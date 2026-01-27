@@ -418,8 +418,12 @@ When implementing a new operator, there are several levels of testing to conside
   See existing tests in `crates/onnx-ir/src/node/squeeze.rs` for examples.
 
 - **Code Generation**: Test the burn-onnx Node implementation to verify correct Rust code
-  generation. Each node file typically includes unit tests using `assert_tokens()` to validate
-  generated code against expected output.
+  generation. Use `insta` snapshot tests to cover as many code generation branches as possible:
+  - Each configuration option (e.g., different axis values, padding modes)
+  - Each input type variant (tensor, scalar, shape)
+  - Optional vs required inputs
+  - Different tensor ranks and data types
+  - Edge cases that trigger different code paths
 
 ### Integration Testing
 

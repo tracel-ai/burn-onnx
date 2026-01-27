@@ -64,7 +64,8 @@ examples/
 - Implement `NodeCodegen<PS>` directly on onnx-ir node types
 - Use `scope.arg()` for automatic tensor/scalar/shape handling
 - Use `quote!` macro for code generation
-- Add snapshot tests with `insta` crate
+- Add `insta` snapshot tests for ALL code generation branches - each config option, each input
+  type variant, optional vs required inputs should have test coverage
 
 ### Testing
 
@@ -128,6 +129,8 @@ This ensures test scripts are self-contained and use the ONNX reference implemen
    - Check for proper variable naming (no conflicts)
    - Verify correct Burn API usage
    - Emit clear errors for unsupported ONNX configurations
+   - Use `insta` snapshot tests to cover as many code generation branches as possible
+   - Each configuration variant should have a corresponding snapshot test
 
 4. **Testing**
    - New operators need both unit tests and integration tests
