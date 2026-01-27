@@ -22,12 +22,15 @@ examples/
 ## Crate Responsibilities
 
 ### onnx-ir
+
 - Parses ONNX protobuf files into a clean Intermediate Representation
-- 5-phase pipeline: Initialization → Node Conversion → Type Inference → Post-processing → Finalization
+- 5-phase pipeline: Initialization → Node Conversion → Type Inference → Post-processing →
+  Finalization
 - Each ONNX operator has a `NodeProcessor` implementation
 - Node structs contain: `name`, `inputs`, `outputs`, `config`
 
 ### burn-onnx
+
 - Converts onnx-ir nodes to Burn Rust code
 - Implements `NodeCodegen` trait for each node type
 - Generates `.rs` files and `.burnpack` weight files
@@ -36,6 +39,7 @@ examples/
 ## Coding Conventions
 
 ### Rust Style
+
 - Edition 2024
 - Use `#[derive(Debug, Clone)]` on public types
 - Prefer `thiserror` for error types
@@ -43,22 +47,60 @@ examples/
 - Document public APIs with `///` doc comments
 
 ### ONNX-IR Patterns
+
 - Node processors are `pub(crate)` - only the node structs and configs are public
 - Use `NodeBuilder` derive macro for test builders
 - Configuration structs should derive `Debug, Clone, Default` when possible
 - Type inference happens in processors, not in codegen
 
 ### burn-onnx Patterns
+
 - Implement `NodeCodegen<PS>` directly on onnx-ir node types
 - Use `scope.arg()` for automatic tensor/scalar/shape handling
 - Use `quote!` macro for code generation
 - Add snapshot tests with `insta` crate
 
 ### Testing
+
 - Unit tests go in the same file as implementation
 - Integration tests in `crates/onnx-tests/tests/<op_name>/`
 - Python scripts generate ONNX models for testing
 - Use `torch.manual_seed(42)` for reproducibility
+
+### Python Test Scripts
+
+Use `uv` inline script format for Python test scripts:
+
+```python
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "torch==2.1.1",
+# ]
+# ///
+
+import torch
+import onnx
+# ... rest of script
+```
+
+Use `onnx.reference.ReferenceEvaluator` to verify ONNX model outputs:
+
+```python
+from onnx.reference import ReferenceEvaluator
+
+# Load and evaluate the model
+model = onnx.load("model.onnx")
+ref = ReferenceEvaluator(model)
+outputs = ref.run(None, {"input": input_data})
+
+# Print expected outputs for Rust test comparison
+print("Expected output:", outputs[0])
+```
+
+This ensures test scripts are self-contained and use the ONNX reference implementation for ground truth.
 
 ## Code Review Guidelines
 

@@ -431,16 +431,26 @@ conversion from ONNX models to Burn source code.
 - `tests/<op_name>/<op_name>.onnx`: Generated ONNX model
 - `tests/<op_name>/mod.rs`: Test implementation for the operator
 
-#### Setting Up Python Environment
+#### Python Script Format
 
-Use [`uv`](https://docs.astral.sh/uv/) to set up a Python environment:
+Use [`uv`](https://docs.astral.sh/uv/) inline script format for self-contained test scripts:
 
-```sh
-cd crates/onnx-tests
-uv sync
+```python
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "torch==2.1.1",
+# ]
+# ///
+
+import torch
+import onnx
+# ... rest of script
 ```
 
-Or manually: `pip install onnx==1.15.0 torch==2.1.1`
+This makes scripts executable without manual environment setup.
 
 #### Creating a Test for a New Operator
 
@@ -449,8 +459,19 @@ There are two approaches to generating ONNX files:
 **Approach 1: Exporting a PyTorch Model** (most common)
 
 ```python
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "torch==2.1.1",
+# ]
+# ///
+
 import torch
 import torch.nn as nn
+from onnx.reference import ReferenceEvaluator
+import onnx
 
 class MyModel(nn.Module):
     def __init__(self):
@@ -460,6 +481,7 @@ class MyModel(nn.Module):
         return my_operation(x)
 
 model = MyModel()
+torch.manual_seed(42)
 input_tensor = torch.randn(1, 3, 224, 224)
 
 torch.onnx.export(
@@ -472,10 +494,13 @@ torch.onnx.export(
     do_constant_folding=False  # Preserve operators
 )
 
-# Print for test verification
-output = model(input_tensor)
+# Verify with ONNX ReferenceEvaluator (ground truth)
+onnx_model = onnx.load("tests/my_new_op/my_new_op.onnx")
+ref = ReferenceEvaluator(onnx_model)
+outputs = ref.run(None, {"input": input_tensor.numpy()})
+
 print("Input:", input_tensor)
-print("Output:", output)
+print("Expected output:", outputs[0])
 ```
 
 **Approach 2: Constructing ONNX Graph Directly**
@@ -483,10 +508,21 @@ print("Output:", output)
 Useful when you need precise control over operator attributes:
 
 ```python
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 import numpy as np
 import onnx
 from onnx import TensorProto, helper
+from onnx.reference import ReferenceEvaluator
 
+np.random.seed(42)
 data = np.random.randn(5, 5, 5).astype(np.float32)
 indices = np.array([0, 2, 4], dtype=np.int64)
 
@@ -499,7 +535,20 @@ output_tensor = helper.make_tensor_value_info("output", TensorProto.FLOAT, [5, 3
 graph = helper.make_graph([node], "gather-model", [data_tensor, indices_tensor], [output_tensor])
 model = helper.make_model(graph)
 onnx.save(model, "tests/my_new_op/my_new_op.onnx")
+
+# Verify with ONNX ReferenceEvaluator (ground truth)
+ref = ReferenceEvaluator(model)
+outputs = ref.run(None, {"data": data, "indices": indices})
+
+print("Data:", data)
+print("Indices:", indices)
+print("Expected output:", outputs[0])
 ```
+
+#### Using ReferenceEvaluator
+
+Always use `onnx.reference.ReferenceEvaluator` to compute expected outputs. This is the official
+ONNX reference implementation and serves as ground truth for verifying Burn's output matches.
 
 #### Creating the Rust Test
 
