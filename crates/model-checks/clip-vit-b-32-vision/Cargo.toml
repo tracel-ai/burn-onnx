@@ -20,7 +20,7 @@ burn = { workspace = true, features = [
     "wgpu",
     "metal",
 ] }
-burn-store = { workspace = true, features = ["burnpack", "pytorch"] }
+burn-store = { workspace = true, features = ["std", "burnpack", "pytorch"] }
 
 [build-dependencies]
 burn-onnx = { path = "../../burn-onnx" }
