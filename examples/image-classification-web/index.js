@@ -1,11 +1,11 @@
 /**
  *
- * This demo is part of Burn project: https://github.com/tracel-ai/burn
- * 
- * Released under a dual license: 
- * https://github.com/tracel-ai/burn/blob/main/LICENSE-MIT
- * https://github.com/tracel-ai/burn/blob/main/LICENSE-APACHE
- * 
+ * This demo is part of Burn project: https://github.com/tracel-ai/burn-onnx
+ *
+ * Released under a dual license:
+ * https://github.com/tracel-ai/burn-onnx/blob/main/LICENSE-MIT
+ * https://github.com/tracel-ai/burn-onnx/blob/main/LICENSE-APACHE
+ *
  */
 
 
