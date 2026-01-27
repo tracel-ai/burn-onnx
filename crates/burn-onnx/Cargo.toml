@@ -8,7 +8,7 @@ edition.workspace = true
 license.workspace = true
 name = "burn-onnx"
 readme = "README.md"
-repository = "https://github.com/tracel-ai/burn/tree/main/crates/burn-onnx"
+repository = "https://github.com/tracel-ai/burn-onnx/tree/main/crates/burn-onnx"
 documentation = "https://docs.rs/burn-onnx"
 version.workspace = true
 
