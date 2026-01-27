@@ -15,7 +15,6 @@ use burn::{
 };
 
 use burn::backend::wgpu::{WebGpu, WgpuDevice, graphics::AutoGraphicsApi};
-use burn_candle::Candle;
 
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -31,9 +30,6 @@ pub fn start() {
 #[allow(clippy::large_enum_variant)]
 /// The model is loaded to a specific backend
 pub enum ModelType {
-    /// The model is loaded to the Candle backend
-    WithCandleBackend(Model<Candle<f32, i64>>),
-
     /// The model is loaded to the NdArray backend
     WithNdArrayBackend(Model<NdArray<f32>>),
 
@@ -71,7 +67,6 @@ impl ImageClassifier {
         let start = Instant::now();
 
         let result = match self.model {
-            ModelType::WithCandleBackend(ref model) => model.forward(input).await,
             ModelType::WithNdArrayBackend(ref model) => model.forward(input).await,
             ModelType::WithWgpuBackend(ref model) => model.forward(input).await,
         };
@@ -81,17 +76,6 @@ impl ImageClassifier {
         log::debug!("Inference is completed in {duration:?}");
 
         top_5_classes(result)
-    }
-
-    /// Sets the backend to Candle
-    pub async fn set_backend_candle(&mut self) -> Result<(), JsValue> {
-        log::info!("Loading the model to the Candle backend");
-        let start = Instant::now();
-        let device = Default::default();
-        self.model = ModelType::WithCandleBackend(Model::new(&device));
-        let duration = start.elapsed();
-        log::debug!("Model is loaded to the Candle backend in {duration:?}");
-        Ok(())
     }
 
     /// Sets the backend to NdArray

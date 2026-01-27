@@ -19,7 +19,6 @@ default = []
 burn = { workspace = true, default-features = false, features = [
     "ndarray", "webgpu",
 ] }
-burn-candle = { git = "https://github.com/tracel-ai/burn", rev = "44bbbe8c2cf10784fe3275f9a9c9933732b600e4", default-features = false }
 burn-store = { workspace = true, default-features = false, features = ["std", "burnpack"] }
 
 log = { workspace = true }

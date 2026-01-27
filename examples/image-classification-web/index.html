@@ -44,7 +44,6 @@
           <label for="backend">Backend:</label>
           <select id="backend">
             <option value="ndarray" selected>CPU - Ndarray</option>
-            <option value="candle">CPU - Candle</option>
             <option value="webgpu">GPU - WebGPU</option>
           </select>
         </div>
@@ -149,7 +148,7 @@
 
       // Check if WebGPU is supported
       if (!navigator.gpu) {
-        backendDropdown.options[2].disabled = true;
+        backendDropdown.options[1].disabled = true;
         alert("WebGPU is not supported on this device.\n\nDisabling WebGPU backend ...");
       }
 
@@ -166,7 +165,6 @@
       async function handleBackendDropdownChange() {
         const backend = this.value;
         if (backend === "ndarray") await imageClassifier.set_backend_ndarray();
-        if (backend === "candle") await imageClassifier.set_backend_candle();
         if (backend === "webgpu") await imageClassifier.set_backend_wgpu();
 
         resetCanvasAndInputs();

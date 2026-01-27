@@ -3109,7 +3109,6 @@ name = "image-classification-web"
 version = "0.21.0"
 dependencies = [
  "burn",
- "burn-candle",
  "burn-onnx",
  "burn-store",
  "console_error_panic_hook",
