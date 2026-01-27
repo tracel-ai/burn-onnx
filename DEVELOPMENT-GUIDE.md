@@ -98,12 +98,14 @@ using a processor-based architecture. For each operation:
 
 1. **Create a node module** in `crates/onnx-ir/src/node/<operation_name>.rs`. This file should
    contain:
-   - **Configuration struct**: Define operation-specific parameters (e.g., `SqueezeConfig`)
+   - **Configuration struct**: Define operation-specific parameters (e.g., `SqueezeConfig`).
+     **Important**: Include ALL ONNX operator attributes, even if burn-onnx doesn't use them yet.
+     Use `Option<T>` for optional attributes.
    - **Processor struct**: Implement `NodeProcessor` trait (marked as `pub(crate)`)
    - The processor handles:
      - **Input/output specification**: Define expected inputs and outputs via `NodeSpec`
      - **Type inference**: Infer output types from inputs and configuration
-     - **Configuration extraction**: Extract operation parameters from ONNX attributes
+     - **Configuration extraction**: Extract ALL operation parameters from ONNX attributes
      - **Node construction**: Build the final `Node` enum variant with config
 
 2. **Make the module visible** in `crates/onnx-ir/src/node/mod.rs`:

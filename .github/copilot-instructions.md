@@ -28,6 +28,8 @@ examples/
   Finalization
 - Each ONNX operator has a `NodeProcessor` implementation
 - Node structs contain: `name`, `inputs`, `outputs`, `config`
+- **Important**: Should extract and preserve ALL ONNX attributes faithfully, even if Burn doesn't
+  support them yet. This allows onnx-ir to be reused by other projects
 
 ### burn-onnx
 
@@ -35,6 +37,8 @@ examples/
 - Implements `NodeCodegen` trait for each node type
 - Generates `.rs` files and `.burnpack` weight files
 - Entry point: `ModelGen` builder
+- **Important**: Rejection of unsupported features happens HERE, not in onnx-ir. If Burn API doesn't
+  support a configuration, burn-onnx should emit a clear error during code generation
 
 ## Coding Conventions
 
@@ -52,6 +56,8 @@ examples/
 - Use `NodeBuilder` derive macro for test builders
 - Configuration structs should derive `Debug, Clone, Default` when possible
 - Type inference happens in processors, not in codegen
+- **Strive for full ONNX opset coverage** - extract all attributes even if not yet used by burn-onnx
+- Config structs should include all ONNX operator attributes, using `Option<T>` for optional ones
 
 ### burn-onnx Patterns
 
@@ -111,17 +117,24 @@ This ensures test scripts are self-contained and use the ONNX reference implemen
    - Check tensor rank and dtype consistency
    - Verify configuration extraction handles all ONNX attributes
 
-2. **Code Generation**
+2. **ONNX Coverage (onnx-ir)**
+   - Config structs should include ALL ONNX operator attributes
+   - Use `Option<T>` for optional attributes
+   - Don't skip attributes just because burn-onnx doesn't use them yet
+   - Unsupported feature rejection belongs in burn-onnx, not onnx-ir
+
+3. **Code Generation (burn-onnx)**
    - Generated code should compile without warnings
    - Check for proper variable naming (no conflicts)
    - Verify correct Burn API usage
+   - Emit clear errors for unsupported ONNX configurations
 
-3. **Testing**
+4. **Testing**
    - New operators need both unit tests and integration tests
    - Edge cases: empty tensors, single elements, broadcasting
    - Multiple input shapes and data types
 
-4. **Documentation**
+5. **Documentation**
    - Public items need doc comments
    - Update SUPPORTED-ONNX-OPS.md for new operators
    - Include examples in doc comments for complex APIs
