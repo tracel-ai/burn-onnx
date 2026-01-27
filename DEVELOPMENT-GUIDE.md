@@ -2,8 +2,8 @@
 
 This guide offers in-depth design insights and step-by-step procedures for developers working on the
 ONNX to Burn conversion tool. This tool allows the importation of ONNX models into the Burn deep
-learning framework written in Rust. It converts ONNX models to Rust source code and model
-weights to `.burnpack` files.
+learning framework written in Rust. It converts ONNX models to Rust source code and model weights to
+`.burnpack` files.
 
 For an introduction to ONNX import in Burn, see
 [this section of the Burn book](https://burn.dev/books/burn/import/onnx-model.html).
@@ -40,10 +40,11 @@ For an introduction to ONNX import in Burn, see
 - Limit interaction with ONNX to the Intermediate Representation (IR) stage to simplify the process
 - Ensure operator behavior consistency across different OpSet versions
 - Exclude any ONNX/Protobuf-specific logic from the Burn graph
-- **Feature Support Validation**: The `onnx-ir` crate should extract and preserve all ONNX attributes
-  faithfully, even if Burn does not yet support them. Rejection of unsupported features should happen
-  in `burn-onnx` during code generation, not in `onnx-ir` during configuration extraction. This
-  allows `onnx-ir` to be reused by other projects that may have different feature support
+- **Feature Support Validation**: The `onnx-ir` crate should extract and preserve all ONNX
+  attributes faithfully, even if Burn does not yet support them. Rejection of unsupported features
+  should happen in `burn-onnx` during code generation, not in `onnx-ir` during configuration
+  extraction. This allows `onnx-ir` to be reused by other projects that may have different feature
+  support
 
 The conversion process involves three main stages:
 
@@ -56,8 +57,8 @@ The conversion process involves three main stages:
 To extend `burn-onnx` with support for new ONNX operators, follow these steps:
 
 1. **Create PyTorch Script**: Place a PyTorch script using the new operator under
-   `crates/onnx-tests/tests/<op>/<op>.py`. Make sure to print both input and output
-   tensors for end-to-end testing.
+   `crates/onnx-tests/tests/<op>/<op>.py`. Make sure to print both input and output tensors for
+   end-to-end testing.
 
 2. **Generate ONNX Model**: Run the PyTorch script to produce an ONNX model.
 
@@ -65,7 +66,7 @@ To extend `burn-onnx` with support for new ONNX operators, follow these steps:
    model contains the expected operators.
 
 4. **Generate IR and Burn Graph**: Navigate to
-   [crates/burn-onnx/](https://github.com/tracel-ai/burn-onnx/tree/main/crates/burn-onnx) and run:
+   [crates/burn-onnx/](crates/burn-onnx/) and run:
 
    ```
    cargo r -- ../onnx-tests/tests/<op>/<op>.onnx ./out
@@ -79,9 +80,9 @@ To extend `burn-onnx` with support for new ONNX operators, follow these steps:
    the Burn model in Rust code, and `my-model.burnpack` contains the model weights.
 
 7. **Integration Test**: Include the test in the `tests/<op_name>/mod.rs` file in the
-   [crates/onnx-tests/tests/](https://github.com/tracel-ai/burn-onnx/blob/main/crates/onnx-tests/tests/)
+   [crates/onnx-tests/tests/](crates/onnx-tests/tests/)
    directory. Further details can be found in the
-   [onnx-tests README](https://github.com/tracel-ai/burn-onnx/blob/main/crates/onnx-tests/README.md).
+   [onnx-tests README](crates/onnx-tests/README.md).
 
 ## Implementing a New Operator
 
@@ -157,9 +158,9 @@ For example, the squeeze operation in `crates/onnx-ir/src/node/squeeze.rs` conta
 
 ### Step 2: Code Generation in burn-onnx
 
-1. Create a new file named `<operation_name>.rs` in the `crates/burn-onnx/src/burn/node/`
-   directory. This file implements code generation for your operation by implementing the
-   `NodeCodegen` trait directly on the onnx-ir node type.
+1. Create a new file named `<operation_name>.rs` in the `crates/burn-onnx/src/burn/node/` directory.
+   This file implements code generation for your operation by implementing the `NodeCodegen` trait
+   directly on the onnx-ir node type.
 
 2. Implement the `NodeCodegen<PS>` trait for the onnx-ir node type. This trait defines how the node
    generates Rust code during the graph compilation process:
@@ -214,7 +215,8 @@ For example, the squeeze operation in `crates/onnx-ir/src/node/squeeze.rs` conta
    - `outputs(&self)` - Returns references to output arguments (usually just `&self.outputs`)
    - `forward(&self, scope)` - Generates Rust code for the operation using the `quote!` macro
    - `field(&self)` - (Optional) Declares module fields for parameters like weights
-   - `collect_snapshots(&self, field_name)` - (Optional) Collects tensor snapshots for burnpack serialization
+   - `collect_snapshots(&self, field_name)` - (Optional) Collects tensor snapshots for burnpack
+     serialization
 
 3. Use helper utilities from `argument_helpers.rs`:
    - `scope.arg(argument)` - Automatically handles Tensor/Scalar/Shape with proper cloning
@@ -419,16 +421,18 @@ When implementing a new operator, there are several levels of testing to conside
 
 ### Integration Testing
 
-- **Test Path**: Write integration tests in `crates/onnx-tests/tests/<op_name>/mod.rs` where `<op_name>` is the name of the new operator. 
+- **Test Path**: Write integration tests in `crates/onnx-tests/tests/<op_name>/mod.rs` where
+  `<op_name>` is the name of the new operator.
 
-- **What to Test**: 
-    - Create ONNX models that use your operator and test the end-to-end conversion process
-    - Ensure the generated Rust code compiles
-    - Test with realistic ONNX models that use your operator in conjunction with others
-    - Include models that test edge cases (e.g., different input shapes, parameter combinations)
-    - Verify that inputs and outputs match between the original ONNX model and the converted Burn model
+- **What to Test**:
+  - Create ONNX models that use your operator and test the end-to-end conversion process
+  - Ensure the generated Rust code compiles
+  - Test with realistic ONNX models that use your operator in conjunction with others
+  - Include models that test edge cases (e.g., different input shapes, parameter combinations)
+  - Verify that inputs and outputs match between the original ONNX model and the converted Burn
+    model
 - Further details can be found in the
-   [onnx-tests README](https://github.com/tracel-ai/burn-onnx/blob/main/crates/onnx-tests/README.md).
+  [onnx-tests README](crates/onnx-tests/README.md).
 
 Testing the processor implementation is particularly important as it directly affects the
 correctness of the conversion process. Incorrect type inference can lead to mismatched tensor shapes
