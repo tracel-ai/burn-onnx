@@ -5,6 +5,8 @@ extend-ignore-identifiers-re = ["NdArray*", "ND"]
 extend-exclude = [
     "*.onnx",
     "*.proto",
+    # ImageNet labels contain scientific names that look like typos
+    "examples/image-classification-web/src/model/label.txt",
 ]
 
 [default.extend-words]
