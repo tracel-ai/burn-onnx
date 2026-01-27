@@ -40,11 +40,11 @@ For an introduction to ONNX import in Burn, see
 - Limit interaction with ONNX to the Intermediate Representation (IR) stage to simplify the process
 - Ensure operator behavior consistency across different OpSet versions
 - Exclude any ONNX/Protobuf-specific logic from the Burn graph
-- **Feature Support Validation**: The `onnx-ir` crate should extract and preserve all ONNX
-  attributes faithfully, even if Burn does not yet support them. Rejection of unsupported features
-  should happen in `burn-onnx` during code generation, not in `onnx-ir` during configuration
-  extraction. This allows `onnx-ir` to be reused by other projects that may have different feature
-  support
+- **Feature Support Validation**: The [`onnx-ir`](crates/onnx-ir/) crate should extract and preserve
+  all ONNX attributes faithfully, even if Burn does not yet support them. Rejection of unsupported
+  features should happen in [`burn-onnx`](crates/burn-onnx/) during code generation, not in `onnx-ir`
+  during configuration extraction. This allows `onnx-ir` to be reused by other projects that may have
+  different feature support
 
 The conversion process involves three main stages:
 
@@ -93,8 +93,8 @@ are relative to the root of the burn-onnx repository.
 
 ### Step 1: Node Processor Implementation in onnx-ir
 
-The `onnx-ir` crate handles the Intermediate Representation (IR) of ONNX models using a
-processor-based architecture. For each operation:
+The [`onnx-ir`](crates/onnx-ir/) crate handles the Intermediate Representation (IR) of ONNX models
+using a processor-based architecture. For each operation:
 
 1. **Create a node module** in `crates/onnx-ir/src/node/<operation_name>.rs`. This file should
    contain:
@@ -338,8 +338,8 @@ post-processing.
 
 ### ONNX-IR Pipeline
 
-The `onnx-ir` crate converts ONNX models to an Intermediate Representation through a 5-phase
-pipeline:
+The [`onnx-ir`](crates/onnx-ir/) crate converts ONNX models to an Intermediate Representation
+through a 5-phase pipeline:
 
 #### Phase 1: Initialization
 
