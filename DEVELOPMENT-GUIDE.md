@@ -42,9 +42,9 @@ For an introduction to ONNX import in Burn, see
 - Exclude any ONNX/Protobuf-specific logic from the Burn graph
 - **Feature Support Validation**: The [`onnx-ir`](crates/onnx-ir/) crate should extract and preserve
   all ONNX attributes faithfully, even if Burn does not yet support them. Rejection of unsupported
-  features should happen in [`burn-onnx`](crates/burn-onnx/) during code generation, not in `onnx-ir`
-  during configuration extraction. This allows `onnx-ir` to be reused by other projects that may have
-  different feature support
+  features should happen in [`burn-onnx`](crates/burn-onnx/) during code generation, not in
+  `onnx-ir` during configuration extraction. This allows `onnx-ir` to be reused by other projects
+  that may have different feature support
 
 The conversion process involves three main stages:
 
@@ -65,8 +65,7 @@ To extend `burn-onnx` with support for new ONNX operators, follow these steps:
 3. **Visualize ONNX Model**: Use [Netron](https://github.com/lutzroeder/netron) to verify the ONNX
    model contains the expected operators.
 
-4. **Generate IR and Burn Graph**: Navigate to
-   [crates/burn-onnx/](crates/burn-onnx/) and run:
+4. **Generate IR and Burn Graph**: Navigate to [crates/burn-onnx/](crates/burn-onnx/) and run:
 
    ```
    cargo r -- ../onnx-tests/tests/<op>/<op>.onnx ./out
@@ -80,9 +79,8 @@ To extend `burn-onnx` with support for new ONNX operators, follow these steps:
    the Burn model in Rust code, and `my-model.burnpack` contains the model weights.
 
 7. **Integration Test**: Include the test in the `tests/<op_name>/mod.rs` file in the
-   [crates/onnx-tests/tests/](crates/onnx-tests/tests/)
-   directory. Further details can be found in the
-   [onnx-tests README](crates/onnx-tests/README.md).
+   [crates/onnx-tests/tests/](crates/onnx-tests/tests/) directory. Further details can be found in
+   the [onnx-tests README](crates/onnx-tests/README.md).
 
 ## Implementing a New Operator
 
@@ -591,6 +589,7 @@ cargo test --test test_mod my_new_op::test_my_new_op
 #### Best Practices
 
 **Model Generation:**
+
 - Keep models simple, focusing on single operators
 - Use fixed seeds for reproducibility: `torch.manual_seed(42)`
 - Print input/output tensors for reference
@@ -598,6 +597,7 @@ cargo test --test test_mod my_new_op::test_my_new_op
 - Use `do_constant_folding=False` if PyTorch optimizes away operators
 
 **Test Implementation:**
+
 - Test multiple input shapes, data types, and parameters
 - Include edge cases (empty tensors, single elements, large tensors)
 - Use appropriate numerical tolerance levels

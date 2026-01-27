@@ -64,8 +64,8 @@ examples/
 - Implement `NodeCodegen<PS>` directly on onnx-ir node types
 - Use `scope.arg()` for automatic tensor/scalar/shape handling
 - Use `quote!` macro for code generation
-- Add `insta` snapshot tests for ALL code generation branches - each config option, each input
-  type variant, optional vs required inputs should have test coverage
+- Add `insta` snapshot tests for ALL code generation branches - each config option, each input type
+  variant, optional vs required inputs should have test coverage
 
 ### Testing
 
@@ -107,7 +107,8 @@ outputs = ref.run(None, {"input": input_data})
 print("Expected output:", outputs[0])
 ```
 
-This ensures test scripts are self-contained and use the ONNX reference implementation for ground truth.
+This ensures test scripts are self-contained and use the ONNX reference implementation for ground
+truth.
 
 ## Code Review Guidelines
 

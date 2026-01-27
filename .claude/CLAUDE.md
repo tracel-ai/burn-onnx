@@ -22,14 +22,17 @@ examples/
 ## Crate Responsibilities
 
 ### onnx-ir
+
 - Parses ONNX protobuf files into a clean Intermediate Representation
-- 5-phase pipeline: Initialization → Node Conversion → Type Inference → Post-processing → Finalization
+- 5-phase pipeline: Initialization → Node Conversion → Type Inference → Post-processing →
+  Finalization
 - Each ONNX operator has a `NodeProcessor` implementation
 - Node structs contain: `name`, `inputs`, `outputs`, `config`
 - **Important**: Should extract and preserve ALL ONNX attributes faithfully, even if Burn doesn't
   support them yet. This allows onnx-ir to be reused by other projects
 
 ### burn-onnx
+
 - Converts onnx-ir nodes to Burn Rust code
 - Implements `NodeCodegen` trait for each node type
 - Generates `.rs` files and `.burnpack` weight files
@@ -40,6 +43,7 @@ examples/
 ## Coding Conventions
 
 ### Rust Style
+
 - Edition 2024
 - Use `#[derive(Debug, Clone)]` on public types
 - Prefer `thiserror` for error types
@@ -47,6 +51,7 @@ examples/
 - Document public APIs with `///` doc comments
 
 ### ONNX-IR Patterns
+
 - Node processors are `pub(crate)` - only the node structs and configs are public
 - Use `NodeBuilder` derive macro for test builders
 - Configuration structs should derive `Debug, Clone, Default` when possible
@@ -55,13 +60,15 @@ examples/
 - Config structs should include all ONNX operator attributes, using `Option<T>` for optional ones
 
 ### burn-onnx Patterns
+
 - Implement `NodeCodegen<PS>` directly on onnx-ir node types
 - Use `scope.arg()` for automatic tensor/scalar/shape handling
 - Use `quote!` macro for code generation
-- Add `insta` snapshot tests for ALL code generation branches - each config option, each input
-  type variant, optional vs required inputs should have test coverage
+- Add `insta` snapshot tests for ALL code generation branches - each config option, each input type
+  variant, optional vs required inputs should have test coverage
 
 ### Testing
+
 - Unit tests go in the same file as implementation
 - Integration tests in `crates/onnx-tests/tests/<op_name>/`
 - Use `torch.manual_seed(42)` or `np.random.seed(42)` for reproducibility
