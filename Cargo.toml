@@ -7,8 +7,9 @@ resolver = "2"
 members = ["crates/*", "examples/*", "xtask"]
 
 exclude = [
-    "crates/model-checks",   # exclude model-checks parent directory
-    "crates/model-checks/*", # exclude model checking crates from workspace
+    "crates/model-checks",         # exclude model-checks parent directory
+    "crates/model-checks/*",       # exclude model checking crates from workspace
+    "examples/raspberry-pi-pico",  # standalone no_std embedded example
 ]
 
 [workspace.package]
