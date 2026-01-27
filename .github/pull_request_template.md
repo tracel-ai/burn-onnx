@@ -1,8 +1,7 @@
-## Pull Request Template
-
 ### Checklist
 
-- [ ] Confirmed that `cargo xtask test` command has been executed.
+- [ ] Confirmed that `cargo xtask validate` command has been executed.
+- [ ] Confirm relevant documentation has been updated.
 
 ### Related Issues/PRs
 
