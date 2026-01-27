@@ -421,18 +421,139 @@ When implementing a new operator, there are several levels of testing to conside
 
 ### Integration Testing
 
-- **Test Path**: Write integration tests in `crates/onnx-tests/tests/<op_name>/mod.rs` where
-  `<op_name>` is the name of the new operator.
+Integration tests are located in [`crates/onnx-tests/`](crates/onnx-tests/) and verify end-to-end
+conversion from ONNX models to Burn source code.
 
-- **What to Test**:
-  - Create ONNX models that use your operator and test the end-to-end conversion process
-  - Ensure the generated Rust code compiles
-  - Test with realistic ONNX models that use your operator in conjunction with others
-  - Include models that test edge cases (e.g., different input shapes, parameter combinations)
-  - Verify that inputs and outputs match between the original ONNX model and the converted Burn
-    model
-- Further details can be found in the
-  [onnx-tests README](crates/onnx-tests/README.md).
+#### Directory Structure
+
+- `tests/<op_name>/`: Each operator has its own directory
+- `tests/<op_name>/<op_name>.py`: Python script that generates the ONNX model
+- `tests/<op_name>/<op_name>.onnx`: Generated ONNX model
+- `tests/<op_name>/mod.rs`: Test implementation for the operator
+
+#### Setting Up Python Environment
+
+Use [`uv`](https://docs.astral.sh/uv/) to set up a Python environment:
+
+```sh
+cd crates/onnx-tests
+uv sync
+```
+
+Or manually: `pip install onnx==1.15.0 torch==2.1.1`
+
+#### Creating a Test for a New Operator
+
+There are two approaches to generating ONNX files:
+
+**Approach 1: Exporting a PyTorch Model** (most common)
+
+```python
+import torch
+import torch.nn as nn
+
+class MyModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return my_operation(x)
+
+model = MyModel()
+input_tensor = torch.randn(1, 3, 224, 224)
+
+torch.onnx.export(
+    model,
+    input_tensor,
+    "tests/my_new_op/my_new_op.onnx",
+    opset_version=16,
+    input_names=["input"],
+    output_names=["output"],
+    do_constant_folding=False  # Preserve operators
+)
+
+# Print for test verification
+output = model(input_tensor)
+print("Input:", input_tensor)
+print("Output:", output)
+```
+
+**Approach 2: Constructing ONNX Graph Directly**
+
+Useful when you need precise control over operator attributes:
+
+```python
+import numpy as np
+import onnx
+from onnx import TensorProto, helper
+
+data = np.random.randn(5, 5, 5).astype(np.float32)
+indices = np.array([0, 2, 4], dtype=np.int64)
+
+node = helper.make_node("Gather", inputs=["data", "indices"], outputs=["output"], axis=1)
+
+data_tensor = helper.make_tensor_value_info("data", TensorProto.FLOAT, data.shape)
+indices_tensor = helper.make_tensor_value_info("indices", TensorProto.INT64, indices.shape)
+output_tensor = helper.make_tensor_value_info("output", TensorProto.FLOAT, [5, 3, 5])
+
+graph = helper.make_graph([node], "gather-model", [data_tensor, indices_tensor], [output_tensor])
+model = helper.make_model(graph)
+onnx.save(model, "tests/my_new_op/my_new_op.onnx")
+```
+
+#### Creating the Rust Test
+
+Create `tests/my_new_op/mod.rs`:
+
+```rust
+use super::test_record_type::TestRecordType;
+use burn_onnx::OnnxModel;
+
+#[test]
+fn test_my_new_op() {
+    let model = OnnxModel::read("tests/my_new_op/my_new_op.onnx").unwrap();
+    let record = model.into_record::<TestRecordType>();
+    // Implement test logic and assertions
+}
+```
+
+#### Running Tests
+
+```sh
+# Default backend (NdArray)
+cargo test
+
+# WGPU backend
+cargo test --features test-wgpu
+
+# LibTorch backend
+cargo test --features test-tch
+
+# Specific test
+cargo test --test test_mod my_new_op::test_my_new_op
+```
+
+#### Best Practices
+
+**Model Generation:**
+- Keep models simple, focusing on single operators
+- Use fixed seeds for reproducibility: `torch.manual_seed(42)`
+- Print input/output tensors for reference
+- Verify with [Netron](https://github.com/lutzroeder/netron)
+- Use `do_constant_folding=False` if PyTorch optimizes away operators
+
+**Test Implementation:**
+- Test multiple input shapes, data types, and parameters
+- Include edge cases (empty tensors, single elements, large tensors)
+- Use appropriate numerical tolerance levels
+- Test error cases for invalid inputs
+
+#### Debugging Failed Tests
+
+1. **Inspect ONNX Model**: Use Netron to visualize structure
+2. **Check Values**: Add print statements in Python scripts
+3. **Generate Rust Code**: `cargo run -p burn-onnx -- tests/my_op/my_op.onnx ./out`
+4. **Numerical Issues**: Adjust tolerance for precision problems
 
 Testing the processor implementation is particularly important as it directly affects the
 correctness of the conversion process. Incorrect type inference can lead to mismatched tensor shapes
