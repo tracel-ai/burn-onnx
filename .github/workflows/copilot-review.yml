@@ -1,0 +1,31 @@
+# Automatically request GitHub Copilot code review on pull requests
+name: Copilot Code Review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+jobs:
+  copilot-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Request Copilot Review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Request Copilot as a reviewer
+            // Note: Copilot code review must be enabled in repository settings
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                reviewers: ['copilot-pull-request-reviewer']
+              });
+              console.log('Copilot review requested successfully');
+            } catch (error) {
+              console.log('Could not request Copilot review:', error.message);
+              console.log('Make sure Copilot code review is enabled in repository settings');
+            }
