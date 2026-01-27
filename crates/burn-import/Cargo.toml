@@ -1,0 +1,28 @@
+[package]
+authors = [
+    "Dilshod Tadjibaev (@antimora)",
+    "Nathaniel Simard (@nathanielsimard)",
+]
+description = "Legacy crate for ONNX import - use burn-onnx instead"
+edition.workspace = true
+license.workspace = true
+name = "burn-import"
+readme = "README.md"
+repository = "https://github.com/tracel-ai/burn-onnx/tree/main/crates/burn-import"
+documentation = "https://docs.rs/burn-import"
+version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["onnx"]
+onnx = []
+mmap = ["burn-onnx/mmap"]
+
+[dependencies]
+burn-onnx = { path = "../burn-onnx", version = "=0.21.0", default-features = false }
+
+[package.metadata.docs.rs]
+features = ["default"]
+rustdoc-args = ["--cfg", "docsrs"]
