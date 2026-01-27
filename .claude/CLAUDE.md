@@ -1,0 +1,151 @@
+# Claude Instructions for burn-onnx
+
+This repository contains the ONNX import functionality for the Burn deep learning framework.
+
+## Project Structure
+
+```
+crates/
+├── burn-onnx/       # Main crate - converts ONNX IR to Burn code
+├── onnx-ir/         # ONNX Intermediate Representation parser
+├── onnx-ir-derive/  # Derive macros for onnx-ir
+├── onnx-tests/      # End-to-end integration tests
+├── burn-import/     # Legacy crate (deprecated, re-exports burn-onnx)
+└── model-checks/    # Real-world model validation (excluded from workspace)
+
+examples/
+├── onnx-inference/          # Standard inference example
+├── image-classification-web/ # WASM/WebGPU example
+└── raspberry-pi-pico/       # no_std embedded example (excluded)
+```
+
+## Crate Responsibilities
+
+### onnx-ir
+- Parses ONNX protobuf files into a clean Intermediate Representation
+- 5-phase pipeline: Initialization → Node Conversion → Type Inference → Post-processing → Finalization
+- Each ONNX operator has a `NodeProcessor` implementation
+- Node structs contain: `name`, `inputs`, `outputs`, `config`
+- **Important**: Should extract and preserve ALL ONNX attributes faithfully, even if Burn doesn't
+  support them yet. This allows onnx-ir to be reused by other projects
+
+### burn-onnx
+- Converts onnx-ir nodes to Burn Rust code
+- Implements `NodeCodegen` trait for each node type
+- Generates `.rs` files and `.burnpack` weight files
+- Entry point: `ModelGen` builder
+- **Important**: Rejection of unsupported features happens HERE, not in onnx-ir. If Burn API doesn't
+  support a configuration, burn-onnx should emit a clear error during code generation
+
+## Coding Conventions
+
+### Rust Style
+- Edition 2024
+- Use `#[derive(Debug, Clone)]` on public types
+- Prefer `thiserror` for error types
+- Use `log` crate for logging (not `println!`)
+- Document public APIs with `///` doc comments
+
+### ONNX-IR Patterns
+- Node processors are `pub(crate)` - only the node structs and configs are public
+- Use `NodeBuilder` derive macro for test builders
+- Configuration structs should derive `Debug, Clone, Default` when possible
+- Type inference happens in processors, not in codegen
+- **Strive for full ONNX opset coverage** - extract all attributes even if not yet used by burn-onnx
+- Config structs should include all ONNX operator attributes, using `Option<T>` for optional ones
+
+### burn-onnx Patterns
+- Implement `NodeCodegen<PS>` directly on onnx-ir node types
+- Use `scope.arg()` for automatic tensor/scalar/shape handling
+- Use `quote!` macro for code generation
+- Add `insta` snapshot tests for ALL code generation branches - each config option, each input
+  type variant, optional vs required inputs should have test coverage
+
+### Testing
+- Unit tests go in the same file as implementation
+- Integration tests in `crates/onnx-tests/tests/<op_name>/`
+- Use `torch.manual_seed(42)` or `np.random.seed(42)` for reproducibility
+
+### Python Test Scripts
+
+Use `uv` inline script format for self-contained test scripts:
+
+```python
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "torch==2.1.1",
+# ]
+# ///
+
+import torch
+import onnx
+from onnx.reference import ReferenceEvaluator
+```
+
+Always use `onnx.reference.ReferenceEvaluator` to compute expected outputs - this is the official
+ONNX reference implementation and serves as ground truth.
+
+## Adding a New ONNX Operator
+
+1. **onnx-ir**: Create node processor in `crates/onnx-ir/src/node/<op>.rs`
+   - Define config struct with ALL ONNX attributes
+   - Implement `NodeProcessor` trait
+   - Register in `crates/onnx-ir/src/registry.rs`
+
+2. **burn-onnx**: Create codegen in `crates/burn-onnx/src/burn/node/<op>.rs`
+   - Implement `NodeCodegen<PS>` for the onnx-ir node type
+   - Add `insta` snapshot tests for all code generation branches
+   - Register in dispatch macro in `node_codegen.rs`
+
+3. **onnx-tests**: Create integration test in `crates/onnx-tests/tests/<op>/`
+   - Python script to generate ONNX model (use uv script format)
+   - Use `ReferenceEvaluator` for expected outputs
+   - Rust test in `mod.rs`
+
+4. **Documentation**: Update `SUPPORTED-ONNX-OPS.md`
+
+## Common Commands
+
+```sh
+# Run all tests
+cargo test
+
+# Run specific crate tests
+cargo test -p onnx-ir
+cargo test -p burn-onnx
+cargo test -p onnx-tests
+
+# Run validation (formatting, linting, tests)
+cargo xtask validate
+
+# Generate code from ONNX model
+cargo run -p burn-onnx -- model.onnx ./out
+
+# Update insta snapshots
+cargo insta review
+```
+
+## Key Files to Know
+
+- `crates/onnx-ir/src/processor.rs` - NodeProcessor trait definition
+- `crates/onnx-ir/src/registry.rs` - Processor registration
+- `crates/onnx-ir/src/ir/node.rs` - Node enum and define_node_enum! macro
+- `crates/burn-onnx/src/burn/node_codegen.rs` - Codegen dispatch macro
+- `crates/burn-onnx/src/burn/graph.rs` - Graph code generation
+- `SUPPORTED-ONNX-OPS.md` - Operator support table
+- `DEVELOPMENT-GUIDE.md` - Detailed implementation guide
+
+## Dependencies
+
+- `burn` crates are from git (tracel-ai/burn)
+- `protobuf` for ONNX parsing
+- `quote`/`proc-macro2`/`syn` for code generation
+- `insta` for snapshot testing
+
+## Feature Flags
+
+- `mmap` - Memory-mapped file loading (default enabled in onnx-ir)
+- `std` - Standard library support (required for most functionality)
