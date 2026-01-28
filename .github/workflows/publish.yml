@@ -16,7 +16,7 @@ jobs:
   publish-burn-onnx:
     needs:
       - publish-onnx-ir
-    uses: tracel-ai/github-actions/.github/workflows/publish-crate.yml@v6
+    uses: tracel-ai/github-actions/.github/workflows/publish-crate.yml@v7
     with:
       crate: burn-onnx
       dry-run-only: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run-only || false }}
@@ -24,7 +24,7 @@ jobs:
       CRATES_IO_API_TOKEN: ${{ secrets.CRATES_IO_API_TOKEN }}
 
   publish-onnx-ir-derive:
-    uses: tracel-ai/github-actions/.github/workflows/publish-crate.yml@v6
+    uses: tracel-ai/github-actions/.github/workflows/publish-crate.yml@v7
     with:
       crate: onnx-ir-derive
       dry-run-only: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run-only || false }}
@@ -34,7 +34,7 @@ jobs:
   publish-onnx-ir:
     needs:
       - publish-onnx-ir-derive
-    uses: tracel-ai/github-actions/.github/workflows/publish-crate.yml@v6
+    uses: tracel-ai/github-actions/.github/workflows/publish-crate.yml@v7
     with:
       crate: onnx-ir
       dry-run-only: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run-only || false }}
