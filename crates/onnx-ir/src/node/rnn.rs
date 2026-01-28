@@ -137,7 +137,7 @@ impl NodeProcessor for RnnProcessor {
             }
         };
         
-        // RNN expects 3D weights matrix: [num_directions, 4*hidden_size, input_size]
+        // RNN expects 3D weights matrix: [num_directions, hidden_size, input_size]
         if weight_tensor.rank != 3 {
             return Err(ProcessError::Custom(format!(
                 "RNN expects weight tensor (W) of rank 3, got rank {}",
@@ -188,6 +188,349 @@ impl NodeProcessor for RnnProcessor {
             )));
         }
 
+        // Extract config for validation for sequence_lens checks below
+        let config = self.extract_config(node, opset)?;
+
+        // Infer output types based on which outputs are requested
+        // Output 0: Y - all hidden states [seq_length, num_directions, batch_size, hidden_size]
+        if !node.outputs.is_empty() {
+            node.outputs[0].ty = ArgType::Tensor(TensorType {
+                dtype: input_tensor.dtype,
+                rank: 4, // [seq_length, num_directions, batch_size, hidden_size]
+                static_shape: None,
+            });
+        }
+
+        // Output 1: Y_h - final hidden state [num_directions, batch_size, hidden_size]
+        if node.outputs.len() > 1 {
+            node.outputs[1].ty = ArgType::Tensor(TensorType {
+                dtype: input_tensor.dtype,
+                rank: 3,
+                static_shape: None,
+            });
+        }
+
+        // Validate sequence_lens is not used (not supported in Burn)
+        if node.inputs.len() > 4 && !node.inputs[4].is_optional() {
+            return Err(ProcessError::Custom(
+                "RNN sequence_lens input is not yet supported. All sequences must have the same length.".to_string(),
+            ));
+        }
+
         Ok(())
+    }
+
+    fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+        // Get input_size - can be derived from:
+        // 1. Weight tensor W shape: [num_directions, hidden_size, input_size] -> input_size is W[2]
+        // 2. Input tensor X shape: [seq_length, batch_size, input_size] -> input_size is X[2]
+        //
+        // We try multiple sources since weight tensors may be dynamically computed (e.g., after
+        // Concat/Slice operations) while the input tensor often has static shape from the model input.
+        let weight_input = &node.inputs[1];
+        let x_input = &node.inputs[0];
+        log::debug!(
+            "RNN extract_config: X input type={:?}, W input type={:?}",
+            x_input.ty,
+            weight_input.ty
+        );
+
+        // Try to get input_size from weight tensor's static_shape
+        let input_size = if let ArgType::Tensor(t) = &weight_input.ty {
+            if let Some(shape) = &t.static_shape {
+                if shape.len() == 3 {
+                    log::debug!("RNN: using input_size from W static_shape: {}", shape[2]);
+                    Some(shape[2])
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Extract clip threshold (default: None)
+        let clip = node.attrs.get("clip").and_then(|v| {
+            let val = v.clone().into_f32();
+            if val > 0.0 { Some(val) } else { None }
+        });
+
+        // Fallback: try to get input_size from weight constant data
+        let input_size = input_size.or_else(|| {
+            weight_input.value().and_then(|data| {
+                if data.shape.len() == 3 {
+                    log::debug!(
+                        "RNN: using input_size from W constant value: {}",
+                        data.shape[2]
+                    );
+                    Some(data.shape[2])
+                } else {
+                    None
+                }
+            })
+        });
+
+        // Fallback: try to get input_size from input tensor X's static_shape
+        // X has shape [seq_length, batch_size, input_size] so input_size is X[2]
+        let input_size = input_size.or_else(|| {
+            if let ArgType::Tensor(t) = &x_input.ty {
+                if let Some(shape) = &t.static_shape {
+                    if shape.len() >= 3 {
+                        log::debug!("RNN: using input_size from X static_shape: {}", shape[2]);
+                        Some(shape[2])
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+
+        let input_size = input_size.ok_or_else(|| {
+            ProcessError::Custom(
+                "RNN: cannot determine input_size - weight tensor (W) and input tensor (X) must have static shape or W must be a constant".to_string()
+            )
+        })?;
+
+        // Extract hidden_size from attributes (required)
+        let hidden_size = node
+            .attrs
+            .get("hidden_size")
+            .ok_or_else(|| ProcessError::MissingAttribute("hidden_size".to_string()))?
+            .clone()
+            .into_i64() as usize;
+
+        // Extract direction (default: "forward")
+        let direction = node
+            .attrs
+            .get("direction")
+            .map(|v| v.clone().into_string())
+            .unwrap_or_else(|| "forward".to_string());
+        let direction: RnnDirection = direction.parse()?;
+
+        // Extract layout (default: 0 = seq_length major)
+        // layout attribute was added in opset 14, but we support it for all versions
+        let layout = node
+            .attrs
+            .get("layout")
+            .map(|v| v.clone().into_i64())
+            .unwrap_or(0);
+        let batch_first = layout == 1;
+
+        // Check optional inputs
+        let has_bias = node.inputs.len() > 3 && !node.inputs[3].is_optional();
+        let has_initial_h = node.inputs.len() > 5 && !node.inputs[5].is_optional();
+
+        // Extract activations (default: Tanh for each direction)
+        // f = gate activation (i, o, f gates), g = cell activation, h = hidden activation
+        let (gate_activation) = if let Some(activations) =
+            node.attrs.get("activations")
+        {
+            let acts = activations.clone().into_strings();
+            if acts.is_empty() {
+                // Empty means use defaults
+                (
+                    LstmActivationFunction::Tanh,
+                )
+            } else if acts.len() >= 3 {
+                // Parse the first 3 activations (forward direction or only direction)
+                let gate: LstmActivationFunction = acts[0].parse()?;
+  
+                // For bidirectional, verify both directions use the same activations
+                if direction == LstmDirection::Bidirectional && acts.len() >= 2 {
+                    let gate2: LstmActivationFunction = acts[2].parse()?;
+
+                    if gate != gate2 {
+                        return Err(ProcessError::Custom(
+                                "RNN bidirectional with different activations per direction is not supported. Both directions must use the same activations.".to_string(),
+                            ));
+                    }
+                }
+
+                (gate)
+            } else {
+                return Err(ProcessError::Custom(format!(
+                    "RNN activations must have at least 3 elements, got {}",
+                    acts.len()
+                )));
+            }
+        } else {
+            // No activations attribute means use defaults
+            (
+                LstmActivationFunction::Tanh,
+            )
+        };
+
+        let config = RnnConfig::new(
+            input_size,
+            hidden_size,
+            direction,
+            has_bias,
+            has_initial_h,
+            batch_first,
+            clip,
+            input_forget,
+            gate_activation,
+        );
+
+        Ok(config)
+    }
+
+    fn build_node(&self, builder: RawNode, opset: usize) -> Node {
+        let config = self
+            .extract_config(&builder, opset)
+            .expect("Config extraction failed");
+
+        Node::Rnn(RnnNode {
+            name: builder.name,
+            inputs: builder.inputs,
+            outputs: builder.outputs,
+            config,
+        })
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::NodeType;
+    use crate::node::test_utils::TestNodeBuilder;
+
+    fn create_rnn_node(
+        hidden_size: i64,
+        direction: Option<&str>,
+        layout: Option<i64>,
+        num_outputs: usize,
+    ) -> RawNode {
+        let num_directions = match direction {
+            Some("bidirectional") => 2,
+            _ => 1,
+        };
+
+        let mut builder = TestNodeBuilder::new(NodeType::Rnn, "test_rnn")
+            // X: [seq_length=10, batch_size=2, input_size=4]
+            .input_tensor_f32("X", 3, Some(vec![10, 2, 4]))
+            // W: [num_directions, hidden_size, input_size]
+            .input_tensor_f32_data(
+                "W",
+                vec![0.0; num_directions * hidden_size as usize * 4],
+                vec![num_directions, hidden_size as usize, 4],
+            )
+            // R: [num_directions, hidden_size, hidden_size]
+            .input_tensor_f32_data(
+                "R",
+                vec![0.0; num_directions * hidden_size as usize * hidden_size as usize],
+                vec![
+                    num_directions,
+                    hidden_size as usize,
+                    hidden_size as usize,
+                ],
+            )
+            .attr_int("hidden_size", hidden_size);
+
+        if let Some(dir) = direction {
+            builder = builder.attr_string("direction", dir);
+        }
+
+        if let Some(lay) = layout {
+            builder = builder.attr_int("layout", lay);
+        }
+
+        // Add outputs
+        for i in 0..num_outputs {
+            let output_name = match i {
+                0 => "Y",
+                1 => "Y_h",
+                _ => unreachable!(),
+            };
+            let output_rank = if i == 0 { 4 } else { 3 };
+            builder = builder.output_tensor_f32(output_name, output_rank, None);
+        }
+
+        builder.build_with_graph_data(14) // opset 14
+    }
+
+    #[test]
+    fn test_rnn_config_basic() {
+        let node = create_rnn_node(8, None, None, 2);
+        let processor = RnnProcessor;
+        let config = processor.extract_config(&node, 14).unwrap();
+
+        assert_eq!(config.input_size, 4);
+        assert_eq!(config.hidden_size, 8);
+        assert_eq!(config.direction, RnnDirection::Forward);
+        assert!(!config.has_bias);
+        assert!(!config.has_initial_h);
+        assert!(!config.batch_first);
+    }
+
+    #[test]
+    fn test_rnn_config_bidirectional() {
+        let node = create_rnn_node(8, Some("bidirectional"), None, 2);
+        let processor = RnnProcessor;
+        let config = processor.extract_config(&node, 14).unwrap();
+
+        assert_eq!(config.direction, RnnDirection::Bidirectional);
+        assert_eq!(config.direction.num_directions(), 2);
+    }
+
+    #[test]
+    fn test_rnn_config_batch_first() {
+        let node = create_rnn_node(8, None, Some(1), 2);
+        let processor = RnnProcessor;
+        let config = processor.extract_config(&node, 14).unwrap();
+
+        assert!(config.batch_first);
+    }
+
+    #[test]
+    fn test_rnn_type_inference() {
+        let mut node = create_rnn_node(8, None, None, 2);
+        let processor = RnnProcessor;
+        let prefs = OutputPreferences::new();
+
+        processor.infer_types(&mut node, 14, &prefs).unwrap();
+
+        // Y: [seq_length, num_directions, batch_size, hidden_size] -> rank 4
+        assert!(matches!(&node.outputs[0].ty, ArgType::Tensor(t) if t.rank == 4));
+        // Y_h: [num_directions, batch_size, hidden_size] -> rank 3
+        assert!(matches!(&node.outputs[1].ty, ArgType::Tensor(t) if t.rank == 3));
+    }
+
+    #[test]
+    fn test_rnn_direction_parsing() {
+        assert_eq!(
+            "forward".parse::<RnnDirection>().unwrap(),
+            RnnDirection::Forward
+        );
+        assert_eq!(
+            "reverse".parse::<RnnDirection>().unwrap(),
+            RnnDirection::Reverse
+        );
+        assert_eq!(
+            "bidirectional".parse::<RnnDirection>().unwrap(),
+            RnnDirection::Bidirectional
+        );
+        assert_eq!(
+            "FORWARD".parse::<RnnDirection>().unwrap(),
+            RnnDirection::Forward
+        );
+        assert!("invalid".parse::<RnnDirection>().is_err());
+    }
+
+    #[test]
+    fn test_rnn_spec() {
+        let processor = RnnProcessor;
+        let spec = processor.spec();
+
+        assert_eq!(spec.min_opset, 1);
+        assert!(spec.max_opset.is_none());
     }
 }

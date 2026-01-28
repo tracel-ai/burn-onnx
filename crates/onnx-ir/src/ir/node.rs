@@ -347,6 +347,7 @@ define_node_enum! {
     LpPool => unsupported::LpPoolNode,
     Lrn => unsupported::LrnNode,
     Lstm => lstm::LstmNode,
+    Rnn => rnn::RnnNode,
     MaxPool => unsupported::MaxPoolNode,
     MaxRoiPool => unsupported::MaxRoiPoolNode,
     MaxUnpool => unsupported::MaxUnpoolNode,
