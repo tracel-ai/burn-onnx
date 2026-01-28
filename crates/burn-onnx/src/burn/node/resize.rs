@@ -455,13 +455,13 @@ mod tests {
         };
         let node = ResizeNodeBuilder::new("dynamic_resize")
             .input_tensor("input", 4, DType::F32)
-            .input_shape("target_size")
+            .input_shape("target_size", 4)
             .output_tensor("output", 4, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, target_size: [i64; 1]) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<B, 4>, target_size: [i64; 4]) -> Tensor<B, 4> {
             let output = {
                 let target_height = target_size[2] as usize;
                 let target_width = target_size[3] as usize;
@@ -491,13 +491,13 @@ mod tests {
         };
         let node = ResizeNodeBuilder::new("bilinear_resize")
             .input_tensor("img", 4, DType::F32)
-            .input_shape("new_dims")
+            .input_shape("new_dims", 4)
             .output_tensor("resized_img", 4, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, img: Tensor<B, 4>, new_dims: [i64; 1]) -> Tensor<B, 4> {
+        pub fn forward(&self, img: Tensor<B, 4>, new_dims: [i64; 4]) -> Tensor<B, 4> {
             let resized_img = {
                 let target_height = new_dims[2] as usize;
                 let target_width = new_dims[3] as usize;
@@ -527,13 +527,13 @@ mod tests {
         };
         let node = ResizeNodeBuilder::new("cubic_interp")
             .input_tensor("source", 4, DType::F32)
-            .input_shape("output_shape")
+            .input_shape("output_shape", 4)
             .output_tensor("dest", 4, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, source: Tensor<B, 4>, output_shape: [i64; 1]) -> Tensor<B, 4> {
+        pub fn forward(&self, source: Tensor<B, 4>, output_shape: [i64; 4]) -> Tensor<B, 4> {
             let dest = {
                 let target_height = output_shape[2] as usize;
                 let target_width = output_shape[3] as usize;
@@ -689,13 +689,13 @@ mod tests {
         };
         let node = ResizeNodeBuilder::new("scale_resize")
             .input_tensor("input", 4, DType::F32)
-            .input_shape("scale_factors")
+            .input_shape("scale_factors", 4)
             .output_tensor("output", 4, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, scale_factors: [i64; 1]) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<B, 4>, scale_factors: [i64; 4]) -> Tensor<B, 4> {
             let output = {
                 let input_dims = input.dims();
                 let target_height = ((input_dims[2] as f64) * (scale_factors[2] as f64))
@@ -727,13 +727,13 @@ mod tests {
         };
         let node = ResizeNodeBuilder::new("bilinear_scale")
             .input_tensor("image", 4, DType::F32)
-            .input_shape("scale_vals")
+            .input_shape("scale_vals", 4)
             .output_tensor("scaled_image", 4, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, image: Tensor<B, 4>, scale_vals: [i64; 1]) -> Tensor<B, 4> {
+        pub fn forward(&self, image: Tensor<B, 4>, scale_vals: [i64; 4]) -> Tensor<B, 4> {
             let scaled_image = {
                 let input_dims = image.dims();
                 let target_height = ((input_dims[2] as f64) * (scale_vals[2] as f64)) as usize;
@@ -764,13 +764,13 @@ mod tests {
         };
         let node = ResizeNodeBuilder::new("bicubic_scale")
             .input_tensor("features", 4, DType::F32)
-            .input_shape("cubic_scales")
+            .input_shape("cubic_scales", 4)
             .output_tensor("upscaled", 4, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, features: Tensor<B, 4>, cubic_scales: [i64; 1]) -> Tensor<B, 4> {
+        pub fn forward(&self, features: Tensor<B, 4>, cubic_scales: [i64; 4]) -> Tensor<B, 4> {
             let upscaled = {
                 let input_dims = features.dims();
                 let target_height = ((input_dims[2] as f64) * (cubic_scales[2] as f64)) as usize;

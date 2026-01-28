@@ -253,14 +253,14 @@ mod tests {
     fn test_gather_shape_to_scalar_i32() {
         let config = GatherConfig { axis: 0 };
         let node = GatherNodeBuilder::new("extract_dim")
-            .input_shape("input_shape")
+            .input_shape("input_shape", 4)
             .input_scalar("dim_idx", DType::I32)
             .output_scalar("dim_value", DType::I32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input_shape: [i64; 1], dim_idx: i32) -> i32 {
+        pub fn forward(&self, input_shape: [i64; 4], dim_idx: i32) -> i32 {
             let actual_idx = if dim_idx < 0 {
                 (input_shape.len() as i64 + dim_idx) as usize
             } else {
@@ -276,14 +276,14 @@ mod tests {
     fn test_gather_shape_to_scalar_i64() {
         let config = GatherConfig { axis: 0 };
         let node = GatherNodeBuilder::new("get_batch_size")
-            .input_shape("shape_arr")
+            .input_shape("shape_arr", 4)
             .input_scalar("position", DType::I64)
             .output_scalar("size", DType::I64)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_arr: [i64; 1], position: i64) -> i64 {
+        pub fn forward(&self, shape_arr: [i64; 4], position: i64) -> i64 {
             let actual_idx = if position < 0 {
                 (shape_arr.len() as i64 + position) as usize
             } else {
@@ -299,15 +299,15 @@ mod tests {
     fn test_gather_shape_to_shape_tensor_index() {
         let config = GatherConfig { axis: 0 };
         let node = GatherNodeBuilder::new("select_dims")
-            .input_shape("full_shape")
+            .input_shape("full_shape", 4)
             .input_tensor("dim_indices", 1, DType::I64)
-            .output_shape("selected_shape")
+            .output_shape("selected_shape", 4)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, full_shape: [i64; 1], dim_indices: Tensor<B, 1, Int>) -> [i64; 1] {
-            let selected_shape: [i64; 1usize] = dim_indices
+        pub fn forward(&self, full_shape: [i64; 4], dim_indices: Tensor<B, 1, Int>) -> [i64; 4] {
+            let selected_shape: [i64; 4usize] = dim_indices
                 .to_data()
                 .iter::<i64>()
                 .map(|idx| {
@@ -330,15 +330,15 @@ mod tests {
     fn test_gather_shape_to_shape_tensor_index_rank3() {
         let config = GatherConfig { axis: 0 };
         let node = GatherNodeBuilder::new("pick_dimensions")
-            .input_shape("dimensions")
+            .input_shape("dimensions", 3)
             .input_tensor("choices", 1, DType::I64)
-            .output_shape("result_dims")
+            .output_shape("result_dims", 3)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dimensions: [i64; 1], choices: Tensor<B, 1, Int>) -> [i64; 1] {
-            let result_dims: [i64; 1usize] = choices
+        pub fn forward(&self, dimensions: [i64; 3], choices: Tensor<B, 1, Int>) -> [i64; 3] {
+            let result_dims: [i64; 3usize] = choices
                 .to_data()
                 .iter::<i64>()
                 .map(|idx| {
@@ -361,15 +361,15 @@ mod tests {
     fn test_gather_shape_to_shape_shape_index() {
         let config = GatherConfig { axis: 0 };
         let node = GatherNodeBuilder::new("reorder_shape")
-            .input_shape("original")
-            .input_shape("indices")
-            .output_shape("reordered")
+            .input_shape("original", 4)
+            .input_shape("indices", 4)
+            .output_shape("reordered", 4)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, original: [i64; 1], indices: [i64; 1]) -> [i64; 1] {
-            let reordered: [i64; 1usize] = indices
+        pub fn forward(&self, original: [i64; 4], indices: [i64; 4]) -> [i64; 4] {
+            let reordered: [i64; 4usize] = indices
                 .iter()
                 .map(|&idx| {
                     let actual_idx = if idx < 0 {
@@ -391,15 +391,15 @@ mod tests {
     fn test_gather_shape_to_shape_shape_index_rank2() {
         let config = GatherConfig { axis: 0 };
         let node = GatherNodeBuilder::new("transpose_dims")
-            .input_shape("shape_vec")
-            .input_shape("order")
-            .output_shape("transposed")
+            .input_shape("shape_vec", 2)
+            .input_shape("order", 2)
+            .output_shape("transposed", 2)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_vec: [i64; 1], order: [i64; 1]) -> [i64; 1] {
-            let transposed: [i64; 1usize] = order
+        pub fn forward(&self, shape_vec: [i64; 2], order: [i64; 2]) -> [i64; 2] {
+            let transposed: [i64; 2usize] = order
                 .iter()
                 .map(|&idx| {
                     let actual_idx = if idx < 0 {
@@ -706,13 +706,13 @@ mod tests {
         let config = GatherConfig { axis: 0 };
         let node = GatherNodeBuilder::new("gather_by_shape")
             .input_tensor("weights", 2, DType::F32)
-            .input_shape("positions")
+            .input_shape("positions", 2)
             .output_tensor("selected_weights", 2, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, weights: Tensor<B, 2>, positions: [i64; 1]) -> Tensor<B, 2> {
+        pub fn forward(&self, weights: Tensor<B, 2>, positions: [i64; 2]) -> Tensor<B, 2> {
             let selected_weights = {
                 let indices = Tensor::<B, 1, _>::from_data(positions, &*self.device);
                 Tensor::select(weights, 0, indices)
@@ -727,13 +727,13 @@ mod tests {
         let config = GatherConfig { axis: 1 };
         let node = GatherNodeBuilder::new("index_columns")
             .input_tensor("matrix_data", 3, DType::F64)
-            .input_shape("col_indices")
+            .input_shape("col_indices", 3)
             .output_tensor("columns", 3, DType::F64)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, matrix_data: Tensor<B, 3>, col_indices: [i64; 1]) -> Tensor<B, 3> {
+        pub fn forward(&self, matrix_data: Tensor<B, 3>, col_indices: [i64; 3]) -> Tensor<B, 3> {
             let columns = {
                 let indices = Tensor::<B, 1, _>::from_data(col_indices, &*self.device);
                 Tensor::select(matrix_data, 1, indices)
@@ -748,13 +748,13 @@ mod tests {
         let config = GatherConfig { axis: 2 };
         let node = GatherNodeBuilder::new("select_planes")
             .input_tensor("tensor3d", 4, DType::F32)
-            .input_shape("plane_ids")
+            .input_shape("plane_ids", 4)
             .output_tensor("planes", 4, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, tensor3d: Tensor<B, 4>, plane_ids: [i64; 1]) -> Tensor<B, 4> {
+        pub fn forward(&self, tensor3d: Tensor<B, 4>, plane_ids: [i64; 4]) -> Tensor<B, 4> {
             let planes = {
                 let indices = Tensor::<B, 1, _>::from_data(plane_ids, &*self.device);
                 Tensor::select(tensor3d, 2, indices)

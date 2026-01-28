@@ -155,7 +155,7 @@ mod tests {
             value: Some(TensorData::new(vec![3.14f32], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("dims")
+            .input_shape("dims", 1)
             .output_scalar("result", DType::F32)
             .config(config)
             .build();
@@ -175,7 +175,7 @@ mod tests {
             value: Some(TensorData::new(vec![2.718f64], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("shape_in")
+            .input_shape("shape_in", 1)
             .output_scalar("value", DType::F64)
             .config(config)
             .build();
@@ -195,7 +195,7 @@ mod tests {
             value: Some(TensorData::new(vec![42i32], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("s")
+            .input_shape("s", 1)
             .output_scalar("num", DType::I32)
             .config(config)
             .build();
@@ -215,7 +215,7 @@ mod tests {
             value: Some(TensorData::new(vec![999i64], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("shape_data")
+            .input_shape("shape_data", 1)
             .output_scalar("output", DType::I64)
             .config(config)
             .build();
@@ -235,7 +235,7 @@ mod tests {
             value: Some(TensorData::new(vec![true], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("shape_vec")
+            .input_shape("shape_vec", 1)
             .output_scalar("flag", DType::Bool)
             .config(config)
             .build();
@@ -255,7 +255,7 @@ mod tests {
             value: None, // Should default to 0.0f32
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("s")
+            .input_shape("s", 1)
             .output_scalar("zero", DType::F32)
             .config(config)
             .build();
@@ -277,13 +277,13 @@ mod tests {
             value: Some(TensorData::new(vec![1.5f32], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("target_shape")
+            .input_shape("target_shape", 3)
             .output_tensor("filled", 3, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, target_shape: [i64; 1]) -> Tensor<B, 3> {
+        pub fn forward(&self, target_shape: [i64; 3]) -> Tensor<B, 3> {
             let filled = Tensor::<
                 B,
                 1,
@@ -306,13 +306,13 @@ mod tests {
             value: Some(TensorData::new(vec![0.5f64], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("dims")
+            .input_shape("dims", 2)
             .output_tensor("matrix", 2, DType::F64)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dims: [i64; 1]) -> Tensor<B, 2> {
+        pub fn forward(&self, dims: [i64; 2]) -> Tensor<B, 2> {
             let matrix = Tensor::<
                 B,
                 1,
@@ -335,13 +335,13 @@ mod tests {
             value: Some(TensorData::new(vec![7i32], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("size")
+            .input_shape("size", 2)
             .output_tensor("grid", 2, DType::I32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, size: [i64; 1]) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, size: [i64; 2]) -> Tensor<B, 2, Int> {
             let grid = Tensor::<
                 B,
                 1,
@@ -365,7 +365,7 @@ mod tests {
             value: Some(TensorData::new(vec![100i64], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("length")
+            .input_shape("length", 1)
             .output_tensor("vector", 1, DType::I64)
             .config(config)
             .build();
@@ -395,13 +395,13 @@ mod tests {
             value: Some(TensorData::new(vec![true], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("shape_dims")
+            .input_shape("shape_dims", 2)
             .output_tensor("mask", 2, DType::Bool)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_dims: [i64; 1]) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, shape_dims: [i64; 2]) -> Tensor<B, 2, Bool> {
             let mask = Tensor::<B, 2, Int>::ones([3usize, 4usize], &*self.device).bool();
             mask
         }
@@ -415,13 +415,13 @@ mod tests {
             value: Some(TensorData::new(vec![false], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("dimensions")
+            .input_shape("dimensions", 3)
             .output_tensor("flags", 3, DType::Bool)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dimensions: [i64; 1]) -> Tensor<B, 3, Bool> {
+        pub fn forward(&self, dimensions: [i64; 3]) -> Tensor<B, 3, Bool> {
             let flags = Tensor::<B, 3, Int>::zeros([6usize, 7usize, 8usize], &*self.device)
                 .bool();
             flags
@@ -436,13 +436,13 @@ mod tests {
             value: None, // Defaults to 0.0f32
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("size")
+            .input_shape("size", 2)
             .output_tensor("zeros", 2, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, size: [i64; 1]) -> Tensor<B, 2> {
+        pub fn forward(&self, size: [i64; 2]) -> Tensor<B, 2> {
             let zeros = Tensor::<
                 B,
                 1,
@@ -470,13 +470,13 @@ mod tests {
             value: Some(TensorData::new(vec![2.5f32], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("dynamic_shape")
+            .input_shape("dynamic_shape", 3)
             .output_tensor("tensor", 3, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dynamic_shape: [i64; 1]) -> Tensor<B, 3> {
+        pub fn forward(&self, dynamic_shape: [i64; 3]) -> Tensor<B, 3> {
             let tensor = Tensor::<
                 B,
                 1,
@@ -502,13 +502,13 @@ mod tests {
             value: Some(TensorData::new(vec![255i64], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("shape_param")
+            .input_shape("shape_param", 2)
             .output_tensor("data", 2, DType::I64)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_param: [i64; 1]) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, shape_param: [i64; 2]) -> Tensor<B, 2, Int> {
             let data = Tensor::<
                 B,
                 1,
@@ -535,13 +535,13 @@ mod tests {
             value: Some(TensorData::new(vec![true], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("sz")
+            .input_shape("sz", 4)
             .output_tensor("bitmask", 4, DType::Bool)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, sz: [i64; 1]) -> Tensor<B, 4, Bool> {
+        pub fn forward(&self, sz: [i64; 4]) -> Tensor<B, 4, Bool> {
             let bitmask = Tensor::<B, 4, Int>::ones(sz, &*self.device).bool();
             bitmask
         }
@@ -558,13 +558,13 @@ mod tests {
             value: Some(TensorData::new(vec![false], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("target_dims")
+            .input_shape("target_dims", 2)
             .output_tensor("empty_mask", 2, DType::Bool)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, target_dims: [i64; 1]) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, target_dims: [i64; 2]) -> Tensor<B, 2, Bool> {
             let empty_mask = Tensor::<B, 2, Int>::zeros(target_dims, &*self.device).bool();
             empty_mask
         }
@@ -581,13 +581,13 @@ mod tests {
             value: None, // Defaults to 0.0f32
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("runtime_shape")
+            .input_shape("runtime_shape", 3)
             .output_tensor("zeros", 3, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, runtime_shape: [i64; 1]) -> Tensor<B, 3> {
+        pub fn forward(&self, runtime_shape: [i64; 3]) -> Tensor<B, 3> {
             let zeros = Tensor::<
                 B,
                 1,
@@ -613,8 +613,8 @@ mod tests {
             value: Some(TensorData::new(vec![10i64], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("in_shape")
-            .output_shape_with_size("out_shape", 3) // Shape(3) - 3 elements
+            .input_shape("in_shape", 1)
+            .output_shape("out_shape", 3) // Shape(3) - 3 elements
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
@@ -634,8 +634,8 @@ mod tests {
             value: Some(TensorData::new(vec![5i64], vec![])),
         };
         let node = ConstantOfShapeNodeBuilder::new("const1")
-            .input_shape("dims")
-            .output_shape_with_size("result", 1) // Shape(1) - 1 element
+            .input_shape("dims", 1)
+            .output_shape("result", 1) // Shape(1) - 1 element
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
