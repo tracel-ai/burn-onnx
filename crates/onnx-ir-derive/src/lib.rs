@@ -21,10 +21,10 @@ use syn::{Data, DeriveInput, Fields, parse_macro_input};
 /// - `input_tensor(name, rank, dtype)` - Add tensor input (dynamic, no static shape)
 /// - `input_tensor_shape(name, shape, dtype)` - Add tensor input with static shape
 /// - `input_scalar(name, dtype)` - Add scalar input
-/// - `input_shape(name)` - Add shape input
+/// - `input_shape(name, rank)` - Add shape input (rank = number of dimensions)
 /// - `output_tensor(name, rank, dtype)` - Add output tensor
 /// - `output_scalar(name, dtype)` - Add scalar output
-/// - `output_shape(name)` - Add shape output
+/// - `output_shape(name, rank)` - Add shape output (rank = number of dimensions)
 /// - `config(config)` - Set config (if node has a config field)
 /// - `build()` - Build the node
 #[proc_macro_derive(NodeBuilder)]
@@ -165,10 +165,12 @@ pub fn node_builder_derive(input: TokenStream) -> TokenStream {
                 self
             }
 
-            /// Add a shape input (rank 1 by default, since shapes are 1D arrays)
-            pub fn input_shape(mut self, name: &str) -> Self {
+            /// Add a shape input with a specific rank (number of dimensions the shape describes)
+            ///
+            /// For example, a 4D tensor shape `[N, C, H, W]` has rank 4.
+            pub fn input_shape(mut self, name: &str, rank: usize) -> Self {
                 use crate::ir::{Argument, ArgType};
-                self.inputs.push(Argument::new(name, ArgType::Shape(1)));
+                self.inputs.push(Argument::new(name, ArgType::Shape(rank)));
                 self
             }
 
@@ -198,17 +200,12 @@ pub fn node_builder_derive(input: TokenStream) -> TokenStream {
                 self
             }
 
-            /// Add a shape output (size 1 by default, since shapes are 1D arrays of length 1)
-            pub fn output_shape(mut self, name: &str) -> Self {
+            /// Add a shape output with a specific rank (number of dimensions the shape describes)
+            ///
+            /// For example, a 4D tensor shape `[N, C, H, W]` has rank 4.
+            pub fn output_shape(mut self, name: &str, rank: usize) -> Self {
                 use crate::ir::{Argument, ArgType};
-                self.outputs.push(Argument::new(name, ArgType::Shape(1)));
-                self
-            }
-
-            /// Add a shape output with a specific size (number of elements in the shape array)
-            pub fn output_shape_with_size(mut self, name: &str, size: usize) -> Self {
-                use crate::ir::{Argument, ArgType};
-                self.outputs.push(Argument::new(name, ArgType::Shape(size)));
+                self.outputs.push(Argument::new(name, ArgType::Shape(rank)));
                 self
             }
 
