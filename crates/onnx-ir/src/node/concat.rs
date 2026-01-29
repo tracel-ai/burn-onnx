@@ -164,14 +164,13 @@ impl NodeProcessor for ConcatProcessor {
                         ArgType::Tensor(t) => Some(t.dtype),
                         _ => None,
                     };
-                    if let Some(d) = dtype {
-                        if d != first_dtype {
+                    if let Some(d) = dtype
+                        && d != first_dtype {
                             return Err(ProcessError::TypeMismatch {
                                 expected: format!("{:?}", first_dtype),
                                 actual: format!("{:?} at input {}", d, i),
                             });
                         }
-                    }
                 }
 
                 node.outputs[0].ty = ArgType::Tensor(TensorType {
