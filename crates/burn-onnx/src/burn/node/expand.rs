@@ -17,27 +17,6 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
         let output = arg_to_ident(output_arg);
         let output_rank = output_arg.ty.rank();
 
-        // For scalar inputs, convert to rank-1 tensor
-        let (input_init, input_expr, input_rank) = if input_arg.ty.is_scalar() {
-            let dtype = input_arg.ty.elem_type();
-            let dtype_tokens = dtype.to_tokens();
-            let kind = match dtype {
-                DType::Bool => quote! { , Bool },
-                _ if dtype.is_float() => quote! {},
-                _ => quote! { , Int },
-            };
-            let init = quote! {
-                let input = Tensor::<B, 1 #kind>::from_data_dtype(
-                    burn::tensor::TensorData::from([#input]),
-                    &*self.device,
-                    #dtype_tokens
-                );
-            };
-            (init, quote! { input }, 1usize)
-        } else {
-            (quote! {}, input.clone(), input_arg.ty.rank())
-        };
-
         let shape = match &self.config {
             onnx_ir::expand::ExpandConfig::Static(s) => s.to_tokens(),
             onnx_ir::expand::ExpandConfig::Runtime(r) => {
@@ -60,12 +39,34 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
             }
         };
 
+        // For scalar inputs, materialize as rank-1 tensor and expand directly.
+        // No max-semantics loop needed since a scalar always has dim [1].
+        if input_arg.ty.is_scalar() {
+            let dtype = input_arg.ty.elem_type();
+            let dtype_tokens = dtype.to_tokens();
+            let kind = match dtype {
+                DType::Bool => quote! { , Bool },
+                _ if dtype.is_float() => quote! {},
+                _ => quote! { , Int },
+            };
+            return quote! {
+                let #output = {
+                    let input = Tensor::<B, 1 #kind>::from_data_dtype(
+                        burn::tensor::TensorData::from([#input]),
+                        &*self.device,
+                        #dtype_tokens
+                    );
+                    input.expand(#shape)
+                };
+            };
+        }
+
         // ONNX Expand uses max-semantics: output_dim = max(input_dim, shape_dim)
+        let input_rank = input_arg.ty.rank();
         quote! {
             let #output = {
-                #input_init
                 let onnx_shape: [i64; #output_rank] = #shape;
-                let input_dims = #input_expr.dims();
+                let input_dims = #input.dims();
                 let mut shape = onnx_shape;
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..#input_rank {
@@ -74,7 +75,7 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
                         shape[dim_offset] = input_dims[i] as i64;
                     }
                 }
-                #input_expr.expand(shape)
+                #input.expand(shape)
             };
         }
     }
@@ -167,17 +168,7 @@ mod tests {
                     &*self.device,
                     burn::tensor::DType::I64,
                 );
-                let onnx_shape: [i64; 2usize] = [2, 3];
-                let input_dims = input.dims();
-                let mut shape = onnx_shape;
-                #[allow(clippy::needless_range_loop)]
-                for i in 0..1usize {
-                    let dim_offset = 2usize - 1usize + i;
-                    if shape[dim_offset] == 1 && input_dims[i] > 1 {
-                        shape[dim_offset] = input_dims[i] as i64;
-                    }
-                }
-                input.expand(shape)
+                input.expand([2, 3])
             };
             output
         }
@@ -204,17 +195,7 @@ mod tests {
                     &*self.device,
                     burn::tensor::DType::F32,
                 );
-                let onnx_shape: [i64; 2usize] = [2, 3];
-                let input_dims = input.dims();
-                let mut shape = onnx_shape;
-                #[allow(clippy::needless_range_loop)]
-                for i in 0..1usize {
-                    let dim_offset = 2usize - 1usize + i;
-                    if shape[dim_offset] == 1 && input_dims[i] > 1 {
-                        shape[dim_offset] = input_dims[i] as i64;
-                    }
-                }
-                input.expand(shape)
+                input.expand([2, 3])
             };
             output
         }
@@ -242,17 +223,7 @@ mod tests {
                     &*self.device,
                     burn::tensor::DType::Bool,
                 );
-                let onnx_shape: [i64; 2usize] = [2, 3];
-                let input_dims = input.dims();
-                let mut shape = onnx_shape;
-                #[allow(clippy::needless_range_loop)]
-                for i in 0..1usize {
-                    let dim_offset = 2usize - 1usize + i;
-                    if shape[dim_offset] == 1 && input_dims[i] > 1 {
-                        shape[dim_offset] = input_dims[i] as i64;
-                    }
-                }
-                input.expand(shape)
+                input.expand([2, 3])
             };
             output
         }
