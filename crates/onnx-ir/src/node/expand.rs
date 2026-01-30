@@ -569,6 +569,50 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_expand_scalar_input_static_shape() {
+        let mut node = TestNodeBuilder::new(NodeType::Expand, "test_expand")
+            .input_scalar_f32("input")
+            .input_tensor_i64_data("shape", vec![2, 3], vec![2])
+            .output_tensor_f32("output", 0, None)
+            .build_with_graph_data(16);
+
+        let processor = ExpandProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(tensor) => {
+                assert_eq!(tensor.dtype, DType::F32);
+                assert_eq!(tensor.rank, 2);
+                assert_eq!(tensor.static_shape, Some(vec![2, 3]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_expand_scalar_input_runtime_shape() {
+        let mut node = TestNodeBuilder::new(NodeType::Expand, "test_expand")
+            .input_scalar_i64("input")
+            .input_tensor_i64("shape", 1, Some(vec![4]))
+            .output_tensor_i64("output", 0, None)
+            .build();
+
+        let processor = ExpandProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(tensor) => {
+                assert_eq!(tensor.dtype, DType::I64);
+                assert_eq!(tensor.rank, 4);
+                assert_eq!(tensor.static_shape, None);
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
     // TODO: Add test for invalid shape values - Test negative values other than -1 (e.g., -2, -3) should return error - Missing constraint validation test
     // TODO: Add test for shape with value -1 - Per spec, -1 means copy from input dimension - Missing edge case test
     // TODO: Add test for incompatible broadcasting - Test case where input shape cannot be broadcast to target shape - Missing broadcast validation test
