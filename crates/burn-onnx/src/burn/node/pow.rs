@@ -206,6 +206,18 @@ mod tests {
     }
 
     #[test]
+    fn test_pow_int_broadcast_rhs_larger() {
+        let node = create_pow_node_broadcast("pow1", 2, 3, DType::F32, DType::I32);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, base: Tensor<B, 2>, exponent: Tensor<B, 3, Int>) -> Tensor<B, 3> {
+            let output = base.unsqueeze_dims(&[0isize]).powi(exponent);
+            output
+        }
+        ");
+    }
+
+    #[test]
     fn test_pow_int_tensor_int_scalar() {
         let node = create_pow_node_tensor_scalar("pow1", DType::I32, DType::I32);
         let code = codegen_forward_default(&node);
