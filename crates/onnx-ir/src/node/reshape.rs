@@ -235,6 +235,13 @@ pub(crate) struct ReshapeProcessor;
 impl NodeProcessor for ReshapeProcessor {
     type Config = ReshapeConfig;
 
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Reshape is a no-op when both input and output are Scalar
+        // (e.g., Reshape(scalar, [-1]) or Reshape(scalar, [1]))
+        matches!(node.inputs[0].ty, ArgType::Scalar(_))
+            && matches!(node.outputs[0].ty, ArgType::Scalar(_))
+    }
+
     fn spec(&self) -> NodeSpec {
         NodeSpec {
             min_opset: 5,
@@ -653,5 +660,33 @@ mod tests {
             }
             other => panic!("Expected Tensor output, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_reshape_is_noop_scalar_to_scalar() {
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape_noop")
+            .add_input("data", ArgType::Scalar(DType::F32))
+            .input_tensor_i64_data("shape", vec![-1], vec![1])
+            .add_output(
+                "reshaped",
+                ArgType::Tensor(TensorType::new(DType::F32, 1, None)),
+            )
+            .build_with_graph_data(16);
+
+        let processor = ReshapeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        // Scalar reshaped to [-1] stays Scalar, so this is a no-op
+        assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_reshape_is_not_noop_tensor() {
+        let node = create_test_node(0, vec![2, 3]).process(ReshapeProcessor, 16);
+        let processor = ReshapeProcessor;
+
+        // Tensor reshape is not a no-op
+        assert!(!processor.is_noop(&node));
     }
 }

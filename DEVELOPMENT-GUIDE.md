@@ -290,6 +290,7 @@ implement:
 4. **`extract_config()`** - Extract config from attributes/inputs (override if Config != `()`)
 5. **`spec()`** - Define opset and input/output requirements (optional)
 6. **`lift_constants()`** - Request constant lifting for inputs (optional)
+7. **`is_noop()`** - Return `true` if the node is a no-op (optional, default `false`)
 
 Example `build_node()` implementation:
 
@@ -367,8 +368,9 @@ through a 5-phase pipeline:
 #### Phase 4: Post-processing
 
 - Lifts constants: Makes constant values accessible on downstream node inputs
-- Eliminates Identity nodes: Removes no-op nodes and rewires the graph
-- Re-runs constant lifting after Identity elimination
+- Eliminates no-op nodes: Removes nodes whose processor's `is_noop()` returns `true` (Identity,
+  same-type Cast, scalar Reshape, scalar Gather, etc.) and rewires the graph
+- Re-runs constant lifting after no-op elimination
 
 #### Phase 5: Finalization
 
@@ -394,6 +396,8 @@ handling ONNX operations. Each processor implements:
   `Default::default()`)
 - `lift_constants()` - Request constant lifting for specific inputs (default does nothing)
 - `input_preferences()` - Declare preferred input types from producers (default returns `None`)
+- `is_noop()` - Return `true` if this node is a no-op after type inference, causing it to be
+  eliminated during post-processing (default returns `false`)
 
 Design principles: Each processor is self-contained, handling type inference, config extraction, and
 node construction. Processors return strongly-typed `Node` enum variants, ensuring type safety
