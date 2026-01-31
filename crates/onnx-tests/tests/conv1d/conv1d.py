@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: conv1d.onnx
 
@@ -34,7 +42,7 @@ def main():
     file_name = "conv1d.onnx"
     test_input = torch.full((6, 4, 10), 3.141592, device=device)
     torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
+                      verbose=False, opset_version=16, external_data=False)
 
     print("Finished exporting model to {}".format(file_name))
 

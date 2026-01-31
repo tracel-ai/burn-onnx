@@ -1,50 +1,55 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/reduce_prod/reduce_prod.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: reduce_prod.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, x):
-        return (
-            # ReduceProd, keepdims=0, axes=None
-            torch.prod(x),
-            # ReduceProd, keepdims=1, axes=[1]
-            torch.prod(x, dim=1, keepdim=True),
-            # ReduceProd, keepdims=1, axes=[-1]
-            torch.prod(x, dim=-1, keepdim=True),
-            # ReduceProd, keepdims=0, axes=[2]
-            torch.prod(x, dim=2, keepdim=False),
-        )
+OPSET_VERSION = 16
 
 
 def main():
-    # Set random seed for reproducibility
-    torch.manual_seed(0)
+    node0 = helper.make_node(
+        "ReduceProd", ["onnx::ReduceProd_0"], ["1"],
+        keepdims=0)
+    node1 = helper.make_node(
+        "ReduceProd", ["onnx::ReduceProd_0"], ["2"],
+        axes=[1],
+        keepdims=1)
+    node2 = helper.make_node(
+        "ReduceProd", ["onnx::ReduceProd_0"], ["3"],
+        axes=[-1],
+        keepdims=1)
+    node3 = helper.make_node(
+        "ReduceProd", ["onnx::ReduceProd_0"], ["4"],
+        axes=[2],
+        keepdims=0)
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-    test_input = torch.tensor([[[
-        [1.0, 4.0, 9.0, 25.0],
-        [2.0, 5.0, 10.0, 26.0],
-    ]]], device=device)
+    inp_onnx__ReduceProd_0 = helper.make_tensor_value_info("onnx::ReduceProd_0", TensorProto.FLOAT, [1, 1, 2, 4])
 
+    out_n1 = helper.make_tensor_value_info("1", TensorProto.FLOAT, [])
+    out_n2 = helper.make_tensor_value_info("2", TensorProto.FLOAT, [1, 1, 2, 4])
+    out_n3 = helper.make_tensor_value_info("3", TensorProto.FLOAT, [1, 1, 2, 1])
+    out_n4 = helper.make_tensor_value_info("4", TensorProto.FLOAT, [1, 1, 4])
 
-    torch.onnx.export(model, test_input, "reduce_prod.onnx", verbose=False, opset_version=16)
+    graph = helper.make_graph(
+        [node0, node1, node2, node3],
+        "main_graph",
+        [inp_onnx__ReduceProd_0],
+        [out_n1, out_n2, out_n3, out_n4],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
 
-    print("Finished exporting model")
-
-    # Output some test data for use in the test
-    print(f"Test input data:\n{test_input}")
-    output = model.forward(test_input)
-    print("Test output data:", *output, sep = "\n")
+    onnx.save(model, "reduce_prod.onnx")
+    print(f"Finished exporting model to reduce_prod.onnx")
 
 
 if __name__ == "__main__":

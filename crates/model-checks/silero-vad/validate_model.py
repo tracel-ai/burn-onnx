@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "onnxruntime",
+#   "numpy",
+# ]
+# ///
+
 """
 Validate the Silero VAD ONNX model independently.
 
@@ -10,20 +19,9 @@ This script:
 import numpy as np
 from pathlib import Path
 
-try:
-    import onnx
-    from onnx import checker
-except ImportError:
-    print("Error: onnx package not found. Please install it with:")
-    print("  pip install onnx")
-    exit(1)
-
-try:
-    import onnxruntime as ort
-except ImportError:
-    print("Error: onnxruntime package not found. Please install it with:")
-    print("  pip install onnxruntime")
-    exit(1)
+import onnx
+from onnx import checker
+import onnxruntime as ort
 
 
 def validate_model():

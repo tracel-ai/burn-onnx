@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: linear.onnx
 
@@ -45,7 +53,7 @@ def main():
     input2 = torch.full((2, 5), 3.14, device=device)
     input3 = torch.full((3, 2, 7), 3.14, device=device)
     torch.onnx.export(model, (input1, input2, input3), file_name,
-                      verbose=False, opset_version=16)
+                      verbose=False, opset_version=16, external_data=False)
 
     print("Finished exporting model to {}".format(file_name))
 

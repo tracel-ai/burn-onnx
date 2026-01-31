@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 # Generates matmulinteger.onnx in the same directory and sanity-checks with ReferenceEvaluator.
 
 from pathlib import Path

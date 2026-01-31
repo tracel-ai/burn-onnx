@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+#   "onnxruntime",
+# ]
+# ///
+
 """
 Generate ONNX model that tests outer-scope variable references in subgraphs.
 

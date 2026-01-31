@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
 # /// script
-# python = "3.11"
 # dependencies = [
-#   "onnx>=1.14",
+#   "onnx==1.19.0",
 #   "huggingface_hub",
 # ]
 # ///

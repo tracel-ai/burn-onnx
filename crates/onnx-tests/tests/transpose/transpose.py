@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: transpose.onnx
 
@@ -29,7 +37,7 @@ def main():
     file_name = "transpose.onnx"
     test_input = torch.arange(24, dtype=torch.float, device=device).reshape(2, 3, 4)
     torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
+                      verbose=False, opset_version=16, external_data=False)
 
     print(f"Finished exporting model to {file_name}")
 

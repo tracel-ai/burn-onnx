@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # This script generates ONNX model for testing squeeze without axes specified
 # When no axes are provided, all dimensions with size 1 should be squeezed

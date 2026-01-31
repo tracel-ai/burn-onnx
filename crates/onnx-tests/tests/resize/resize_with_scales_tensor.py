@@ -6,10 +6,7 @@
 #   "numpy",
 # ]
 # ///
-#
-# Learn more about Astral's UV tool at
-# https://docs.astral.sh/uv/guides/scripts/#declaring-script-dependencies
-#
+
 # used to generate model: onnx-tests/tests/resize/resize_with_scales_tensor.onnx
 # This tests resize with a runtime tensor input for scales (not a constant)
 # This is the counterpart to resize_with_sizes_tensor.py but for scales instead of sizes

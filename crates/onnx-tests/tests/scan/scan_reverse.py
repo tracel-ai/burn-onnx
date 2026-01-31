@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 """
 Generate ONNX model with Scan operator that scans in reverse direction.
 Tests scan_input_directions attribute handling.
@@ -117,7 +125,11 @@ def main():
     print("✓ Saved scan_reverse.onnx")
 
     # Generate test data using ONNX reference implementation
-    test_data = generate_test_data(model)
+    try:
+        test_data = generate_test_data(model)
+    except RuntimeError as e:
+        print(f"Skipping test data generation (ReferenceEvaluator limitation): {e}")
+        return
 
     # Print test data for copying into Rust tests
     print("\n" + "=" * 80)

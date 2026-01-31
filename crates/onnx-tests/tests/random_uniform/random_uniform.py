@@ -1,44 +1,41 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: random_uniform.onnx
 
-import torch
-import torch.nn as nn
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, _in):
-        return torch.rand(2, 3)
+OPSET_VERSION = 16
 
 
 def main():
-    # Set seed for reproducibility
-    torch.manual_seed(42)
-
-    torch.set_printoptions(precision=8)
-
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-
-    file_name = "random_uniform.onnx"
-    test_input = torch.empty(0)
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
-
-    print(f"Finished exporting model to {file_name}")
-
-    # Output some test data for use in the test
-    print(f"Test input data: {test_input}")
-    print(f"Test input data shape: {test_input.shape}")
-    output = model.forward(test_input)
-    print(f"Test output data shape: {output.shape}")
-    print(f"Test output data: {output}")
+    node0 = helper.make_node(
+        "RandomUniform", [], ["1"],
+        dtype=1,
+        shape=[2, 3])
 
 
-if __name__ == '__main__':
+    out_n1 = helper.make_tensor_value_info("1", TensorProto.FLOAT, [2, 3])
+
+    graph = helper.make_graph(
+        [node0],
+        "main_graph",
+        [],
+        [out_n1],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+
+    onnx.save(model, "random_uniform.onnx")
+    print(f"Finished exporting model to random_uniform.onnx")
+
+
+if __name__ == "__main__":
     main()

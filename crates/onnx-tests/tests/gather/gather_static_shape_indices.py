@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: gather_static_shape_indices.onnx
 # Test case that demonstrates why shape preservation is needed for static indices

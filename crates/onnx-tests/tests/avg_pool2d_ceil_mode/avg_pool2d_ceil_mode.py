@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: avg_pool2d_ceil_mode.onnx
 # Tests ceil_mode=True for AvgPool2d which produces larger output when input doesn't divide evenly
@@ -51,7 +59,7 @@ def main():
     ]]], device=device)
 
     torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=19)
+                      verbose=False, opset_version=19, external_data=False)
 
     print("Finished exporting model to {}".format(file_name))
 

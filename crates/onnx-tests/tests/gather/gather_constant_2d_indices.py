@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # Test case for Gather with different combinations of Initializer and Constant
 # Creates a single model with 3 Gather nodes to test:

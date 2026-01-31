@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate models:
 #  where_op.onnx
@@ -26,7 +34,7 @@ def create_model(name: str, device: torch.device, mask: torch.Tensor, x: torch.T
     onnx_name = f"{name}.onnx"
     test_input = (mask, x, y)
 
-    torch.onnx.export(model, (test_input), onnx_name, verbose=False, opset_version=16)
+    torch.onnx.export(model, (test_input), onnx_name, verbose=False, opset_version=16, external_data=False)
 
     print(f"Finished exporting model to {onnx_name}")
 

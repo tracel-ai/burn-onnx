@@ -1,43 +1,44 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/concat/concat.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: concat.onnx
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-    def forward(self, x):
-        # Concatenate along the channel dimension
-        y = torch.cat((x,x), 1)
-        x = torch.cat((x,y), 1)
-        z = torch.cat((y,y), 1)
-        x = torch.cat((x,y,z), 1)
-        return x
+OPSET_VERSION = 16
+
 
 def main():
+    node0 = helper.make_node(
+        "Concat", ["onnx::Concat_0", "onnx::Concat_0"], ["/Concat_output_0"],
+        axis=1)
+    node1 = helper.make_node(
+        "Concat", ["onnx::Concat_0", "/Concat_output_0", "/Concat_output_0", "/Concat_output_0", "/Concat_output_0"], ["2"],
+        axis=1)
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-    onnx_name = "concat.onnx"
-    dummy_input = torch.randn(1,2,3,5, device=device)
-    torch.onnx.export(model, dummy_input, onnx_name,
-                      verbose=False, opset_version=16)
-    
-    print("Finished exporting model to {}".format(onnx_name))
+    inp_onnx__Concat_0 = helper.make_tensor_value_info("onnx::Concat_0", TensorProto.FLOAT, [1, 2, 3, 5])
 
-    # Output some test data for use in the test
-    test_input = torch.randn(1,2,3,5, device=device)
-    print("Test input data shape: {}".format(test_input.shape))
-    output = model.forward(test_input)
+    out_n2 = helper.make_tensor_value_info("2", TensorProto.FLOAT, [1, 18, 3, 5])
 
-    print("Test output data shape: {}".format(output.shape))
+    graph = helper.make_graph(
+        [node0, node1],
+        "torch_jit",
+        [inp_onnx__Concat_0],
+        [out_n2],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+
+    onnx.save(model, "concat.onnx")
+    print(f"Finished exporting model to concat.onnx")
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

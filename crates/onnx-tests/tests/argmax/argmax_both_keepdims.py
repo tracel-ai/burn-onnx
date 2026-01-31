@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/argmax/argmax_both_keepdims.onnx
 
@@ -26,7 +34,7 @@ def main():
     onnx_name = "argmax_both_keepdims.onnx"
     dummy_input = torch.randn((3, 4), device=device)
     torch.onnx.export(model, dummy_input, onnx_name,
-                      verbose=False, opset_version=16,
+                      verbose=False, opset_version=16, external_data=False,
                       output_names=['keepdims_true', 'keepdims_false'])
     
     print("Finished exporting model to {}".format(onnx_name))
@@ -48,7 +56,7 @@ def main():
     
     # Verify with ONNX reference implementation
     onnx_model = onnx.load(onnx_name)
-    ref_outputs = onnx.reference.ReferenceEvaluator(onnx_model).run(None, {"input1": test_input.numpy()})
+    ref_outputs = onnx.reference.ReferenceEvaluator(onnx_model).run(None, {"x": test_input.numpy()})
     print("ONNX reference outputs:")
     print("  keepdims=True:", ref_outputs[0], "shape:", ref_outputs[0].shape)
     print("  keepdims=False:", ref_outputs[1], "shape:", ref_outputs[1].shape)

@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: concat_scalar_direct.onnx
 # This test directly reproduces issue #4228: Concat fails when receiving Scalar(I64) input.
@@ -130,8 +137,8 @@ def main():
         print(f"Output shape tensor: {result[0]}")
         print(f"Expected: [2, 64] (batch=2 from input shape, 64 from constant)")
 
-    except ImportError:
-        print("onnx.reference not available, skipping inference test")
+    except (ImportError, RuntimeError) as e:
+        print(f"Skipping inference test: {e}")
 
 
 if __name__ == "__main__":

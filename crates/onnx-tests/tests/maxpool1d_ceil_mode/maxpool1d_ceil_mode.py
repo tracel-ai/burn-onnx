@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: maxpool1d_ceil_mode.onnx
 # Tests ceil_mode=True for MaxPool1d which produces larger output when input doesn't divide evenly
@@ -43,7 +51,7 @@ def main():
     test_input = torch.tensor([[[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]]], device=device)
 
     torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
+                      verbose=False, opset_version=16, external_data=False)
 
     print("Finished exporting model to {}".format(file_name))
 

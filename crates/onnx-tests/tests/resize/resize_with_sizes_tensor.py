@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/resize/resize_with_sizes_tensor.onnx
 # This tests resize with a runtime tensor input for sizes (not a constant, not a Shape type)

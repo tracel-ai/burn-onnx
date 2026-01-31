@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 import torch
 import torch.nn as nn
@@ -37,7 +45,7 @@ def export_interpolate_onnx(filename, batch_size=1, channels=1, height=6, width=
                       input_names=['input'], output_names=['output'],
                       dynamic_axes={'input': {0: 'batch_size'},
                                     'output': {0: 'batch_size'}},
-                      opset_version=17)
+                      opset_version=17, external_data=False)
 
     output = model(dummy_input)
     print(f"Input shape: {dummy_input.shape}")

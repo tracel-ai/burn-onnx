@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 """
 Generate ONNX model with 3 levels of nested subgraphs: If -> Loop -> If.
 This tests recursive code generation and module hierarchy.

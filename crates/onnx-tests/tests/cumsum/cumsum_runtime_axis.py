@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/cumsum/cumsum_runtime_axis.onnx
 # CumSum with runtime axis (axis as model input, not constant)

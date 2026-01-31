@@ -1,45 +1,41 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: flatten.onnx
 
-import torch
-import torch.nn as nn
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, x):
-        x = x.flatten(1, 2)
-        return x
+OPSET_VERSION = 16
 
 
 def main():
+    node0 = helper.make_node(
+        "Flatten", ["onnx::Flatten_0"], ["1"],
+        axis=1)
 
-    # Set seed for reproducibility
-    torch.manual_seed(42)
+    inp_onnx__Flatten_0 = helper.make_tensor_value_info("onnx::Flatten_0", TensorProto.FLOAT, [1, 5, 15])
 
-    torch.set_printoptions(precision=8)
+    out_n1 = helper.make_tensor_value_info("1", TensorProto.FLOAT, [1, 75])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
+    graph = helper.make_graph(
+        [node0],
+        "torch_jit",
+        [inp_onnx__Flatten_0],
+        [out_n1],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
 
-    file_name = "flatten.onnx"
-    test_input =  torch.ones(1, 5, 15, device=device)
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
-
-    print("Finished exporting model to {}".format(file_name))
-
-    # Output some test data for use in the test
-    print("Test input data of ones: {}".format(test_input))
-    print("Test input data shape of ones: {}".format(test_input.shape))
-    output = model.forward(test_input)
-    print("Test output data shape: {}".format(output.shape))
+    onnx.save(model, "flatten.onnx")
+    print(f"Finished exporting model to flatten.onnx")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

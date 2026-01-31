@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/add/add_argmax_with_shape.onnx
 # This replicates the exact pattern from the CLIP model that was failing

@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
+
 """
 Generate ONNX model for GridSample with nearest neighbor interpolation.
 """
@@ -38,7 +47,7 @@ def main():
         "grid_sample_nearest.onnx",
         input_names=["input", "grid"],
         output_names=["output"],
-        opset_version=16,
+        opset_version=16, external_data=False,
         dynamic_axes=None,
     )
 

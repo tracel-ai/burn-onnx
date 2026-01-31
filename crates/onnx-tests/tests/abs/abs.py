@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/abs/abs.onnx
 
@@ -26,7 +34,7 @@ def main():
     test_input = torch.tensor([[[[-1.0, -4.0, 9.0, -25.0]]]], device=device)
 
     torch.onnx.export(model, (test_input), onnx_name,
-                      verbose=False, opset_version=16)
+                      verbose=False, opset_version=16, external_data=False)
 
     print("Finished exporting model to {}".format(onnx_name))
 

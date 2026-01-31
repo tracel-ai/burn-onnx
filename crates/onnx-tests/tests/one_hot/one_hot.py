@@ -1,43 +1,47 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/one_hot/one_hot.onnx
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
+# used to generate model: one_hot.onnx
+
+import numpy as np
 import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class OneHotModel(nn.Module):
-    def __init__(self, num_classes=3):
-        super().__init__()
-        self.num_classes = num_classes  # Number of categories for one-hot encoding
+OPSET_VERSION = 16
 
-    def forward(self, x):
-        one_hot = F.one_hot(x, num_classes=self.num_classes)
-        return one_hot  # Convert to float for compatibility
 
-# Create model instance
-num_classes = 3
-model = OneHotModel(num_classes=num_classes)
-model.eval()
+def main():
+    node0 = helper.make_node(
+        "Constant", [], ["/Constant_output_0"],
+        value=numpy_helper.from_array(np.array([3], dtype=np.int64).reshape([]), name="value"))
+    node1 = helper.make_node(
+        "Constant", [], ["/Constant_1_output_0"],
+        value=numpy_helper.from_array(np.array([0, 1], dtype=np.int64).reshape([2]), name="value"))
+    node2 = helper.make_node(
+        "OneHot", ["input", "/Constant_output_0", "/Constant_1_output_0"], ["one_hot_output"],
+        axis=-1)
 
-# Example input: Tensor of class indices
-test_input = torch.tensor([0, 1, 2], dtype=torch.int64)
+    inp_input = helper.make_tensor_value_info("input", TensorProto.INT64, [None])
 
-# Export to ONNX
-onnx_file = "one_hot.onnx"
-torch.onnx.export(
-    model,
-    test_input,
-    onnx_file,
-    opset_version=16,
-    input_names=["input"],
-    output_names=["one_hot_output"],
-    dynamic_axes={"input": {0: "batch_size"}, "one_hot_output": {0: "batch_size"}}
-)
+    out_one_hot_output = helper.make_tensor_value_info("one_hot_output", TensorProto.INT64, [None, 3])
 
-print(f"Finished exporting model to {onnx_file}")
-print(f"Test input data of ones: {test_input}")
-print(f"Test input data shape of ones: {test_input.shape}")
-output = model.forward(test_input)
-print(f"Test output data shape: {output.shape}")
-print(f"Test output: {output}")
+    graph = helper.make_graph(
+        [node0, node1, node2],
+        "main_graph",
+        [inp_input],
+        [out_one_hot_output],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+
+    onnx.save(model, "one_hot.onnx")
+    print(f"Finished exporting model to one_hot.onnx")
+
+
+if __name__ == "__main__":
+    main()

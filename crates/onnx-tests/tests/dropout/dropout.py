@@ -1,46 +1,46 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/dropout/dropout.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: dropout.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-        self.dropout = nn.Dropout(p=0.25)
-
-    def forward(self, x):
-        x = self.dropout(x)
-        return x
+OPSET_VERSION = 16
 
 
 def main():
+    node0 = helper.make_node(
+        "Constant", [], ["/dropout/Constant_output_0"],
+        value=numpy_helper.from_array(np.array([0.25], dtype=np.float32).reshape([]), name="value"))
+    node1 = helper.make_node(
+        "Constant", [], ["/dropout/Constant_1_output_0"],
+        value=numpy_helper.from_array(np.array([True], dtype=np.bool).reshape([]), name="value"))
+    node2 = helper.make_node(
+        "Dropout", ["input", "/dropout/Constant_output_0", "/dropout/Constant_1_output_0"], ["3", "/dropout/Dropout_output_1"])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
+    inp_input = helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 4, 10, 15])
 
-    file_name = "dropout.onnx"
-    test_input = torch.ones(2, 4, 10, 15, device=device)
-    torch.onnx.export(model, test_input, file_name,
-                      training=torch.onnx.TrainingMode.TRAINING,
-                      do_constant_folding=False,
-                      verbose=False, opset_version=16)
+    out_n3 = helper.make_tensor_value_info("3", TensorProto.FLOAT, [2, 4, 10, 15])
 
-    print("Finished exporting model to {}".format(file_name))
+    graph = helper.make_graph(
+        [node0, node1, node2],
+        "main_graph",
+        [inp_input],
+        [out_n3],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
 
-    # Output some test data for use in the test
-    print("Test input data shape of ones: {}".format(test_input.shape))
-    output = model.forward(test_input)
-    print("Test output data shape: {}".format(output.shape))
-
-    sum = output.sum().item()
-
-    print("Test output sum: {}".format(sum))
+    onnx.save(model, "dropout.onnx")
+    print(f"Finished exporting model to dropout.onnx")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

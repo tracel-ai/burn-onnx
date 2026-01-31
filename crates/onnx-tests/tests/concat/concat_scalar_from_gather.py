@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: concat_scalar_from_gather.onnx
 # This test reproduces issue #4228: Concat fails when receiving Scalar(I64) input

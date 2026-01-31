@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 import torch
 import torch.nn as nn
@@ -36,7 +44,7 @@ def main():
     upper_file_name = "trilu_upper.onnx"
     test_input = torch.randn(2, 4, 4, device=device)  # 2 batches of 4x4 matrices
     torch.onnx.export(lower_model, test_input, upper_file_name,
-                      verbose=False, opset_version=16)
+                      verbose=False, opset_version=16, external_data=False)
 
     print("Finished exporting model to {}".format(upper_file_name))
 
@@ -57,7 +65,7 @@ def main():
     upper_file_name = "trilu_lower.onnx"
     test_input = torch.randn(2, 4, 4, device=device)  # 2 batches of 4x4 matrices
     torch.onnx.export(lower_model, test_input, upper_file_name,
-                      verbose=False, opset_version=16)
+                      verbose=False, opset_version=16, external_data=False)
 
     print("Finished exporting model to {}".format(upper_file_name))
 

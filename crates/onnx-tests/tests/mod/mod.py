@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/mod/mod.onnx
 
@@ -28,7 +36,7 @@ def main():
     dummy_y = torch.randn(2, 3, 4, device=device)
 
     torch.onnx.export(model, (dummy_x, dummy_y), onnx_name,
-                      verbose=False, opset_version=16)
+                      verbose=False, opset_version=16, external_data=False)
 
     print("Finished exporting model to {}".format(onnx_name))
 

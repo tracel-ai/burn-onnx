@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 import torch
 import torch.nn as nn
@@ -29,7 +37,7 @@ def export_model(model: ConstantModel, dummy_input: torch.Tensor, file_name: str
         dummy_input,
         file_name,
         verbose=False,
-        opset_version=16,
+        opset_version=16, external_data=False,
         do_constant_folding=False,
     )
     print(f"Finished exporting model to {file_name}")

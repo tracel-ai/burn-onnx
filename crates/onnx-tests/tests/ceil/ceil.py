@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # Used to generate model: onnx-tests/tests/ceil/ceil.onnx
 
@@ -25,7 +33,7 @@ def main():
         model,
         test_input,
         onnx_file,
-        opset_version=16,
+        opset_version=16, external_data=False,
     )
 
     print(f"Finished exporting model to {onnx_file}")

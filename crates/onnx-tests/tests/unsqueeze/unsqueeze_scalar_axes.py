@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: unsqueeze_scalar_axes.onnx
 # This test verifies that Unsqueeze handles scalar axes input (not just 1D tensor).

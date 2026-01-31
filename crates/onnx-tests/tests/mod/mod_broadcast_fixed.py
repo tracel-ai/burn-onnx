@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/mod/mod_broadcast_fixed.onnx
 # Tests broadcasting with fmod=1 - using torch for proper shape inference
@@ -26,7 +34,7 @@ def main():
     dummy_y = torch.randn(2, 1, 3, 4, device=device)  # 4D tensor
 
     torch.onnx.export(model, (dummy_x, dummy_y), onnx_name,
-                      verbose=False, opset_version=16)
+                      verbose=False, opset_version=16, external_data=False)
 
     print(f"Finished exporting model to {onnx_name}")
 

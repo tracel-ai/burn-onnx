@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 """
 Generate ONNX model with Loop operator that has multiple loop-carried dependencies.
 Tests handling of 3 separate accumulator variables updated independently.

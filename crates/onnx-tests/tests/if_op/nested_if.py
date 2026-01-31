@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 """
 Generate ONNX model with deeply nested If operators testing variable scoping.
 Tests that variables can be passed from outer scopes through nested subgraphs.

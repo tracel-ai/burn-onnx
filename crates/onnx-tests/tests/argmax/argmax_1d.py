@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/argmax_1d/argmax_1d.onnx
 
@@ -28,7 +37,7 @@ def main():
     dummy_input = torch.randn(5, device=device)
     
     torch.onnx.export(model, dummy_input, onnx_name,
-                      verbose=False, opset_version=16,
+                      verbose=False, opset_version=16, external_data=False,
                       input_names=['input'],
                       output_names=['output'],
                       dynamic_axes={'input': {0: 'dim0'}})

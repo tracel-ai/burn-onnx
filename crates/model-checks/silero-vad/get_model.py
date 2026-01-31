@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "onnxruntime",
+#   "numpy",
+# ]
+# ///
+
 """
 Download and prepare the Silero VAD model for testing.
 
@@ -17,20 +26,8 @@ from pathlib import Path
 from collections import defaultdict
 
 import numpy as np
-
-try:
-    import onnx
-except ImportError:
-    print("Error: onnx package not found. Please install it with:")
-    print("  pip install onnx")
-    exit(1)
-
-try:
-    import onnxruntime as ort
-except ImportError:
-    print("Error: onnxruntime package not found. Please install it with:")
-    print("  pip install onnxruntime")
-    exit(1)
+import onnx
+import onnxruntime as ort
 
 
 def extract_node_info(model_path, artifacts_dir):

@@ -1,3 +1,12 @@
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 import onnx
 import numpy as np
 from onnx import helper, TensorProto

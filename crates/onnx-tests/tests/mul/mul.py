@@ -1,57 +1,54 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/add/add.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: mul.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        # Declare a constant float tensor
-        self.a = torch.full((1, 1, 1, 4), 3.0)
-
-        # Declare a scalar
-        self.b = 7.0
-        super(Model, self).__init__()
-
-    def forward(self, x, k):
-
-        # Multiply the input by the constant tensor
-        x = x * self.a
-
-        # Multiply the input scalar by the constant scalar
-        d = k * self.b
-
-        # Multiply the result of the previous multiplications
-        x = x * d
-
-        return x
+OPSET_VERSION = 16
 
 
 def main():
+    node0 = helper.make_node(
+        "Constant", [], ["/Constant_output_0"],
+        value=numpy_helper.from_array(np.array([3.0, 3.0, 3.0, 3.0], dtype=np.float32).reshape([1, 1, 1, 4]), name="value"))
+    node1 = helper.make_node(
+        "Mul", ["onnx::Mul_0", "/Constant_output_0"], ["/Mul_output_0"])
+    node2 = helper.make_node(
+        "Cast", ["onnx::Cast_1"], ["/Cast_output_0"],
+        to=1)
+    node3 = helper.make_node(
+        "Constant", [], ["/Constant_1_output_0"],
+        value=numpy_helper.from_array(np.array([7.0], dtype=np.float32).reshape([]), name="value"))
+    node4 = helper.make_node(
+        "Mul", ["/Cast_output_0", "/Constant_1_output_0"], ["/Mul_1_output_0"])
+    node5 = helper.make_node(
+        "Mul", ["/Mul_output_0", "/Mul_1_output_0"], ["7"])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-    onnx_name = "mul.onnx"
-    dummy_input = torch.randn(1, 2, 3, 4, device=device)
+    inp_onnx__Mul_0 = helper.make_tensor_value_info("onnx::Mul_0", TensorProto.FLOAT, [1, 2, 3, 4])
+    inp_onnx__Cast_1 = helper.make_tensor_value_info("onnx::Cast_1", TensorProto.DOUBLE, [])
 
-    scalar = 6.0
+    out_n7 = helper.make_tensor_value_info("7", TensorProto.FLOAT, [1, 2, 3, 4])
 
-    torch.onnx.export(model, (dummy_input, scalar), onnx_name,
-                      verbose=False, opset_version=16)
+    graph = helper.make_graph(
+        [node0, node1, node2, node3, node4, node5],
+        "torch_jit",
+        [inp_onnx__Mul_0, inp_onnx__Cast_1],
+        [out_n7],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
 
-    print("Finished exporting model to {}".format(onnx_name))
-
-    # Output some test data for use in the test
-    test_input = torch.tensor([[[[1.0, 2.0, 3.0, 4.0]]]])
-
-    print("Test input data: {}, {}".format(test_input, scalar))
-    output = model.forward(test_input, scalar)
-    print("Test output data: {}".format(output))
+    onnx.save(model, "mul.onnx")
+    print(f"Finished exporting model to mul.onnx")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

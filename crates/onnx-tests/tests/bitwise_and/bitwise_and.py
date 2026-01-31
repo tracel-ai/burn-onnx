@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+# ]
+# ///
+
 # used to generate all bitwise_and ONNX models
 
 import onnx

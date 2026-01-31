@@ -1,52 +1,66 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: equal.onnx
 
-import torch
-import torch.nn as nn
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
+from onnx.reference import ReferenceEvaluator
 
-
-class Model(nn.Module):
-    def __init__(self):
-        # Declare a constant float tensor with ones
-        self.a = torch.ones(1, 1, 1, 4)
-
-        # Declare a scalar
-        self.b = 5.0
-        super(Model, self).__init__()
-
-    def forward(self, x, k):
-
-        x = x == self.a
-
-        k = k == self.b
-
-        return x, k
+OPSET_VERSION = 16
 
 
 def main():
+    # Graph: Equal(x, ones_const) and Equal(Cast(k, float), 5.0_const)
+    # x is float tensor [1,1,1,4], k is float64 scalar
 
-    # Set seed for reproducibility
-    torch.manual_seed(42)
+    const_ones = helper.make_node(
+        "Constant", [], ["ones"],
+        value=numpy_helper.from_array(
+            np.ones([1, 1, 1, 4], dtype=np.float32), name="ones"
+        ),
+    )
+    equal1 = helper.make_node("Equal", ["x", "ones"], ["out1"])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
+    cast_k = helper.make_node("Cast", ["k"], ["k_float"], to=TensorProto.FLOAT)
+    const_5 = helper.make_node(
+        "Constant", [], ["five"],
+        value=numpy_helper.from_array(np.float32(5.0), name="five"),
+    )
+    equal2 = helper.make_node("Equal", ["k_float", "five"], ["out2"])
+
+    x = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 1, 1, 4])
+    k = helper.make_tensor_value_info("k", TensorProto.DOUBLE, [])
+    out1 = helper.make_tensor_value_info("out1", TensorProto.BOOL, [1, 1, 1, 4])
+    out2 = helper.make_tensor_value_info("out2", TensorProto.BOOL, [])
+
+    graph = helper.make_graph(
+        [const_ones, equal1, cast_k, const_5, equal2],
+        "equal_test",
+        [x, k],
+        [out1, out2],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+
     onnx_name = "equal.onnx"
-    input = torch.ones(1, 1, 1, 4, device=device)
+    onnx.save(model, onnx_name)
+    print(f"Finished exporting model to {onnx_name}")
 
-    scalar = 2.0
-
-    torch.onnx.export(model, (input, scalar), onnx_name,
-                      verbose=False, opset_version=16)
-
-    print("Finished exporting model to {}".format(onnx_name))
-
-    print("Test input data: {}, {}".format(input, scalar))
-    output = model.forward(input, scalar)
-    print("Test output data: {}".format(output))
+    # Test
+    test_x = np.ones([1, 1, 1, 4], dtype=np.float32)
+    test_k = np.float64(2.0)
+    session = ReferenceEvaluator(onnx_name)
+    results = session.run(None, {"x": test_x, "k": test_k})
+    print(f"Test input data: {test_x}, {test_k}")
+    print(f"Test output data: {results}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

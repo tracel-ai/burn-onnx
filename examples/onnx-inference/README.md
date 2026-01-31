@@ -100,17 +100,13 @@ https://huggingface.co/datasets/ylecun/mnist/viewer/mnist/test?row=15
 The following steps show how to export a PyTorch model to ONNX from checked in PyTorch code (see
 `pytorch/mnist.py`).
 
-1. Install dependencies:
+1. Run the following script to run the MNIST training and export the model to ONNX:
 
    ```bash
-   pip install torch torchvision onnx
+   uv run pytorch/mnist.py
    ```
 
-2. Run the following script to run the MNIST training and export the model to ONNX:
-
-   ```bash
-   python3 pytorch/mnist.py
-   ```
+   Dependencies are declared inline in the script and installed automatically by `uv`.
 
 This will generate `pytorch/mnist.onnx`.
 

@@ -1,41 +1,46 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/xor/xor.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: xor.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, x, y):
-        return torch.logical_xor(x, y)
+OPSET_VERSION = 16
 
 
 def main():
-    # Set random seed for reproducibility
-    torch.manual_seed(0)
+    node0 = helper.make_node(
+        "Cast", ["onnx::Cast_0"], ["/Cast_output_0"],
+        to=9)
+    node1 = helper.make_node(
+        "Cast", ["onnx::Cast_1"], ["/Cast_1_output_0"],
+        to=9)
+    node2 = helper.make_node(
+        "Xor", ["/Cast_output_0", "/Cast_1_output_0"], ["4"])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-    onnx_name = "xor.onnx"
-    test_input_x = torch.tensor([[[[False, False, True, True]]]], device=device)
-    test_input_y = torch.tensor([[[[False, True, False, True]]]], device=device)
+    inp_onnx__Cast_0 = helper.make_tensor_value_info("onnx::Cast_0", TensorProto.BOOL, [1, 1, 1, 4])
+    inp_onnx__Cast_1 = helper.make_tensor_value_info("onnx::Cast_1", TensorProto.BOOL, [1, 1, 1, 4])
 
-    # NOTE: torch exports logical_xor with a cast node even if the input is already bool
-    # https://github.com/pytorch/pytorch/blob/main/torch/onnx/symbolic_opset9.py#L2204-L2207
-    torch.onnx.export(model, (test_input_x, test_input_y), onnx_name, verbose=False, opset_version=16)
+    out_n4 = helper.make_tensor_value_info("4", TensorProto.BOOL, [1, 1, 1, 4])
 
-    print(f"Finished exporting model to {onnx_name}")
+    graph = helper.make_graph(
+        [node0, node1, node2],
+        "main_graph",
+        [inp_onnx__Cast_0, inp_onnx__Cast_1],
+        [out_n4],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
 
-    # Output some test data for use in the test
-    print(f"Test input data: {test_input_x}, {test_input_y}")
-    output = model.forward(test_input_x, test_input_y)
-    print(f"Test output data: {output}")
+    onnx.save(model, "xor.onnx")
+    print(f"Finished exporting model to xor.onnx")
 
 
 if __name__ == "__main__":

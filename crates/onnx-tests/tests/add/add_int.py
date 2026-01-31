@@ -1,60 +1,51 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/add/add.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: add_int.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-
-        # TODO enable this after https://github.com/tracel-ai/burn/issues/665 is fixed
-        # Declare a constant int tensor with ones
-        # self.a = torch.ones(1, 1, 1, 4, dtype=torch.int32)
-
-        # Declare a scalar
-        self.b = 5
-        super(Model, self).__init__()
-
-    def forward(self, x, k):
-
-        # Add tensor inputs
-        x = x + x
-
-        # Add a scalar constant and a scalar input
-        d = self.b + k
-
-        # Add a tensor and a scalar
-        x = x + d
-
-        return x
+OPSET_VERSION = 16
 
 
 def main():
+    node0 = helper.make_node(
+        "Add", ["onnx::Add_0", "onnx::Add_0"], ["/Add_output_0"])
+    node1 = helper.make_node(
+        "Constant", [], ["/Constant_output_0"],
+        value=numpy_helper.from_array(np.array([5], dtype=np.int64).reshape([]), name="value"))
+    node2 = helper.make_node(
+        "Add", ["onnx::Add_1", "/Constant_output_0"], ["/Add_1_output_0"])
+    node3 = helper.make_node(
+        "Cast", ["/Add_1_output_0"], ["/Cast_output_0"],
+        to=6)
+    node4 = helper.make_node(
+        "Add", ["/Add_output_0", "/Cast_output_0"], ["6"])
 
-    # set seed for reproducibility
-    torch.manual_seed(0)
+    inp_onnx__Add_0 = helper.make_tensor_value_info("onnx::Add_0", TensorProto.INT32, [1, 1, 1, 4])
+    inp_onnx__Add_1 = helper.make_tensor_value_info("onnx::Add_1", TensorProto.INT64, [])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-    onnx_name = "add_int.onnx"
-    # Output some test data for use in the test
-    test_input = torch.tensor([[[[1, 2, 3, 4]]]], dtype=torch.int32)
+    out_n6 = helper.make_tensor_value_info("6", TensorProto.INT32, [1, 1, 1, 4])
 
-    scalar = 2
+    graph = helper.make_graph(
+        [node0, node1, node2, node3, node4],
+        "torch_jit",
+        [inp_onnx__Add_0, inp_onnx__Add_1],
+        [out_n6],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
 
-    torch.onnx.export(model, (test_input, scalar), onnx_name,
-                      verbose=False, opset_version=16)
-
-    print("Finished exporting model to {}".format(onnx_name))
-
-    print("Test input data: {}, {}".format(test_input, scalar))
-    output = model.forward(test_input, scalar)
-    print("Test output data: {}".format(output))
+    onnx.save(model, "add_int.onnx")
+    print(f"Finished exporting model to add_int.onnx")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 """
 Generate ONNX model with Scan operator using scan_input_axes=[1].
 Tests that the scan operator correctly slices along axis 1.
