@@ -55,6 +55,10 @@ impl NodeProcessor for IdentityProcessor {
         Ok(())
     }
 
+    fn is_noop(&self, _node: &RawNode) -> bool {
+        true
+    }
+
     fn extract_config(&self, _node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
         Ok(())
     }

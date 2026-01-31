@@ -1,6 +1,6 @@
 //! Phase 4: Post-processing
 //!
-//! Eliminates Identity nodes by rewiring consumers, preserves at least one if graph would be empty.
+//! Eliminates no-op nodes (Identity and processor-declared no-ops) by rewiring consumers.
 
 use std::{
     cell::RefCell,
@@ -10,16 +10,16 @@ use std::{
 
 use crate::{
     graph_state::GraphState,
-    ir::{Argument, NodeType, RawNode},
+    ir::{Argument, RawNode},
     processor::get_processor_registry,
     proto_conversion::DEFAULT_OPSET_VERSION,
 };
 
-/// Result of Identity elimination analysis
-struct IdentityEliminationPlan {
-    /// Mapping from Identity output names to their input names (for rewiring)
+/// Result of no-op elimination analysis
+struct NoopEliminationPlan {
+    /// Mapping from no-op output names to their input names (for rewiring)
     rewire_map: HashMap<String, String>,
-    /// Indices of Identity nodes to remove
+    /// Indices of no-op nodes to remove
     nodes_to_remove: HashSet<usize>,
 }
 
@@ -41,23 +41,31 @@ fn rewire_argument(
     }
 }
 
-/// Analyze which Identity nodes can be removed and create rewiring map
-fn plan_identity_elimination(
+/// Analyze which nodes are no-ops and create rewiring map
+///
+/// A node is a no-op if its processor's `is_noop()` returns true, meaning the node's
+/// output equals its first input. These nodes are eliminated by rewiring consumers
+/// to read directly from the no-op's input.
+fn plan_noop_elimination(
     nodes: &[RawNode],
     node_output_map: &HashMap<String, (usize, usize)>,
-) -> IdentityEliminationPlan {
+) -> NoopEliminationPlan {
     let mut rewire_map = HashMap::new();
     let mut nodes_to_remove = HashSet::new();
 
-    // Find all Identity nodes
-    let identity_indices: Vec<usize> = nodes
+    let registry = get_processor_registry();
+
+    // Find all no-op nodes via processor trait
+    let noop_indices: Vec<usize> = nodes
         .iter()
         .enumerate()
-        .filter_map(|(i, node)| (node.node_type == NodeType::Identity).then_some(i))
+        .filter_map(|(i, node)| {
+            let processor = registry.get(&node.node_type);
+            processor.is_noop(node).then_some(i)
+        })
         .collect();
 
-    // Remove all pass-through Identity nodes (including empty graphs)
-    for &idx in &identity_indices {
+    for &idx in &noop_indices {
         let node = &nodes[idx];
 
         if node.inputs.is_empty() {
@@ -89,24 +97,24 @@ fn plan_identity_elimination(
         nodes_to_remove.insert(idx);
     }
 
-    IdentityEliminationPlan {
+    NoopEliminationPlan {
         rewire_map,
         nodes_to_remove,
     }
 }
 
-/// Apply the identity elimination plan to the graph
+/// Apply the no-op elimination plan to the graph
 ///
 /// This function:
-/// 1. Rewires all node inputs to bypass removed Identity nodes
-/// 2. Updates graph outputs to bypass removed Identity nodes
+/// 1. Rewires all node inputs to bypass removed no-op nodes
+/// 2. Updates graph outputs to bypass removed no-op nodes
 /// 3. Filters out removed nodes
-fn apply_identity_elimination(
+fn apply_noop_elimination(
     nodes: &mut Vec<RawNode>,
     outputs: &mut [Argument],
-    plan: IdentityEliminationPlan,
+    plan: NoopEliminationPlan,
 ) {
-    let IdentityEliminationPlan {
+    let NoopEliminationPlan {
         rewire_map,
         nodes_to_remove,
     } = plan;
@@ -188,11 +196,11 @@ pub(crate) fn post_process(
         (result.0, result.1, result.2, node_output_map)
     };
 
-    // Identity elimination
-    log::debug!("Starting Identity elimination");
+    // No-op elimination (includes Identity nodes and any processor-declared no-ops)
+    log::debug!("Starting no-op elimination");
     {
-        let elimination_plan = plan_identity_elimination(&nodes, &node_output_map);
-        apply_identity_elimination(&mut nodes, &mut outputs, elimination_plan);
+        let elimination_plan = plan_noop_elimination(&nodes, &node_output_map);
+        apply_noop_elimination(&mut nodes, &mut outputs, elimination_plan);
     }
 
     // Re-run constant lifting after identity elimination
@@ -324,7 +332,7 @@ mod tests {
         ];
 
         let node_output_map = HashMap::new();
-        let plan = plan_identity_elimination(&nodes, &node_output_map);
+        let plan = plan_noop_elimination(&nodes, &node_output_map);
 
         assert_eq!(plan.nodes_to_remove.len(), 1);
         assert!(plan.nodes_to_remove.contains(&0));
@@ -342,7 +350,7 @@ mod tests {
         ];
 
         let node_output_map = HashMap::new();
-        let plan = plan_identity_elimination(&nodes, &node_output_map);
+        let plan = plan_noop_elimination(&nodes, &node_output_map);
 
         // Should remove all Identity nodes (empty graph is allowed)
         assert_eq!(plan.nodes_to_remove.len(), 2);
@@ -351,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_identity_elimination() {
+    fn test_apply_noop_elimination() {
         let mut nodes = vec![
             create_identity_node("identity1", "input1", "identity1_out"),
             create_add_node("add1", "identity1_out", "input2", "add1_out"),
@@ -369,8 +377,8 @@ mod tests {
         }];
 
         let node_output_map = HashMap::new();
-        let plan = plan_identity_elimination(&nodes, &node_output_map);
-        apply_identity_elimination(&mut nodes, &mut outputs, plan);
+        let plan = plan_noop_elimination(&nodes, &node_output_map);
+        apply_noop_elimination(&mut nodes, &mut outputs, plan);
 
         // Identity should be removed
         assert_eq!(nodes.len(), 1);

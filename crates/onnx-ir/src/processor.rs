@@ -217,6 +217,15 @@ pub trait NodeProcessor: Send + Sync {
         )))
     }
 
+    /// Returns true if this node is a no-op (output equals input).
+    ///
+    /// When true, the node will be eliminated during post-processing and its output
+    /// rewired to its first input, similar to Identity elimination.
+    /// Called after type inference when input/output types are known.
+    fn is_noop(&self, _node: &RawNode) -> bool {
+        false
+    }
+
     /// Build the final Node enum from a RawNode
     ///
     /// This method converts the RawNode into the final immutable Node enum.
