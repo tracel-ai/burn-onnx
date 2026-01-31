@@ -523,7 +523,13 @@ pub fn compute_broadcast_static_shape(inputs: &[crate::ir::Argument]) -> Option<
     }
 
     if static_shapes.len() == 1 {
-        return Some(static_shapes[0].clone());
+        // Only return the shape if it matches the broadcast rank.
+        // Otherwise the shape from a lower-rank input would be wrong for the output.
+        let broadcast_rank = compute_broadcast_rank(inputs);
+        if broadcast_rank == static_shapes[0].len() {
+            return Some(static_shapes[0].clone());
+        }
+        return None;
     }
 
     if static_shapes.windows(2).all(|w| w[0] == w[1]) {
@@ -712,5 +718,68 @@ mod tests {
             }
             _ => panic!("Expected tensor output"),
         }
+    }
+
+    #[test]
+    fn test_broadcast_static_shape_rank_mismatch_returns_none() {
+        // Regression: when only one input has a static shape but its rank
+        // doesn't match the broadcast rank, we should return None instead
+        // of incorrectly propagating the shape.
+        let inputs = vec![
+            Argument {
+                name: "a".to_string(),
+                ty: ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank: 1,
+                    static_shape: Some(vec![2]),
+                }),
+                value_source: crate::ir::ValueSource::Dynamic,
+                value_store: None,
+            },
+            Argument {
+                name: "b".to_string(),
+                ty: ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank: 4,
+                    static_shape: None,
+                }),
+                value_source: crate::ir::ValueSource::Dynamic,
+                value_store: None,
+            },
+        ];
+
+        // Broadcast rank is 4, but only static shape is [2] (rank 1). Should be None.
+        let result = compute_broadcast_static_shape(&inputs);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_broadcast_static_shape_matching_rank() {
+        // When one input has a static shape matching the broadcast rank, use it.
+        let inputs = vec![
+            Argument {
+                name: "a".to_string(),
+                ty: ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank: 3,
+                    static_shape: Some(vec![2, 3, 4]),
+                }),
+                value_source: crate::ir::ValueSource::Dynamic,
+                value_store: None,
+            },
+            Argument {
+                name: "b".to_string(),
+                ty: ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank: 3,
+                    static_shape: None,
+                }),
+                value_source: crate::ir::ValueSource::Dynamic,
+                value_store: None,
+            },
+        ];
+
+        let result = compute_broadcast_static_shape(&inputs);
+        assert_eq!(result, Some(vec![2, 3, 4]));
     }
 }

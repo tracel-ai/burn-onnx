@@ -227,9 +227,13 @@ impl NodeProcessor for ConcatProcessor {
                         provisional_rank += rank;
                     }
                     ArgType::Tensor(t) if t.rank == 1 => {
-                        // For constant tensors, use their actual dimension count
-                        // For dynamic tensors, assume 1 element (will be corrected after conversion)
-                        let contribution = input.value().as_ref().map(|v| v.shape[0]).unwrap_or(1);
+                        // Use constant value length, static shape, or default to 1
+                        let contribution = input
+                            .value()
+                            .as_ref()
+                            .map(|v| v.shape[0])
+                            .or_else(|| t.static_shape.as_ref().map(|s| s[0]))
+                            .unwrap_or(1);
                         provisional_rank += contribution;
                     }
                     _ => {
@@ -546,6 +550,29 @@ mod tests {
                 assert_eq!(t.static_shape, Some(vec![4])); // 4 scalar inputs
             }
             _ => panic!("Expected Tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_concat_mixed_shape_and_rank1_tensor_with_static_shape() {
+        // Regression: when mixing Shape inputs with rank-1 Tensors that have
+        // static_shape but no constant value, Concat should use static_shape
+        // to determine the tensor's element contribution instead of defaulting to 1.
+        let mut node = TestNodeBuilder::new(NodeType::Concat, "test_concat_mixed_static")
+            .input_shape("shape1", 2)
+            .input_tensor_i64("tensor1", 1, Some(vec![0])) // rank-1, static_shape=[0]
+            .output_shape("output", 0) // will be updated
+            .attr_int("axis", 0)
+            .build();
+
+        let processor = ConcatProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        // Shape(2) + rank-1 tensor with static_shape [0] => Shape(2 + 0 = 2)
+        match &node.outputs[0].ty {
+            ArgType::Shape(rank) => assert_eq!(*rank, 2),
+            _ => panic!("Expected Shape output, got {:?}", node.outputs[0].ty),
         }
     }
 }

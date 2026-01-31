@@ -63,6 +63,11 @@ examples/
 - Type inference happens in processors, not in codegen
 - **Strive for full ONNX opset coverage** - extract all attributes even if not yet used by burn-onnx
 - Config structs should include all ONNX operator attributes, using `Option<T>` for optional ones
+- **Declarative node architecture**: General processing in the onnx-ir framework (pipeline phases,
+  graph state, type inference loop, etc.) must NOT contain node-type-specific logic. All
+  node-specific behavior is declared in `NodeProcessor` implementations. If a general module needs
+  to handle a particular node type differently, that logic belongs in the node's processor, not in
+  the framework code
 
 ### burn-onnx Patterns
 
