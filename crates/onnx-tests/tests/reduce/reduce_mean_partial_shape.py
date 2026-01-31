@@ -46,13 +46,14 @@ def main():
         test_input,
         onnx_name,
         verbose=False,
-        opset_version=16, external_data=False,
-        input_names=['input'],
-        output_names=['output'],
+        opset_version=16,
+        external_data=False,
+        input_names=["input"],
+        output_names=["output"],
         dynamic_axes={
-            'input': {0: 'batch', 1: 'seq'},  # Only last dim is static
-            'output': {0: 'batch', 1: 'seq'}
-        }
+            "input": {0: "batch", 1: "seq"},  # Only last dim is static
+            "output": {0: "batch", 1: "seq"},
+        },
     )
 
     print(f"Finished exporting model to {onnx_name}")

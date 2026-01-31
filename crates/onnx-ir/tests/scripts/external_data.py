@@ -33,12 +33,15 @@ def create_external_data_model():
     Y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [1, 4])
 
     # Create weight and bias tensors with known values for testing
-    weight_data = np.array([
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 2.0, 0.0, 0.0],
-        [0.0, 0.0, 3.0, 0.0],
-        [0.0, 0.0, 0.0, 4.0],
-    ], dtype=np.float32)
+    weight_data = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0],
+            [0.0, 0.0, 3.0, 0.0],
+            [0.0, 0.0, 0.0, 4.0],
+        ],
+        dtype=np.float32,
+    )
 
     bias_data = np.array([0.1, 0.2, 0.3, 0.4], dtype=np.float32)
 
@@ -46,7 +49,9 @@ def create_external_data_model():
     bias_tensor = numpy_helper.from_array(bias_data, name="bias")
 
     # Create nodes
-    matmul_node = helper.make_node("MatMul", ["X", "weight"], ["matmul_out"], name="matmul")
+    matmul_node = helper.make_node(
+        "MatMul", ["X", "weight"], ["matmul_out"], name="matmul"
+    )
     add_node = helper.make_node("Add", ["matmul_out", "bias"], ["Y"], name="add")
 
     # Create graph
@@ -141,7 +146,9 @@ def create_mixed_data_model():
     bias_data = np.zeros(64, dtype=np.float32)
     bias_tensor = numpy_helper.from_array(bias_data, name="bias")
 
-    matmul_node = helper.make_node("MatMul", ["X", "weight"], ["matmul_out"], name="matmul")
+    matmul_node = helper.make_node(
+        "MatMul", ["X", "weight"], ["matmul_out"], name="matmul"
+    )
     add_node = helper.make_node("Add", ["matmul_out", "bias"], ["Y"], name="add")
 
     graph = helper.make_graph(
@@ -182,19 +189,24 @@ def create_multiple_external_files_model():
     Y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [1, 4])
 
     # Create weight and bias tensors
-    weight_data = np.array([
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 2.0, 0.0, 0.0],
-        [0.0, 0.0, 3.0, 0.0],
-        [0.0, 0.0, 0.0, 4.0],
-    ], dtype=np.float32)
+    weight_data = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0],
+            [0.0, 0.0, 3.0, 0.0],
+            [0.0, 0.0, 0.0, 4.0],
+        ],
+        dtype=np.float32,
+    )
 
     bias_data = np.array([0.5, 0.5, 0.5, 0.5], dtype=np.float32)
 
     weight_tensor = numpy_helper.from_array(weight_data, name="weight")
     bias_tensor = numpy_helper.from_array(bias_data, name="bias")
 
-    matmul_node = helper.make_node("MatMul", ["X", "weight"], ["matmul_out"], name="matmul")
+    matmul_node = helper.make_node(
+        "MatMul", ["X", "weight"], ["matmul_out"], name="matmul"
+    )
     add_node = helper.make_node("Add", ["matmul_out", "bias"], ["Y"], name="add")
 
     graph = helper.make_graph(
@@ -237,13 +249,29 @@ def create_multiple_external_files_model():
         del tensor.external_data[:]
 
         if tensor.name == "weight":
-            tensor.external_data.append(onnx.StringStringEntryProto(key="location", value="multi_external_weights.bin"))
-            tensor.external_data.append(onnx.StringStringEntryProto(key="offset", value="0"))
-            tensor.external_data.append(onnx.StringStringEntryProto(key="length", value=str(weight_data.nbytes)))
+            tensor.external_data.append(
+                onnx.StringStringEntryProto(
+                    key="location", value="multi_external_weights.bin"
+                )
+            )
+            tensor.external_data.append(
+                onnx.StringStringEntryProto(key="offset", value="0")
+            )
+            tensor.external_data.append(
+                onnx.StringStringEntryProto(key="length", value=str(weight_data.nbytes))
+            )
         elif tensor.name == "bias":
-            tensor.external_data.append(onnx.StringStringEntryProto(key="location", value="multi_external_bias.bin"))
-            tensor.external_data.append(onnx.StringStringEntryProto(key="offset", value="0"))
-            tensor.external_data.append(onnx.StringStringEntryProto(key="length", value=str(bias_data.nbytes)))
+            tensor.external_data.append(
+                onnx.StringStringEntryProto(
+                    key="location", value="multi_external_bias.bin"
+                )
+            )
+            tensor.external_data.append(
+                onnx.StringStringEntryProto(key="offset", value="0")
+            )
+            tensor.external_data.append(
+                onnx.StringStringEntryProto(key="length", value=str(bias_data.nbytes))
+            )
 
     # Save the modified model (use raw write to preserve external_data settings)
     with open(output_path, "wb") as f:

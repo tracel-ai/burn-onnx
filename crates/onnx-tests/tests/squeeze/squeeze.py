@@ -18,12 +18,20 @@ OPSET_VERSION = 16
 
 def main():
     node0 = helper.make_node(
-        "Constant", [], ["/Constant_output_0"],
-        value=numpy_helper.from_array(np.array([2], dtype=np.int64).reshape([1]), name="value"))
+        "Constant",
+        [],
+        ["/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([2], dtype=np.int64).reshape([1]), name="value"
+        ),
+    )
     node1 = helper.make_node(
-        "Squeeze", ["onnx::Squeeze_0", "/Constant_output_0"], ["2"])
+        "Squeeze", ["onnx::Squeeze_0", "/Constant_output_0"], ["2"]
+    )
 
-    inp_onnx__Squeeze_0 = helper.make_tensor_value_info("onnx::Squeeze_0", TensorProto.FLOAT, [3, 4, 1, 5])
+    inp_onnx__Squeeze_0 = helper.make_tensor_value_info(
+        "onnx::Squeeze_0", TensorProto.FLOAT, [3, 4, 1, 5]
+    )
 
     out_n2 = helper.make_tensor_value_info("2", TensorProto.FLOAT, [3, 4, 5])
 
@@ -33,7 +41,9 @@ def main():
         [inp_onnx__Squeeze_0],
         [out_n2],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx.save(model, "squeeze.onnx")
     print(f"Finished exporting model to squeeze.onnx")

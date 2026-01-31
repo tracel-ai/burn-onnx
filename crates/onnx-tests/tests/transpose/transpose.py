@@ -23,7 +23,6 @@ class Model(nn.Module):
 
 
 def main():
-
     # Set seed for reproducibility
     torch.manual_seed(42)
 
@@ -36,8 +35,14 @@ def main():
 
     file_name = "transpose.onnx"
     test_input = torch.arange(24, dtype=torch.float, device=device).reshape(2, 3, 4)
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print(f"Finished exporting model to {file_name}")
 
@@ -49,5 +54,5 @@ def main():
     print(f"Test output data: {output}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

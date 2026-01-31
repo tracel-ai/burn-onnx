@@ -24,17 +24,14 @@ def build_model():
             name="const_value",
             data_type=onnx.TensorProto.INT64,
             dims=[3],
-            vals=[10, 20, 30]
+            vals=[10, 20, 30],
         ),
-        name="/Constant"
+        name="/Constant",
     )
 
     # Create Shape node to extract shape from input tensor
     shape_node = onnx.helper.make_node(
-        "Shape",
-        inputs=["input1"],
-        outputs=["shape1"],
-        name="/Shape"
+        "Shape", inputs=["input1"], outputs=["shape1"], name="/Shape"
     )
 
     # Create a Concat node that concatenates shape and three-element constant
@@ -43,7 +40,7 @@ def build_model():
         inputs=["shape1", "const_three"],
         outputs=["concatenated"],
         axis=0,
-        name="/Concat"
+        name="/Concat",
     )
 
     # Create the graph
@@ -62,17 +59,16 @@ def build_model():
             onnx.helper.make_value_info(
                 name="concatenated",
                 type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.INT64, shape=[6]  # 3 + 3 = 6
+                    elem_type=onnx.TensorProto.INT64,
+                    shape=[6],  # 3 + 3 = 6
                 ),
             )
-        ]
+        ],
     )
 
     # Create the model
     model = onnx.helper.make_model(
-        graph,
-        ir_version=8,
-        opset_imports=[onnx.helper.make_operatorsetid("", 16)]
+        graph, ir_version=8, opset_imports=[onnx.helper.make_operatorsetid("", 16)]
     )
 
     return model

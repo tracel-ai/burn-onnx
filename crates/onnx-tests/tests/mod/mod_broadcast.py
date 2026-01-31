@@ -14,27 +14,28 @@ import numpy as np
 import onnx
 from onnx import helper, TensorProto
 
+
 def main():
     # Create ONNX model with Mod operator using broadcasting
     # Different rank tensors: 2D and 4D
-    x = helper.make_tensor_value_info('x', TensorProto.FLOAT, [3, 4])  # 2D
-    y = helper.make_tensor_value_info('y', TensorProto.FLOAT, [2, 1, 3, 4])  # 4D
+    x = helper.make_tensor_value_info("x", TensorProto.FLOAT, [3, 4])  # 2D
+    y = helper.make_tensor_value_info("y", TensorProto.FLOAT, [2, 1, 3, 4])  # 4D
 
     # Output tensor will have the broadcasted shape
-    z = helper.make_tensor_value_info('z', TensorProto.FLOAT, [2, 1, 3, 4])
+    z = helper.make_tensor_value_info("z", TensorProto.FLOAT, [2, 1, 3, 4])
 
     # Create Mod node with fmod=1 (C-style fmod)
     mod_node = helper.make_node(
-        'Mod',
-        inputs=['x', 'y'],
-        outputs=['z'],
-        fmod=1  # C-style fmod
+        "Mod",
+        inputs=["x", "y"],
+        outputs=["z"],
+        fmod=1,  # C-style fmod
     )
 
     # Create the graph
     graph_def = helper.make_graph(
         [mod_node],
-        'mod_broadcast_model',
+        "mod_broadcast_model",
         [x, y],
         [z],
     )
@@ -42,8 +43,8 @@ def main():
     # Create the model with opset version 16
     model_def = helper.make_model(
         graph_def,
-        producer_name='onnx-tests',
-        opset_imports=[helper.make_operatorsetid("", 16)]
+        producer_name="onnx-tests",
+        opset_imports=[helper.make_operatorsetid("", 16)],
     )
 
     # Save the model
@@ -57,16 +58,16 @@ def main():
         from onnx.reference import ReferenceEvaluator
 
         # Create test data
-        test_x = np.array([[5.0, -7.0, 8.0, -9.0],
-                           [4.0, -6.0, 10.0, -11.0],
-                           [3.0, -5.0, 12.0, -13.0]]).astype(np.float32)
+        test_x = np.array(
+            [[5.0, -7.0, 8.0, -9.0], [4.0, -6.0, 10.0, -11.0], [3.0, -5.0, 12.0, -13.0]]
+        ).astype(np.float32)
 
-        test_y = np.array([[[[3.0, 3.0, 3.0, 3.0],
-                             [3.0, 3.0, 3.0, 3.0],
-                             [3.0, 3.0, 3.0, 3.0]]],
-                           [[[4.0, 4.0, 4.0, 4.0],
-                             [4.0, 4.0, 4.0, 4.0],
-                             [4.0, 4.0, 4.0, 4.0]]]]).astype(np.float32)
+        test_y = np.array(
+            [
+                [[[3.0, 3.0, 3.0, 3.0], [3.0, 3.0, 3.0, 3.0], [3.0, 3.0, 3.0, 3.0]]],
+                [[[4.0, 4.0, 4.0, 4.0], [4.0, 4.0, 4.0, 4.0], [4.0, 4.0, 4.0, 4.0]]],
+            ]
+        ).astype(np.float32)
 
         # Run inference with ReferenceEvaluator
         sess = ReferenceEvaluator(model_def)
@@ -86,5 +87,6 @@ def main():
     except ImportError:
         print("onnx.reference not available, skipping inference test")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

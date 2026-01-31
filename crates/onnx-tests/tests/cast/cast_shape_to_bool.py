@@ -21,10 +21,7 @@ def main():
 
     # Create Shape node to extract the shape of the input
     shape_node = helper.make_node(
-        "Shape",
-        inputs=["input"],
-        outputs=["shape_output"],
-        name="Shape"
+        "Shape", inputs=["input"], outputs=["shape_output"], name="Shape"
     )
 
     # Create Cast node to cast shape to bool
@@ -33,7 +30,7 @@ def main():
         inputs=["shape_output"],
         outputs=["output"],
         to=TensorProto.BOOL,  # Cast to bool type
-        name="Cast_to_bool"
+        name="Cast_to_bool",
     )
 
     # Create the graph

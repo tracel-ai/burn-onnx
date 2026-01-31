@@ -13,12 +13,14 @@
 import torch
 import torch.nn as nn
 
+
 class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
 
     def forward(self, x, y):
         return torch.ge(x, y)
+
 
 def main():
     # Set seed for reproducibility
@@ -36,9 +38,15 @@ def main():
     # Shape [4, 1] vs [1, 4] - should broadcast to [4, 4]
     test_input1 = torch.tensor([[1.0], [2.0], [3.0], [4.0]], device=device)
     test_input2 = torch.tensor([[1.0, 2.0, 3.0, 4.0]], device=device)
-    
-    torch.onnx.export(model, (test_input1, test_input2), onnx_name, 
-                      verbose=False, opset_version=16, external_data=False)
+
+    torch.onnx.export(
+        model,
+        (test_input1, test_input2),
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(onnx_name))
 
@@ -47,5 +55,6 @@ def main():
     output = model.forward(test_input1, test_input2)
     print("Test output shape: {}, data: {}".format(output.shape, output))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

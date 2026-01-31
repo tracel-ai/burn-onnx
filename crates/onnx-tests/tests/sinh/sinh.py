@@ -22,10 +22,7 @@ def build_model():
             name="main_graph",
             nodes=[
                 onnx.helper.make_node(
-                    "Sinh",
-                    inputs=["input1"],
-                    outputs=["output1"],
-                    name="/Sinh"
+                    "Sinh", inputs=["input1"], outputs=["output1"], name="/Sinh"
                 ),
             ],
             inputs=[
@@ -43,7 +40,7 @@ def build_model():
                         elem_type=onnx.TensorProto.FLOAT, shape=[1, 1, 1, 4]
                     ),
                 )
-            ]
+            ],
         ),
     )
 
@@ -56,8 +53,8 @@ def main():
     onnx.checker.check_model(onnx_model)
 
     onnx.save(onnx_model, file_name)
-    print(f"Finished exporting model to {file_name}") 
+    print(f"Finished exporting model to {file_name}")
+
 
 if __name__ == "__main__":
     main()
-

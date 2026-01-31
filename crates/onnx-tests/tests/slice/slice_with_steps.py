@@ -62,7 +62,11 @@ def main() -> None:
     )
 
     # Steps - non-trivial values
-    steps_val = [2, 3, -1]  # step=2 for dim0, step=3 for dim1, step=-1 (reverse) for dim2
+    steps_val = [
+        2,
+        3,
+        -1,
+    ]  # step=2 for dim0, step=3 for dim1, step=-1 (reverse) for dim2
     steps_tensor = helper.make_tensor(
         name="steps",
         data_type=TensorProto.INT64,
@@ -90,7 +94,9 @@ def main() -> None:
         nodes=[starts_node, ends_node, axes_node, steps_node, slice_node],
         name="SliceWithStepsGraph",
         inputs=[
-            helper.make_tensor_value_info("input_tensor", TensorProto.FLOAT, [10, 10, 12]),
+            helper.make_tensor_value_info(
+                "input_tensor", TensorProto.FLOAT, [10, 10, 12]
+            ),
         ],
         outputs=[
             helper.make_tensor_value_info("output", TensorProto.FLOAT, [5, 3, 12])

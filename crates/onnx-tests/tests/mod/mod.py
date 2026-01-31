@@ -35,8 +35,14 @@ def main():
     dummy_x = torch.randn(2, 3, 4, device=device)
     dummy_y = torch.randn(2, 3, 4, device=device)
 
-    torch.onnx.export(model, (dummy_x, dummy_y), onnx_name,
-                      verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        (dummy_x, dummy_y),
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(onnx_name))
 
@@ -50,5 +56,5 @@ def main():
     print("Test output: {}".format(output))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

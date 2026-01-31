@@ -22,31 +22,34 @@ def create_shape_broadcasting_model():
     """Create model where Shape output is used in broadcasting operation."""
 
     # Input
-    input_tensor = helper.make_tensor_value_info('input', TensorProto.FLOAT, [2, 3, 4])
+    input_tensor = helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 3, 4])
 
     # Output
-    output = helper.make_tensor_value_info('output', TensorProto.INT64, [3])
+    output = helper.make_tensor_value_info("output", TensorProto.INT64, [3])
 
     # Get shape, then use it in operations
     nodes = [
         # Extract shape as int64 tensor [2, 3, 4]
-        helper.make_node('Shape', ['input'], ['shape_tensor'], name='shape'),
-
+        helper.make_node("Shape", ["input"], ["shape_tensor"], name="shape"),
         # Use shape in Add operation (shape + shape, element-wise)
         # This tests Shape type in broadcasting context
-        helper.make_node('Add', ['shape_tensor', 'shape_tensor'], ['output'], name='add_shapes'),
+        helper.make_node(
+            "Add", ["shape_tensor", "shape_tensor"], ["output"], name="add_shapes"
+        ),
     ]
 
     # Create the graph
     graph = helper.make_graph(
         nodes,
-        'shape_broadcasting_model',
+        "shape_broadcasting_model",
         [input_tensor],
         [output],
     )
 
     # Create the model
-    model = helper.make_model(graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)]
+    )
 
     # Check the model
     onnx.checker.check_model(model)
@@ -59,7 +62,7 @@ def main():
     model = create_shape_broadcasting_model()
 
     # Save the model
-    output_path = '../fixtures/shape_broadcasting.onnx'
+    output_path = "../fixtures/shape_broadcasting.onnx"
     onnx.save(model, output_path)
     print(f"Model saved to {output_path}")
 
@@ -69,5 +72,5 @@ def main():
     print(f"  Tests ArgType::Shape in broadcasting operations")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

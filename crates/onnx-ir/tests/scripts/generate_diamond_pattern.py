@@ -23,10 +23,10 @@ def create_diamond_pattern_model():
     """Create model where computation splits and then merges back."""
 
     # Input
-    input_tensor = helper.make_tensor_value_info('input', TensorProto.FLOAT, [1, 4])
+    input_tensor = helper.make_tensor_value_info("input", TensorProto.FLOAT, [1, 4])
 
     # Output
-    output = helper.make_tensor_value_info('output', TensorProto.FLOAT, [1, 4])
+    output = helper.make_tensor_value_info("output", TensorProto.FLOAT, [1, 4])
 
     # Diamond pattern:
     #     input
@@ -37,23 +37,24 @@ def create_diamond_pattern_model():
 
     nodes = [
         # Split: input feeds two different operations
-        helper.make_node('Relu', ['input'], ['path1'], name='relu_path'),
-        helper.make_node('Abs', ['input'], ['path2'], name='abs_path'),
-
+        helper.make_node("Relu", ["input"], ["path1"], name="relu_path"),
+        helper.make_node("Abs", ["input"], ["path2"], name="abs_path"),
         # Merge: both paths combine
-        helper.make_node('Add', ['path1', 'path2'], ['output'], name='merge'),
+        helper.make_node("Add", ["path1", "path2"], ["output"], name="merge"),
     ]
 
     # Create the graph
     graph = helper.make_graph(
         nodes,
-        'diamond_pattern_model',
+        "diamond_pattern_model",
         [input_tensor],
         [output],
     )
 
     # Create the model
-    model = helper.make_model(graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)]
+    )
 
     # Check the model
     onnx.checker.check_model(model)
@@ -66,7 +67,7 @@ def main():
     model = create_diamond_pattern_model()
 
     # Save the model
-    output_path = '../fixtures/diamond_pattern.onnx'
+    output_path = "../fixtures/diamond_pattern.onnx"
     onnx.save(model, output_path)
     print(f"Model saved to {output_path}")
 
@@ -75,5 +76,5 @@ def main():
     print(f"  Tests split and merge convergence")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

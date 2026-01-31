@@ -18,10 +18,14 @@ OPSET_VERSION = 16
 
 def main():
     node0 = helper.make_node(
-        "Constant", [], ["/Constant_output_0"],
-        value=numpy_helper.from_array(np.array([True], dtype=np.bool).reshape([]), name="value"))
-    node1 = helper.make_node(
-        "Or", ["onnx::Or_0", "/Constant_output_0"], ["2"])
+        "Constant",
+        [],
+        ["/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([True], dtype=np.bool).reshape([]), name="value"
+        ),
+    )
+    node1 = helper.make_node("Or", ["onnx::Or_0", "/Constant_output_0"], ["2"])
 
     inp_onnx__Or_0 = helper.make_tensor_value_info("onnx::Or_0", TensorProto.BOOL, [])
 
@@ -33,7 +37,9 @@ def main():
         [inp_onnx__Or_0],
         [out_n2],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx.save(model, "constant_bool.onnx")
     print(f"Finished exporting model to constant_bool.onnx")

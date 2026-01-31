@@ -23,24 +23,26 @@ def create_passthrough_model():
     """Create model where input passes through to output."""
 
     # Input and output with same shape
-    input_tensor = helper.make_tensor_value_info('input', TensorProto.FLOAT, [1, 4])
-    output_tensor = helper.make_tensor_value_info('output', TensorProto.FLOAT, [1, 4])
+    input_tensor = helper.make_tensor_value_info("input", TensorProto.FLOAT, [1, 4])
+    output_tensor = helper.make_tensor_value_info("output", TensorProto.FLOAT, [1, 4])
 
     # Single Identity node
     nodes = [
-        helper.make_node('Identity', ['input'], ['output'], name='passthrough'),
+        helper.make_node("Identity", ["input"], ["output"], name="passthrough"),
     ]
 
     # Create the graph
     graph = helper.make_graph(
         nodes,
-        'passthrough_model',
+        "passthrough_model",
         [input_tensor],
         [output_tensor],
     )
 
     # Create the model
-    model = helper.make_model(graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)]
+    )
 
     # Check the model
     onnx.checker.check_model(model)
@@ -53,7 +55,7 @@ def main():
     model = create_passthrough_model()
 
     # Save the model
-    output_path = '../fixtures/passthrough.onnx'
+    output_path = "../fixtures/passthrough.onnx"
     onnx.save(model, output_path)
     print(f"Model saved to {output_path}")
 
@@ -62,5 +64,5 @@ def main():
     print(f"  Should be optimized away in Phase 4")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

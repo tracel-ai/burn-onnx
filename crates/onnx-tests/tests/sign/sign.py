@@ -34,7 +34,14 @@ def main():
     onnx_name = "sign.onnx"
     test_input = torch.tensor([[[[-1.0, 2.0, 0.0, -4.0]]]])
 
-    torch.onnx.export(model, test_input, onnx_name, verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        test_input,
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
     print("Finished exporting model to {}".format(onnx_name))
 
     # Output some test data for use in the test

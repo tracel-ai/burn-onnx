@@ -138,10 +138,13 @@ def compute_expected_outputs():
     # Input sequence with simple pattern for easy verification
     # Batch 0: [[1, 2], [3, 4], [5, 6]]
     # Batch 1: [[10, 20], [30, 40], [50, 60]]
-    input_sequence = np.array([
-        [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
-        [[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]]
-    ], dtype=np.float32)
+    input_sequence = np.array(
+        [
+            [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+            [[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]],
+        ],
+        dtype=np.float32,
+    )
 
     # Compute expected outputs by simulating scan
     sum_state = initial_sum.copy()

@@ -24,53 +24,45 @@ def create_unsqueeze_scalar_axes_model():
     """
 
     # Input: 2D tensor
-    input_tensor = helper.make_tensor_value_info(
-        'input',
-        TensorProto.FLOAT,
-        [3, 4]
-    )
+    input_tensor = helper.make_tensor_value_info("input", TensorProto.FLOAT, [3, 4])
 
     # Output: 3D tensor (after unsqueeze at axis 0)
     output_tensor = helper.make_tensor_value_info(
-        'output',
-        TensorProto.FLOAT,
-        [1, 3, 4]
+        "output", TensorProto.FLOAT, [1, 3, 4]
     )
 
     # Create scalar axes constant (not 1D tensor)
     # This is the key - dims=[] makes it a scalar
     axes_const = helper.make_node(
-        'Constant',
+        "Constant",
         inputs=[],
-        outputs=['axes'],
+        outputs=["axes"],
         value=helper.make_tensor(
-            name='axes_value',
+            name="axes_value",
             data_type=TensorProto.INT64,
             dims=[],  # Scalar - this triggers the bug we fixed
-            vals=[0]
-        )
+            vals=[0],
+        ),
     )
 
     # Unsqueeze operation with scalar axes
     unsqueeze_node = helper.make_node(
-        'Unsqueeze',
-        inputs=['input', 'axes'],
-        outputs=['output']
+        "Unsqueeze", inputs=["input", "axes"], outputs=["output"]
     )
 
     # Create the graph
     graph = helper.make_graph(
         [axes_const, unsqueeze_node],
-        'unsqueeze_scalar_axes',
+        "unsqueeze_scalar_axes",
         [input_tensor],
-        [output_tensor]
+        [output_tensor],
     )
 
     # Create the model
     model = helper.make_model(
         graph,
-        producer_name='unsqueeze_scalar_axes_test',
-        opset_imports=[helper.make_operatorsetid("", 16)]
+        producer_name="unsqueeze_scalar_axes_test",
+        opset_imports=[helper.make_operatorsetid("", 16)],
     )
     model.ir_version = 8
 
@@ -94,13 +86,15 @@ def main():
         print(f"\nTest input shape: {test_input.shape}")
 
         # Run inference
-        output, = session.run(None, {"input": test_input})
+        (output,) = session.run(None, {"input": test_input})
 
         print(f"Test output shape: {output.shape}")
 
         # Verify the result
         expected_shape = (1, 3, 4)
-        assert output.shape == expected_shape, f"Expected shape {expected_shape}, got {output.shape}"
+        assert output.shape == expected_shape, (
+            f"Expected shape {expected_shape}, got {output.shape}"
+        )
         print(f"Test passed: {test_input.shape} unsqueezed to {output.shape}")
 
     except Exception as e:

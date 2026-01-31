@@ -19,8 +19,7 @@ class Model(nn.Module):
         super(Model, self).__init__()
 
         # Use non-default values for all parameters
-        self.conv1 = nn.Conv1d(
-            4, 2, 3, groups=2, stride=2, padding=4, dilation=2)
+        self.conv1 = nn.Conv1d(4, 2, 3, groups=2, stride=2, padding=4, dilation=2)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -28,7 +27,6 @@ class Model(nn.Module):
 
 
 def main():
-
     # Set random seed for reproducibility
     torch.manual_seed(0)
 
@@ -41,8 +39,14 @@ def main():
 
     file_name = "conv1d.onnx"
     test_input = torch.full((6, 4, 10), 3.141592, device=device)
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 

@@ -18,13 +18,24 @@ OPSET_VERSION = 16
 
 def main():
     node0 = helper.make_node(
-        "Concat", ["onnx::Concat_0", "onnx::Concat_0"], ["/Concat_output_0"],
-        axis=1)
+        "Concat", ["onnx::Concat_0", "onnx::Concat_0"], ["/Concat_output_0"], axis=1
+    )
     node1 = helper.make_node(
-        "Concat", ["onnx::Concat_0", "/Concat_output_0", "/Concat_output_0", "/Concat_output_0", "/Concat_output_0"], ["2"],
-        axis=1)
+        "Concat",
+        [
+            "onnx::Concat_0",
+            "/Concat_output_0",
+            "/Concat_output_0",
+            "/Concat_output_0",
+            "/Concat_output_0",
+        ],
+        ["2"],
+        axis=1,
+    )
 
-    inp_onnx__Concat_0 = helper.make_tensor_value_info("onnx::Concat_0", TensorProto.FLOAT, [1, 2, 3, 5])
+    inp_onnx__Concat_0 = helper.make_tensor_value_info(
+        "onnx::Concat_0", TensorProto.FLOAT, [1, 2, 3, 5]
+    )
 
     out_n2 = helper.make_tensor_value_info("2", TensorProto.FLOAT, [1, 18, 3, 5])
 
@@ -34,7 +45,9 @@ def main():
         [inp_onnx__Concat_0],
         [out_n2],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx.save(model, "concat.onnx")
     print(f"Finished exporting model to concat.onnx")

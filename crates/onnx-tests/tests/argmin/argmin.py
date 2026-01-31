@@ -26,15 +26,20 @@ class Model(nn.Module):
 
 
 def main():
-
     # Export to onnx
     model = Model(1)
     model.eval()
     device = torch.device("cpu")
     onnx_name = "argmin.onnx"
     dummy_input = torch.randn((3, 4), device=device)
-    torch.onnx.export(model, dummy_input, onnx_name,
-                      verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        dummy_input,
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(onnx_name))
 
@@ -48,5 +53,5 @@ def main():
     print("Test output data:\n{}".format(output))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

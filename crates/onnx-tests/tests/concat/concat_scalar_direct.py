@@ -21,10 +21,7 @@ import numpy as np
 def build_model():
     # Get shape of input tensor: [batch, channels, height, width]
     shape_node = onnx.helper.make_node(
-        "Shape",
-        inputs=["input1"],
-        outputs=["shape1"],
-        name="/Shape"
+        "Shape", inputs=["input1"], outputs=["shape1"], name="/Shape"
     )
 
     # Constant scalar index (0) to extract batch dimension
@@ -37,9 +34,9 @@ def build_model():
             name="idx_value",
             data_type=onnx.TensorProto.INT64,
             dims=[],  # Scalar
-            vals=[0]
+            vals=[0],
         ),
-        name="/ConstIdx"
+        name="/ConstIdx",
     )
 
     # Gather the batch dimension (index 0) from shape
@@ -49,7 +46,7 @@ def build_model():
         inputs=["shape1", "idx"],
         outputs=["batch_dim"],  # This will be Scalar(I64) - triggers the bug
         axis=0,
-        name="/Gather"
+        name="/Gather",
     )
 
     # Constant for another dimension
@@ -61,9 +58,9 @@ def build_model():
             name="other_dim_value",
             data_type=onnx.TensorProto.INT64,
             dims=[],  # Also scalar
-            vals=[64]
+            vals=[64],
         ),
-        name="/ConstDim"
+        name="/ConstDim",
     )
 
     # Concat two scalars directly - this triggers the bug
@@ -73,19 +70,13 @@ def build_model():
         inputs=["batch_dim", "other_dim"],
         outputs=["output_shape"],
         axis=0,
-        name="/Concat"
+        name="/Concat",
     )
 
     # Create the graph
     graph = onnx.helper.make_graph(
         name="main_graph",
-        nodes=[
-            shape_node,
-            const_idx_node,
-            gather_node,
-            const_dim_node,
-            concat_node
-        ],
+        nodes=[shape_node, const_idx_node, gather_node, const_dim_node, concat_node],
         inputs=[
             onnx.helper.make_value_info(
                 name="input1",
@@ -98,17 +89,16 @@ def build_model():
             onnx.helper.make_value_info(
                 name="output_shape",
                 type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.INT64, shape=[2]  # [batch_dim, 64]
+                    elem_type=onnx.TensorProto.INT64,
+                    shape=[2],  # [batch_dim, 64]
                 ),
             )
-        ]
+        ],
     )
 
     # Create the model
     model = onnx.helper.make_model(
-        graph,
-        ir_version=8,
-        opset_imports=[onnx.helper.make_operatorsetid("", 16)]
+        graph, ir_version=8, opset_imports=[onnx.helper.make_operatorsetid("", 16)]
     )
 
     return model

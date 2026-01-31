@@ -24,7 +24,9 @@ class GridSampleNearestModel(nn.Module):
         super().__init__()
 
     def forward(self, x, grid):
-        return F.grid_sample(x, grid, mode='nearest', padding_mode='zeros', align_corners=False)
+        return F.grid_sample(
+            x, grid, mode="nearest", padding_mode="zeros", align_corners=False
+        )
 
 
 def main():
@@ -47,7 +49,8 @@ def main():
         "grid_sample_nearest.onnx",
         input_names=["input", "grid"],
         output_names=["output"],
-        opset_version=16, external_data=False,
+        opset_version=16,
+        external_data=False,
         dynamic_axes=None,
     )
 

@@ -22,10 +22,7 @@ import numpy as np
 def build_model():
     # Get shape of input tensor: [batch, channels, height, width]
     shape_node = onnx.helper.make_node(
-        "Shape",
-        inputs=["input1"],
-        outputs=["shape1"],
-        name="/Shape"
+        "Shape", inputs=["input1"], outputs=["shape1"], name="/Shape"
     )
 
     # Constant scalar index (0) to extract batch dimension
@@ -38,9 +35,9 @@ def build_model():
             name="idx_value",
             data_type=onnx.TensorProto.INT64,
             dims=[],  # Scalar - this is key to reproducing the bug
-            vals=[0]
+            vals=[0],
         ),
-        name="/ConstIdx"
+        name="/ConstIdx",
     )
 
     # Gather the batch dimension (index 0) from shape
@@ -50,7 +47,7 @@ def build_model():
         inputs=["shape1", "idx"],
         outputs=["batch_dim"],  # This will be Scalar(I64)
         axis=0,
-        name="/Gather"
+        name="/Gather",
     )
 
     # Constant for new dimensions to concat
@@ -62,9 +59,9 @@ def build_model():
             name="new_dims_value",
             data_type=onnx.TensorProto.INT64,
             dims=[2],
-            vals=[32, 64]
+            vals=[32, 64],
         ),
-        name="/ConstDims"
+        name="/ConstDims",
     )
 
     # Unsqueeze the scalar to make it 1D for concat
@@ -76,16 +73,16 @@ def build_model():
             name="unsqueeze_axes_value",
             data_type=onnx.TensorProto.INT64,
             dims=[1],
-            vals=[0]
+            vals=[0],
         ),
-        name="/UnsqueezeAxes"
+        name="/UnsqueezeAxes",
     )
 
     unsqueeze_node = onnx.helper.make_node(
         "Unsqueeze",
         inputs=["batch_dim", "unsqueeze_axes"],
         outputs=["batch_dim_1d"],
-        name="/Unsqueeze"
+        name="/Unsqueeze",
     )
 
     # Concat the unsqueezed batch dim with new dims
@@ -94,7 +91,7 @@ def build_model():
         inputs=["batch_dim_1d", "new_dims"],
         outputs=["output_shape"],
         axis=0,
-        name="/Concat"
+        name="/Concat",
     )
 
     # Create the graph
@@ -107,7 +104,7 @@ def build_model():
             const_dims_node,
             unsqueeze_axes_node,
             unsqueeze_node,
-            concat_node
+            concat_node,
         ],
         inputs=[
             onnx.helper.make_value_info(
@@ -121,17 +118,16 @@ def build_model():
             onnx.helper.make_value_info(
                 name="output_shape",
                 type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.INT64, shape=[3]  # [batch, 32, 64]
+                    elem_type=onnx.TensorProto.INT64,
+                    shape=[3],  # [batch, 32, 64]
                 ),
             )
-        ]
+        ],
     )
 
     # Create the model
     model = onnx.helper.make_model(
-        graph,
-        ir_version=8,
-        opset_imports=[onnx.helper.make_operatorsetid("", 16)]
+        graph, ir_version=8, opset_imports=[onnx.helper.make_operatorsetid("", 16)]
     )
 
     return model

@@ -37,7 +37,14 @@ def main():
 
     file_name = "hard_swish.onnx"
     test_input = torch.randn(2, 3, device=device)
-    torch.onnx.export(model, test_input, file_name, verbose=False, opset_version=22, external_data=False)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=22,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 

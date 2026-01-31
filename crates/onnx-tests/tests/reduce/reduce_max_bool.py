@@ -22,52 +22,56 @@ def create_model():
     """Create ONNX model with ReduceMax operations on boolean tensors."""
 
     # Create input tensor (bool, shape [2, 3, 4])
-    input_tensor = helper.make_tensor_value_info('input', TensorProto.BOOL, [2, 3, 4])
+    input_tensor = helper.make_tensor_value_info("input", TensorProto.BOOL, [2, 3, 4])
 
     # Output 1: Reduce all dimensions, no keepdims -> scalar bool
     reduce1 = helper.make_node(
-        'ReduceMax',
-        inputs=['input'],
-        outputs=['output1'],
+        "ReduceMax",
+        inputs=["input"],
+        outputs=["output1"],
         keepdims=0,
     )
 
     # Output 2: Reduce all dimensions, keepdims=1 -> shape [1, 1, 1]
     reduce2 = helper.make_node(
-        'ReduceMax',
-        inputs=['input'],
-        outputs=['output2'],
+        "ReduceMax",
+        inputs=["input"],
+        outputs=["output2"],
         keepdims=1,
     )
 
     # Output 3: Reduce along axis 2, no keepdims -> shape [2, 3]
     reduce3 = helper.make_node(
-        'ReduceMax',
-        inputs=['input'],
-        outputs=['output3'],
+        "ReduceMax",
+        inputs=["input"],
+        outputs=["output3"],
         axes=[2],
         keepdims=0,
     )
 
     # Output 4: Reduce along axes [0, 2], keepdims=1 -> shape [1, 3, 1]
     reduce4 = helper.make_node(
-        'ReduceMax',
-        inputs=['input'],
-        outputs=['output4'],
+        "ReduceMax",
+        inputs=["input"],
+        outputs=["output4"],
         axes=[0, 2],
         keepdims=1,
     )
 
     # Create output tensors
-    output1_tensor = helper.make_tensor_value_info('output1', TensorProto.BOOL, [])
-    output2_tensor = helper.make_tensor_value_info('output2', TensorProto.BOOL, [1, 1, 1])
-    output3_tensor = helper.make_tensor_value_info('output3', TensorProto.BOOL, [2, 3])
-    output4_tensor = helper.make_tensor_value_info('output4', TensorProto.BOOL, [1, 3, 1])
+    output1_tensor = helper.make_tensor_value_info("output1", TensorProto.BOOL, [])
+    output2_tensor = helper.make_tensor_value_info(
+        "output2", TensorProto.BOOL, [1, 1, 1]
+    )
+    output3_tensor = helper.make_tensor_value_info("output3", TensorProto.BOOL, [2, 3])
+    output4_tensor = helper.make_tensor_value_info(
+        "output4", TensorProto.BOOL, [1, 3, 1]
+    )
 
     # Create graph
     graph = helper.make_graph(
         nodes=[reduce1, reduce2, reduce3, reduce4],
-        name='reduce_max_bool_model',
+        name="reduce_max_bool_model",
         inputs=[input_tensor],
         outputs=[output1_tensor, output2_tensor, output3_tensor, output4_tensor],
     )
@@ -75,8 +79,8 @@ def create_model():
     # Create model
     model = helper.make_model(
         graph,
-        producer_name='burn-onnx-test',
-        opset_imports=[helper.make_opsetid("", 16)]
+        producer_name="burn-onnx-test",
+        opset_imports=[helper.make_opsetid("", 16)],
     )
 
     # Check model
@@ -90,18 +94,21 @@ def generate_test_data(model):
 
     # Input data: [2, 3, 4] boolean tensor
     # Using a mix of True and False values
-    input_data = np.array([
+    input_data = np.array(
         [
-            [False, False, False, False], # All False
-            [True, True, True, True],     # All True
-            [False, True, False, True],   # Mixed
+            [
+                [False, False, False, False],  # All False
+                [True, True, True, True],  # All True
+                [False, True, False, True],  # Mixed
+            ],
+            [
+                [False, False, False, False],  # All False
+                [False, True, False, False],  # Mostly False
+                [True, False, True, False],  # Mixed
+            ],
         ],
-        [
-            [False, False, False, False], # All False
-            [False, True, False, False],  # Mostly False
-            [True, False, True, False],   # Mixed
-        ]
-    ], dtype=bool)
+        dtype=bool,
+    )
 
     print("=" * 80)
     print("Test data for reduce_max_bool (ReduceMax on boolean = logical OR):")
@@ -125,7 +132,9 @@ def generate_test_data(model):
 
         # Output 1: Reduce all -> scalar
         print("Output 1 (reduce all, no keepdims):")
-        print(f"  Shape: {outputs[0].shape if hasattr(outputs[0], 'shape') else 'scalar'}")
+        print(
+            f"  Shape: {outputs[0].shape if hasattr(outputs[0], 'shape') else 'scalar'}"
+        )
         print(f"  Value: {outputs[0]}")
         print()
 
@@ -178,11 +187,11 @@ def generate_test_data(model):
     print("=" * 80)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     model = create_model()
 
     # Save model
-    onnx.save(model, 'reduce_max_bool.onnx')
+    onnx.save(model, "reduce_max_bool.onnx")
     print("✓ Saved reduce_max_bool.onnx")
     print()
 

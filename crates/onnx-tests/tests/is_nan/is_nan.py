@@ -21,6 +21,7 @@ class Model(nn.Module):
     def forward(self, x):
         return torch.isnan(x)
 
+
 def main():
     # Set seed for reproducibility
     torch.manual_seed(42)
@@ -35,7 +36,14 @@ def main():
 
     test_input1 = torch.randn(4, 4, device=device)
     test_input1 = torch.where(test_input1 > 0, test_input1, torch.nan)
-    torch.onnx.export(model, (test_input1,), onnx_name, verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        (test_input1,),
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(onnx_name))
 
@@ -43,5 +51,6 @@ def main():
     output = model.forward(test_input1)
     print("Test output data: {}".format(output))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

@@ -24,9 +24,9 @@ def build_model():
             name="const1_value",
             data_type=onnx.TensorProto.INT64,
             dims=[2],
-            vals=[100, 200]
+            vals=[100, 200],
         ),
-        name="/Constant1"
+        name="/Constant1",
     )
 
     # Create second constant with 1 element
@@ -35,27 +35,18 @@ def build_model():
         inputs=[],
         outputs=["const2"],
         value=onnx.helper.make_tensor(
-            name="const2_value",
-            data_type=onnx.TensorProto.INT64,
-            dims=[1],
-            vals=[300]
+            name="const2_value", data_type=onnx.TensorProto.INT64, dims=[1], vals=[300]
         ),
-        name="/Constant2"
+        name="/Constant2",
     )
 
     # Create Shape nodes for two input tensors
     shape1_node = onnx.helper.make_node(
-        "Shape",
-        inputs=["input1"],
-        outputs=["shape1"],
-        name="/Shape1"
+        "Shape", inputs=["input1"], outputs=["shape1"], name="/Shape1"
     )
 
     shape2_node = onnx.helper.make_node(
-        "Shape",
-        inputs=["input2"],
-        outputs=["shape2"],
-        name="/Shape2"
+        "Shape", inputs=["input2"], outputs=["shape2"], name="/Shape2"
     )
 
     # Create a Concat node with mixed inputs: shape, const, shape, const
@@ -64,7 +55,7 @@ def build_model():
         inputs=["shape1", "const1", "shape2", "const2"],
         outputs=["concatenated"],
         axis=0,
-        name="/Concat"
+        name="/Concat",
     )
 
     # Create the graph
@@ -89,17 +80,16 @@ def build_model():
             onnx.helper.make_value_info(
                 name="concatenated",
                 type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.INT64, shape=[8]  # 2 + 2 + 3 + 1 = 8
+                    elem_type=onnx.TensorProto.INT64,
+                    shape=[8],  # 2 + 2 + 3 + 1 = 8
                 ),
             )
-        ]
+        ],
     )
 
     # Create the model
     model = onnx.helper.make_model(
-        graph,
-        ir_version=8,
-        opset_imports=[onnx.helper.make_operatorsetid("", 16)]
+        graph, ir_version=8, opset_imports=[onnx.helper.make_operatorsetid("", 16)]
     )
 
     return model

@@ -18,15 +18,13 @@ from onnx.reference import ReferenceEvaluator
 
 def build_model():
     # Define the graph inputs and outputs
-    input = onnx.helper.make_tensor_value_info(
-        'input', TensorProto.FLOAT, [2, 6, 2, 3])
+    input = onnx.helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 6, 2, 3])
     output = onnx.helper.make_tensor_value_info(
-        'output', TensorProto.FLOAT, [2, 6, 2, 3])
+        "output", TensorProto.FLOAT, [2, 6, 2, 3]
+    )
 
-    scale = onnx.helper.make_tensor(
-        'scale', TensorProto.FLOAT, [6], np.random.rand(6))
-    bias = onnx.helper.make_tensor(
-        'bias', TensorProto.FLOAT, [6], np.random.rand(6))
+    scale = onnx.helper.make_tensor("scale", TensorProto.FLOAT, [6], np.random.rand(6))
+    bias = onnx.helper.make_tensor("bias", TensorProto.FLOAT, [6], np.random.rand(6))
 
     # Create the GroupNormalization node
     group_norm = onnx.helper.make_node(
@@ -40,7 +38,7 @@ def build_model():
     # Create the graph
     graph = onnx.helper.make_graph(
         [group_norm],
-        'GroupNormalizationModel',
+        "GroupNormalizationModel",
         [input],
         [output],
         [scale, bias],
@@ -50,7 +48,7 @@ def build_model():
     model = onnx.helper.make_model(
         opset_imports=[onnx.helper.make_operatorsetid("", 21)],
         graph=graph,
-        producer_name='ONNX_Generator',
+        producer_name="ONNX_Generator",
     )
 
     return model
@@ -75,6 +73,6 @@ if __name__ == "__main__":
     print(f"Test input data: {repr(test_input)}")
     print(f"Test input data shape: {test_input.shape}")
     session = ReferenceEvaluator("group_norm.onnx", verbose=1)
-    test_output, = session.run(None, {"input": test_input})
+    (test_output,) = session.run(None, {"input": test_input})
     print(f"Test output: {repr(test_output)}")
     print(f"Test output shape: {test_output.shape}")

@@ -18,11 +18,16 @@ OPSET_VERSION = 16
 
 def main():
     node0 = helper.make_node(
-        "Constant", [], ["/Constant_output_0"],
-        value=numpy_helper.from_array(np.array([2, 2, 1], dtype=np.int64).reshape([3]), name="value"))
+        "Constant",
+        [],
+        ["/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([2, 2, 1], dtype=np.int64).reshape([3]), name="value"
+        ),
+    )
     node1 = helper.make_node(
-        "Split", ["tensor", "/Constant_output_0"], ["2", "3", "4"],
-        axis=0)
+        "Split", ["tensor", "/Constant_output_0"], ["2", "3", "4"], axis=0
+    )
 
     inp_tensor = helper.make_tensor_value_info("tensor", TensorProto.INT64, [5, 2])
 
@@ -36,7 +41,9 @@ def main():
         [inp_tensor],
         [out_n2, out_n3, out_n4],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx.save(model, "split.onnx")
     print(f"Finished exporting model to split.onnx")

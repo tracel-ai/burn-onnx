@@ -53,14 +53,18 @@ def main():
         [x],
         [out1, out2, out3, out4, out5, out6],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx_name = "reduce_max.onnx"
     onnx.save(model, onnx_name)
     print(f"Finished exporting model to {onnx_name}")
 
     # Test
-    test_input = np.array([[[[1.0, 4.0, 9.0, 25.0], [2.0, 5.0, 10.0, 26.0]]]]).astype(np.float32)
+    test_input = np.array([[[[1.0, 4.0, 9.0, 25.0], [2.0, 5.0, 10.0, 26.0]]]]).astype(
+        np.float32
+    )
     session = ReferenceEvaluator(onnx_name)
     outputs = session.run(None, {"x": test_input})
     print(f"Test input data:\n{test_input}")

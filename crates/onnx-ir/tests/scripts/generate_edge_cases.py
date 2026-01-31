@@ -25,63 +25,63 @@ def create_edge_cases_model():
     """Create model with various edge cases."""
 
     # Input
-    input_tensor = helper.make_tensor_value_info('input', TensorProto.FLOAT, [2, 3])
+    input_tensor = helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 3])
 
     # Outputs
-    output1 = helper.make_tensor_value_info('output1', TensorProto.FLOAT, [2, 3])
-    output2 = helper.make_tensor_value_info('output2', TensorProto.FLOAT, [2, 3])
-    output3 = helper.make_tensor_value_info('output3', TensorProto.FLOAT, [2, 3])
+    output1 = helper.make_tensor_value_info("output1", TensorProto.FLOAT, [2, 3])
+    output2 = helper.make_tensor_value_info("output2", TensorProto.FLOAT, [2, 3])
+    output3 = helper.make_tensor_value_info("output3", TensorProto.FLOAT, [2, 3])
 
     # Edge case 1: Scalar with empty shape []
     scalar_empty_shape = helper.make_tensor(
-        name='scalar_empty',
+        name="scalar_empty",
         data_type=TensorProto.FLOAT,
         dims=[],  # Empty dims = scalar
         vals=np.array([5.0], dtype=np.float32).tobytes(),
-        raw=True
+        raw=True,
     )
 
     # Edge case 2: Scalar with shape [1]
     scalar_shape_1 = helper.make_tensor(
-        name='scalar_one',
+        name="scalar_one",
         data_type=TensorProto.FLOAT,
         dims=[1],  # Single element
         vals=np.array([3.0], dtype=np.float32).tobytes(),
-        raw=True
+        raw=True,
     )
 
     # Edge case 3: Single-element tensor with shape [1, 1]
     single_elem_2d = helper.make_tensor(
-        name='single_2d',
+        name="single_2d",
         data_type=TensorProto.FLOAT,
         dims=[1, 1],
         vals=np.array([[2.0]], dtype=np.float32).flatten().tobytes(),
-        raw=True
+        raw=True,
     )
 
     # Create nodes testing edge cases
     nodes = [
         # Use scalar with empty shape
-        helper.make_node('Add', ['input', 'scalar_empty'], ['output1'], name='add1'),
-
+        helper.make_node("Add", ["input", "scalar_empty"], ["output1"], name="add1"),
         # Use scalar with shape [1]
-        helper.make_node('Mul', ['input', 'scalar_one'], ['output2'], name='mul1'),
-
+        helper.make_node("Mul", ["input", "scalar_one"], ["output2"], name="mul1"),
         # Use single-element 2D tensor
-        helper.make_node('Add', ['input', 'single_2d'], ['output3'], name='add2'),
+        helper.make_node("Add", ["input", "single_2d"], ["output3"], name="add2"),
     ]
 
     # Create the graph
     graph = helper.make_graph(
         nodes,
-        'edge_cases_model',
+        "edge_cases_model",
         [input_tensor],
         [output1, output2, output3],
-        initializer=[scalar_empty_shape, scalar_shape_1, single_elem_2d]
+        initializer=[scalar_empty_shape, scalar_shape_1, single_elem_2d],
     )
 
     # Create the model
-    model = helper.make_model(graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)]
+    )
 
     # Check the model
     onnx.checker.check_model(model)
@@ -94,7 +94,7 @@ def main():
     model = create_edge_cases_model()
 
     # Save the model
-    output_path = '../fixtures/edge_cases.onnx'
+    output_path = "../fixtures/edge_cases.onnx"
     onnx.save(model, output_path)
     print(f"Model saved to {output_path}")
 
@@ -108,8 +108,10 @@ def main():
         print(f"    - {init.name}: shape={list(init.dims)}, dtype={init.data_type}")
     print(f"  Nodes: {len(model.graph.node)}")
     for node in model.graph.node:
-        print(f"    - {node.op_type} ({node.name}): {list(node.input)} → {list(node.output)}")
+        print(
+            f"    - {node.op_type} ({node.name}): {list(node.input)} → {list(node.output)}"
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

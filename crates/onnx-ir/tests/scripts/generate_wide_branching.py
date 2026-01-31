@@ -24,11 +24,11 @@ def create_wide_branching_model(num_outputs=8):
     """Create model where one node's output feeds many consumers."""
 
     # Single input
-    input_tensor = helper.make_tensor_value_info('input', TensorProto.FLOAT, [1, 4])
+    input_tensor = helper.make_tensor_value_info("input", TensorProto.FLOAT, [1, 4])
 
     # Many outputs
     outputs = [
-        helper.make_tensor_value_info(f'output{i}', TensorProto.FLOAT, [1, 4])
+        helper.make_tensor_value_info(f"output{i}", TensorProto.FLOAT, [1, 4])
         for i in range(num_outputs)
     ]
 
@@ -36,42 +36,37 @@ def create_wide_branching_model(num_outputs=8):
     initializers = []
     for i in range(num_outputs):
         init = helper.make_tensor(
-            name=f'const{i}',
+            name=f"const{i}",
             data_type=TensorProto.FLOAT,
             dims=[1, 4],
             vals=np.array([[i + 1.0] * 4], dtype=np.float32).flatten().tobytes(),
-            raw=True
+            raw=True,
         )
         initializers.append(init)
 
     # Nodes: Single Relu branches to many consumers
     nodes = [
         # Single node that will be consumed by many
-        helper.make_node('Relu', ['input'], ['relu_out'], name='relu'),
+        helper.make_node("Relu", ["input"], ["relu_out"], name="relu"),
     ]
 
     # Each consumer adds the relu_out with a different constant
     for i in range(num_outputs):
         nodes.append(
             helper.make_node(
-                'Add',
-                ['relu_out', f'const{i}'],
-                [f'output{i}'],
-                name=f'add{i}'
+                "Add", ["relu_out", f"const{i}"], [f"output{i}"], name=f"add{i}"
             )
         )
 
     # Create the graph
     graph = helper.make_graph(
-        nodes,
-        'wide_branching_model',
-        [input_tensor],
-        outputs,
-        initializer=initializers
+        nodes, "wide_branching_model", [input_tensor], outputs, initializer=initializers
     )
 
     # Create the model
-    model = helper.make_model(graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)]
+    )
 
     # Check the model
     onnx.checker.check_model(model)
@@ -85,7 +80,7 @@ def main():
     model = create_wide_branching_model(num_outputs)
 
     # Save the model
-    output_path = '../fixtures/wide_branching.onnx'
+    output_path = "../fixtures/wide_branching.onnx"
     onnx.save(model, output_path)
     print(f"Model saved to {output_path}")
 
@@ -95,5 +90,5 @@ def main():
     print(f"  Tests reference counting at scale")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

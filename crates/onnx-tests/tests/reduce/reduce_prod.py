@@ -17,23 +17,20 @@ OPSET_VERSION = 16
 
 
 def main():
-    node0 = helper.make_node(
-        "ReduceProd", ["onnx::ReduceProd_0"], ["1"],
-        keepdims=0)
+    node0 = helper.make_node("ReduceProd", ["onnx::ReduceProd_0"], ["1"], keepdims=0)
     node1 = helper.make_node(
-        "ReduceProd", ["onnx::ReduceProd_0"], ["2"],
-        axes=[1],
-        keepdims=1)
+        "ReduceProd", ["onnx::ReduceProd_0"], ["2"], axes=[1], keepdims=1
+    )
     node2 = helper.make_node(
-        "ReduceProd", ["onnx::ReduceProd_0"], ["3"],
-        axes=[-1],
-        keepdims=1)
+        "ReduceProd", ["onnx::ReduceProd_0"], ["3"], axes=[-1], keepdims=1
+    )
     node3 = helper.make_node(
-        "ReduceProd", ["onnx::ReduceProd_0"], ["4"],
-        axes=[2],
-        keepdims=0)
+        "ReduceProd", ["onnx::ReduceProd_0"], ["4"], axes=[2], keepdims=0
+    )
 
-    inp_onnx__ReduceProd_0 = helper.make_tensor_value_info("onnx::ReduceProd_0", TensorProto.FLOAT, [1, 1, 2, 4])
+    inp_onnx__ReduceProd_0 = helper.make_tensor_value_info(
+        "onnx::ReduceProd_0", TensorProto.FLOAT, [1, 1, 2, 4]
+    )
 
     out_n1 = helper.make_tensor_value_info("1", TensorProto.FLOAT, [])
     out_n2 = helper.make_tensor_value_info("2", TensorProto.FLOAT, [1, 1, 2, 4])
@@ -46,7 +43,9 @@ def main():
         [inp_onnx__ReduceProd_0],
         [out_n1, out_n2, out_n3, out_n4],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx.save(model, "reduce_prod.onnx")
     print(f"Finished exporting model to reduce_prod.onnx")

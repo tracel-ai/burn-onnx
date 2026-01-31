@@ -26,7 +26,13 @@ class Model(nn.Module):
         return torch.where(condition, x, y)
 
 
-def create_model(name: str, device: torch.device, mask: torch.Tensor, x: torch.Tensor, y: torch.Tensor):
+def create_model(
+    name: str,
+    device: torch.device,
+    mask: torch.Tensor,
+    x: torch.Tensor,
+    y: torch.Tensor,
+):
     print(f"--- {name} ---")
     # Export to onnx
     model = Model()
@@ -34,7 +40,14 @@ def create_model(name: str, device: torch.device, mask: torch.Tensor, x: torch.T
     onnx_name = f"{name}.onnx"
     test_input = (mask, x, y)
 
-    torch.onnx.export(model, (test_input), onnx_name, verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        (test_input),
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print(f"Finished exporting model to {onnx_name}")
 
@@ -42,6 +55,7 @@ def create_model(name: str, device: torch.device, mask: torch.Tensor, x: torch.T
     print(f"Test input data: {test_input}")
     output = model.forward(*test_input)
     print(f"Test output data: {output}")
+
 
 def main():
     # Set random seed for reproducibility
@@ -52,14 +66,13 @@ def main():
     x = torch.ones(2, 2, device=device)
     y = torch.zeros(2, 2, device=device)
     mask_scalar = torch.tensor(True, device=device)
-    x_scalar = torch.tensor(1., device=device)
-    y_scalar = torch.tensor(0., device=device)
+    x_scalar = torch.tensor(1.0, device=device)
+    y_scalar = torch.tensor(0.0, device=device)
     create_model("where_op", device, mask, x, y)
     create_model("where_op_broadcast", device, mask, x[0], y[0])
     create_model("where_op_scalar_x", device, mask, x_scalar, y)
     create_model("where_op_scalar_y", device, mask, x, y_scalar)
     create_model("where_op_all_scalar", device, mask_scalar, x_scalar, y_scalar)
-    
 
 
 if __name__ == "__main__":

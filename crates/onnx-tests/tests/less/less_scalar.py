@@ -13,12 +13,14 @@
 import torch
 import torch.nn as nn
 
+
 class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
 
     def forward(self, x, y):
-        return torch.lt(x,y)
+        return torch.lt(x, y)
+
 
 def main():
     # Set seed for reproducibility
@@ -34,7 +36,14 @@ def main():
 
     test_input1 = torch.randn(4, 4, device=device)
     test_input2 = torch.tensor(1.0)
-    torch.onnx.export(model, (test_input1, test_input2), onnx_name, verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        (test_input1, test_input2),
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(onnx_name))
 
@@ -42,5 +51,6 @@ def main():
     output = model.forward(test_input1, test_input2)
     print("Test output data: {}".format(output))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

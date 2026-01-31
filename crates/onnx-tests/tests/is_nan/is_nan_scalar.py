@@ -21,6 +21,7 @@ class Model(nn.Module):
     def forward(self, x):
         return torch.isnan(x)
 
+
 def main():
     # Set seed for reproducibility
     torch.manual_seed(42)
@@ -34,7 +35,14 @@ def main():
     onnx_name = "is_nan_scalar.onnx"
 
     test_input1 = torch.tensor(1.0, device=device)
-    torch.onnx.export(model, (test_input1,), onnx_name, verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        (test_input1,),
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(onnx_name))
 
@@ -42,5 +50,6 @@ def main():
     output = model.forward(test_input1)
     print("Test output data: {}".format(output))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

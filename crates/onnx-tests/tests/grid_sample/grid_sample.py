@@ -28,7 +28,9 @@ class GridSampleModel(nn.Module):
 
     def forward(self, x, grid):
         # align_corners=False, mode='bilinear', padding_mode='zeros' (defaults)
-        return F.grid_sample(x, grid, mode='bilinear', padding_mode='zeros', align_corners=False)
+        return F.grid_sample(
+            x, grid, mode="bilinear", padding_mode="zeros", align_corners=False
+        )
 
 
 def main():
@@ -51,7 +53,8 @@ def main():
         "grid_sample.onnx",
         input_names=["input", "grid"],
         output_names=["output"],
-        opset_version=16, external_data=False,
+        opset_version=16,
+        external_data=False,
         dynamic_axes=None,
     )
 

@@ -17,13 +17,12 @@ OPSET_VERSION = 16
 
 
 def main():
-    node0 = helper.make_node(
-        "Cast", ["onnx::Cast_0"], ["/Cast_output_0"],
-        to=11)
-    node1 = helper.make_node(
-        "IsInf", ["/Cast_output_0"], ["2"])
+    node0 = helper.make_node("Cast", ["onnx::Cast_0"], ["/Cast_output_0"], to=11)
+    node1 = helper.make_node("IsInf", ["/Cast_output_0"], ["2"])
 
-    inp_onnx__Cast_0 = helper.make_tensor_value_info("onnx::Cast_0", TensorProto.FLOAT, [])
+    inp_onnx__Cast_0 = helper.make_tensor_value_info(
+        "onnx::Cast_0", TensorProto.FLOAT, []
+    )
 
     out_n2 = helper.make_tensor_value_info("2", TensorProto.BOOL, [])
 
@@ -33,7 +32,9 @@ def main():
         [inp_onnx__Cast_0],
         [out_n2],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx.save(model, "is_inf_scalar.onnx")
     print(f"Finished exporting model to is_inf_scalar.onnx")

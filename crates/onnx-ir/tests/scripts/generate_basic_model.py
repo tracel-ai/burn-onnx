@@ -28,53 +28,59 @@ def create_basic_model():
     """Create a basic ONNX model with common operations."""
 
     # Define inputs
-    input_tensor = helper.make_tensor_value_info('input', TensorProto.FLOAT, [1, 3, 4, 4])
+    input_tensor = helper.make_tensor_value_info(
+        "input", TensorProto.FLOAT, [1, 3, 4, 4]
+    )
 
     # Define outputs
-    output_tensor = helper.make_tensor_value_info('output', TensorProto.FLOAT, [1, 3, 4, 4])
+    output_tensor = helper.make_tensor_value_info(
+        "output", TensorProto.FLOAT, [1, 3, 4, 4]
+    )
 
     # Create initializers (constant tensors)
     # PRelu slope parameter
     prelu_slope = helper.make_tensor(
-        name='prelu_slope',
+        name="prelu_slope",
         data_type=TensorProto.FLOAT,
         dims=[3, 1, 1],
         vals=np.array([0.1, 0.2, 0.3], dtype=np.float32).tobytes(),
-        raw=True
+        raw=True,
     )
 
     # Add bias
     add_bias = helper.make_tensor(
-        name='add_bias',
+        name="add_bias",
         data_type=TensorProto.FLOAT,
         dims=[1, 3, 1, 1],
         vals=np.array([1.0, 2.0, 3.0], dtype=np.float32).tobytes(),
-        raw=True
+        raw=True,
     )
 
     # Create nodes
     nodes = [
         # Apply Relu
-        helper.make_node('Relu', ['input'], ['relu_out'], name='relu'),
-
+        helper.make_node("Relu", ["input"], ["relu_out"], name="relu"),
         # Apply PRelu
-        helper.make_node('PRelu', ['relu_out', 'prelu_slope'], ['prelu_out'], name='prelu'),
-
+        helper.make_node(
+            "PRelu", ["relu_out", "prelu_slope"], ["prelu_out"], name="prelu"
+        ),
         # Add bias
-        helper.make_node('Add', ['prelu_out', 'add_bias'], ['output'], name='add'),
+        helper.make_node("Add", ["prelu_out", "add_bias"], ["output"], name="add"),
     ]
 
     # Create the graph
     graph = helper.make_graph(
         nodes,
-        'basic_model',
+        "basic_model",
         [input_tensor],
         [output_tensor],
-        initializer=[prelu_slope, add_bias]
+        initializer=[prelu_slope, add_bias],
     )
 
     # Create the model
-    model = helper.make_model(graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)]
+    )
 
     # Check the model
     onnx.checker.check_model(model)
@@ -87,7 +93,7 @@ def main():
     model = create_basic_model()
 
     # Save the model
-    output_path = '../fixtures/basic_model.onnx'
+    output_path = "../fixtures/basic_model.onnx"
     onnx.save(model, output_path)
     print(f"Model saved to {output_path}")
 
@@ -101,5 +107,5 @@ def main():
         print(f"    - {node.op_type} ({node.name})")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

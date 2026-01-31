@@ -22,7 +22,9 @@ def main():
     # x is float tensor [1,1,1,4], k is float64 scalar
 
     const_ones = helper.make_node(
-        "Constant", [], ["ones"],
+        "Constant",
+        [],
+        ["ones"],
         value=numpy_helper.from_array(
             np.ones([1, 1, 1, 4], dtype=np.float32), name="ones"
         ),
@@ -31,7 +33,9 @@ def main():
 
     cast_k = helper.make_node("Cast", ["k"], ["k_float"], to=TensorProto.FLOAT)
     const_5 = helper.make_node(
-        "Constant", [], ["five"],
+        "Constant",
+        [],
+        ["five"],
         value=numpy_helper.from_array(np.float32(5.0), name="five"),
     )
     equal2 = helper.make_node("Equal", ["k_float", "five"], ["out2"])
@@ -47,7 +51,9 @@ def main():
         [x, k],
         [out1, out2],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx_name = "equal.onnx"
     onnx.save(model, onnx_name)

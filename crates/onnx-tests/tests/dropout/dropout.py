@@ -18,15 +18,30 @@ OPSET_VERSION = 16
 
 def main():
     node0 = helper.make_node(
-        "Constant", [], ["/dropout/Constant_output_0"],
-        value=numpy_helper.from_array(np.array([0.25], dtype=np.float32).reshape([]), name="value"))
+        "Constant",
+        [],
+        ["/dropout/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([0.25], dtype=np.float32).reshape([]), name="value"
+        ),
+    )
     node1 = helper.make_node(
-        "Constant", [], ["/dropout/Constant_1_output_0"],
-        value=numpy_helper.from_array(np.array([True], dtype=np.bool).reshape([]), name="value"))
+        "Constant",
+        [],
+        ["/dropout/Constant_1_output_0"],
+        value=numpy_helper.from_array(
+            np.array([True], dtype=np.bool).reshape([]), name="value"
+        ),
+    )
     node2 = helper.make_node(
-        "Dropout", ["input", "/dropout/Constant_output_0", "/dropout/Constant_1_output_0"], ["3", "/dropout/Dropout_output_1"])
+        "Dropout",
+        ["input", "/dropout/Constant_output_0", "/dropout/Constant_1_output_0"],
+        ["3", "/dropout/Dropout_output_1"],
+    )
 
-    inp_input = helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 4, 10, 15])
+    inp_input = helper.make_tensor_value_info(
+        "input", TensorProto.FLOAT, [2, 4, 10, 15]
+    )
 
     out_n3 = helper.make_tensor_value_info("3", TensorProto.FLOAT, [2, 4, 10, 15])
 
@@ -36,7 +51,9 @@ def main():
         [inp_input],
         [out_n3],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx.save(model, "dropout.onnx")
     print(f"Finished exporting model to dropout.onnx")

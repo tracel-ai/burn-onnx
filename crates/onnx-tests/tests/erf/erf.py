@@ -33,8 +33,14 @@ def main():
     onnx_name = "erf.onnx"
     dummy_input = torch.randn(1, 2, 3, 4, device=device)
 
-    torch.onnx.export(model, (dummy_input), onnx_name,
-                      verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        (dummy_input),
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(onnx_name))
 
@@ -46,5 +52,5 @@ def main():
     print("Test output data: {}".format(output))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

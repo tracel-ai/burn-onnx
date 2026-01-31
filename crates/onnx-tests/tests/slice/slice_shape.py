@@ -25,19 +25,27 @@ def main():
 
     # Slice constants: starts=1, ends=3, axes=0, steps=1
     const_axes = helper.make_node(
-        "Constant", [], ["axes"],
+        "Constant",
+        [],
+        ["axes"],
         value=numpy_helper.from_array(np.array([0], dtype=np.int64), name="axes"),
     )
     const_starts = helper.make_node(
-        "Constant", [], ["starts"],
+        "Constant",
+        [],
+        ["starts"],
         value=numpy_helper.from_array(np.array([1], dtype=np.int64), name="starts"),
     )
     const_ends = helper.make_node(
-        "Constant", [], ["ends"],
+        "Constant",
+        [],
+        ["ends"],
         value=numpy_helper.from_array(np.array([3], dtype=np.int64), name="ends"),
     )
     const_steps = helper.make_node(
-        "Constant", [], ["steps"],
+        "Constant",
+        [],
+        ["steps"],
         value=numpy_helper.from_array(np.array([1], dtype=np.int64), name="steps"),
     )
 
@@ -55,7 +63,9 @@ def main():
         [inp],
         [out],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx_name = "slice_shape.onnx"
     onnx.save(model, onnx_name)

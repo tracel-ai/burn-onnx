@@ -38,18 +38,12 @@ def main():
 
     # Shape tensor for first reshape: empty shape = scalar
     shape_to_scalar = helper.make_tensor(
-        name="shape_to_scalar",
-        data_type=TensorProto.INT64,
-        dims=[0],
-        vals=[]
+        name="shape_to_scalar", data_type=TensorProto.INT64, dims=[0], vals=[]
     )
 
     # Shape tensor for second reshape: [1]
     shape_one = helper.make_tensor(
-        name="shape_one",
-        data_type=TensorProto.INT64,
-        dims=[1],
-        vals=[1]
+        name="shape_one", data_type=TensorProto.INT64, dims=[1], vals=[1]
     )
 
     # Index tensor for gather: scalar index 0
@@ -57,7 +51,7 @@ def main():
         name="gather_index",
         data_type=TensorProto.INT64,
         dims=[],  # scalar index
-        vals=[0]
+        vals=[0],
     )
 
     # First Reshape: [1,1] tensor -> scalar
@@ -65,7 +59,7 @@ def main():
         "Reshape",
         inputs=["input", "shape_to_scalar"],
         outputs=["scalar_val"],
-        name="reshape_to_scalar"
+        name="reshape_to_scalar",
     )
 
     # Second Reshape: scalar -> [1] (with optimization, remains scalar)
@@ -73,7 +67,7 @@ def main():
         "Reshape",
         inputs=["scalar_val", "shape_one"],
         outputs=["reshaped_scalar"],
-        name="reshape_scalar_to_1"
+        name="reshape_scalar_to_1",
     )
 
     # Gather: gather from scalar at index 0 (should pass through the scalar)
@@ -82,7 +76,7 @@ def main():
         inputs=["reshaped_scalar", "gather_index"],
         outputs=["output"],
         axis=0,
-        name="gather_from_scalar"
+        name="gather_from_scalar",
     )
 
     # Create the graph
@@ -91,20 +85,22 @@ def main():
         "gather_scalar_input_model",
         [input_tensor],
         [output_tensor],
-        [shape_to_scalar, shape_one, gather_index]
+        [shape_to_scalar, shape_one, gather_index],
     )
 
     # Create the model
     model_def = helper.make_model(
         graph_def,
         producer_name="gather_scalar_input",
-        opset_imports=[helper.make_operatorsetid("", 16)]
+        opset_imports=[helper.make_operatorsetid("", 16)],
     )
 
     # Save the model
     onnx.save(model_def, "gather_scalar_input.onnx")
     print("Model exported successfully to gather_scalar_input.onnx")
-    print("Model structure: Reshape([1,1] -> scalar) -> Reshape(scalar, [1]) -> Gather(scalar, 0) -> scalar")
+    print(
+        "Model structure: Reshape([1,1] -> scalar) -> Reshape(scalar, [1]) -> Gather(scalar, 0) -> scalar"
+    )
 
     # Verify with ONNX Runtime or reference evaluator
     try:

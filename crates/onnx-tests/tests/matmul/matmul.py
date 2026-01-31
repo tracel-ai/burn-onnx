@@ -37,7 +37,14 @@ def main():
     d = torch.arange(4, dtype=torch.float, device=device)
     test_input = (a, b, c, d)
 
-    torch.onnx.export(model, test_input, onnx_name, verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        test_input,
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print(f"Finished exporting model to {onnx_name}")
 

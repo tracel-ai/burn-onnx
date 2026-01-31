@@ -37,7 +37,8 @@ def export_model(model: ConstantModel, dummy_input: torch.Tensor, file_name: str
         dummy_input,
         file_name,
         verbose=False,
-        opset_version=16, external_data=False,
+        opset_version=16,
+        external_data=False,
         do_constant_folding=False,
     )
     print(f"Finished exporting model to {file_name}")
@@ -75,10 +76,9 @@ def main():
     export_model(model_i64, i64_input, "constant_i64.onnx")
 
     model_bool = ConstantModel(torch.bool)
-    bool_input = torch.randint(
-        low=0, high=2, size=[], device=device, dtype=torch.bool
-    )
+    bool_input = torch.randint(low=0, high=2, size=[], device=device, dtype=torch.bool)
     export_model(model_bool, bool_input, "constant_bool.onnx")
+
 
 if __name__ == "__main__":
     main()

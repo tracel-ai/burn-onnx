@@ -18,7 +18,9 @@ class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
 
-        self.maxpool2d1 = nn.MaxPool2d((4, 2), stride=(2, 1), padding=(2, 1), dilation=(1, 3))
+        self.maxpool2d1 = nn.MaxPool2d(
+            (4, 2), stride=(2, 1), padding=(2, 1), dilation=(1, 3)
+        )
 
     def forward(self, x):
         x = self.maxpool2d1(x)
@@ -39,8 +41,14 @@ def main():
 
     file_name = "maxpool2d.onnx"
     test_input = torch.randn(1, 1, 5, 5, device=device)
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 
@@ -52,5 +60,5 @@ def main():
     print("Test output: {}".format(output))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

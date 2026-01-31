@@ -18,13 +18,20 @@ OPSET_VERSION = 16
 
 def main():
     node0 = helper.make_node(
-        "Constant", [], ["/Constant_output_0"],
-        value=numpy_helper.from_array(np.array([0], dtype=np.int64).reshape([]), name="value"))
+        "Constant",
+        [],
+        ["/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([0], dtype=np.int64).reshape([]), name="value"
+        ),
+    )
     node1 = helper.make_node(
-        "Trilu", ["onnx::Trilu_0", "/Constant_output_0"], ["2"],
-        upper=1)
+        "Trilu", ["onnx::Trilu_0", "/Constant_output_0"], ["2"], upper=1
+    )
 
-    inp_onnx__Trilu_0 = helper.make_tensor_value_info("onnx::Trilu_0", TensorProto.FLOAT, [2, 4, 4])
+    inp_onnx__Trilu_0 = helper.make_tensor_value_info(
+        "onnx::Trilu_0", TensorProto.FLOAT, [2, 4, 4]
+    )
 
     out_n2 = helper.make_tensor_value_info("2", TensorProto.FLOAT, [2, 4, 4])
 
@@ -34,7 +41,9 @@ def main():
         [inp_onnx__Trilu_0],
         [out_n2],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx.save(model, "trilu_upper.onnx")
     print(f"Finished exporting model to trilu_upper.onnx")

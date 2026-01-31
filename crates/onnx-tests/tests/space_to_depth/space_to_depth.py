@@ -18,10 +18,10 @@ from onnx.reference import ReferenceEvaluator
 
 def build_model():
     # Define the graph inputs and outputs
-    input = onnx.helper.make_tensor_value_info(
-        'input', TensorProto.FLOAT, [2, 1, 4, 6])
+    input = onnx.helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 1, 4, 6])
     output = onnx.helper.make_tensor_value_info(
-        'output', TensorProto.FLOAT, [2, 4, 2, 3])
+        "output", TensorProto.FLOAT, [2, 4, 2, 3]
+    )
 
     # Create the SpaceToDepth node
     space_to_depth = onnx.helper.make_node(
@@ -35,7 +35,7 @@ def build_model():
     # Create the graph
     graph = onnx.helper.make_graph(
         [space_to_depth],
-        'SpaceToDepthModel',
+        "SpaceToDepthModel",
         [input],
         [output],
     )
@@ -44,7 +44,7 @@ def build_model():
     model = onnx.helper.make_model(
         opset_imports=[onnx.helper.make_operatorsetid("", 16)],
         graph=graph,
-        producer_name='ONNX_Generator',
+        producer_name="ONNX_Generator",
     )
 
     return model
@@ -69,6 +69,6 @@ if __name__ == "__main__":
     print(f"Test input data:\n{repr(test_input)}")
     print(f"Test input data shape: {test_input.shape}")
     session = ReferenceEvaluator(file_name, verbose=1)
-    test_output, = session.run(None, {"input": test_input})
+    (test_output,) = session.run(None, {"input": test_input})
     print(f"Test output:\n{repr(test_output)}")
     print(f"Test output shape: {test_output.shape}")

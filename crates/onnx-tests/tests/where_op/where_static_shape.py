@@ -21,20 +21,26 @@ def main():
     # Where(condition, x_const, y_const) with static constant shapes [2,2]
 
     const_x = helper.make_node(
-        "Constant", [], ["x"],
+        "Constant",
+        [],
+        ["x"],
         value=numpy_helper.from_array(
             np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32), name="x"
         ),
     )
     const_y = helper.make_node(
-        "Constant", [], ["y"],
+        "Constant",
+        [],
+        ["y"],
         value=numpy_helper.from_array(
             np.array([[5.0, 6.0], [7.0, 8.0]], dtype=np.float32), name="y"
         ),
     )
     where_node = helper.make_node("Where", ["condition", "x", "y"], ["output"])
 
-    condition = helper.make_tensor_value_info("condition", TensorProto.BOOL, [None, None])
+    condition = helper.make_tensor_value_info(
+        "condition", TensorProto.BOOL, [None, None]
+    )
     output = helper.make_tensor_value_info("output", TensorProto.FLOAT, [2, 2])
 
     graph = helper.make_graph(
@@ -43,7 +49,9 @@ def main():
         [condition],
         [output],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx_name = "where_static_shape.onnx"
     onnx.save(model, onnx_name)

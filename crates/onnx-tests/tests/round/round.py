@@ -14,12 +14,14 @@ import torch
 import torch.nn as nn
 import onnx
 
+
 class RoundModel(nn.Module):
     def __init__(self):
         super().__init__()
 
     def forward(self, x):
         return torch.round(x)
+
 
 def main():
     model = RoundModel()
@@ -33,7 +35,8 @@ def main():
         model,
         test_input,
         onnx_file,
-        opset_version=16, external_data=False,
+        opset_version=16,
+        external_data=False,
     )
 
     print(f"Finished exporting model to {onnx_file}")
@@ -44,5 +47,5 @@ def main():
     print(f"Test output: {output}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

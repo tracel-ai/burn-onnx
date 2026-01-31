@@ -13,6 +13,7 @@ import onnx.checker as checker
 import onnx.numpy_helper
 import numpy as np
 
+
 def build_model():
     # Scalar inputs
     input1 = helper.make_tensor_value_info("input1", onnx.TensorProto.INT32, [])
@@ -21,9 +22,7 @@ def build_model():
 
     # Create bitwise XOR node
     xor_node = helper.make_node(
-        "BitwiseXor",
-        inputs=["input1", "input2"],
-        outputs=["output"]
+        "BitwiseXor", inputs=["input1", "input2"], outputs=["output"]
     )
 
     # Create the graph
@@ -39,6 +38,7 @@ def build_model():
     checker.check_model(model_def)
 
     return model_def
+
 
 if __name__ == "__main__":
     model = build_model()

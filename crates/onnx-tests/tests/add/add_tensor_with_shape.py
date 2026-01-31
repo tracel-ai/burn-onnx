@@ -21,13 +21,17 @@ def main():
     # Graph: Add(input_1d * 2, Shape(input_tensor))
     # Tests adding a tensor with a shape output
 
-    input_tensor = helper.make_tensor_value_info("input_tensor", TensorProto.FLOAT, [2, 3, 4])
+    input_tensor = helper.make_tensor_value_info(
+        "input_tensor", TensorProto.FLOAT, [2, 3, 4]
+    )
     input_1d = helper.make_tensor_value_info("input_1d", TensorProto.INT64, [3])
 
     shape_node = helper.make_node("Shape", ["input_tensor"], ["shape"])
 
     const_multiplier = helper.make_node(
-        "Constant", [], ["multiplier"],
+        "Constant",
+        [],
+        ["multiplier"],
         value=helper.make_tensor("const_mult", TensorProto.INT64, [], [2]),
     )
 
@@ -42,7 +46,9 @@ def main():
         [input_tensor, input_1d],
         [output],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx_name = "add_tensor_with_shape.onnx"
     onnx.save(model, onnx_name)

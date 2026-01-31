@@ -10,10 +10,11 @@
 
 import onnx
 
+
 def build_model(name, input1_shape, input2_shape, output_shape, direction):
     """
     Build a BitShift ONNX model with specified input/output shapes and direction.
-    
+
     Args:
         name: Name of the model (used for file naming)
         input1_shape: Shape of first input ([] for scalar)
@@ -22,17 +23,17 @@ def build_model(name, input1_shape, input2_shape, output_shape, direction):
         direction: "LEFT" or "RIGHT"
     """
     op_type = "BitShift"
-    
+
     nodes = [
         onnx.helper.make_node(
             op_type,
             inputs=["input1", "input2"],
             outputs=["output"],
             name=f"/{op_type}",
-            direction=direction
+            direction=direction,
         ),
     ]
-    
+
     inputs = [
         onnx.helper.make_value_info(
             name="input1",
@@ -47,7 +48,7 @@ def build_model(name, input1_shape, input2_shape, output_shape, direction):
             ),
         ),
     ]
-    
+
     outputs = [
         onnx.helper.make_value_info(
             name="output",
@@ -56,7 +57,7 @@ def build_model(name, input1_shape, input2_shape, output_shape, direction):
             ),
         )
     ]
-    
+
     model = onnx.helper.make_model(
         ir_version=8,
         opset_imports=[onnx.helper.make_operatorsetid("", 18)],
@@ -65,13 +66,14 @@ def build_model(name, input1_shape, input2_shape, output_shape, direction):
             nodes=nodes,
             inputs=inputs,
             outputs=outputs,
-            initializer=[]
+            initializer=[],
         ),
     )
-    
+
     onnx.checker.check_model(model)
     onnx.save(model, f"{name}.onnx")
     print(f"Finished exporting model to {name}.onnx")
+
 
 if __name__ == "__main__":
     # Define all model configurations
@@ -86,6 +88,6 @@ if __name__ == "__main__":
         ("scalar_bitshift_left_scalar", [], [], [], "LEFT"),
         ("scalar_bitshift_right_scalar", [], [], [], "RIGHT"),
     ]
-    
+
     for config in configs:
         build_model(*config)

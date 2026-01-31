@@ -17,8 +17,7 @@ OPSET_VERSION = 16
 
 
 def main():
-    node0 = helper.make_node(
-        "Shape", ["x"], ["2"])
+    node0 = helper.make_node("Shape", ["x"], ["2"])
 
     inp_x = helper.make_tensor_value_info("x", TensorProto.FLOAT, [None, 2])
 
@@ -30,7 +29,9 @@ def main():
         [inp_x],
         [out_n2],
     )
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx.save(model, "shape.onnx")
     print(f"Finished exporting model to shape.onnx")

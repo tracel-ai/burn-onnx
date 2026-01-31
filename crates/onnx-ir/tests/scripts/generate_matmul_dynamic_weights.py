@@ -22,28 +22,34 @@ def create_matmul_dynamic_weights_model():
     """Create model where MatMul uses runtime weights (not constants)."""
 
     # Both inputs are runtime (not constants)
-    input_data = helper.make_tensor_value_info('input_data', TensorProto.FLOAT, [2, 3])
-    input_weights = helper.make_tensor_value_info('input_weights', TensorProto.FLOAT, [3, 4])
+    input_data = helper.make_tensor_value_info("input_data", TensorProto.FLOAT, [2, 3])
+    input_weights = helper.make_tensor_value_info(
+        "input_weights", TensorProto.FLOAT, [3, 4]
+    )
 
     # Output
-    output = helper.make_tensor_value_info('output', TensorProto.FLOAT, [2, 4])
+    output = helper.make_tensor_value_info("output", TensorProto.FLOAT, [2, 4])
 
     # MatMul with both inputs being runtime (not constant)
     # This should NOT be coalesced to Linear because weights are not static
     nodes = [
-        helper.make_node('MatMul', ['input_data', 'input_weights'], ['output'], name='matmul_dynamic'),
+        helper.make_node(
+            "MatMul", ["input_data", "input_weights"], ["output"], name="matmul_dynamic"
+        ),
     ]
 
     # Create the graph (no initializers - all inputs are runtime)
     graph = helper.make_graph(
         nodes,
-        'matmul_dynamic_weights_model',
+        "matmul_dynamic_weights_model",
         [input_data, input_weights],
         [output],
     )
 
     # Create the model
-    model = helper.make_model(graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)]
+    )
 
     # Check the model
     onnx.checker.check_model(model)
@@ -56,7 +62,7 @@ def main():
     model = create_matmul_dynamic_weights_model()
 
     # Save the model
-    output_path = '../fixtures/matmul_dynamic_weights.onnx'
+    output_path = "../fixtures/matmul_dynamic_weights.onnx"
     onnx.save(model, output_path)
     print(f"Model saved to {output_path}")
 
@@ -65,5 +71,5 @@ def main():
     print(f"  Should NOT coalesce to Linear (no constant weights)")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

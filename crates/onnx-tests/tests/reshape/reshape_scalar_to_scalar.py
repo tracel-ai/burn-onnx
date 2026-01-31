@@ -37,18 +37,12 @@ def main():
 
     # Shape tensor for first reshape: empty shape = scalar
     shape_to_scalar = helper.make_tensor(
-        name="shape_to_scalar",
-        data_type=TensorProto.INT64,
-        dims=[0],
-        vals=[]
+        name="shape_to_scalar", data_type=TensorProto.INT64, dims=[0], vals=[]
     )
 
     # Shape tensor for second reshape: [-1]
     shape_neg1 = helper.make_tensor(
-        name="shape_neg1",
-        data_type=TensorProto.INT64,
-        dims=[1],
-        vals=[-1]
+        name="shape_neg1", data_type=TensorProto.INT64, dims=[1], vals=[-1]
     )
 
     # First Reshape: [1,1] tensor -> scalar
@@ -56,7 +50,7 @@ def main():
         "Reshape",
         inputs=["input", "shape_to_scalar"],
         outputs=["scalar_val"],
-        name="reshape_to_scalar"
+        name="reshape_to_scalar",
     )
 
     # Second Reshape: scalar -> [-1] (should remain scalar with optimization)
@@ -64,7 +58,7 @@ def main():
         "Reshape",
         inputs=["scalar_val", "shape_neg1"],
         outputs=["output"],
-        name="reshape_scalar_neg1"
+        name="reshape_scalar_neg1",
     )
 
     # Create the graph
@@ -73,20 +67,22 @@ def main():
         "reshape_scalar_to_scalar_model",
         [input_tensor],
         [output_tensor],
-        [shape_to_scalar, shape_neg1]
+        [shape_to_scalar, shape_neg1],
     )
 
     # Create the model
     model_def = helper.make_model(
         graph_def,
         producer_name="reshape_scalar_to_scalar",
-        opset_imports=[helper.make_operatorsetid("", 16)]
+        opset_imports=[helper.make_operatorsetid("", 16)],
     )
 
     # Save the model
     onnx.save(model_def, "reshape_scalar_to_scalar.onnx")
     print("Model exported successfully to reshape_scalar_to_scalar.onnx")
-    print("Model structure: Reshape([1,1] -> scalar) -> Reshape(scalar, [-1]) -> scalar")
+    print(
+        "Model structure: Reshape([1,1] -> scalar) -> Reshape(scalar, [-1]) -> scalar"
+    )
 
     # Verify with ONNX Runtime or reference evaluator
     try:

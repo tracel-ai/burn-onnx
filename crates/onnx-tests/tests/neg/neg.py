@@ -28,7 +28,9 @@ def main():
     out2 = helper.make_tensor_value_info("out2", TensorProto.DOUBLE, [])
 
     graph = helper.make_graph([neg1, neg2], "neg_test", [x, y], [out1, out2])
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)])
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
     onnx_name = "neg.onnx"
     onnx.save(model, onnx_name)

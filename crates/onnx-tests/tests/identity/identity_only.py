@@ -19,10 +19,7 @@ output_tensor = helper.make_tensor_value_info("output", TensorProto.FLOAT, [3, 4
 
 # Create Identity node that takes graph input (not a constant)
 identity_node = helper.make_node(
-    "Identity",
-    inputs=["input"],
-    outputs=["output"],
-    name="identity_test"
+    "Identity", inputs=["input"], outputs=["output"], name="identity_test"
 )
 
 # Create the graph

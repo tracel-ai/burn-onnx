@@ -37,7 +37,6 @@ class Model(nn.Module):
 
 
 def main():
-
     # Set random seed for reproducibility
     torch.manual_seed(0)
 
@@ -52,8 +51,14 @@ def main():
     input1 = torch.full((4, 3), 3.14, device=device)
     input2 = torch.full((2, 5), 3.14, device=device)
     input3 = torch.full((3, 2, 7), 3.14, device=device)
-    torch.onnx.export(model, (input1, input2, input3), file_name,
-                      verbose=False, opset_version=16, external_data=False)
+    torch.onnx.export(
+        model,
+        (input1, input2, input3),
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 

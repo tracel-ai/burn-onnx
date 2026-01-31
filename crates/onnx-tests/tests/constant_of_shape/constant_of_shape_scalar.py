@@ -11,6 +11,7 @@ import onnx
 import numpy as np
 from onnx import TensorProto, helper
 
+
 def create_model():
     # Create a model that generates a scalar constant
     # Shape is provided as an initializer (compile-time constant)
@@ -18,46 +19,46 @@ def create_model():
 
     # Create shape initializer - empty array means scalar output
     shape_initializer = helper.make_tensor(
-        name='shape',
+        name="shape",
         data_type=TensorProto.INT64,
         dims=[0],  # 1D tensor with 0 elements (empty array)
-        vals=[]
+        vals=[],
     )
 
     # Create output - scalar float
     output = helper.make_tensor_value_info(
-        'output', TensorProto.FLOAT, []  # Empty shape means scalar
+        "output",
+        TensorProto.FLOAT,
+        [],  # Empty shape means scalar
     )
 
     # Create ConstantOfShape node with default value (0.0 float)
     constantofshape_node = helper.make_node(
-        'ConstantOfShape',
-        inputs=['shape'],
-        outputs=['output'],
-        name='constantofshape'
+        "ConstantOfShape", inputs=["shape"], outputs=["output"], name="constantofshape"
     )
 
     # Create the graph with initializer instead of input
     graph = helper.make_graph(
         [constantofshape_node],
-        'constant_of_shape_scalar',
+        "constant_of_shape_scalar",
         [],  # No runtime inputs
         [output],
-        initializer=[shape_initializer]
+        initializer=[shape_initializer],
     )
-    
+
     # Create the model
     model = helper.make_model(graph)
     model.opset_import[0].version = 16
-    
+
     return model
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     model = create_model()
-    
+
     # Validate
     onnx.checker.check_model(model)
-    
+
     # Save
-    onnx.save(model, 'constant_of_shape_scalar.onnx')
+    onnx.save(model, "constant_of_shape_scalar.onnx")
     print("Created constant_of_shape_scalar.onnx")

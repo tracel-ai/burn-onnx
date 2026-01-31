@@ -35,7 +35,14 @@ def main():
     onnx_name = "layer_norm.onnx"
     test_input = torch.arange(24, dtype=torch.float, device=device).reshape(2, 3, 4)
     # LayerNormalization only appeared in opset 17
-    torch.onnx.export(model, test_input, onnx_name, verbose=False, opset_version=17, external_data=False)
+    torch.onnx.export(
+        model,
+        test_input,
+        onnx_name,
+        verbose=False,
+        opset_version=17,
+        external_data=False,
+    )
 
     print(f"Finished exporting model to {onnx_name}")
 
