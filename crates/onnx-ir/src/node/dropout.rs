@@ -59,6 +59,11 @@ pub(crate) struct DropoutProcessor;
 impl NodeProcessor for DropoutProcessor {
     type Config = DropoutConfig;
 
+    fn is_noop(&self, _node: &RawNode) -> bool {
+        // Dropout is always a no-op during inference (burn-onnx generates inference code only)
+        true
+    }
+
     fn spec(&self) -> NodeSpec {
         NodeSpec {
             min_opset: 1,
@@ -249,4 +254,11 @@ mod tests {
     // TODO: Add test for different data types - Spec supports float16, float, double, bfloat16 types - Only testing f32
     // TODO: Add test for opset version transitions - Test attribute vs input behavior for opset 11 vs 12 - Missing opset-specific test
     // TODO: Add test for unexpected attributes - Should validate and reject unknown attributes - Missing attribute validation test
+
+    #[test]
+    fn test_dropout_is_always_noop() {
+        let node = create_test_node_with_attr(0.5).build_with_graph_data(16);
+        let processor = DropoutProcessor;
+        assert!(processor.is_noop(&node));
+    }
 }

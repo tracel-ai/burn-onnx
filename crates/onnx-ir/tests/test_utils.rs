@@ -18,6 +18,7 @@ use std::path::PathBuf;
 pub fn load_onnx(model_name: &str) -> onnx_ir::ir::OnnxGraph {
     let model_path = get_model_path(model_name);
     onnx_ir::OnnxGraphBuilder::new()
+        .simplify(false)
         .parse_file(&model_path)
         .unwrap_or_else(|e| {
             panic!(

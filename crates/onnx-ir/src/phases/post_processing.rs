@@ -61,7 +61,18 @@ fn plan_noop_elimination(
         .enumerate()
         .filter_map(|(i, node)| {
             let processor = registry.get(&node.node_type);
-            processor.is_noop(node).then_some(i)
+            if processor.is_noop(node) {
+                log::debug!(
+                    "No-op elimination: {:?} '{}' (output '{}' -> input '{}')",
+                    node.node_type,
+                    node.name,
+                    node.outputs.first().map(|o| o.name.as_str()).unwrap_or("?"),
+                    node.inputs.first().map(|i| i.name.as_str()).unwrap_or("?"),
+                );
+                Some(i)
+            } else {
+                None
+            }
         })
         .collect();
 
@@ -120,8 +131,14 @@ fn apply_noop_elimination(
     } = plan;
 
     if nodes_to_remove.is_empty() {
+        log::debug!("No-op elimination: nothing to remove");
         return;
     }
+
+    log::info!(
+        "No-op elimination: removing {} node(s)",
+        nodes_to_remove.len()
+    );
 
     // Step 1: Build a map from output names to Arguments
     // This allows us to look up data_id and value_store when rewiring

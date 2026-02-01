@@ -86,6 +86,24 @@ impl NodeProcessor for FlattenProcessor {
         Ok(())
     }
 
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Flatten always produces rank 2. It's a no-op when input is rank 2 AND axis=1
+        // (the default), which splits dimensions as [d0, d1] -> [d0, d1] (identity).
+        // axis=0 would give [1, d0*d1] and axis=2 would give [d0*d1, 1].
+        if let ArgType::Tensor(in_t) = &node.inputs[0].ty {
+            if in_t.rank != 2 {
+                return false;
+            }
+            let axis = node
+                .attrs
+                .get("axis")
+                .map(|v| v.clone().into_i64())
+                .unwrap_or(1);
+            return axis == 1 || axis == -(in_t.rank as i64 - 1);
+        }
+        false
+    }
+
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
         // Extract the shape of the input tensor
         let tensor = match &node.inputs.first().unwrap().ty {

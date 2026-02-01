@@ -159,6 +159,17 @@ impl NodeProcessor for ExpandProcessor {
         Ok(())
     }
 
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Expand is a no-op when output shape == input shape (no actual broadcasting)
+        if let (ArgType::Tensor(in_t), ArgType::Tensor(out_t)) =
+            (&node.inputs[0].ty, &node.outputs[0].ty)
+            && let (Some(in_shape), Some(out_shape)) = (&in_t.static_shape, &out_t.static_shape)
+        {
+            return in_shape == out_shape;
+        }
+        false
+    }
+
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
         // Extract config
         let config = match node.inputs[1].value() {

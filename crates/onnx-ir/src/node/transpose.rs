@@ -97,6 +97,23 @@ impl NodeProcessor for TransposeProcessor {
         Ok(())
     }
 
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Transpose is a no-op when perm is the identity permutation [0, 1, 2, ...]
+        let rank = match &node.inputs[0].ty {
+            ArgType::Tensor(t) => t.rank,
+            _ => return false,
+        };
+
+        let perm: Vec<i64> = if let Some(axes) = node.attrs.get("perm") {
+            axes.clone().into_i64s()
+        } else {
+            // Default perm reverses dimensions, which is only identity for rank 0 or 1
+            return rank <= 1;
+        };
+
+        perm.iter().enumerate().all(|(i, &p)| p == i as i64)
+    }
+
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
         // Extract the shape of the input tensor
         let tensor = match &node.inputs.first().unwrap().ty {
@@ -201,6 +218,36 @@ mod tests {
                 actual: 2
             })
         ));
+    }
+
+    #[test]
+    fn test_transpose_identity_perm_is_noop() {
+        let node = create_test_node(Some(vec![0, 1, 2]), 3);
+        let processor = TransposeProcessor;
+        assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_transpose_non_identity_perm_is_not_noop() {
+        let node = create_test_node(Some(vec![0, 2, 1]), 3);
+        let processor = TransposeProcessor;
+        assert!(!processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_transpose_default_perm_rank1_is_noop() {
+        // Default perm for rank 1 is [0] which is identity
+        let node = create_test_node(None, 1);
+        let processor = TransposeProcessor;
+        assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_transpose_default_perm_rank3_is_not_noop() {
+        // Default perm for rank 3 is [2, 1, 0] which is NOT identity
+        let node = create_test_node(None, 3);
+        let processor = TransposeProcessor;
+        assert!(!processor.is_noop(&node));
     }
 
     // TODO: Missing test for invalid permutations - duplicate indices.

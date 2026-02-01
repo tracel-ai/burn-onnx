@@ -8,7 +8,6 @@
 [![license](https://shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-MIT)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/tracel-ai/burn-onnx)
 
-
 **Import ONNX models into the [Burn](https://burn.dev) deep learning framework.**
 
 </div>
@@ -24,6 +23,8 @@ TensorFlow, and other frameworks on any Burn backend - from WebAssembly to CUDA.
 - Produces `burnpack` weight files for efficient loading
 - Works with any Burn backend (CPU, GPU, WebGPU, embedded)
 - Supports both `std` and `no_std` environments
+- Graph simplification: dead code elimination, CSE, no-op removal, constant shape propagation, and
+  pattern-based optimizations (enabled by default)
 
 ## Quick Start
 

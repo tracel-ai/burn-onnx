@@ -237,9 +237,22 @@ impl NodeProcessor for ReshapeProcessor {
 
     fn is_noop(&self, node: &RawNode) -> bool {
         // Reshape is a no-op when both input and output are Scalar
-        // (e.g., Reshape(scalar, [-1]) or Reshape(scalar, [1]))
-        matches!(node.inputs[0].ty, ArgType::Scalar(_))
+        if matches!(node.inputs[0].ty, ArgType::Scalar(_))
             && matches!(node.outputs[0].ty, ArgType::Scalar(_))
+        {
+            return true;
+        }
+
+        // Reshape is a no-op when input and output have identical static shapes
+        if let (ArgType::Tensor(input_t), ArgType::Tensor(output_t)) =
+            (&node.inputs[0].ty, &node.outputs[0].ty)
+            && let (Some(in_shape), Some(out_shape)) =
+                (&input_t.static_shape, &output_t.static_shape)
+        {
+            return in_shape == out_shape;
+        }
+
+        false
     }
 
     fn spec(&self) -> NodeSpec {
@@ -687,6 +700,46 @@ mod tests {
         let processor = ReshapeProcessor;
 
         // Tensor reshape is not a no-op
+        assert!(!processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_reshape_same_static_shape_is_noop() {
+        let shape = vec![2, 3, 4];
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape")
+            .input_tensor_f32("data", 3, None)
+            .input_tensor_i64_data("shape", vec![2, 3, 4], vec![3])
+            .output_tensor_f32("reshaped", 3, None)
+            .build();
+
+        // Set matching static shapes on input and output
+        if let ArgType::Tensor(ref mut t) = node.inputs[0].ty {
+            t.static_shape = Some(shape.clone());
+        }
+        if let ArgType::Tensor(ref mut t) = node.outputs[0].ty {
+            t.static_shape = Some(shape);
+        }
+
+        let processor = ReshapeProcessor;
+        assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_reshape_different_static_shape_is_not_noop() {
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape")
+            .input_tensor_f32("data", 3, None)
+            .input_tensor_i64_data("shape", vec![6, 4], vec![2])
+            .output_tensor_f32("reshaped", 2, None)
+            .build();
+
+        if let ArgType::Tensor(ref mut t) = node.inputs[0].ty {
+            t.static_shape = Some(vec![2, 3, 4]);
+        }
+        if let ArgType::Tensor(ref mut t) = node.outputs[0].ty {
+            t.static_shape = Some(vec![6, 4]);
+        }
+
+        let processor = ReshapeProcessor;
         assert!(!processor.is_noop(&node));
     }
 }

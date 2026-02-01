@@ -152,6 +152,11 @@ impl NodeProcessor for SplitProcessor {
         Ok(())
     }
 
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Split is a no-op when there is only a single output
+        node.outputs.len() == 1
+    }
+
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
         // Initialize the axis to split along (default is 0 as per ONNX specification)
         let mut axis: i64 = 0;

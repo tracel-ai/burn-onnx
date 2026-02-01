@@ -72,6 +72,7 @@ impl DeferredGraph {
             self.name_registry.clone(),
             outer_scope,
             self.base_path.as_deref(),
+            false,
         )
     }
 

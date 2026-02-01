@@ -61,13 +61,27 @@ use onnx_ir::{OnnxGraphBuilder, ir::OnnxGraph};
 ///     .development(true)  // Generates .onnx.txt and .graph.txt debug files
 ///     .run_from_cli();
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ModelGen {
     out_dir: Option<PathBuf>,
     /// List of onnx files to generate source code from.
     inputs: Vec<PathBuf>,
     development: bool,
     embed_states: bool,
+    /// Whether to run graph simplification passes (default: true)
+    simplify: bool,
+}
+
+impl Default for ModelGen {
+    fn default() -> Self {
+        Self {
+            out_dir: None,
+            inputs: Vec::new(),
+            development: false,
+            embed_states: false,
+            simplify: true,
+        }
+    }
 }
 
 impl ModelGen {
@@ -197,6 +211,16 @@ impl ModelGen {
         self
     }
 
+    /// Enable or disable graph simplification passes (default: true)
+    ///
+    /// When enabled, optimization passes like dead node elimination, common
+    /// subexpression elimination (CSE), and pattern-based simplifications
+    /// are applied to the ONNX IR before code generation.
+    pub fn simplify(&mut self, simplify: bool) -> &mut Self {
+        self.simplify = simplify;
+        self
+    }
+
     /// Runs code generation from a build script context.
     ///
     /// Use this method when calling from `build.rs`. The output directory will be
@@ -292,6 +316,7 @@ impl ModelGen {
         log::debug!("Output file: {out_file:?}");
 
         let graph = OnnxGraphBuilder::new()
+            .simplify(self.simplify)
             .parse_file(input)
             .unwrap_or_else(|e| panic!("Failed to parse ONNX file '{}': {}", input.display(), e));
 

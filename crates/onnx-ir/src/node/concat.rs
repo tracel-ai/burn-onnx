@@ -291,6 +291,11 @@ impl NodeProcessor for ConcatProcessor {
         Ok(())
     }
 
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Concat is a no-op when there is only a single input
+        node.inputs.len() == 1
+    }
+
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
         // Extract the axis attribute (required per ONNX spec)
         let mut axis: Option<i64> = None;

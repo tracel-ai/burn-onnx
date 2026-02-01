@@ -7,6 +7,7 @@ fn main() {
     // Add onnx models.
     // All models are now saved in burnpack format (.bpk files)
     ModelGen::new()
+        .simplify(false)
         .input("tests/abs/abs.onnx")
         .input("tests/add/add.onnx")
         .input("tests/add/add_shape.onnx")
