@@ -27,6 +27,8 @@ pub const DEFAULT_OPSET_VERSION: usize = 16;
 #[derive(Debug)]
 pub enum ParseError {
     VariantNotFound(String),
+    SymbolicDimension(String),
+    UnknownDimension,
 }
 
 /// Sanitize ONNX names to be valid Rust identifiers in snake_case
@@ -510,9 +512,16 @@ impl TryFrom<TensorShapeProto> for Vec<usize> {
     fn try_from(shape: TensorShapeProto) -> Result<Vec<usize>, Self::Error> {
         let mut result = Vec::new();
 
-        for dim in shape.dim {
-            if let Value::DimValue(value) = dim.value.unwrap() {
-                result.push(value as usize);
+        for (i, dim) in shape.dim.into_iter().enumerate() {
+            match dim.value {
+                Some(Value::DimValue(value)) => result.push(value as usize),
+                Some(Value::DimParam(name)) => {
+                    return Err(ParseError::SymbolicDimension(format!(
+                        "Dimension {} has symbolic name '{}'",
+                        i, name
+                    )));
+                }
+                None => return Err(ParseError::UnknownDimension),
             }
         }
 
@@ -1020,5 +1029,113 @@ mod tests {
 
         // Trailing underscores removed
         assert_eq!(sanitize_name("name_:"), "name");
+    }
+
+    #[test]
+    fn test_try_from_tensor_shape_proto_concrete_dimensions() {
+        use crate::protos::tensor_shape_proto::Dimension;
+        use crate::protos::tensor_shape_proto::dimension::Value;
+
+        let mut shape = TensorShapeProto::default();
+
+        let mut dim1 = Dimension::default();
+        dim1.value = Some(Value::DimValue(1));
+        shape.dim.push(dim1);
+
+        let mut dim2 = Dimension::default();
+        dim2.value = Some(Value::DimValue(3));
+        shape.dim.push(dim2);
+
+        let mut dim3 = Dimension::default();
+        dim3.value = Some(Value::DimValue(224));
+        shape.dim.push(dim3);
+
+        let mut dim4 = Dimension::default();
+        dim4.value = Some(Value::DimValue(224));
+        shape.dim.push(dim4);
+
+        let result: Vec<usize> = Vec::try_from(shape).unwrap();
+        assert_eq!(result, vec![1, 3, 224, 224]);
+    }
+
+    #[test]
+    fn test_try_from_tensor_shape_proto_symbolic_dimension() {
+        use crate::protos::tensor_shape_proto::Dimension;
+        use crate::protos::tensor_shape_proto::dimension::Value;
+
+        let mut shape = TensorShapeProto::default();
+
+        let mut dim1 = Dimension::default();
+        dim1.value = Some(Value::DimParam("batch_size".to_string()));
+        shape.dim.push(dim1);
+
+        let mut dim2 = Dimension::default();
+        dim2.value = Some(Value::DimValue(3));
+        shape.dim.push(dim2);
+
+        let mut dim3 = Dimension::default();
+        dim3.value = Some(Value::DimValue(224));
+        shape.dim.push(dim3);
+
+        let mut dim4 = Dimension::default();
+        dim4.value = Some(Value::DimValue(224));
+        shape.dim.push(dim4);
+
+        let result: Result<Vec<usize>, ParseError> = Vec::try_from(shape);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ParseError::SymbolicDimension(msg) => {
+                assert!(msg.contains("batch_size"));
+            }
+            _ => panic!("Expected SymbolicDimension error"),
+        }
+    }
+
+    #[test]
+    fn test_try_from_tensor_shape_proto_unknown_dimension() {
+        use crate::protos::tensor_shape_proto::Dimension;
+        use crate::protos::tensor_shape_proto::dimension::Value;
+
+        let mut shape = TensorShapeProto::default();
+
+        let mut dim1 = Dimension::default();
+        dim1.value = None;
+        shape.dim.push(dim1);
+
+        let mut dim2 = Dimension::default();
+        dim2.value = Some(Value::DimValue(3));
+        shape.dim.push(dim2);
+
+        let result: Result<Vec<usize>, ParseError> = Vec::try_from(shape);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ParseError::UnknownDimension => (),
+            _ => panic!("Expected UnknownDimension error"),
+        }
+    }
+
+    #[test]
+    fn test_try_from_tensor_shape_proto_single_dimension() {
+        use crate::protos::tensor_shape_proto::Dimension;
+        use crate::protos::tensor_shape_proto::dimension::Value;
+
+        let mut shape = TensorShapeProto::default();
+
+        let mut dim = Dimension::default();
+        dim.value = Some(Value::DimValue(1024));
+        shape.dim.push(dim);
+
+        let result: Vec<usize> = Vec::try_from(shape).unwrap();
+        assert_eq!(result, vec![1024]);
+    }
+
+    #[test]
+    fn test_try_from_tensor_shape_proto_zero_dimensions() {
+        use crate::protos::TensorShapeProto;
+
+        let shape = TensorShapeProto::default();
+
+        let result: Vec<usize> = Vec::try_from(shape).unwrap();
+        assert!(result.is_empty());
     }
 }
