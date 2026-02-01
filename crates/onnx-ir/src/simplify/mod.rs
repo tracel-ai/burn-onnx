@@ -24,38 +24,55 @@ use identity_element::eliminate_identity_elements;
 use permute_reshape::simplify_permute_reshape;
 use redundant_nodes::eliminate_redundant_nodes;
 
+/// Maximum number of fixed-point iterations to prevent runaway loops.
+const MAX_ITERATIONS: usize = 10;
+
 /// Run all simplification passes on the graph.
 ///
-/// Returns the (possibly modified) nodes, inputs, and outputs.
+/// Applies passes in a fixed-point loop: repeats until the graph stops changing
+/// or `MAX_ITERATIONS` is reached. Each iteration runs all passes in order,
+/// since one pass may create opportunities for another.
 pub(crate) fn simplify_graph(
-    nodes: Vec<RawNode>,
+    mut nodes: Vec<RawNode>,
     inputs: Vec<Argument>,
     outputs: Vec<Argument>,
     _state: &Rc<RefCell<GraphState>>,
 ) -> (Vec<RawNode>, Vec<Argument>, Vec<Argument>) {
-    // Constant propagation (may eliminate Shape->Gather chains)
-    let nodes = simplify_constant_shape(nodes);
+    for iteration in 0..MAX_ITERATIONS {
+        let node_count_before = nodes.len();
 
-    // Pattern-based simplifications (may create dead nodes)
-    let nodes = simplify_permute_reshape(nodes);
+        // Constant propagation (may eliminate Shape->Gather chains)
+        nodes = simplify_constant_shape(nodes);
 
-    // Idempotent op elimination: f(f(x)) -> f(x)
-    let nodes = eliminate_idempotent_ops(nodes);
+        // Pattern-based simplifications (may create dead nodes)
+        nodes = simplify_permute_reshape(nodes);
 
-    // Identity element elimination: x + 0 -> x, x * 1 -> x, etc.
-    let nodes = eliminate_identity_elements(nodes);
+        // Idempotent op elimination: f(f(x)) -> f(x)
+        nodes = eliminate_idempotent_ops(nodes);
 
-    // Common subexpression elimination (rewrites inputs, creates dead nodes)
-    let nodes = eliminate_redundant_nodes(nodes);
+        // Identity element elimination: x + 0 -> x, x * 1 -> x, etc.
+        nodes = eliminate_identity_elements(nodes);
 
-    // Dead node elimination (cleans up nodes orphaned by pattern passes)
-    let node_count_before = nodes.len();
-    let nodes = eliminate_dead_nodes(nodes, &outputs);
-    let removed = node_count_before - nodes.len();
-    if removed > 0 {
-        log::info!("Simplification: removed {} dead node(s)", removed);
-    } else {
-        log::debug!("Simplification: no dead nodes found");
+        // Common subexpression elimination (rewrites inputs, creates dead nodes)
+        nodes = eliminate_redundant_nodes(nodes);
+
+        // Dead node elimination (cleans up nodes orphaned by pattern passes)
+        nodes = eliminate_dead_nodes(nodes, &outputs);
+
+        let removed = node_count_before - nodes.len();
+        if removed == 0 {
+            log::debug!(
+                "Simplification: converged after {} iteration(s)",
+                iteration + 1
+            );
+            break;
+        }
+
+        log::info!(
+            "Simplification: iteration {} removed {} node(s)",
+            iteration + 1,
+            removed
+        );
     }
 
     (nodes, inputs, outputs)

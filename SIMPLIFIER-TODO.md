@@ -16,7 +16,7 @@ Reference: [onnx-simplifier](https://github.com/daquexian/onnx-simplifier)
 - [x] `simplify` flag on `OnnxGraphBuilder` (default: true)
 - [x] `simplify` flag on `ModelGen` (default: true, forwarded to `OnnxGraphBuilder`)
 - [x] Disable simplification in `onnx-tests` and `onnx-ir` integration tests
-- [ ] Fixed-point iteration: apply passes repeatedly until the graph stops changing
+- [x] Fixed-point iteration: apply passes repeatedly until the graph stops changing
 
 ## Constant Folding
 
