@@ -81,8 +81,20 @@ examples/
 
 - Unit tests go in the same file as implementation
 - Integration tests in `crates/onnx-tests/tests/<op_name>/`
+- Simplification comparison tests in `crates/onnx-tests/tests/simplify/`
 - Python scripts generate ONNX models for testing
 - Use `torch.manual_seed(42)` for reproducibility
+
+### Simplification
+
+- `ModelGen::simplify(true)` enables an optional ONNX-IR pass that folds shape computations into
+  constants at codegen time (e.g., `Shape(x)` with static dims becomes a constant array)
+- Existing operator tests use `.simplify(false)` to test unsimplified codegen
+- Dedicated tests in `crates/onnx-tests/tests/simplify/` have their own ONNX models compiled both
+  with and without simplification to verify outputs match
+- The `build.rs` generates three model sets: `model/` (main, unsimplified), `model_simplified/`, and
+  `model_unsimplified/` (the latter two for simplify comparison tests)
+- When adding a new simplification pattern, add a test model via `tests/simplify/gen_models.py`
 
 ### Python Test Scripts
 
