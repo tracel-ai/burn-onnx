@@ -152,14 +152,18 @@ fn extract_constant_shape_dim(
     let start = start as usize;
 
     // Gather's index (input[1]) must be a constant scalar
-    let index_val = gather.inputs[1].value()?.scalar_i64().ok()?;
+    let mut index_val = gather.inputs[1].value()?.scalar_i64().ok()?;
 
-    // Compute the actual dimension index into the original shape
-    let dim_idx = start + index_val as usize;
-    if dim_idx >= static_shape.len() {
+    // Handle negative indices (relative to the sliced shape length)
+    let sliced_len = static_shape.len() - start;
+    if index_val < 0 {
+        index_val += sliced_len as i64;
+    }
+    if index_val < 0 || index_val as usize >= sliced_len {
         return None;
     }
 
+    let dim_idx = start + index_val as usize;
     Some(static_shape[dim_idx] as i64)
 }
 
