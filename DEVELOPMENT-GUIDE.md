@@ -388,9 +388,17 @@ post-processing. This pass folds shape-related computations into constants at co
 - **Expand from shape**: `Expand(x, Shape(y))` uses a folded constant shape
 - **ConstantOfShape optimization**: `ConstantOfShape(Shape(x))` uses a known shape
 
-Simplification is off by default. Existing operator tests use `.simplify(false)` to test
-unsimplified codegen. Dedicated comparison tests in `crates/onnx-tests/tests/simplify/` verify that
-simplified and unsimplified codegen produce identical outputs.
+Simplification is off by default in `ModelGen` but enabled by default in the `onnx2burn` CLI tool.
+Use `--no-simplify` to disable it:
+
+```sh
+cargo run -p burn-onnx -- model.onnx ./out             # simplification enabled (default)
+cargo run -p burn-onnx -- model.onnx ./out --no-simplify  # simplification disabled
+```
+
+Existing operator tests use `.simplify(false)` to test unsimplified codegen. Dedicated comparison
+tests in `crates/onnx-tests/tests/simplify/` verify that simplified and unsimplified codegen produce
+identical outputs.
 
 #### Phase 5: Finalization
 
