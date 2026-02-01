@@ -17,7 +17,8 @@ include_simplified_models!(
     simplify_where_on_shapes,
     simplify_expand_from_shape,
     simplify_constant_of_shape_opt,
-    simplify_gather_shape_chain
+    simplify_gather_shape_chain,
+    simplify_permute_via_shape_gather
 );
 
 #[cfg(test)]
@@ -134,6 +135,20 @@ mod tests {
         let x = Tensor::<TestBackend, 3>::ones([3, 1, 4], &device);
         let y = Tensor::<TestBackend, 3>::ones([5, 6, 7], &device);
         assert_eq!(s.forward(x.clone(), y.clone()), u.forward(x, y));
+    }
+
+    /// Shape->Gather->Unsqueeze->Concat->Reshape that transposes last two dims.
+    /// Should simplify to a Transpose.
+    #[test]
+    fn permute_via_shape_gather() {
+        let device = Default::default();
+        let s = simplified::simplify_permute_via_shape_gather::Model::<TestBackend>::new(&device);
+        let u = unsimplified::simplify_permute_via_shape_gather::Model::<TestBackend>::new(&device);
+        let input = Tensor::<TestBackend, 4>::ones([2, 3, 4, 5], &device);
+        assert_eq!(
+            s.forward(input.clone()).to_data(),
+            u.forward(input).to_data()
+        );
     }
 
     #[test]

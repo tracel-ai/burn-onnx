@@ -416,6 +416,74 @@ def gather_shape_chain():
     )
 
 
+def permute_via_shape_gather():
+    """Shape->Gather->Unsqueeze->Concat->Reshape that transposes last two dims.
+
+    input: [2,3,4,5]
+    4x Shape -> Gather(0), Gather(1), Gather(3), Gather(2)
+    -> Unsqueeze each -> Concat -> [2,3,5,4] -> Reshape(input, shape)
+    output: [2,3,5,4]
+
+    This is the classic permute-reshape pattern that should be simplified
+    to a Transpose operation.
+    """
+    graph = helper.make_graph(
+        name="main_graph",
+        nodes=[
+            helper.make_node("Shape", ["input"], ["s0"]),
+            helper.make_node("Shape", ["input"], ["s1"]),
+            helper.make_node("Shape", ["input"], ["s2"]),
+            helper.make_node("Shape", ["input"], ["s3"]),
+            helper.make_node(
+                "Constant", [], ["i0"],
+                value=helper.make_tensor("i0v", TensorProto.INT64, [], [0]),
+            ),
+            helper.make_node(
+                "Constant", [], ["i1"],
+                value=helper.make_tensor("i1v", TensorProto.INT64, [], [1]),
+            ),
+            helper.make_node(
+                "Constant", [], ["i3"],
+                value=helper.make_tensor("i3v", TensorProto.INT64, [], [3]),
+            ),
+            helper.make_node(
+                "Constant", [], ["i2"],
+                value=helper.make_tensor("i2v", TensorProto.INT64, [], [2]),
+            ),
+            helper.make_node("Gather", ["s0", "i0"], ["d0"], axis=0),
+            helper.make_node("Gather", ["s1", "i1"], ["d1"], axis=0),
+            helper.make_node("Gather", ["s2", "i3"], ["d3"], axis=0),
+            helper.make_node("Gather", ["s3", "i2"], ["d2"], axis=0),
+            helper.make_node(
+                "Constant", [], ["unsq_axes"],
+                value=helper.make_tensor("ax", TensorProto.INT64, [1], [0]),
+            ),
+            helper.make_node("Unsqueeze", ["d0", "unsq_axes"], ["u0"]),
+            helper.make_node("Unsqueeze", ["d1", "unsq_axes"], ["u1"]),
+            helper.make_node("Unsqueeze", ["d3", "unsq_axes"], ["u3"]),
+            helper.make_node("Unsqueeze", ["d2", "unsq_axes"], ["u2"]),
+            helper.make_node("Concat", ["u0", "u1", "u3", "u2"], ["new_shape"], axis=0),
+            helper.make_node("Reshape", ["input", "new_shape"], ["output"]),
+        ],
+        inputs=[
+            helper.make_value_info(
+                "input",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 3, 4, 5]),
+            ),
+        ],
+        outputs=[
+            helper.make_value_info(
+                "output",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 3, 5, 4]),
+            ),
+        ],
+    )
+    save(
+        helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET)]),
+        "simplify_permute_via_shape_gather.onnx",
+    )
+
+
 if __name__ == "__main__":
     print("Generating simplify test models:")
     shape_folding()
@@ -429,4 +497,5 @@ if __name__ == "__main__":
     expand_from_shape()
     constant_of_shape_opt()
     gather_shape_chain()
+    permute_via_shape_gather()
     print("Done.")
