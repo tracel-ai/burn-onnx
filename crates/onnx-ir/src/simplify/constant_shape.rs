@@ -149,7 +149,7 @@ fn extract_constant_shape_dim(
     if start < 0 {
         start += rank as i64;
     }
-    let start = start as usize;
+    let start = start.max(0) as usize;
 
     // Gather's index (input[1]) must be a constant scalar
     let mut index_val = gather.inputs[1].value()?.scalar_i64().ok()?;

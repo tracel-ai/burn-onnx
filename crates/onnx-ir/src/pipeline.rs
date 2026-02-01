@@ -143,7 +143,8 @@ impl OnnxGraphBuilder {
     /// Enable or disable graph simplification passes (default: true)
     ///
     /// When enabled, the builder runs optimization passes on the IR graph
-    /// such as constant folding and dead node elimination.
+    /// such as dead node elimination, common subexpression elimination, and
+    /// pattern-based simplifications.
     pub fn simplify(mut self, simplify: bool) -> Self {
         self.simplify = simplify;
         self

@@ -213,8 +213,9 @@ impl ModelGen {
 
     /// Enable or disable graph simplification passes (default: true)
     ///
-    /// When enabled, optimization passes like constant folding and dead node
-    /// elimination are applied to the ONNX IR before code generation.
+    /// When enabled, optimization passes like dead node elimination, common
+    /// subexpression elimination (CSE), and pattern-based simplifications
+    /// are applied to the ONNX IR before code generation.
     pub fn simplify(&mut self, simplify: bool) -> &mut Self {
         self.simplify = simplify;
         self
