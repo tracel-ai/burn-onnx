@@ -351,7 +351,13 @@ pub(crate) fn build_graph_builder_from_proto(
     name_registry: Option<crate::graph_state::NameRegistry>,
     base_path: Option<&Path>,
 ) -> Result<crate::ir::OnnxGraphBuilder, Error> {
-    build_graph_builder_from_proto_with_simplify(graph, opset_version, name_registry, base_path, false)
+    build_graph_builder_from_proto_with_simplify(
+        graph,
+        opset_version,
+        name_registry,
+        base_path,
+        false,
+    )
 }
 
 fn build_graph_builder_from_proto_with_simplify(

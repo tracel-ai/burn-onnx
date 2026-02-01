@@ -122,7 +122,9 @@ fn test_external_data_from_bytes_panics() {
     let bytes = fs::read(&model_path).expect("Failed to read model file");
 
     // This should panic because external data requires a file path context
-    let _ = onnx_ir::OnnxGraphBuilder::new().simplify(false).parse_bytes(&bytes);
+    let _ = onnx_ir::OnnxGraphBuilder::new()
+        .simplify(false)
+        .parse_bytes(&bytes);
 }
 
 /// Test loading a model with tensors stored in multiple external files

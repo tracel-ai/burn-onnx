@@ -246,12 +246,10 @@ impl NodeProcessor for ReshapeProcessor {
         // Reshape is a no-op when input and output have identical static shapes
         if let (ArgType::Tensor(input_t), ArgType::Tensor(output_t)) =
             (&node.inputs[0].ty, &node.outputs[0].ty)
-        {
-            if let (Some(in_shape), Some(out_shape)) =
+            && let (Some(in_shape), Some(out_shape)) =
                 (&input_t.static_shape, &output_t.static_shape)
-            {
-                return in_shape == out_shape;
-            }
+        {
+            return in_shape == out_shape;
         }
 
         false

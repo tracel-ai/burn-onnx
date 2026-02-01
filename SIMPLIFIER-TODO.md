@@ -20,6 +20,8 @@ Reference: [onnx-simplifier](https://github.com/daquexian/onnx-simplifier)
 
 ## Constant Folding
 
+DO NOT WORK ON CONSTANT FOLDING!!
+
 Evaluate nodes where all inputs are compile-time constants and replace with constant tensors.
 Unlike onnx-simplifier (which uses ONNX Runtime), we evaluate ops directly on constant data.
 
@@ -43,6 +45,8 @@ Unlike onnx-simplifier (which uses ONNX Runtime), we evaluate ops directly on co
 ## Elimination Passes
 
 Remove unnecessary nodes from the graph.
+
+I THINK MOST OF THEM ARE ALREADY DONE IN POST-PROCESSING PHASE
 
 - [ ] Dead node elimination: remove nodes whose outputs are not consumed by any other node
       or graph output
@@ -85,8 +89,4 @@ Replace common multi-node patterns with simpler equivalents.
 
 ## Shape Inference Propagation
 
-- [ ] Iterative shape inference: propagate static shapes through the graph to enable more
-      constant folding (shapes become known -> Shape ops become foldable -> downstream
-      Reshape/Expand become foldable)
-- [ ] Dynamic-to-static shape resolution: when input shapes are fully specified, resolve
-      all dynamic dimensions to static values throughout the graph
+DO NOT WORK ON THIS
