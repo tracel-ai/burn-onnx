@@ -4,11 +4,29 @@ fn main() {
     // Re-run this build script if the onnx-tests directory changes.
     println!("cargo:rerun-if-changed=tests");
 
-    // Add onnx models.
-    // All models are now saved in burnpack format (.bpk files)
-    ModelGen::new()
-        .simplify(true)
-        .input("tests/abs/abs.onnx")
+    // Add onnx models (unsimplified, used by existing tests).
+    let mut model_gen = ModelGen::new();
+    model_gen.simplify(false);
+    add_all_inputs(&mut model_gen);
+    model_gen.out_dir("model/").run_from_script();
+
+    // Generate simplified models for comparison testing.
+    let mut simplified = ModelGen::new();
+    simplified.simplify(true);
+    add_simplify_inputs(&mut simplified);
+    simplified.out_dir("model_simplified/").run_from_script();
+
+    // Generate unsimplified models in a separate dir for comparison testing.
+    let mut unsimplified = ModelGen::new();
+    unsimplified.simplify(false);
+    add_simplify_inputs(&mut unsimplified);
+    unsimplified
+        .out_dir("model_unsimplified/")
+        .run_from_script();
+}
+
+fn add_all_inputs(model_gen: &mut ModelGen) {
+    model_gen.input("tests/abs/abs.onnx")
         .input("tests/add/add.onnx")
         .input("tests/add/add_shape.onnx")
         .input("tests/add/add_broadcast.onnx")
@@ -389,10 +407,19 @@ fn main() {
         .input("tests/subgraph/outer_scope_multi_var.onnx")
         .input("tests/subgraph/outer_scope_loop.onnx")
         .input("tests/subgraph/outer_scope_scan.onnx")
-        .input("tests/subgraph/outer_scope_constant.onnx")
-        .out_dir("model/")
-        .run_from_script();
+        .input("tests/subgraph/outer_scope_constant.onnx");
+}
 
-    // Note: Previous record type variants (NamedMpk, PrettyJson, Bincode, etc.)
-    // have been removed. All models now use burnpack format exclusively.
+fn add_simplify_inputs(model_gen: &mut ModelGen) {
+    model_gen
+        .input("tests/simplify/simplify_shape_folding.onnx")
+        .input("tests/simplify/simplify_gather_on_shape.onnx")
+        .input("tests/simplify/simplify_slice_on_shape.onnx")
+        .input("tests/simplify/simplify_concat_shapes.onnx")
+        .input("tests/simplify/simplify_reshape_from_shape.onnx")
+        .input("tests/simplify/simplify_binary_ops_on_shape.onnx")
+        .input("tests/simplify/simplify_cast_shape.onnx")
+        .input("tests/simplify/simplify_where_on_shapes.onnx")
+        .input("tests/simplify/simplify_expand_from_shape.onnx")
+        .input("tests/simplify/simplify_constant_of_shape_opt.onnx");
 }

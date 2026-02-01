@@ -125,6 +125,7 @@ pub mod transpose;
 pub mod trilu;
 pub mod unsqueeze;
 pub mod where_op;
+pub mod simplify;
 pub mod xor;
 
 /// Include specified models in the `model` directory in the target directory.
@@ -138,5 +139,28 @@ macro_rules! include_models {
                 include!(concat!(env!("OUT_DIR"), concat!("/model/", stringify!($model), ".rs")));
             }
         )*
+    };
+}
+
+/// Include models from both `model_simplified/` and `model_unsimplified/` directories.
+#[macro_export]
+macro_rules! include_simplified_models {
+    ($($model:ident),*) => {
+        pub mod simplified {
+            $(
+                #[allow(clippy::type_complexity)]
+                pub mod $model {
+                    include!(concat!(env!("OUT_DIR"), "/model_simplified/", stringify!($model), ".rs"));
+                }
+            )*
+        }
+        pub mod unsimplified {
+            $(
+                #[allow(clippy::type_complexity)]
+                pub mod $model {
+                    include!(concat!(env!("OUT_DIR"), "/model_unsimplified/", stringify!($model), ".rs"));
+                }
+            )*
+        }
     };
 }
