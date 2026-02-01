@@ -104,7 +104,7 @@ fn is_constant_value(arg: &crate::ir::Argument, target: f64) -> bool {
         None => return false,
     };
 
-    let values = match data.to_f32_vec() {
+    let values = match data.to_f64_vec() {
         Ok(v) => v,
         Err(_) => return false,
     };
@@ -113,8 +113,7 @@ fn is_constant_value(arg: &crate::ir::Argument, target: f64) -> bool {
         return false;
     }
 
-    let target_f32 = target as f32;
-    values.iter().all(|&v| v == target_f32)
+    values.iter().all(|&v| v == target)
 }
 
 #[cfg(test)]
@@ -237,6 +236,84 @@ mod tests {
         let nodes = vec![
             make_binary_node("sub", NodeType::Sub, x, zero, "sub_out"),
             node("relu", NodeType::Relu, &["sub_out"], &["output"]),
+        ];
+
+        let result = eliminate_identity_elements(nodes);
+        let relu = result.iter().find(|n| n.name == "relu").unwrap();
+        assert_eq!(relu.inputs[0].name, "x");
+    }
+
+    fn const_f64_arg(name: &str, value: f64) -> Argument {
+        let bytes = bytes::Bytes::copy_from_slice(&value.to_ne_bytes());
+        let data_ref = TensorDataRef::new(bytes, vec![1], DType::F64);
+        let mut store = TensorStore::new();
+        let id = store.store(data_ref);
+        let mut constant_map = std::collections::HashMap::new();
+        constant_map.insert(name.to_string(), id);
+        let value_store = ValueStore::new(std::rc::Rc::new(store), std::rc::Rc::new(constant_map));
+        Argument {
+            name: name.to_string(),
+            ty: ArgType::Tensor(TensorType {
+                dtype: DType::F64,
+                rank: 0,
+                static_shape: Some(vec![]),
+            }),
+            value_source: ValueSource::Constant,
+            value_store: Some(value_store),
+        }
+    }
+
+    #[test]
+    fn test_f64_near_zero_not_eliminated() {
+        // 1e-15 would round to 0.0 in f32 but must NOT be treated as zero
+        let x = crate::simplify::tests::arg("x");
+        let tiny = const_f64_arg("tiny", 1e-15);
+        let nodes = vec![
+            make_binary_node("add", NodeType::Add, x, tiny, "add_out"),
+            node("relu", NodeType::Relu, &["add_out"], &["output"]),
+        ];
+
+        let result = eliminate_identity_elements(nodes);
+        let relu = result.iter().find(|n| n.name == "relu").unwrap();
+        assert_eq!(relu.inputs[0].name, "add_out");
+    }
+
+    #[test]
+    fn test_f64_near_one_not_eliminated() {
+        // 1.0 + 1e-15 would round to 1.0 in f32 but must NOT be treated as one
+        let x = crate::simplify::tests::arg("x");
+        let near_one = const_f64_arg("near_one", 1.0 + 1e-15);
+        let nodes = vec![
+            make_binary_node("mul", NodeType::Mul, x, near_one, "mul_out"),
+            node("relu", NodeType::Relu, &["mul_out"], &["output"]),
+        ];
+
+        let result = eliminate_identity_elements(nodes);
+        let relu = result.iter().find(|n| n.name == "relu").unwrap();
+        assert_eq!(relu.inputs[0].name, "mul_out");
+    }
+
+    #[test]
+    fn test_f64_exact_zero_eliminated() {
+        let x = crate::simplify::tests::arg("x");
+        let zero = const_f64_arg("zero", 0.0);
+        let nodes = vec![
+            make_binary_node("add", NodeType::Add, x, zero, "add_out"),
+            node("relu", NodeType::Relu, &["add_out"], &["output"]),
+        ];
+
+        let result = eliminate_identity_elements(nodes);
+        let relu = result.iter().find(|n| n.name == "relu").unwrap();
+        assert_eq!(relu.inputs[0].name, "x");
+    }
+
+    #[test]
+    fn test_f64_exact_one_eliminated() {
+        let x = crate::simplify::tests::arg("x");
+        let one = const_f64_arg("one", 1.0);
+        let nodes = vec![
+            make_binary_node("mul", NodeType::Mul, x, one, "mul_out"),
+            node("relu", NodeType::Relu, &["mul_out"], &["output"]),
         ];
 
         let result = eliminate_identity_elements(nodes);
