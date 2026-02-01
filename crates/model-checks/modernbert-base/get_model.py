@@ -7,6 +7,7 @@
 #   "huggingface-hub>=0.20.0",
 #   "numpy",
 #   "torch",
+#   "onnxscript",
 #   "transformers>=4.46.0",
 # ]
 # ///
