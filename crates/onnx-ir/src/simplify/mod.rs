@@ -5,6 +5,8 @@
 
 mod constant_shape;
 mod dead_nodes;
+mod idempotent;
+mod identity_element;
 mod permute_reshape;
 mod redundant_nodes;
 
@@ -17,6 +19,8 @@ use crate::{
 
 use constant_shape::simplify_constant_shape;
 use dead_nodes::eliminate_dead_nodes;
+use idempotent::eliminate_idempotent_ops;
+use identity_element::eliminate_identity_elements;
 use permute_reshape::simplify_permute_reshape;
 use redundant_nodes::eliminate_redundant_nodes;
 
@@ -34,6 +38,12 @@ pub(crate) fn simplify_graph(
 
     // Pattern-based simplifications (may create dead nodes)
     let nodes = simplify_permute_reshape(nodes);
+
+    // Idempotent op elimination: f(f(x)) -> f(x)
+    let nodes = eliminate_idempotent_ops(nodes);
+
+    // Identity element elimination: x + 0 -> x, x * 1 -> x, etc.
+    let nodes = eliminate_identity_elements(nodes);
 
     // Common subexpression elimination (rewrites inputs, creates dead nodes)
     let nodes = eliminate_redundant_nodes(nodes);

@@ -52,20 +52,20 @@ I THINK MOST OF THEM ARE ALREADY DONE IN POST-PROCESSING PHASE
       or graph output
 - [x] Redundant node elimination: merge duplicate nodes that have identical op type, attributes,
       and inputs (CSE - common subexpression elimination)
-- [ ] Identity elimination (already done in post-processing phase, but verify completeness)
-- [ ] No-op Cast elimination: remove Cast where input dtype == output dtype
-- [ ] No-op Transpose elimination: remove Transpose with identity permutation [0,1,2,...]
-- [ ] No-op Reshape elimination: remove Reshape where output shape == input shape
-- [ ] No-op Pad elimination: remove Pad where all pad values are 0
-- [ ] No-op Dropout elimination: remove Dropout in inference mode (ratio=0 or test mode)
+- [x] Identity elimination (in post-processing phase via is_noop)
+- [x] No-op Cast elimination: remove Cast where input dtype == output dtype
+- [x] No-op Transpose elimination: remove Transpose with identity permutation [0,1,2,...]
+- [x] No-op Reshape elimination: remove Reshape where output shape == input shape
+- [x] No-op Pad elimination: remove Pad where all pad values are 0
+- [x] No-op Dropout elimination: remove Dropout in inference mode (always no-op, inference only)
 - [x] No-op Expand elimination: remove Expand where output shape == input shape
 - [x] No-op Concat elimination: remove Concat with single input (replace with Identity)
 - [x] No-op Split elimination: remove Split with single output
 - [x] No-op Flatten elimination: remove Flatten where input is already rank 2
-- [ ] Consecutive idempotent op elimination: `Relu(Relu(x))` -> `Relu(x)`, same for
-      Ceil, Floor, Round, Sign
-- [ ] Identity element elimination: `x + 0 = x`, `x * 1 = x`, `x / 1 = x`, `x ** 1 = x`,
-      concat with empty tensor
+- [x] Consecutive idempotent op elimination: `Relu(Relu(x))` -> `Relu(x)`, same for
+      Ceil, Floor, Round, Sign, Abs
+- [x] Identity element elimination: `x + 0 = x`, `0 + x = x`, `x - 0 = x`,
+      `x * 1 = x`, `1 * x = x`, `x / 1 = x`, `x ** 1 = x`
 - [ ] Unused initializer elimination: remove initializers/constants not consumed by any node
 
 ## Fusion Passes
