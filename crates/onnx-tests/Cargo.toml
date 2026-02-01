@@ -17,6 +17,7 @@ burn = { workspace = true }
 burn-store = { workspace = true, features = ["std", "burnpack"] }
 serde = { workspace = true }
 float-cmp = { workspace = true }
+insta = { workspace = true }
 
 [build-dependencies]
 burn-onnx = { path = "../burn-onnx" }

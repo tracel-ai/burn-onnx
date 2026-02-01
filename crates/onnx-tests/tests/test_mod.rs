@@ -143,6 +143,9 @@ macro_rules! include_models {
 }
 
 /// Include models from both `model_simplified/` and `model_unsimplified/` directories.
+///
+/// Also generates `simplified_source::<model>()` and `unsimplified_source::<model>()`
+/// functions returning the generated source code as `&'static str` for snapshot testing.
 #[macro_export]
 macro_rules! include_simplified_models {
     ($($model:ident),*) => {
@@ -159,6 +162,21 @@ macro_rules! include_simplified_models {
                 #[allow(clippy::type_complexity)]
                 pub mod $model {
                     include!(concat!(env!("OUT_DIR"), "/model_unsimplified/", stringify!($model), ".rs"));
+                }
+            )*
+        }
+
+        pub mod simplified_source {
+            $(
+                pub fn $model() -> &'static str {
+                    include_str!(concat!(env!("OUT_DIR"), "/model_simplified/", stringify!($model), ".rs"))
+                }
+            )*
+        }
+        pub mod unsimplified_source {
+            $(
+                pub fn $model() -> &'static str {
+                    include_str!(concat!(env!("OUT_DIR"), "/model_unsimplified/", stringify!($model), ".rs"))
                 }
             )*
         }
