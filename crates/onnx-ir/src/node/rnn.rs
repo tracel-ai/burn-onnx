@@ -5,15 +5,31 @@ use crate::processor::{
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
 
-use strum_macros::EnumString;
-
-
-#[derive(Debug, Clone, PartialEq, Default, EnumString)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum RnnDirection {
     #[default]
     Forward,
     Reverse,
     Bidirectional,
+}
+
+impl std::str::FromStr for RnnDirection {
+    type Err = ProcessError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "forward" => Ok(RnnDirection::Forward),
+            "reverse" => Ok(RnnDirection::Reverse),
+            "bidirectional" => Ok(RnnDirection::Bidirectional),
+            _ => Err(ProcessError::InvalidAttribute {
+                name: "direction".to_string(),
+                reason: format!(
+                    "Invalid direction '{}'. Must be 'forward', 'reverse', or 'bidirectional'",
+                    s
+                ),
+            }),
+        }
+    }
 }
 
 impl RnnDirection {
@@ -25,9 +41,8 @@ impl RnnDirection {
     }
 }
 
-
-#[derive(Debug, Clone, PartialEq, Copy, Default, Eq, EnumString)]
-pub enum RnnActivationFunction{
+#[derive(Debug, Clone, PartialEq, Copy, Default, Eq)]
+pub enum RnnActivationFunction {
     #[default]
     Tanh,
     Relu,
@@ -42,9 +57,36 @@ pub enum RnnActivationFunction{
     Softplus,
 }
 
+impl std::str::FromStr for RnnActivationFunction {
+    type Err = ProcessError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // ONNX activation names (case-insensitive matching)
+        match s.to_lowercase().as_str() {
+            "sigmoid" => Ok(RnnActivationFunction::Sigmoid),
+            "tanh" => Ok(RnnActivationFunction::Tanh),
+            "relu" => Ok(RnnActivationFunction::Relu),
+            "hardsigmoid" => Ok(RnnActivationFunction::HardSigmoid),
+            "leakyrelu" => Ok(RnnActivationFunction::LeakyRelu),
+            "thresholdedrelu" => Ok(RnnActivationFunction::ThresholdedRelu),
+            "scaledtanh" => Ok(RnnActivationFunction::ScaledTanh),
+            "elu" => Ok(RnnActivationFunction::Elu),
+            "softsign" => Ok(RnnActivationFunction::Softsign),
+            "softplus" => Ok(RnnActivationFunction::Softplus),
+            "affine" => Ok(RnnActivationFunction::Affine),
+            _ => Err(ProcessError::InvalidAttribute {
+                name: "activations".to_string(),
+                reason: format!(
+                    "Unknown ONNX activation '{}'. Valid activations: Sigmoid, Tanh, Relu, HardSigmoid, LeakyRelu, ThresholdedRelu, ScaledTanh, Elu, Softsign, Softplus, Affine",
+                    s
+                ),
+            }),
+        }
+    }
+}
 
 #[derive(Debug, Clone, new)]
-pub struct RnnConfig{
+pub struct RnnConfig {
     // Size of the input features
     pub input_size: usize,
     // Number of neurons in the hidden layer (required ONNX attribute)
@@ -55,7 +97,11 @@ pub struct RnnConfig{
     pub has_bias: bool,
     // Whether initial hidden state is provided
     pub has_initial_h: bool,
+    /// Tensor layout: false = seq_length major (default), true = batch_size major
     pub batch_first: bool,
+    /// Cell state clipping threshold (None = no clipping)
+    pub clip: Option<f32>,
+    /// Activation function for hidden state output (default: Tanh)
     pub hidden_activation: RnnActivationFunction,
 }
 
@@ -76,8 +122,8 @@ impl NodeProcessor for RnnProcessor {
         NodeSpec {
             min_opset: 1,
             max_opset: None,
-            // Inputs: 
-            //     Required: X, W, R 
+            // Inputs:
+            //     Required: X, W, R
             //     Optional: B, sequence_lens, initial_h
             inputs: InputSpec::Range(3, 6),
             // Outputs: Y, Y_h (all optional, but at least one should be present)
@@ -85,7 +131,7 @@ impl NodeProcessor for RnnProcessor {
         }
     }
 
-    fn lift_constants(&self, node: &RawNode, _opset: usize) -> Result<(), ProcessError>{
+    fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
         // W (weights) and R (recurrence weights) are typically constants
         if node.inputs.len() > 1 && node.inputs[1].is_constant() {
             node.inputs[1].to_static()?;
@@ -102,7 +148,7 @@ impl NodeProcessor for RnnProcessor {
 
     fn infer_types(
         &self,
-        node: &RawNode,
+        node: &mut RawNode,
         opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
@@ -136,7 +182,7 @@ impl NodeProcessor for RnnProcessor {
                 });
             }
         };
-        
+
         // RNN expects 3D weights matrix: [num_directions, hidden_size, input_size]
         if weight_tensor.rank != 3 {
             return Err(ProcessError::Custom(format!(
@@ -155,7 +201,7 @@ impl NodeProcessor for RnnProcessor {
                 });
             }
         };
-        
+
         // RNN expects 3D weights matrix: [num_directions, hidden_size, hidden_size]
         if recurrence_tensor.rank != 3 {
             return Err(ProcessError::Custom(format!(
@@ -189,7 +235,7 @@ impl NodeProcessor for RnnProcessor {
         }
 
         // Extract config for validation for sequence_lens checks below
-        let config = self.extract_config(node, opset)?;
+        let _config = self.extract_config(node, opset)?;
 
         // Infer output types based on which outputs are requested
         // Output 0: Y - all hidden states [seq_length, num_directions, batch_size, hidden_size]
@@ -327,32 +373,26 @@ impl NodeProcessor for RnnProcessor {
         let has_initial_h = node.inputs.len() > 5 && !node.inputs[5].is_optional();
 
         // Extract activations (default: Tanh for each direction)
-        // f = gate activation (i, o, f gates), g = cell activation, h = hidden activation
-        let (gate_activation) = if let Some(activations) =
-            node.attrs.get("activations")
-        {
+        // f = hidden activation
+        let hidden_activation = if let Some(activations) = node.attrs.get("activations") {
             let acts = activations.clone().into_strings();
             if acts.is_empty() {
                 // Empty means use defaults
-                (
-                    LstmActivationFunction::Tanh,
-                )
-            } else if acts.len() >= 3 {
-                // Parse the first 3 activations (forward direction or only direction)
-                let gate: LstmActivationFunction = acts[0].parse()?;
-  
-                // For bidirectional, verify both directions use the same activations
-                if direction == LstmDirection::Bidirectional && acts.len() >= 2 {
-                    let gate2: LstmActivationFunction = acts[2].parse()?;
+                RnnActivationFunction::Tanh
+            } else if acts.len() >= 1 {
+                let hidden: RnnActivationFunction = acts[0].parse()?;
 
-                    if gate != gate2 {
+                // For bidirectional, verify both directions use the same activations
+                if direction == RnnDirection::Bidirectional && acts.len() >= 2 {
+                    let hidden2: RnnActivationFunction = acts[1].parse()?;
+                    if hidden != hidden2 {
                         return Err(ProcessError::Custom(
                                 "RNN bidirectional with different activations per direction is not supported. Both directions must use the same activations.".to_string(),
                             ));
                     }
                 }
 
-                (gate)
+                hidden
             } else {
                 return Err(ProcessError::Custom(format!(
                     "RNN activations must have at least 3 elements, got {}",
@@ -361,9 +401,7 @@ impl NodeProcessor for RnnProcessor {
             }
         } else {
             // No activations attribute means use defaults
-            (
-                LstmActivationFunction::Tanh,
-            )
+            RnnActivationFunction::Tanh
         };
 
         let config = RnnConfig::new(
@@ -374,8 +412,7 @@ impl NodeProcessor for RnnProcessor {
             has_initial_h,
             batch_first,
             clip,
-            input_forget,
-            gate_activation,
+            hidden_activation,
         );
 
         Ok(config)
@@ -394,8 +431,6 @@ impl NodeProcessor for RnnProcessor {
         })
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -427,11 +462,7 @@ mod tests {
             .input_tensor_f32_data(
                 "R",
                 vec![0.0; num_directions * hidden_size as usize * hidden_size as usize],
-                vec![
-                    num_directions,
-                    hidden_size as usize,
-                    hidden_size as usize,
-                ],
+                vec![num_directions, hidden_size as usize, hidden_size as usize],
             )
             .attr_int("hidden_size", hidden_size);
 

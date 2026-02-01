@@ -67,7 +67,6 @@ define_placeholder_node! {
     QLinearMatMulNode,
     QuantizeLinearNode,
     RMSNormalizationNode,
-    RnnNode,
     RegexFullMatchNode,
     ReverseSequenceNode,
     RoiAlignNode,
