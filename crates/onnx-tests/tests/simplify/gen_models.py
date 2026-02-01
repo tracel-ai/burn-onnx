@@ -367,6 +367,51 @@ def constant_of_shape_opt():
     )
 
 
+def gather_shape_chain():
+    """Shape(x) -> Gather(0) -> Cast(FLOAT) -> Mul(y, gathered).
+
+    When x.shape[0] == 1, the gathered dim is 1. After Cast to float it becomes
+    1.0, so Mul(y, 1.0) is an identity element that should be eliminated.
+    This tests that value_store propagation through constant_shape folding
+    enables downstream identity element elimination.
+    """
+    graph = helper.make_graph(
+        name="main_graph",
+        nodes=[
+            helper.make_node("Shape", ["x"], ["shape_out"]),
+            helper.make_node(
+                "Constant",
+                [],
+                ["idx"],
+                value=helper.make_tensor("idx_val", TensorProto.INT64, [], [0]),
+            ),
+            helper.make_node("Gather", ["shape_out", "idx"], ["dim_val"], axis=0),
+            helper.make_node("Cast", ["dim_val"], ["dim_float"], to=TensorProto.FLOAT),
+            helper.make_node("Mul", ["y", "dim_float"], ["result"]),
+        ],
+        inputs=[
+            helper.make_value_info(
+                "x",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[1, 3, 4]),
+            ),
+            helper.make_value_info(
+                "y",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 5]),
+            ),
+        ],
+        outputs=[
+            helper.make_value_info(
+                "result",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 5]),
+            ),
+        ],
+    )
+    save(
+        helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET)]),
+        "simplify_gather_shape_chain.onnx",
+    )
+
+
 if __name__ == "__main__":
     print("Generating simplify test models:")
     shape_folding()
@@ -379,4 +424,5 @@ if __name__ == "__main__":
     where_on_shapes()
     expand_from_shape()
     constant_of_shape_opt()
+    gather_shape_chain()
     print("Done.")

@@ -16,7 +16,8 @@ include_simplified_models!(
     simplify_cast_shape,
     simplify_where_on_shapes,
     simplify_expand_from_shape,
-    simplify_constant_of_shape_opt
+    simplify_constant_of_shape_opt,
+    simplify_gather_shape_chain
 );
 
 #[cfg(test)]
@@ -120,6 +121,21 @@ mod tests {
         assert_eq!(
             s.forward(x.clone(), shape_source.clone()).to_data(),
             u.forward(x, shape_source).to_data()
+        );
+    }
+
+    /// Shape->Gather chain where gathered dim=1 feeds into Mul.
+    /// Tests that value_store propagation enables identity element elimination.
+    #[test]
+    fn gather_shape_chain() {
+        let device = Default::default();
+        let s = simplified::simplify_gather_shape_chain::Model::<TestBackend>::new(&device);
+        let u = unsimplified::simplify_gather_shape_chain::Model::<TestBackend>::new(&device);
+        let x = Tensor::<TestBackend, 3>::ones([1, 3, 4], &device);
+        let y = Tensor::<TestBackend, 2>::from_floats([[1., 2., 3., 4., 5.], [6., 7., 8., 9., 10.]], &device);
+        assert_eq!(
+            s.forward(x.clone(), y.clone()).to_data(),
+            u.forward(x, y).to_data()
         );
     }
 
