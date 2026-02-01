@@ -21,9 +21,7 @@ pub(crate) fn eliminate_redundant_nodes(mut nodes: Vec<RawNode>) -> Vec<RawNode>
             let original = &nodes[original_idx];
             let duplicate = &nodes[i];
             if original.outputs.len() == duplicate.outputs.len() {
-                for (orig_out, dup_out) in
-                    original.outputs.iter().zip(duplicate.outputs.iter())
-                {
+                for (orig_out, dup_out) in original.outputs.iter().zip(duplicate.outputs.iter()) {
                     log::debug!(
                         "CSE: '{}' output '{}' -> '{}'",
                         duplicate.name,
@@ -42,10 +40,7 @@ pub(crate) fn eliminate_redundant_nodes(mut nodes: Vec<RawNode>) -> Vec<RawNode>
         return nodes;
     }
 
-    log::info!(
-        "CSE: found {} redundant output(s) to rewrite",
-        rename.len()
-    );
+    log::info!("CSE: found {} redundant output(s) to rewrite", rename.len());
 
     // Rewrite all input names that reference a duplicate output
     for node in &mut nodes {
