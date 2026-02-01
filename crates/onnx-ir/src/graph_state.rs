@@ -455,6 +455,16 @@ impl GraphState {
         Rc::make_mut(&mut self.tensor_store).store(data)
     }
 
+    /// Register a constant created by the simplifier.
+    ///
+    /// Stores the tensor data and maps the output name to its data ID so that
+    /// codegen can find it when generating Constant node code.
+    pub(crate) fn register_constant(&mut self, output_name: String, data: TensorDataRef) -> DataId {
+        let data_id = self.store_tensor_data(data);
+        Rc::make_mut(&mut self.constant_map).insert(output_name, data_id);
+        data_id
+    }
+
     /// Get data_id for a constant by output name (O(1) lookup via constant_map)
     pub(crate) fn get_constant_data_id_by_output(&self, output_name: &str) -> Option<DataId> {
         // First try the constant_map (O(1) lookup)

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ir::{AttributeValue, RawNode};
+use crate::ir::{AttributeValue, RawNode, ValueSource};
 
 /// Eliminate redundant nodes (common subexpression elimination).
 ///
@@ -67,6 +67,18 @@ fn cse_key(node: &RawNode) -> String {
                 | AttributeValue::Graph(_)
         ) {
             // Return a unique key so this node never matches another
+            return format!("__unique__:{}", node.name);
+        }
+    }
+
+    // Nodes with constant/static inputs carry embedded values not visible in the name.
+    // Two nodes can have the same input name pattern but different embedded values,
+    // so they must not be merged.
+    for input in &node.inputs {
+        if matches!(
+            input.value_source,
+            ValueSource::Constant | ValueSource::Static(_)
+        ) {
             return format!("__unique__:{}", node.name);
         }
     }

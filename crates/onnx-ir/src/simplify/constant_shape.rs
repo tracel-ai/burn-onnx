@@ -1,17 +1,23 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::TensorDataExt;
-use crate::ir::{Argument, NodeType, RawNode};
+use crate::graph_state::GraphState;
+use crate::ir::{ArgType, Argument, DType, NodeType, RawNode, ValueSource};
+use crate::tensor_store::TensorDataRef;
 
 /// Simplify shape-related patterns when input shapes are statically known.
 ///
-/// Handles three patterns:
+/// Handles two patterns:
 /// 1. `Shape -> Gather(constant_index)` -> constant scalar
-/// 2. `Shape` with fully static input -> constant tensor (replaces Shape node entirely)
-/// 3. `Shape -> Slice(static starts/ends)` -> constant tensor
+/// 2. `Shape -> Slice(static starts/ends)` -> constant tensor
 ///
 /// Orphaned nodes are cleaned up by dead node elimination.
-pub(crate) fn simplify_constant_shape(mut nodes: Vec<RawNode>) -> Vec<RawNode> {
+pub(crate) fn simplify_constant_shape(
+    mut nodes: Vec<RawNode>,
+    state: &Rc<RefCell<GraphState>>,
+) -> Vec<RawNode> {
     // Build output_name -> node index map
     let mut producer: HashMap<String, usize> = HashMap::new();
     for (i, node) in nodes.iter().enumerate() {
@@ -31,6 +37,9 @@ pub(crate) fn simplify_constant_shape(mut nodes: Vec<RawNode>) -> Vec<RawNode> {
         }
     }
 
+    // Track all output names replaced with constants so we can update downstream references
+    let mut constant_outputs: Vec<String> = Vec::new();
+
     for (gi, dim_value) in &gather_replacements {
         let gather = &nodes[*gi];
         log::info!(
@@ -39,14 +48,11 @@ pub(crate) fn simplify_constant_shape(mut nodes: Vec<RawNode>) -> Vec<RawNode> {
             dim_value,
         );
 
-        let output_name = &gather.outputs[0].name;
-        nodes[*gi] = RawNode {
-            node_type: NodeType::Identity,
-            name: nodes[*gi].name.clone(),
-            inputs: vec![Argument::from_const_i64(output_name.clone(), *dim_value)],
-            outputs: nodes[*gi].outputs.clone(),
-            attrs: HashMap::new(),
-        };
+        let output_name = gather.outputs[0].name.clone();
+        let output_ty = gather.outputs[0].ty.clone();
+        let node_name = nodes[*gi].name.clone();
+        nodes[*gi] = make_constant_node(&node_name, &output_name, &[*dim_value], output_ty, state);
+        constant_outputs.push(output_name);
     }
 
     // Pass 2: Shape -> Slice(static) -> constant tensor
@@ -68,48 +74,83 @@ pub(crate) fn simplify_constant_shape(mut nodes: Vec<RawNode>) -> Vec<RawNode> {
             values,
         );
 
-        let output_name = &slice_node.outputs[0].name;
-        nodes[*si] = RawNode {
-            node_type: NodeType::Identity,
-            name: nodes[*si].name.clone(),
-            inputs: vec![Argument::from_const_i64_shape(output_name.clone(), values)],
-            outputs: nodes[*si].outputs.clone(),
-            attrs: HashMap::new(),
-        };
-    }
-
-    // Pass 3: Shape with fully static input -> constant tensor (replaces Shape node)
-    // Run after Gather/Slice passes so those get first chance to handle specific consumers.
-    // This catches remaining Shape nodes whose output is used by other ops.
-    let mut shape_replacements: Vec<(usize, Vec<i64>)> = Vec::new();
-    for (si, node) in nodes.iter().enumerate() {
-        if node.node_type != NodeType::Shape || node.inputs.is_empty() {
-            continue;
-        }
-        if let Some(values) = extract_full_static_shape(node) {
-            shape_replacements.push((si, values));
-        }
-    }
-
-    for (si, values) in &shape_replacements {
-        let shape_node = &nodes[*si];
-        log::info!(
-            "Simplification: replacing Shape '{}' with constant {:?}",
-            shape_node.name,
+        let output_name = slice_node.outputs[0].name.clone();
+        let node_name = nodes[*si].name.clone();
+        nodes[*si] = make_constant_node(
+            &node_name,
+            &output_name,
             values,
+            ArgType::Shape(values.len()),
+            state,
         );
+        constant_outputs.push(output_name);
+    }
 
-        let output_name = &shape_node.outputs[0].name;
-        nodes[*si] = RawNode {
-            node_type: NodeType::Identity,
-            name: nodes[*si].name.clone(),
-            inputs: vec![Argument::from_const_i64_shape(output_name.clone(), values)],
-            outputs: nodes[*si].outputs.clone(),
-            attrs: HashMap::new(),
-        };
+    // Pass 3 (full Shape elimination) is intentionally omitted. While it works when
+    // static_shape values match runtime shapes, type inference populates static_shape
+    // from ONNX export-time values which may differ at runtime for models with dynamic
+    // spatial dimensions (e.g., rf-detr). The Shape codegen already handles the dynamic
+    // case correctly via .dims(), so skipping this pass is safe.
+
+    // Update downstream inputs: nodes that reference replaced outputs need
+    // ValueSource::Constant so the dead constant elimination pass in
+    // convert_to_graph recognizes them as live references.
+    if !constant_outputs.is_empty() {
+        let constant_set: std::collections::HashSet<&str> =
+            constant_outputs.iter().map(|s| s.as_str()).collect();
+        for node in &mut nodes {
+            for input in &mut node.inputs {
+                if input.value_source == ValueSource::Dynamic
+                    && constant_set.contains(input.name.as_str())
+                {
+                    input.value_source = ValueSource::Constant;
+                }
+            }
+        }
     }
 
     nodes
+}
+
+/// Create a Constant RawNode with its data registered in GraphState.
+fn make_constant_node(
+    node_name: &str,
+    output_name: &str,
+    values: &[i64],
+    ty: ArgType,
+    state: &Rc<RefCell<GraphState>>,
+) -> RawNode {
+    let bytes: Vec<u8> = values.iter().flat_map(|v| v.to_ne_bytes()).collect();
+    let shape = if values.len() == 1 && matches!(ty, ArgType::Scalar(_)) {
+        vec![]
+    } else {
+        vec![values.len()]
+    };
+    let data_ref = TensorDataRef::new(bytes::Bytes::from(bytes), shape, DType::I64);
+
+    let mut gs = state.borrow_mut();
+    let data_id = gs.register_constant(output_name.to_string(), data_ref);
+    let value_store = gs.build_value_store();
+
+    let input_name = format!("{}_const", output_name);
+
+    RawNode {
+        node_type: NodeType::Constant,
+        name: node_name.to_string(),
+        inputs: vec![Argument {
+            name: input_name,
+            ty: ty.clone(),
+            value_source: ValueSource::Static(data_id),
+            value_store: Some(value_store.clone()),
+        }],
+        outputs: vec![Argument {
+            name: output_name.to_string(),
+            ty,
+            value_source: ValueSource::Constant,
+            value_store: Some(value_store),
+        }],
+        attrs: HashMap::new(),
+    }
 }
 
 /// Check if a Gather node reads from a Shape node with a statically known input,
@@ -304,7 +345,7 @@ fn extract_constant_shape_slice(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{ArgType, Argument, AttributeValue, DType, TensorType, ValueSource};
+    use crate::ir::{AttributeValue, TensorType};
     use crate::simplify::tests::arg;
     use crate::tensor_store::{TensorDataRef, TensorStore, ValueStore};
 
@@ -367,6 +408,10 @@ mod tests {
         }
     }
 
+    fn test_state() -> Rc<RefCell<GraphState>> {
+        Rc::new(RefCell::new(GraphState::new(&[], &[], &[], &[])))
+    }
+
     // --- Shape->Gather tests ---
 
     #[test]
@@ -391,9 +436,10 @@ mod tests {
             ),
         ];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         let gather = result.iter().find(|n| n.name == "gather").unwrap();
-        assert_eq!(gather.node_type, NodeType::Identity);
+        assert_eq!(gather.node_type, NodeType::Constant);
 
         // The input should be a constant with value 3
         let val = gather.inputs[0].value().unwrap().scalar_i64().unwrap();
@@ -424,9 +470,10 @@ mod tests {
             ),
         ];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         let gather = result.iter().find(|n| n.name == "gather").unwrap();
-        assert_eq!(gather.node_type, NodeType::Identity);
+        assert_eq!(gather.node_type, NodeType::Constant);
         let val = gather.inputs[0].value().unwrap().scalar_i64().unwrap();
         assert_eq!(val, 4); // static_shape[1 + 1] = static_shape[2] = 4
     }
@@ -453,7 +500,8 @@ mod tests {
             ),
         ];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         assert_eq!(result[1].node_type, NodeType::Gather);
     }
 
@@ -479,15 +527,18 @@ mod tests {
             ),
         ];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         assert_eq!(result[1].node_type, NodeType::Gather);
     }
 
     // --- Shape elimination tests ---
 
     #[test]
-    fn test_shape_replaced_with_constant() {
-        // tensor(shape=[2,3,4]) -> Shape -> consumed by Add
+    fn test_shape_not_replaced_without_gather_or_slice() {
+        // Full Shape elimination is disabled because static_shape may not reflect
+        // runtime dimensions for models with dynamic axes. Shape nodes without
+        // downstream Gather/Slice consumers are left as-is.
         let nodes = vec![
             raw_node(
                 "shape",
@@ -505,34 +556,10 @@ mod tests {
             ),
         ];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         let shape = result.iter().find(|n| n.name == "shape").unwrap();
-        assert_eq!(shape.node_type, NodeType::Identity);
-        let vals = shape.inputs[0].value().unwrap().to_i64_vec().unwrap();
-        assert_eq!(vals, vec![2, 3, 4]);
-    }
-
-    #[test]
-    fn test_shape_with_start_end_replaced() {
-        // tensor(shape=[2,3,4,5]) -> Shape(start=1, end=3) -> [3, 4]
-        let nodes = vec![raw_node(
-            "shape",
-            NodeType::Shape,
-            vec![tensor_arg_with_shape("input", vec![2, 3, 4, 5])],
-            vec![shape_arg("shape_out", 2)],
-            [
-                ("start".to_string(), AttributeValue::Int64(1)),
-                ("end".to_string(), AttributeValue::Int64(3)),
-            ]
-            .into_iter()
-            .collect(),
-        )];
-
-        let result = simplify_constant_shape(nodes);
-        let shape = result.iter().find(|n| n.name == "shape").unwrap();
-        assert_eq!(shape.node_type, NodeType::Identity);
-        let vals = shape.inputs[0].value().unwrap().to_i64_vec().unwrap();
-        assert_eq!(vals, vec![3, 4]);
+        assert_eq!(shape.node_type, NodeType::Shape); // NOT replaced
     }
 
     #[test]
@@ -545,7 +572,8 @@ mod tests {
             HashMap::new(),
         )];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         assert_eq!(result[0].node_type, NodeType::Shape);
     }
 
@@ -575,9 +603,10 @@ mod tests {
             ),
         ];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         let slice = result.iter().find(|n| n.name == "slice").unwrap();
-        assert_eq!(slice.node_type, NodeType::Identity);
+        assert_eq!(slice.node_type, NodeType::Constant);
         let vals = slice.inputs[0].value().unwrap().to_i64_vec().unwrap();
         assert_eq!(vals, vec![3, 4]);
     }
@@ -609,9 +638,10 @@ mod tests {
             ),
         ];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         let slice = result.iter().find(|n| n.name == "slice").unwrap();
-        assert_eq!(slice.node_type, NodeType::Identity);
+        assert_eq!(slice.node_type, NodeType::Constant);
         let vals = slice.inputs[0].value().unwrap().to_i64_vec().unwrap();
         assert_eq!(vals, vec![10, 30, 50]);
     }
@@ -640,9 +670,10 @@ mod tests {
             ),
         ];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         let slice = result.iter().find(|n| n.name == "slice").unwrap();
-        assert_eq!(slice.node_type, NodeType::Identity);
+        assert_eq!(slice.node_type, NodeType::Constant);
         let vals = slice.inputs[0].value().unwrap().to_i64_vec().unwrap();
         assert_eq!(vals, vec![3, 4]);
     }
@@ -671,7 +702,8 @@ mod tests {
             ),
         ];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         assert_eq!(result[1].node_type, NodeType::Slice);
     }
 
@@ -699,7 +731,8 @@ mod tests {
             ),
         ];
 
-        let result = simplify_constant_shape(nodes);
+        let state = test_state();
+        let result = simplify_constant_shape(nodes, &state);
         assert_eq!(result[1].node_type, NodeType::Slice);
     }
 }
