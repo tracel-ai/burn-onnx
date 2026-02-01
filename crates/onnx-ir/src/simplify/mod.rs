@@ -6,6 +6,7 @@
 mod constant_shape;
 mod dead_nodes;
 mod permute_reshape;
+mod redundant_nodes;
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -17,6 +18,7 @@ use crate::{
 use constant_shape::simplify_constant_shape;
 use dead_nodes::eliminate_dead_nodes;
 use permute_reshape::simplify_permute_reshape;
+use redundant_nodes::eliminate_redundant_nodes;
 
 /// Run all simplification passes on the graph.
 ///
@@ -32,6 +34,9 @@ pub(crate) fn simplify_graph(
 
     // Pattern-based simplifications (may create dead nodes)
     let nodes = simplify_permute_reshape(nodes);
+
+    // Common subexpression elimination (rewrites inputs, creates dead nodes)
+    let nodes = eliminate_redundant_nodes(nodes);
 
     // Dead node elimination (cleans up nodes orphaned by pattern passes)
     let node_count_before = nodes.len();

@@ -50,7 +50,7 @@ I THINK MOST OF THEM ARE ALREADY DONE IN POST-PROCESSING PHASE
 
 - [x] Dead node elimination: remove nodes whose outputs are not consumed by any other node
       or graph output
-- [ ] Redundant node elimination: merge duplicate nodes that have identical op type, attributes,
+- [x] Redundant node elimination: merge duplicate nodes that have identical op type, attributes,
       and inputs (CSE - common subexpression elimination)
 - [ ] Identity elimination (already done in post-processing phase, but verify completeness)
 - [ ] No-op Cast elimination: remove Cast where input dtype == output dtype
