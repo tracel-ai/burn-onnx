@@ -30,7 +30,9 @@ include_simplified_models!(
 #[cfg(test)]
 fn extract_forward(source: &str) -> &str {
     // Find the forward method signature
-    let start = source.find("pub fn forward(").expect("no forward method found");
+    let start = source
+        .find("pub fn forward(")
+        .expect("no forward method found");
     // The forward method is the last item in the impl block, ended by closing braces
     &source[start..]
 }
@@ -187,7 +189,10 @@ mod tests {
     fn assert_codegen_differs(simplified: &str, unsimplified: &str, model: &str) {
         let s = extract_forward(simplified);
         let u = extract_forward(unsimplified);
-        assert_ne!(s, u, "simplified and unsimplified codegen should differ for {model}");
+        assert_ne!(
+            s, u,
+            "simplified and unsimplified codegen should differ for {model}"
+        );
     }
 
     #[test]

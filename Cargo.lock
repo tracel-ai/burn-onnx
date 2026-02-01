@@ -3968,6 +3968,7 @@ dependencies = [
  "burn-onnx",
  "burn-store",
  "float-cmp",
+ "insta",
  "serde",
 ]
 

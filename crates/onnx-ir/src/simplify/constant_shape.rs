@@ -101,10 +101,10 @@ pub(crate) fn simplify_constant_shape(
         let mut store_map: HashMap<String, crate::tensor_store::ValueStore> = HashMap::new();
         for node in &nodes {
             for output in &node.outputs {
-                if output.value_source == ValueSource::Constant {
-                    if let Some(ref store) = output.value_store {
-                        store_map.insert(output.name.clone(), store.clone());
-                    }
+                if output.value_source == ValueSource::Constant
+                    && let Some(ref store) = output.value_store
+                {
+                    store_map.insert(output.name.clone(), store.clone());
                 }
             }
         }
