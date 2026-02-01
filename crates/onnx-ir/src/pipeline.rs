@@ -281,13 +281,8 @@ fn build_graph_with_options(
     simplify: bool,
 ) -> Result<OnnxGraph, Error> {
     let opset_version = extract_opset_version(model)?;
-    let graph_builder = build_graph_builder_from_proto(
-        &model.graph,
-        opset_version,
-        None,
-        base_path,
-        simplify,
-    )?;
+    let graph_builder =
+        build_graph_builder_from_proto(&model.graph, opset_version, None, base_path, simplify)?;
 
     log::debug!(" PHASE 6: Node Conversion (RawNode -> Node) ");
     Ok(graph_builder.convert_to_graph(opset_version))

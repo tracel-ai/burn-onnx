@@ -48,7 +48,7 @@ Remove unnecessary nodes from the graph.
 
 I THINK MOST OF THEM ARE ALREADY DONE IN POST-PROCESSING PHASE
 
-- [ ] Dead node elimination: remove nodes whose outputs are not consumed by any other node
+- [x] Dead node elimination: remove nodes whose outputs are not consumed by any other node
       or graph output
 - [ ] Redundant node elimination: merge duplicate nodes that have identical op type, attributes,
       and inputs (CSE - common subexpression elimination)
@@ -78,11 +78,11 @@ Combine multiple nodes into a single more efficient operation.
 
 Replace common multi-node patterns with simpler equivalents.
 
-- [ ] Shape+Gather+Unsqueeze+Concat+Reshape -> Transpose/Reshape: detect patterns where
+- [x] Shape+Gather+Unsqueeze+Concat+Reshape -> Transpose/Reshape: detect patterns where
       individual shape dimensions are gathered, unsqueezed, concatenated, and used in Reshape
       to effectively implement a permutation (see diagram in issue). Replace with a single
       Transpose or simplified Reshape
-- [ ] Constant Shape propagation: when a tensor's shape is statically known, replace
+- [x] Constant Shape propagation: when a tensor's shape is statically known, replace
       Shape -> Gather chains with constant values
 - [ ] Constant If elimination: when the condition of an If node is a constant, replace with
       the taken branch's subgraph

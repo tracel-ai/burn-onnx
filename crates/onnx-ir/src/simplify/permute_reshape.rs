@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::ir::{AttributeValue, NodeType, RawNode};
 use crate::TensorDataExt;
+use crate::ir::{AttributeValue, NodeType, RawNode};
 
 /// Detect Shape+Gather+Unsqueeze+Concat+Reshape chains that implement a dimension
 /// permutation (e.g. from PyTorch's `tensor.permute()`) and replace the Reshape with
@@ -161,10 +161,7 @@ mod tests {
             let id = store.store(data_ref);
             constant_map.insert(name.to_string(), id);
         }
-        ValueStore::new(
-            std::rc::Rc::new(store),
-            std::rc::Rc::new(constant_map),
-        )
+        ValueStore::new(std::rc::Rc::new(store), std::rc::Rc::new(constant_map))
     }
 
     fn const_scalar_arg(name: &str, store: &ValueStore) -> Argument {
@@ -212,8 +209,7 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, &p)| {
-                    let name: &'static str =
-                        Box::leak(format!("idx_{}", i).into_boxed_str());
+                    let name: &'static str = Box::leak(format!("idx_{}", i).into_boxed_str());
                     (name, p)
                 })
                 .collect::<Vec<_>>(),
