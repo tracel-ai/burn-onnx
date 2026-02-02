@@ -28,7 +28,7 @@ invalid_html_tags = "deny"
 bytemuck = "1.25.0"
 derive-new = { version = "0.7.0", default-features = false }
 float-cmp = "0.10.0"
-insta = "1.45.0"
+insta = "1.46.2"
 log = { default-features = false, version = "0.4.29" }
 proc-macro2 = "1.0.104"
 quote = "1.0.42"
