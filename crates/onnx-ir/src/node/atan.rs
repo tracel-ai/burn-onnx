@@ -9,7 +9,7 @@
 //! T: Float tensor types
 //!
 //! ## Opset Versions
-//! - **Opset 22+**: Initial version
+//! - **Opset 7+**: Initial version
 
 use onnx_ir_derive::NodeBuilder;
 
@@ -35,7 +35,7 @@ impl NodeProcessor for AtanProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 22,
+            min_opset: 7,
             max_opset: None,
             inputs: InputSpec::Exact(1),
             outputs: OutputSpec::Exact(1),
@@ -48,7 +48,7 @@ impl NodeProcessor for AtanProcessor {
         opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        validate_opset(opset, 22)?;
+        validate_opset(opset, 7)?;
         same_as_input(node);
         Ok(())
     }
