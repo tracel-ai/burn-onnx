@@ -66,6 +66,9 @@ examples/
 - Configuration structs should derive `Debug, Clone, Default` when possible
 - Type inference happens in processors, not in codegen
 - **Strive for full ONNX opset coverage** - extract all attributes even if not yet used by burn-onnx
+- **Support all opsets** - when implementing operators, set `min_opset` to the earliest opset version
+  that introduced the operator (not the latest version). Check the ONNX operator changelog to find
+  the original opset version
 - Config structs should include all ONNX operator attributes, using `Option<T>` for optional ones
 - **Reference `onnx-spec/ops/<OpName>.md`** for the official spec when implementing or reviewing
   operators (attributes, inputs/outputs, type constraints)
