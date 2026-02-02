@@ -15,13 +15,13 @@ from onnx import TensorProto, helper
 from onnx.reference import ReferenceEvaluator
 
 
-def make_scatter_nd_model(name, data_shape, indices, updates_shape, reduction="none"):
+def make_scatter_nd_model(name, data_shape, indices, updates_shape, reduction="none", dtype=TensorProto.FLOAT):
     """Create an ONNX model for ScatterND."""
     indices_array = np.array(indices, dtype=np.int64)
 
-    data = helper.make_tensor_value_info("data", TensorProto.FLOAT, data_shape)
-    updates = helper.make_tensor_value_info("updates", TensorProto.FLOAT, updates_shape)
-    output = helper.make_tensor_value_info("output", TensorProto.FLOAT, data_shape)
+    data = helper.make_tensor_value_info("data", dtype, data_shape)
+    updates = helper.make_tensor_value_info("updates", dtype, updates_shape)
+    output = helper.make_tensor_value_info("output", dtype, data_shape)
 
     indices_init = helper.make_tensor(
         "indices", TensorProto.INT64, indices_array.shape, indices_array.flatten().tolist()
@@ -145,6 +145,20 @@ def main():
     )
     # Expected: [1, min(2,11)=2, 3, min(4,10)=4, min(5,9)=5, 6, 7, min(8,12)=8]
     print("Test 6 (min) - expected: [1, 2, 3, 4, 5, 6, 7, 8]")
+
+    # Test 7: bool scatter (reduction=none)
+    make_scatter_nd_model(
+        "scatter_nd_bool",
+        data_shape=[6],
+        indices=[[1], [3], [5]],
+        updates_shape=[3],
+        dtype=TensorProto.BOOL,
+    )
+    # data:    [F, F, F, F, F, F]
+    # updates: [T, T, T]
+    # indices: [1, 3, 5]
+    # Expected: [F, T, F, T, F, T]
+    print("Test 7 (bool) - expected: [False, True, False, True, False, True]")
 
 
 if __name__ == "__main__":

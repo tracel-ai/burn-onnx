@@ -395,6 +395,7 @@ fn main() {
         .input("tests/scatter_nd/scatter_nd_mul.onnx")
         .input("tests/scatter_nd/scatter_nd_max.onnx")
         .input("tests/scatter_nd/scatter_nd_min.onnx")
+        .input("tests/scatter_nd/scatter_nd_bool.onnx")
         // Scan operator tests
         .input("tests/scan/scan_cumsum.onnx")
         .input("tests/scan/scan_reverse.onnx")

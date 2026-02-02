@@ -5,13 +5,14 @@ include_models!(
     scatter_nd_add,
     scatter_nd_mul,
     scatter_nd_max,
-    scatter_nd_min
+    scatter_nd_min,
+    scatter_nd_bool
 );
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
+    use burn::tensor::{Bool, Tensor, TensorData};
 
     use crate::backend::TestBackend;
 
@@ -104,6 +105,25 @@ mod tests {
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([1f32, 2., 3., 4., 5., 6., 7., 8.]);
+        assert_eq!(output.to_data(), expected);
+    }
+
+    #[test]
+    fn scatter_nd_bool_none() {
+        let model: scatter_nd_bool::Model<TestBackend> = scatter_nd_bool::Model::default();
+        let device = Default::default();
+
+        let data = Tensor::<TestBackend, 1, Bool>::from_bool(
+            TensorData::from([false, false, false, false, false, false]),
+            &device,
+        );
+        let updates = Tensor::<TestBackend, 1, Bool>::from_bool(
+            TensorData::from([true, true, true]),
+            &device,
+        );
+        let output = model.forward(data, updates);
+
+        let expected = TensorData::from([false, true, false, true, false, true]);
         assert_eq!(output.to_data(), expected);
     }
 }

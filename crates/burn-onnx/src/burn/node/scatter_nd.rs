@@ -23,8 +23,13 @@ impl NodeCodegen for onnx_ir::scatter_nd::ScatterNDNode {
             _ => panic!("Expected tensor input for data"),
         };
 
-        if matches!(data_kind, TensorKind::Bool) {
-            panic!("ScatterND not supported for bool tensors");
+        if matches!(data_kind, TensorKind::Bool)
+            && !matches!(self.config.reduction, ScatterNDReduction::None)
+        {
+            panic!(
+                "ScatterND with {:?} reduction not supported for bool tensors",
+                self.config.reduction
+            );
         }
 
         let reduction_body = match self.config.reduction {
@@ -475,5 +480,78 @@ mod tests {
             output
         }
         ");
+    }
+
+    #[test]
+    fn test_scatter_nd_bool_none() {
+        let config = ScatterNDConfig::new(ScatterNDReduction::None);
+        let node = ScatterNDNodeBuilder::new("scatter1")
+            .input_tensor("data", 1, DType::Bool)
+            .input_tensor("indices", 2, DType::I64)
+            .input_tensor("updates", 1, DType::Bool)
+            .output_tensor("output", 1, DType::Bool)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            data: Tensor<B, 1, Bool>,
+            indices: Tensor<B, 2, Int>,
+            updates: Tensor<B, 1, Bool>,
+        ) -> Tensor<B, 1, Bool> {
+            let output = {
+                let data_dims = data.dims();
+                let indices_dims = indices.dims();
+                let indices_data = indices.to_data().convert::<i64>();
+                let indices_values: alloc::vec::Vec<i64> = indices_data
+                    .into_vec::<i64>()
+                    .unwrap();
+                let r = data_dims.len();
+                let q = indices_dims.len();
+                let k = indices_dims[q - 1];
+                let mut data_strides = alloc::vec![1usize; r];
+                for i in (0..r.saturating_sub(1)).rev() {
+                    data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
+                }
+                let num_updates: usize = indices_dims[..q - 1].iter().product();
+                let slice_size: usize = if k < r { data_dims[k..].iter().product() } else { 1 };
+                let total_size: usize = data_dims.iter().product();
+                let mut output_flat = data.reshape([total_size]);
+                let updates_flat = updates.reshape([num_updates * slice_size]);
+                for i in 0..num_updates {
+                    let mut target_offset = 0usize;
+                    for j in 0..k {
+                        let mut idx = indices_values[i * k + j];
+                        if idx < 0 {
+                            idx += data_dims[j] as i64;
+                        }
+                        target_offset += idx as usize * data_strides[j];
+                    }
+                    let update_slice = updates_flat
+                        .clone()
+                        .narrow(0, i * slice_size, slice_size);
+                    output_flat = output_flat
+                        .slice_assign([target_offset..target_offset + slice_size], update_slice);
+                }
+                output_flat.reshape(data_dims)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    #[should_panic(expected = "reduction not supported for bool tensors")]
+    fn test_scatter_nd_bool_add_panics() {
+        let config = ScatterNDConfig::new(ScatterNDReduction::Add);
+        let node = ScatterNDNodeBuilder::new("scatter1")
+            .input_tensor("data", 1, DType::Bool)
+            .input_tensor("indices", 2, DType::I64)
+            .input_tensor("updates", 1, DType::Bool)
+            .output_tensor("output", 1, DType::Bool)
+            .config(config)
+            .build();
+        codegen_forward_default(&node);
     }
 }
