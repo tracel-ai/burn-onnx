@@ -2,9 +2,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 use onnx_ir::ir::DType;
-use onnx_ir::node::padding::{
-    AutoPad, PaddingConfig1d, PaddingConfig2d, PaddingConfig3d,
-};
+use onnx_ir::node::padding::{AutoPad, PaddingConfig1d, PaddingConfig2d, PaddingConfig3d};
 
 // ============================================================================
 // Codegen utilities for converting types to TokenStream
@@ -152,7 +150,7 @@ fn compute_auto_pad_1dim(
         AutoPad::Valid => (0, 0),
         AutoPad::SameUpper | AutoPad::SameLower => {
             let effective_kernel = (kernel - 1) * dilation + 1;
-            let output_size = (input_size + stride - 1) / stride; // ceil(input/stride)
+            let output_size = input_size.div_ceil(stride); // ceil(input/stride)
             let total_pad =
                 ((output_size - 1) * stride + effective_kernel).saturating_sub(input_size);
             let pad_small = total_pad / 2;
@@ -183,7 +181,7 @@ pub fn resolve_auto_pad_1d(
         AutoPad::Valid => PaddingConfig1d::Valid,
         AutoPad::SameUpper | AutoPad::SameLower => {
             let shape = input_spatial
-                .expect("auto_pad SAME_UPPER/SAME_LOWER requires known input spatial dimensions");
+                .expect("auto_pad SAME_UPPER/SAME_LOWER requires static input shape, but input has dynamic dimensions. Use explicit pads instead");
             let (left, right) = compute_auto_pad_1dim(auto_pad, shape[0], kernel, stride, dilation);
             PaddingConfig1d::Explicit(left, right)
         }
@@ -204,7 +202,7 @@ pub fn resolve_auto_pad_2d(
         AutoPad::Valid => PaddingConfig2d::Valid,
         AutoPad::SameUpper | AutoPad::SameLower => {
             let shape = input_spatial
-                .expect("auto_pad SAME_UPPER/SAME_LOWER requires known input spatial dimensions");
+                .expect("auto_pad SAME_UPPER/SAME_LOWER requires static input shape, but input has dynamic dimensions. Use explicit pads instead");
             let (top, bottom) =
                 compute_auto_pad_1dim(auto_pad, shape[0], kernel[0], stride[0], dilation[0]);
             let (left, right) =
@@ -228,7 +226,7 @@ pub fn resolve_auto_pad_3d(
         AutoPad::Valid => PaddingConfig3d::Valid,
         AutoPad::SameUpper | AutoPad::SameLower => {
             let shape = input_spatial
-                .expect("auto_pad SAME_UPPER/SAME_LOWER requires known input spatial dimensions");
+                .expect("auto_pad SAME_UPPER/SAME_LOWER requires static input shape, but input has dynamic dimensions. Use explicit pads instead");
             let (front, back) =
                 compute_auto_pad_1dim(auto_pad, shape[0], kernel[0], stride[0], dilation[0]);
             let (top, bottom) =

@@ -158,6 +158,27 @@ mod tests {
     }
 
     #[test]
+    fn test_avg_pool2d_field_init_auto_pad_same_upper() {
+        let config = AvgPool2dConfig::new(
+            [3, 3], [1, 1], PaddingConfig2d::Valid, false, [1, 1], false, AutoPad::SameUpper,
+        );
+        let node = AveragePool2dNodeBuilder::new("pool1")
+            .input_tensor_shape("input", vec![1, 3, 7, 7], DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_field_init(&node);
+        assert_snapshot!(code, @r#"
+        let pool1 = AvgPool2dConfig::new([3, 3])
+            .with_strides([1, 1])
+            .with_padding(PaddingConfig2d::Explicit(1, 1, 1, 1))
+            .with_count_include_pad(false)
+            .with_ceil_mode(false)
+            .init();
+        "#);
+    }
+
+    #[test]
     fn test_avg_pool2d_field_init_asymmetric_padding() {
         let node = create_avg_pool2d_node_asymmetric("pool1");
         let code = codegen_field_init(&node);

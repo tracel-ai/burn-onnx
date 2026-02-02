@@ -69,8 +69,14 @@ mod tests {
     use onnx_ir::padding::{AutoPad, PaddingConfig2d};
 
     fn create_max_pool2d_node(name: &str, ceil_mode: bool) -> MaxPool2dNode {
-        let config =
-            MaxPool2dConfig::new([3, 3], [1, 1], PaddingConfig2d::Valid, [1, 1], ceil_mode, AutoPad::NotSet);
+        let config = MaxPool2dConfig::new(
+            [3, 3],
+            [1, 1],
+            PaddingConfig2d::Valid,
+            [1, 1],
+            ceil_mode,
+            AutoPad::NotSet,
+        );
 
         MaxPool2dNodeBuilder::new(name)
             .input_tensor("input", 4, DType::F32)
@@ -160,6 +166,27 @@ mod tests {
             output
         }
         ");
+    }
+
+    #[test]
+    fn test_max_pool2d_field_init_auto_pad_same_upper() {
+        let config = MaxPool2dConfig::new(
+            [3, 3], [1, 1], PaddingConfig2d::Valid, [1, 1], false, AutoPad::SameUpper,
+        );
+        let node = MaxPool2dNodeBuilder::new("pool1")
+            .input_tensor_shape("input", vec![1, 3, 7, 7], DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_field_init(&node);
+        assert_snapshot!(code, @r#"
+        let pool1 = MaxPool2dConfig::new([3, 3])
+            .with_strides([1, 1])
+            .with_padding(PaddingConfig2d::Explicit(1, 1, 1, 1))
+            .with_dilation([1, 1])
+            .with_ceil_mode(false)
+            .init();
+        "#);
     }
 
     #[test]

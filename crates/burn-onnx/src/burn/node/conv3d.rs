@@ -160,6 +160,28 @@ mod tests {
     }
 
     #[test]
+    fn test_conv3d_field_init_auto_pad_same_upper() {
+        let config = Conv3dConfig::new(
+            [3, 64], [3, 3, 3], [1, 1, 1], [1, 1, 1], 1, true, PaddingConfig3d::Valid, AutoPad::SameUpper,
+        );
+        let node = Conv3dNodeBuilder::new("conv1")
+            .input_tensor_shape("input", vec![1, 3, 7, 7, 7], DType::F32)
+            .output_tensor("output", 5, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_field_init(&node);
+        assert_snapshot!(code, @r"
+        let conv1 = Conv3dConfig::new([3, 64], [3, 3, 3])
+            .with_stride([1, 1, 1])
+            .with_padding(PaddingConfig3d::Explicit(1, 1, 1))
+            .with_dilation([1, 1, 1])
+            .with_groups(1)
+            .with_bias(true)
+            .init(device);
+        ");
+    }
+
+    #[test]
     #[should_panic(expected = "Asymmetric 3D padding is not supported by Burn")]
     fn test_conv3d_field_init_asymmetric_padding() {
         let node = create_conv3d_node_asymmetric("conv1");
