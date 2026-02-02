@@ -349,7 +349,7 @@ pub(crate) fn build_graph_builder_from_proto_with_outer_scope(
     type_inference::infer_types(&state_rc, opset_version).map_err(Error::TypeInference)?;
 
     log::debug!(" PHASE 4: Post-processing ");
-    let (nodes, inputs, outputs) = post_processing::post_process(&state_rc);
+    let (nodes, inputs, outputs) = post_processing::post_process(&state_rc, simplify);
 
     let (mut nodes, inputs, mut outputs) = if simplify {
         log::debug!(" PHASE 4b: Simplification ");
