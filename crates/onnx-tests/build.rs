@@ -257,6 +257,7 @@ fn main() {
         .input("tests/maxpool/maxpool2d_asymmetric_padding.onnx")
         .input("tests/min/min.onnx")
         .input("tests/min/min_broadcast.onnx")
+        .input("tests/mish/mish.onnx")
         .input("tests/mean/mean.onnx")
         .input("tests/mul/mul.onnx")
         .input("tests/mul/mul_shape.onnx")

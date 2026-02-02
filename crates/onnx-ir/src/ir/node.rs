@@ -182,7 +182,7 @@ define_node_enum! {
     Selu => elementwise::ElementwiseUnaryNode,
     Celu => elementwise::ElementwiseUnaryNode,
     Gelu => gelu::GeluNode,
-    Mish => elementwise::ElementwiseUnaryNode,
+    Mish => mish::MishNode,
     Softplus => softplus::SoftplusNode,
     Softsign => elementwise::ElementwiseUnaryNode,
     ThresholdedRelu => elementwise::ElementwiseUnaryNode,

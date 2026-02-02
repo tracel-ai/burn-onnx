@@ -111,6 +111,7 @@ impl_node_codegen_dispatch! {
     // Activation ops
     Relu,
     Gelu,
+    Mish,
     LeakyRelu,
     HardSigmoid,
     HardSwish,

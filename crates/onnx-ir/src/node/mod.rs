@@ -101,6 +101,7 @@ pub mod max_pool1d;
 pub mod max_pool2d;
 pub mod mean;
 pub mod min;
+pub mod mish;
 pub mod modulo;
 pub mod nonzero;
 pub mod one_hot;

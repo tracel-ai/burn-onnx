@@ -87,6 +87,7 @@ pub mod max;
 pub mod maxpool;
 pub mod mean;
 pub mod min;
+pub mod mish;
 pub mod r#mod;
 pub mod mul;
 pub mod neg;

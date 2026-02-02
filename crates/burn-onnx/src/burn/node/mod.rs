@@ -91,6 +91,7 @@ pub(crate) mod max_pool1d;
 pub(crate) mod max_pool2d;
 pub(crate) mod mean;
 pub(crate) mod min;
+pub(crate) mod mish;
 pub(crate) mod modulo;
 pub(crate) mod mul;
 pub(crate) mod neg;

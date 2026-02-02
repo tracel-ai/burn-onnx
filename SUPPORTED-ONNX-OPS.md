@@ -119,7 +119,7 @@ functionality.
 | [MeanVarianceNormalization][102] | ❌             | ❌           |
 | [MelWeightMatrix][103]           | ❌             | ❌           |
 | [Min][104]                       | ✅             | ✅           |
-| [Mish][105]                      | ❌             | ✅           |
+| [Mish][105]                      | ✅             | ✅           |
 | [Mod][106]                       | ✅             | ✅           |
 | [Mul][107]                       | ✅             | ✅           |
 | [Multinomial][108]               | ❌             | ❌           |
