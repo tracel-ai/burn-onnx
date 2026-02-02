@@ -16,7 +16,16 @@ impl NodeCodegen for onnx_ir::max_pool1d::MaxPool1dNode {
         let dilation = self.config.dilation.to_tokens();
         let ceil_mode = self.config.ceil_mode;
 
-        let padding = self.config.padding.to_tokens();
+        let input_spatial = self.inputs[0].ty.static_shape().map(|s| &s[2..]);
+        let padding = crate::burn::codegen::resolve_auto_pad_1d(
+            &self.config.auto_pad,
+            &self.config.padding,
+            input_spatial,
+            self.config.kernel_size,
+            self.config.stride,
+            self.config.dilation,
+        )
+        .to_tokens();
 
         Some(Field::new(
             self.name.clone(),
@@ -57,10 +66,10 @@ mod tests {
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::max_pool1d::{MaxPool1dConfig, MaxPool1dNode, MaxPool1dNodeBuilder};
-    use onnx_ir::padding::PaddingConfig1d;
+    use onnx_ir::padding::{AutoPad, PaddingConfig1d};
 
     fn create_max_pool1d_node(name: &str, ceil_mode: bool) -> MaxPool1dNode {
-        let config = MaxPool1dConfig::new(3, 1, 1, PaddingConfig1d::Valid, ceil_mode);
+        let config = MaxPool1dConfig::new(3, 1, 1, PaddingConfig1d::Valid, ceil_mode, AutoPad::NotSet);
 
         MaxPool1dNodeBuilder::new(name)
             .input_tensor("input", 3, DType::F32)
@@ -71,7 +80,7 @@ mod tests {
 
     fn create_max_pool1d_node_asymmetric(name: &str) -> MaxPool1dNode {
         // Asymmetric padding: left=1, right=2
-        let config = MaxPool1dConfig::new(3, 1, 1, PaddingConfig1d::Explicit(1, 2), false);
+        let config = MaxPool1dConfig::new(3, 1, 1, PaddingConfig1d::Explicit(1, 2), false, AutoPad::NotSet);
 
         MaxPool1dNodeBuilder::new(name)
             .input_tensor("input", 3, DType::F32)

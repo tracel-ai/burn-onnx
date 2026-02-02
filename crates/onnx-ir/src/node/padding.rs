@@ -7,6 +7,52 @@
 
 use std::fmt;
 
+use crate::processor::ProcessError;
+
+/// ONNX auto_pad attribute value.
+///
+/// Specifies how padding should be computed automatically.
+/// When set to anything other than `NotSet`, the `pads` attribute is ignored.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum AutoPad {
+    /// Use explicit `pads` attribute (default).
+    #[default]
+    NotSet,
+    /// Pad so output_size = ceil(input_size / stride). Extra padding at end.
+    SameUpper,
+    /// Pad so output_size = ceil(input_size / stride). Extra padding at start.
+    SameLower,
+    /// No padding (equivalent to all-zero pads).
+    Valid,
+}
+
+impl AutoPad {
+    /// Parse an ONNX auto_pad string attribute.
+    pub fn parse(s: &str) -> Result<Self, ProcessError> {
+        match s {
+            "NOTSET" => Ok(AutoPad::NotSet),
+            "SAME_UPPER" => Ok(AutoPad::SameUpper),
+            "SAME_LOWER" => Ok(AutoPad::SameLower),
+            "VALID" => Ok(AutoPad::Valid),
+            _ => Err(ProcessError::InvalidAttribute {
+                name: "auto_pad".to_string(),
+                reason: format!("Unknown auto_pad value: {s}"),
+            }),
+        }
+    }
+}
+
+impl fmt::Display for AutoPad {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AutoPad::NotSet => write!(f, "NOTSET"),
+            AutoPad::SameUpper => write!(f, "SAME_UPPER"),
+            AutoPad::SameLower => write!(f, "SAME_LOWER"),
+            AutoPad::Valid => write!(f, "VALID"),
+        }
+    }
+}
+
 /// Padding configuration for 1D operations such as convolution
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum PaddingConfig1d {
@@ -236,6 +282,24 @@ pub(crate) fn padding_config_3d(pads: &[i64]) -> PaddingConfig3d {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // AutoPad tests
+    #[test]
+    fn test_auto_pad_parse() {
+        assert_eq!(AutoPad::parse("NOTSET").unwrap(), AutoPad::NotSet);
+        assert_eq!(AutoPad::parse("SAME_UPPER").unwrap(), AutoPad::SameUpper);
+        assert_eq!(AutoPad::parse("SAME_LOWER").unwrap(), AutoPad::SameLower);
+        assert_eq!(AutoPad::parse("VALID").unwrap(), AutoPad::Valid);
+        assert!(AutoPad::parse("INVALID").is_err());
+    }
+
+    #[test]
+    fn test_auto_pad_display() {
+        assert_eq!(AutoPad::NotSet.to_string(), "NOTSET");
+        assert_eq!(AutoPad::SameUpper.to_string(), "SAME_UPPER");
+        assert_eq!(AutoPad::SameLower.to_string(), "SAME_LOWER");
+        assert_eq!(AutoPad::Valid.to_string(), "VALID");
+    }
 
     // 1D padding tests
     #[test]

@@ -16,7 +16,7 @@ use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
 
-use super::padding::{PaddingConfig1d, padding_config_1d};
+use super::padding::{AutoPad, PaddingConfig1d, padding_config_1d};
 
 /// Node representation for Conv1d operation
 #[derive(Debug, Clone, NodeBuilder)]
@@ -45,8 +45,10 @@ pub struct Conv1dConfig {
     pub groups: usize,
     /// Whether bias is used
     pub bias: bool,
-    /// Padding configuration
+    /// Padding configuration (from explicit pads attribute)
     pub padding: PaddingConfig1d,
+    /// Auto padding mode
+    pub auto_pad: AutoPad,
 }
 
 /// Node processor for Conv1d operation
@@ -95,13 +97,8 @@ impl NodeProcessor for Conv1dProcessor {
             match key.as_str() {
                 "kernel_shape" | "strides" | "pads" | "dilations" | "group" => {}
                 "auto_pad" => {
-                    let auto_pad = value.clone().into_string();
-                    if auto_pad != "NOTSET" {
-                        return Err(ProcessError::InvalidAttribute {
-                            name: "auto_pad".to_string(),
-                            reason: format!("Unsupported 'auto_pad' value: {auto_pad}"),
-                        });
-                    }
+                    // Validate the value is a known auto_pad string
+                    AutoPad::parse(&value.clone().into_string())?;
                 }
                 _ => {
                     return Err(ProcessError::InvalidAttribute {
@@ -203,6 +200,7 @@ impl NodeProcessor for Conv1dProcessor {
         let mut pads = vec![0, 0];
         let mut dilations = vec![1];
         let mut group: usize = 1;
+        let mut auto_pad = AutoPad::NotSet;
 
         let weight_arg = &node.inputs[1];
         log::debug!(
@@ -229,7 +227,7 @@ impl NodeProcessor for Conv1dProcessor {
                 "pads" => pads = value.clone().into_i64s(),
                 "dilations" => dilations = value.clone().into_i64s(),
                 "group" => group = value.clone().into_i64() as usize,
-                "auto_pad" => {}
+                "auto_pad" => auto_pad = AutoPad::parse(&value.clone().into_string())?,
                 _ => {}
             }
         }
@@ -260,6 +258,7 @@ impl NodeProcessor for Conv1dProcessor {
             group,
             bias,
             padding,
+            auto_pad,
         );
 
         Ok(config)
@@ -461,7 +460,7 @@ mod tests {
     }
 
     #[test]
-    fn test_conv1d_config_autopad_not_supported() {
+    fn test_conv1d_config_autopad_same_upper() {
         let node = create_test_node(
             vec![4],
             vec![1],
@@ -475,8 +474,9 @@ mod tests {
         let mut node = node;
         let processor = Conv1dProcessor;
         let prefs = OutputPreferences::new();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::InvalidAttribute { .. })));
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert_eq!(config.auto_pad, AutoPad::SameUpper);
     }
 
     #[test]

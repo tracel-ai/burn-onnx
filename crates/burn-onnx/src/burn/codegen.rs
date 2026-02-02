@@ -2,7 +2,9 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 use onnx_ir::ir::DType;
-use onnx_ir::node::padding::{PaddingConfig1d, PaddingConfig2d, PaddingConfig3d};
+use onnx_ir::node::padding::{
+    AutoPad, PaddingConfig1d, PaddingConfig2d, PaddingConfig3d,
+};
 
 // ============================================================================
 // Codegen utilities for converting types to TokenStream
@@ -129,6 +131,213 @@ impl ToTokens for PaddingConfig3d {
                 quote! { PaddingConfig3d::Explicit(#depth, #height, #width) }
             }
         }
+    }
+}
+
+// ============================================================================
+// Auto-pad computation helpers
+// ============================================================================
+
+/// Compute padding for one spatial dimension from ONNX auto_pad semantics.
+///
+/// Returns (pad_begin, pad_end).
+fn compute_auto_pad_1dim(
+    auto_pad: &AutoPad,
+    input_size: usize,
+    kernel: usize,
+    stride: usize,
+    dilation: usize,
+) -> (usize, usize) {
+    match auto_pad {
+        AutoPad::Valid => (0, 0),
+        AutoPad::SameUpper | AutoPad::SameLower => {
+            let effective_kernel = (kernel - 1) * dilation + 1;
+            let output_size = (input_size + stride - 1) / stride; // ceil(input/stride)
+            let total_pad =
+                ((output_size - 1) * stride + effective_kernel).saturating_sub(input_size);
+            let pad_small = total_pad / 2;
+            let pad_big = total_pad - pad_small;
+            match auto_pad {
+                AutoPad::SameUpper => (pad_small, pad_big),
+                AutoPad::SameLower => (pad_big, pad_small),
+                _ => unreachable!(),
+            }
+        }
+        AutoPad::NotSet => panic!("compute_auto_pad_1dim called with NotSet"),
+    }
+}
+
+/// Resolve auto_pad to a PaddingConfig1d.
+///
+/// Panics if auto_pad is SameUpper/SameLower and input_spatial is None.
+pub fn resolve_auto_pad_1d(
+    auto_pad: &AutoPad,
+    padding: &PaddingConfig1d,
+    input_spatial: Option<&[usize]>,
+    kernel: usize,
+    stride: usize,
+    dilation: usize,
+) -> PaddingConfig1d {
+    match auto_pad {
+        AutoPad::NotSet => padding.clone(),
+        AutoPad::Valid => PaddingConfig1d::Valid,
+        AutoPad::SameUpper | AutoPad::SameLower => {
+            let shape = input_spatial
+                .expect("auto_pad SAME_UPPER/SAME_LOWER requires known input spatial dimensions");
+            let (left, right) = compute_auto_pad_1dim(auto_pad, shape[0], kernel, stride, dilation);
+            PaddingConfig1d::Explicit(left, right)
+        }
+    }
+}
+
+/// Resolve auto_pad to a PaddingConfig2d.
+pub fn resolve_auto_pad_2d(
+    auto_pad: &AutoPad,
+    padding: &PaddingConfig2d,
+    input_spatial: Option<&[usize]>,
+    kernel: &[usize; 2],
+    stride: &[usize; 2],
+    dilation: &[usize; 2],
+) -> PaddingConfig2d {
+    match auto_pad {
+        AutoPad::NotSet => padding.clone(),
+        AutoPad::Valid => PaddingConfig2d::Valid,
+        AutoPad::SameUpper | AutoPad::SameLower => {
+            let shape = input_spatial
+                .expect("auto_pad SAME_UPPER/SAME_LOWER requires known input spatial dimensions");
+            let (top, bottom) =
+                compute_auto_pad_1dim(auto_pad, shape[0], kernel[0], stride[0], dilation[0]);
+            let (left, right) =
+                compute_auto_pad_1dim(auto_pad, shape[1], kernel[1], stride[1], dilation[1]);
+            PaddingConfig2d::Explicit(top, left, bottom, right)
+        }
+    }
+}
+
+/// Resolve auto_pad to a PaddingConfig3d.
+pub fn resolve_auto_pad_3d(
+    auto_pad: &AutoPad,
+    padding: &PaddingConfig3d,
+    input_spatial: Option<&[usize]>,
+    kernel: &[usize; 3],
+    stride: &[usize; 3],
+    dilation: &[usize; 3],
+) -> PaddingConfig3d {
+    match auto_pad {
+        AutoPad::NotSet => padding.clone(),
+        AutoPad::Valid => PaddingConfig3d::Valid,
+        AutoPad::SameUpper | AutoPad::SameLower => {
+            let shape = input_spatial
+                .expect("auto_pad SAME_UPPER/SAME_LOWER requires known input spatial dimensions");
+            let (front, back) =
+                compute_auto_pad_1dim(auto_pad, shape[0], kernel[0], stride[0], dilation[0]);
+            let (top, bottom) =
+                compute_auto_pad_1dim(auto_pad, shape[1], kernel[1], stride[1], dilation[1]);
+            let (left, right) =
+                compute_auto_pad_1dim(auto_pad, shape[2], kernel[2], stride[2], dilation[2]);
+            PaddingConfig3d::Explicit(front, top, left, back, bottom, right)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_auto_pad_same_upper_symmetric() {
+        // input=7, kernel=3, stride=1, dilation=1
+        // effective_kernel=3, output=ceil(7/1)=7, total_pad=max(0,6*1+3-7)=2
+        // begin=1, end=1
+        let (begin, end) = compute_auto_pad_1dim(&AutoPad::SameUpper, 7, 3, 1, 1);
+        assert_eq!((begin, end), (1, 1));
+    }
+
+    #[test]
+    fn test_auto_pad_same_upper_asymmetric() {
+        // input=7, kernel=4, stride=1, dilation=1
+        // effective_kernel=4, output=7, total_pad=max(0,6+4-7)=3
+        // begin=1, end=2
+        let (begin, end) = compute_auto_pad_1dim(&AutoPad::SameUpper, 7, 4, 1, 1);
+        assert_eq!((begin, end), (1, 2));
+    }
+
+    #[test]
+    fn test_auto_pad_same_lower_asymmetric() {
+        // Same as above but SAME_LOWER flips
+        // begin=2, end=1
+        let (begin, end) = compute_auto_pad_1dim(&AutoPad::SameLower, 7, 4, 1, 1);
+        assert_eq!((begin, end), (2, 1));
+    }
+
+    #[test]
+    fn test_auto_pad_valid() {
+        let (begin, end) = compute_auto_pad_1dim(&AutoPad::Valid, 7, 3, 1, 1);
+        assert_eq!((begin, end), (0, 0));
+    }
+
+    #[test]
+    fn test_auto_pad_with_stride() {
+        // input=7, kernel=3, stride=2, dilation=1
+        // effective_kernel=3, output=ceil(7/2)=4, total_pad=max(0,3*2+3-7)=2
+        // begin=1, end=1
+        let (begin, end) = compute_auto_pad_1dim(&AutoPad::SameUpper, 7, 3, 2, 1);
+        assert_eq!((begin, end), (1, 1));
+    }
+
+    #[test]
+    fn test_auto_pad_with_dilation() {
+        // input=7, kernel=3, stride=1, dilation=2
+        // effective_kernel=(3-1)*2+1=5, output=7, total_pad=max(0,6+5-7)=4
+        // begin=2, end=2
+        let (begin, end) = compute_auto_pad_1dim(&AutoPad::SameUpper, 7, 3, 1, 2);
+        assert_eq!((begin, end), (2, 2));
+    }
+
+    #[test]
+    fn test_resolve_auto_pad_1d_not_set() {
+        let padding = PaddingConfig1d::Explicit(1, 2);
+        let result = resolve_auto_pad_1d(&AutoPad::NotSet, &padding, None, 3, 1, 1);
+        assert_eq!(result, PaddingConfig1d::Explicit(1, 2));
+    }
+
+    #[test]
+    fn test_resolve_auto_pad_1d_same_upper() {
+        let result = resolve_auto_pad_1d(
+            &AutoPad::SameUpper,
+            &PaddingConfig1d::Valid,
+            Some(&[7]),
+            3,
+            1,
+            1,
+        );
+        assert_eq!(result, PaddingConfig1d::Explicit(1, 1));
+    }
+
+    #[test]
+    fn test_resolve_auto_pad_2d_same_upper() {
+        let result = resolve_auto_pad_2d(
+            &AutoPad::SameUpper,
+            &PaddingConfig2d::Valid,
+            Some(&[7, 7]),
+            &[3, 3],
+            &[1, 1],
+            &[1, 1],
+        );
+        assert_eq!(result, PaddingConfig2d::Explicit(1, 1, 1, 1));
+    }
+
+    #[test]
+    fn test_resolve_auto_pad_3d_valid() {
+        let result = resolve_auto_pad_3d(
+            &AutoPad::Valid,
+            &PaddingConfig3d::Explicit(1, 1, 1, 1, 1, 1),
+            None,
+            &[3, 3, 3],
+            &[1, 1, 1],
+            &[1, 1, 1],
+        );
+        assert_eq!(result, PaddingConfig3d::Valid);
     }
 }
 

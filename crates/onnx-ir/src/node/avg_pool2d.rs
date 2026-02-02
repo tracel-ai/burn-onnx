@@ -15,7 +15,7 @@ use onnx_ir_derive::NodeBuilder;
 use crate::ir::Argument;
 
 use crate::ir::{ArgType, Node, RawNode, TensorType};
-use crate::node::padding::{PaddingConfig2d, padding_config_2d};
+use crate::node::padding::{AutoPad, PaddingConfig2d, padding_config_2d};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -35,6 +35,8 @@ pub struct AvgPool2dConfig {
     pub dilation: [usize; 2],
     /// Whether to use ceil mode for output size calculation (opset 19+)
     pub ceil_mode: bool,
+    /// Auto padding mode
+    pub auto_pad: AutoPad,
 }
 
 /// Node representation for AveragePool2d operation
@@ -97,13 +99,7 @@ impl NodeProcessor for AvgPool2dProcessor {
                     }
                 }
                 "auto_pad" => {
-                    let auto_pad = value.clone().into_string();
-                    if auto_pad != "NOTSET" {
-                        return Err(ProcessError::InvalidAttribute {
-                            name: "auto_pad".to_string(),
-                            reason: format!("Unsupported 'auto_pad' value: {}", auto_pad),
-                        });
-                    }
+                    AutoPad::parse(&value.clone().into_string())?;
                 }
                 _ => {
                     return Err(ProcessError::InvalidAttribute {
@@ -142,6 +138,7 @@ impl NodeProcessor for AvgPool2dProcessor {
         let mut count_include_pad: i64 = 0;
         let mut dilations = vec![1, 1];
         let mut ceil_mode: i64 = 0;
+        let mut auto_pad = AutoPad::NotSet;
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
@@ -151,6 +148,7 @@ impl NodeProcessor for AvgPool2dProcessor {
                 "count_include_pad" => count_include_pad = value.clone().into_i64(),
                 "dilations" => dilations = value.clone().into_i64s(),
                 "ceil_mode" => ceil_mode = value.clone().into_i64(),
+                "auto_pad" => auto_pad = AutoPad::parse(&value.clone().into_string())?,
                 _ => {}
             }
         }
@@ -164,6 +162,7 @@ impl NodeProcessor for AvgPool2dProcessor {
             count_include_pad == 1,
             [dilations[0] as usize, dilations[1] as usize],
             ceil_mode == 1,
+            auto_pad,
         );
 
         Ok(config)

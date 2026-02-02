@@ -30,6 +30,10 @@ examples/
 - Node structs contain: `name`, `inputs`, `outputs`, `config`
 - **Important**: Should extract and preserve ALL ONNX attributes faithfully, even if Burn doesn't
   support them yet. This allows onnx-ir to be reused by other projects
+- **Important**: Config structs should mirror ONNX semantics, not Burn semantics. Do NOT pre-compute
+  or translate ONNX attributes into Burn-specific values (e.g., do not resolve `auto_pad` into
+  explicit padding values). Store the original ONNX attribute and let burn-onnx handle the
+  translation during code generation
 
 ### burn-onnx
 
@@ -39,6 +43,9 @@ examples/
 - Entry point: `ModelGen` builder
 - **Important**: Rejection of unsupported features happens HERE, not in onnx-ir. If Burn API doesn't
   support a configuration, burn-onnx should emit a clear error during code generation
+- **Important**: Translation from ONNX semantics to Burn semantics happens HERE. For example,
+  resolving ONNX `auto_pad` into explicit padding values for Burn's API is a burn-onnx
+  responsibility, not onnx-ir's
 - **Important**: Always generate the simplest and most efficient Burn Rust code possible. Avoid
   emitting dead code, no-op loops, or redundant operations when the result can be determined at
   codegen time

@@ -19,7 +19,16 @@ impl NodeCodegen for onnx_ir::conv2d::Conv2dNode {
         let groups = self.config.groups.to_tokens();
         let bias = self.config.bias;
 
-        let padding = self.config.padding.to_tokens();
+        let input_spatial = self.inputs[0].ty.static_shape().map(|s| &s[2..]);
+        let padding = crate::burn::codegen::resolve_auto_pad_2d(
+            &self.config.auto_pad,
+            &self.config.padding,
+            input_spatial,
+            &self.config.kernel_size,
+            &self.config.stride,
+            &self.config.dilation,
+        )
+        .to_tokens();
 
         Some(Field::new(
             self.name.clone(),
@@ -87,7 +96,7 @@ mod tests {
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::conv2d::{Conv2dConfig, Conv2dNode, Conv2dNodeBuilder};
-    use onnx_ir::padding::PaddingConfig2d;
+    use onnx_ir::padding::{AutoPad, PaddingConfig2d};
 
     fn create_conv2d_node(name: &str) -> Conv2dNode {
         let config = Conv2dConfig::new(
@@ -98,6 +107,7 @@ mod tests {
             [1, 1],
             1,
             true,
+            AutoPad::NotSet,
         );
 
         Conv2dNodeBuilder::new(name)
@@ -117,6 +127,7 @@ mod tests {
             [1, 1],
             1,
             true,
+            AutoPad::NotSet,
         );
 
         Conv2dNodeBuilder::new(name)
@@ -147,6 +158,56 @@ mod tests {
             let output = self.conv1.forward(input.clone());
             output
         }
+        ");
+    }
+
+    fn create_conv2d_node_auto_pad(name: &str, auto_pad: AutoPad) -> Conv2dNode {
+        let config = Conv2dConfig::new(
+            [3, 64],
+            [3, 3],
+            [1, 1],
+            PaddingConfig2d::Valid, // ignored when auto_pad is set
+            [1, 1],
+            1,
+            true,
+            auto_pad,
+        );
+
+        Conv2dNodeBuilder::new(name)
+            .input_tensor_shape("input", vec![1, 3, 7, 7], DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build()
+    }
+
+    #[test]
+    fn test_conv2d_field_init_auto_pad_same_upper() {
+        let node = create_conv2d_node_auto_pad("conv1", AutoPad::SameUpper);
+        let code = codegen_field_init(&node);
+        // auto_pad SAME_UPPER with input=7x7, kernel=3x3, stride=1 -> pad 1 each side
+        assert_snapshot!(code, @r"
+        let conv1 = Conv2dConfig::new([3, 64], [3, 3])
+            .with_stride([1, 1])
+            .with_padding(PaddingConfig2d::Explicit(1, 1, 1, 1))
+            .with_dilation([1, 1])
+            .with_groups(1)
+            .with_bias(true)
+            .init(device);
+        ");
+    }
+
+    #[test]
+    fn test_conv2d_field_init_auto_pad_valid() {
+        let node = create_conv2d_node_auto_pad("conv1", AutoPad::Valid);
+        let code = codegen_field_init(&node);
+        assert_snapshot!(code, @r"
+        let conv1 = Conv2dConfig::new([3, 64], [3, 3])
+            .with_stride([1, 1])
+            .with_padding(PaddingConfig2d::Valid)
+            .with_dilation([1, 1])
+            .with_groups(1)
+            .with_bias(true)
+            .init(device);
         ");
     }
 

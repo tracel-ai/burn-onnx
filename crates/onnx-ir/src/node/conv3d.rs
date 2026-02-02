@@ -13,7 +13,7 @@ use onnx_ir_derive::NodeBuilder;
 
 use crate::ir::{Argument, Node, RawNode};
 
-use crate::node::padding::{PaddingConfig3d, padding_config_3d};
+use crate::node::padding::{AutoPad, PaddingConfig3d, padding_config_3d};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -44,6 +44,8 @@ pub struct Conv3dConfig {
     pub bias: bool,
     /// Padding.
     pub padding: PaddingConfig3d,
+    /// Auto padding mode
+    pub auto_pad: AutoPad,
 }
 
 pub(crate) struct Conv3dProcessor;
@@ -90,6 +92,7 @@ impl NodeProcessor for Conv3dProcessor {
         let mut pads = vec![0, 0, 0, 0, 0, 0];
         let mut dilations = vec![1, 1, 1];
         let mut group: usize = 1;
+        let mut auto_pad = AutoPad::NotSet;
 
         let weight_shape = node.inputs[1]
             .value()
@@ -110,13 +113,7 @@ impl NodeProcessor for Conv3dProcessor {
                 "dilations" => dilations = value.clone().into_i64s(),
                 "group" => group = value.clone().into_i64() as usize,
                 "auto_pad" => {
-                    let auto_pad = value.clone().into_string();
-                    if auto_pad != "NOTSET" {
-                        return Err(ProcessError::InvalidAttribute {
-                            name: "auto_pad".to_string(),
-                            reason: format!("Unsupported 'auto_pad' value: {auto_pad}"),
-                        });
-                    }
+                    auto_pad = AutoPad::parse(&value.clone().into_string())?;
                 }
                 _ => {
                     // TODO: According to spec, there may be other valid attributes that are not handled
@@ -168,6 +165,7 @@ impl NodeProcessor for Conv3dProcessor {
             group,
             bias,
             padding,
+            auto_pad,
         );
 
         Ok(config)
@@ -360,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn test_conv3d_config_autopad_not_supported() {
+    fn test_conv3d_config_autopad_same_upper() {
         let node = create_test_node(
             vec![2, 2, 2],
             vec![1, 1, 1],
@@ -372,8 +370,8 @@ mod tests {
         )
         .build_with_graph_data(16);
         let processor = Conv3dProcessor;
-        let result = processor.extract_config(&node, 16);
-        assert!(matches!(result, Err(ProcessError::InvalidAttribute { .. })));
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert_eq!(config.auto_pad, AutoPad::SameUpper);
     }
 
     #[test]

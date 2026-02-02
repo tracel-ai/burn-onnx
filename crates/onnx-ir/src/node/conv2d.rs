@@ -12,7 +12,7 @@ use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
 
 use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
-use crate::node::padding::{PaddingConfig2d, padding_config_2d};
+use crate::node::padding::{AutoPad, PaddingConfig2d, padding_config_2d};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -43,6 +43,8 @@ pub struct Conv2dConfig {
     pub groups: usize,
     /// Whether bias is used
     pub bias: bool,
+    /// Auto padding mode
+    pub auto_pad: AutoPad,
 }
 
 /// Node processor for Conv2d operation
@@ -92,13 +94,7 @@ impl NodeProcessor for Conv2dProcessor {
             match key.as_str() {
                 "kernel_shape" | "strides" | "pads" | "dilations" | "group" => {}
                 "auto_pad" => {
-                    let auto_pad = value.clone().into_string();
-                    if auto_pad != "NOTSET" {
-                        return Err(ProcessError::InvalidAttribute {
-                            name: "auto_pad".to_string(),
-                            reason: format!("Unsupported 'auto_pad' value: {auto_pad}"),
-                        });
-                    }
+                    AutoPad::parse(&value.clone().into_string())?;
                 }
                 _ => {
                     return Err(ProcessError::InvalidAttribute {
@@ -200,6 +196,7 @@ impl NodeProcessor for Conv2dProcessor {
         let mut pads = vec![0, 0, 0, 0];
         let mut dilations = vec![1, 1];
         let mut group: usize = 1;
+        let mut auto_pad = AutoPad::NotSet;
 
         let weight_shape = node.inputs[1]
             .value()
@@ -218,7 +215,7 @@ impl NodeProcessor for Conv2dProcessor {
                 "pads" => pads = value.clone().into_i64s(),
                 "dilations" => dilations = value.clone().into_i64s(),
                 "group" => group = value.clone().into_i64() as usize,
-                "auto_pad" => {}
+                "auto_pad" => auto_pad = AutoPad::parse(&value.clone().into_string())?,
                 _ => {}
             }
         }
@@ -248,6 +245,7 @@ impl NodeProcessor for Conv2dProcessor {
             [dilations[0] as usize, dilations[1] as usize],
             group,
             bias,
+            auto_pad,
         );
 
         Ok(config)
@@ -434,7 +432,7 @@ mod tests {
     }
 
     #[test]
-    fn test_conv2d_config_autopad_not_supported() {
+    fn test_conv2d_config_autopad_same_upper() {
         let node = create_test_node(
             vec![3, 3],
             vec![1, 1],
@@ -448,8 +446,9 @@ mod tests {
         let mut node = node;
         let processor = Conv2dProcessor;
         let prefs = OutputPreferences::new();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::InvalidAttribute { .. })));
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert_eq!(config.auto_pad, AutoPad::SameUpper);
     }
 
     #[test]

@@ -20,7 +20,16 @@ impl NodeCodegen for onnx_ir::conv3d::Conv3dNode {
         let groups = self.config.groups.to_tokens();
         let bias = self.config.bias;
 
-        let padding = self.config.padding.to_tokens();
+        let input_spatial = self.inputs[0].ty.static_shape().map(|s| &s[2..]);
+        let padding = crate::burn::codegen::resolve_auto_pad_3d(
+            &self.config.auto_pad,
+            &self.config.padding,
+            input_spatial,
+            &self.config.kernel_size,
+            &self.config.stride,
+            &self.config.dilation,
+        )
+        .to_tokens();
 
         Some(Field::new(
             self.name.clone(),
@@ -85,7 +94,7 @@ mod tests {
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::conv3d::{Conv3dConfig, Conv3dNode, Conv3dNodeBuilder};
-    use onnx_ir::padding::PaddingConfig3d;
+    use onnx_ir::padding::{AutoPad, PaddingConfig3d};
 
     fn create_conv3d_node(name: &str) -> Conv3dNode {
         let config = Conv3dConfig::new(
@@ -96,6 +105,7 @@ mod tests {
             1,
             true,
             PaddingConfig3d::Explicit(1, 1, 1, 1, 1, 1),
+            AutoPad::NotSet,
         );
 
         Conv3dNodeBuilder::new(name)
@@ -115,6 +125,7 @@ mod tests {
             1,
             true,
             PaddingConfig3d::Explicit(1, 2, 3, 4, 5, 6),
+            AutoPad::NotSet,
         );
 
         Conv3dNodeBuilder::new(name)
