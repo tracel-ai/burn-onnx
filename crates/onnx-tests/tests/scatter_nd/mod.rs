@@ -1,5 +1,12 @@
 use crate::include_models;
-include_models!(scatter_nd, scatter_nd_2d, scatter_nd_add, scatter_nd_mul, scatter_nd_max, scatter_nd_min);
+include_models!(
+    scatter_nd,
+    scatter_nd_2d,
+    scatter_nd_add,
+    scatter_nd_mul,
+    scatter_nd_max,
+    scatter_nd_min
+);
 
 #[cfg(test)]
 mod tests {
