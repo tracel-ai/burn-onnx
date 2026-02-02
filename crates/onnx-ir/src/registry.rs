@@ -602,6 +602,7 @@ impl ProcessorRegistry {
 
         // Recurrent neural network operations
         registry.register(NodeType::Lstm, Box::new(crate::node::lstm::LstmProcessor));
+        registry.register(NodeType::Gru, Box::new(crate::node::gru::GruProcessor));
 
         registry
     }

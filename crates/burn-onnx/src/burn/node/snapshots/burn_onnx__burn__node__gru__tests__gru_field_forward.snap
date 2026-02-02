@@ -1,0 +1,7 @@
+---
+source: crates/burn-onnx/src/burn/node/gru.rs
+expression: code
+---
+let gru1 = burn::nn::gru::GruConfig::new(4, 8, true)
+    .with_reset_after(false)
+    .init(device);

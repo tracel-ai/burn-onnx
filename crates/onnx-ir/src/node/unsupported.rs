@@ -43,7 +43,6 @@ define_placeholder_node! {
     EinsumNode,
     GatherNDNode,
     GlobalMaxPoolNode,
-    GruNode,
     HammingWindowNode,
     HannWindowNode,
     HardmaxNode,

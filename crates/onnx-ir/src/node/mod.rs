@@ -80,6 +80,7 @@ pub mod gemm;
 pub mod global_avg_pool;
 pub mod grid_sample;
 pub mod group_norm;
+pub mod gru;
 pub mod hard_sigmoid;
 pub mod hard_swish;
 pub mod identity;

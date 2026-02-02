@@ -68,6 +68,7 @@ pub(crate) mod greater;
 pub(crate) mod greater_equal;
 pub(crate) mod grid_sample;
 pub(crate) mod group_norm;
+pub(crate) mod gru;
 pub(crate) mod hard_sigmoid;
 pub(crate) mod hard_swish;
 pub(crate) mod identity;
