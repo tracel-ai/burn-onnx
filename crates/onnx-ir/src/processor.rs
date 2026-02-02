@@ -561,7 +561,9 @@ pub fn compute_broadcast_rank(inputs: &[crate::ir::Argument]) -> usize {
 }
 
 /// Compute broadcast static shape from multiple inputs (NumPy-style broadcasting)
-pub fn compute_broadcast_static_shape(inputs: &[crate::ir::Argument]) -> Option<Vec<usize>> {
+pub fn compute_broadcast_static_shape(
+    inputs: &[crate::ir::Argument],
+) -> Option<Vec<Option<usize>>> {
     let static_shapes: Vec<_> = inputs
         .iter()
         .filter_map(|input| input.ty.static_shape().cloned())
@@ -572,8 +574,6 @@ pub fn compute_broadcast_static_shape(inputs: &[crate::ir::Argument]) -> Option<
     }
 
     if static_shapes.len() == 1 {
-        // Only return the shape if it matches the broadcast rank.
-        // Otherwise the shape from a lower-rank input would be wrong for the output.
         let broadcast_rank = compute_broadcast_rank(inputs);
         if broadcast_rank == static_shapes[0].len() {
             return Some(static_shapes[0].clone());
@@ -586,18 +586,25 @@ pub fn compute_broadcast_static_shape(inputs: &[crate::ir::Argument]) -> Option<
     }
 
     let max_rank = static_shapes.iter().map(|s| s.len()).max()?;
-    let mut result = vec![1; max_rank];
+    let mut result: Vec<Option<usize>> = vec![Some(1); max_rank];
 
     for shape in &static_shapes {
         let offset = max_rank - shape.len();
-        for (i, &dim) in shape.iter().enumerate() {
+        for (i, dim) in shape.iter().enumerate() {
             let result_idx = offset + i;
-            let current_dim = result[result_idx];
-
-            if current_dim == 1 {
-                result[result_idx] = dim;
-            } else if dim != 1 && dim != current_dim {
-                return None;
+            match (result[result_idx], *dim) {
+                (_, None) | (None, _) => {
+                    // If either dim is symbolic, result is symbolic
+                    result[result_idx] = None;
+                }
+                (Some(cur), Some(d)) => {
+                    if cur == 1 {
+                        result[result_idx] = Some(d);
+                    } else if d != 1 && d != cur {
+                        // Incompatible broadcast
+                        return None;
+                    }
+                }
             }
         }
     }
@@ -780,7 +787,7 @@ mod tests {
                 ty: ArgType::Tensor(TensorType {
                     dtype: DType::F32,
                     rank: 1,
-                    static_shape: Some(vec![2]),
+                    static_shape: Some(vec![Some(2)]),
                 }),
                 value_source: crate::ir::ValueSource::Dynamic,
                 value_store: None,
@@ -811,7 +818,7 @@ mod tests {
                 ty: ArgType::Tensor(TensorType {
                     dtype: DType::F32,
                     rank: 3,
-                    static_shape: Some(vec![2, 3, 4]),
+                    static_shape: Some(vec![Some(2), Some(3), Some(4)]),
                 }),
                 value_source: crate::ir::ValueSource::Dynamic,
                 value_store: None,
@@ -829,6 +836,6 @@ mod tests {
         ];
 
         let result = compute_broadcast_static_shape(&inputs);
-        assert_eq!(result, Some(vec![2, 3, 4]));
+        assert_eq!(result, Some(vec![Some(2), Some(3), Some(4)]));
     }
 }

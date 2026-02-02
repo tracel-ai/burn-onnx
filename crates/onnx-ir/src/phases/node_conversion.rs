@@ -251,7 +251,7 @@ fn extract_constant_from_attributes(node: &mut RawNode, state_rc: &Rc<RefCell<Gr
                 crate::ir::ArgType::Tensor(crate::ir::TensorType {
                     dtype: tensor_data.elem_type(),
                     rank: tensor_data.shape.len(),
-                    static_shape: Some(tensor_data.shape.to_vec()),
+                    static_shape: Some(tensor_data.shape.iter().map(|&d| Some(d)).collect()),
                 })
             };
 

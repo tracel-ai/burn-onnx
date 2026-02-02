@@ -276,7 +276,7 @@ mod tests {
                 ty: ArgType::Tensor(TensorType {
                     dtype: DType::F32,
                     rank: 2,
-                    static_shape: Some(vec![2, 3]),
+                    static_shape: Some(vec![Some(2), Some(3)]),
                 }),
                 value_source: crate::ir::ValueSource::Dynamic,
                 value_store: None,
@@ -287,7 +287,7 @@ mod tests {
                 ty: ArgType::Tensor(TensorType {
                     dtype: DType::F32,
                     rank: 2,
-                    static_shape: Some(vec![2, 3]),
+                    static_shape: Some(vec![Some(2), Some(3)]),
                 }),
                 value_source: crate::ir::ValueSource::Dynamic,
                 value_store: None,
@@ -301,7 +301,7 @@ mod tests {
                 ty: ArgType::Tensor(TensorType {
                     dtype: DType::F32,
                     rank: 2,
-                    static_shape: Some(vec![2, 3]),
+                    static_shape: Some(vec![Some(2), Some(3)]),
                 }),
                 value_source: crate::ir::ValueSource::Dynamic,
                 value_store: None,
@@ -315,7 +315,7 @@ mod tests {
                 ty: ArgType::Tensor(TensorType {
                     dtype: DType::F32,
                     rank: 2,
-                    static_shape: Some(vec![2, 3]),
+                    static_shape: Some(vec![Some(2), Some(3)]),
                 }),
                 value_source: crate::ir::ValueSource::Dynamic,
                 value_store: None,

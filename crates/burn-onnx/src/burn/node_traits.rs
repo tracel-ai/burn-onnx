@@ -207,11 +207,7 @@ pub fn create_lazy_snapshot(
     let (dtype, shape) = match &input.ty {
         ArgType::Tensor(tensor_type) => {
             let dtype = tensor_type.dtype;
-            let shape = tensor_type
-                .static_shape
-                .as_ref()
-                .map(|s| s.to_vec())
-                .unwrap_or_default();
+            let shape = tensor_type.static_shape_known().unwrap_or_default();
             (dtype, shape)
         }
         _ => return None,

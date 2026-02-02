@@ -225,7 +225,7 @@ impl NodeProcessor for ReduceProcessor {
 
                 if keepdims == 1 {
                     for dim in &dims {
-                        shape[*dim] = 1;
+                        shape[*dim] = Some(1);
                     }
                     Some(shape)
                 } else {
@@ -626,7 +626,7 @@ mod tests {
                 // Should maintain rank 3 with keepdims=true
                 assert_eq!(tensor.rank, 3);
                 // Static shape should be updated: [2, 4, 768] -> [2, 4, 1]
-                assert_eq!(tensor.static_shape, Some(vec![2, 4, 1]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(4), Some(1)]));
             }
             _ => {
                 panic!("Expected tensor output");

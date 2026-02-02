@@ -147,6 +147,11 @@ impl NodeProcessor for ConstantOfShapeProcessor {
                             "ConstantOfShape node must have a non-empty static shape value"
                                 .to_string(),
                         )
+                    })?.ok_or_else(|| {
+                        ProcessError::Custom(
+                            "ConstantOfShape node requires a known (non-symbolic) static shape dimension"
+                                .to_string(),
+                        )
                     })?
                 } else {
                     return Err(ProcessError::Custom(format!(
@@ -287,7 +292,7 @@ mod tests {
         let mut node = create_test_node(ArgType::Tensor(TensorType {
             dtype: DType::I64,
             rank: 1,
-            static_shape: Some(vec![4]),
+            static_shape: Some(vec![Some(4)]),
         }))
         .build();
         let processor = ConstantOfShapeProcessor;
@@ -378,7 +383,7 @@ mod tests {
         let mut node = create_test_node(ArgType::Tensor(TensorType {
             dtype: DType::I64,
             rank: 1,
-            static_shape: Some(vec![0]), // Shape is [0], meaning rank-0 output
+            static_shape: Some(vec![Some(0)]), // Shape is [0], meaning rank-0 output
         }))
         .build();
         let processor = ConstantOfShapeProcessor;

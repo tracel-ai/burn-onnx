@@ -117,9 +117,9 @@ impl NodeProcessor for SpaceToDepthProcessor {
                 .expect("SpaceToDepth: input tensor rank is not 4");
             vec![
                 b,
-                c * block_size * block_size,
-                h / block_size,
-                w / block_size,
+                c.map(|v| v * block_size * block_size),
+                h.map(|v| v / block_size),
+                w.map(|v| v / block_size),
             ]
         });
 
@@ -200,7 +200,10 @@ mod tests {
 
         match &node.outputs[0].ty {
             ArgType::Tensor(tensor) => {
-                assert_eq!(tensor.static_shape, vec![2, 4, 2, 3].into());
+                assert_eq!(
+                    tensor.static_shape,
+                    Some(vec![Some(2), Some(4), Some(2), Some(3)])
+                );
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 4);
             }

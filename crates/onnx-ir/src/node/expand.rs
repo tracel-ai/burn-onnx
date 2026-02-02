@@ -117,7 +117,7 @@ impl NodeProcessor for ExpandProcessor {
                 node.outputs[0].ty = ArgType::Tensor(TensorType {
                     dtype: input_elem_type,
                     rank: shape.len(),
-                    static_shape: Some(shape.iter().map(|&dim| dim as usize).collect()),
+                    static_shape: Some(shape.iter().map(|&dim| Some(dim as usize)).collect()),
                 });
             }
             ExpandConfig::Runtime(_) => {
@@ -125,8 +125,10 @@ impl NodeProcessor for ExpandProcessor {
                 let output_rank = match &node.inputs[1].ty {
                     ArgType::Shape(rank) => *rank,
                     ArgType::Tensor(tensor) => {
-                        if let Some(static_shape) = &tensor.static_shape {
-                            static_shape[0]
+                        if let Some(static_shape) = &tensor.static_shape
+                            && let Some(Some(rank)) = static_shape.first()
+                        {
+                            *rank
                         } else {
                             // Check if output already has a rank set from ONNX
                             match &node.outputs[0].ty {
@@ -233,7 +235,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 3);
-                assert_eq!(tensor.static_shape, Some(vec![2, 3, 4]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(3), Some(4)]));
             }
             _ => panic!("Expected tensor output"),
         }
@@ -430,7 +432,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 3);
-                assert_eq!(tensor.static_shape, Some(vec![5, 10, 15]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(5), Some(10), Some(15)]));
             }
             _ => panic!("Expected tensor output"),
         }
@@ -563,7 +565,7 @@ mod tests {
                     "Expand should use input type (Int64) not initial output type (Float32)"
                 );
                 assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, Some(vec![2, 3]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(3)]));
             }
             _ => panic!("Expected tensor output"),
         }
@@ -585,7 +587,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, Some(vec![2, 3]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(3)]));
             }
             _ => panic!("Expected tensor output"),
         }

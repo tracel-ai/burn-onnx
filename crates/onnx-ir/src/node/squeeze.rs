@@ -107,7 +107,7 @@ impl NodeProcessor for SqueezeProcessor {
                     None => {
                         // When axes is None, ONNX spec squeezes all dimensions of size 1
                         if let Some(ref static_shape) = tensor.static_shape {
-                            static_shape.iter().filter(|&&dim| dim != 1).count()
+                            static_shape.iter().filter(|dim| **dim != Some(1)).count()
                         } else {
                             return Err(ProcessError::Custom(
                                 "Squeeze: Cannot infer output rank when axes is None and input tensor static shape is unknown".to_string()

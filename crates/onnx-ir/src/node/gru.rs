@@ -312,11 +312,7 @@ impl NodeProcessor for GruProcessor {
 
         let input_size = if let ArgType::Tensor(t) = &weight_input.ty {
             if let Some(shape) = &t.static_shape {
-                if shape.len() == 3 {
-                    Some(shape[2])
-                } else {
-                    None
-                }
+                if shape.len() == 3 { shape[2] } else { None }
             } else {
                 None
             }
@@ -337,11 +333,7 @@ impl NodeProcessor for GruProcessor {
         let input_size = input_size.or_else(|| {
             if let ArgType::Tensor(t) = &x_input.ty {
                 if let Some(shape) = &t.static_shape {
-                    if shape.len() >= 3 {
-                        Some(shape[2])
-                    } else {
-                        None
-                    }
+                    if shape.len() >= 3 { shape[2] } else { None }
                 } else {
                     None
                 }

@@ -269,7 +269,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, Some(vec![2, 2]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(2)]));
             }
             _ => panic!("Expected tensor output"),
         }
@@ -295,7 +295,7 @@ mod tests {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 2);
                 // Since X and Y have the same static shape, it should propagate
-                assert_eq!(tensor.static_shape, Some(vec![3, 4]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(3), Some(4)]));
             }
             _ => panic!("Expected tensor output"),
         }

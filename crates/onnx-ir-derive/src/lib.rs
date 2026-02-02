@@ -139,7 +139,7 @@ pub fn node_builder_derive(input: TokenStream) -> TokenStream {
                 self
             }
 
-            /// Add a tensor input with static shape
+            /// Add a tensor input with fully-known static shape
             pub fn input_tensor_shape(
                 mut self,
                 name: &str,
@@ -149,11 +149,7 @@ pub fn node_builder_derive(input: TokenStream) -> TokenStream {
                 use crate::ir::{Argument, ArgType, TensorType};
                 self.inputs.push(Argument::new(
                     name,
-                    ArgType::Tensor(TensorType {
-                        dtype,
-                        rank: shape.len(),
-                        static_shape: Some(shape),
-                    }),
+                    ArgType::Tensor(TensorType::new_known(dtype, shape)),
                 ));
                 self
             }

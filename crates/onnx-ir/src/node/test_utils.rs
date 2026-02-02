@@ -56,6 +56,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_input(
             name,
             ArgType::Tensor(TensorType {
@@ -73,6 +74,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_input(
             name,
             ArgType::Tensor(TensorType {
@@ -90,6 +92,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_input(
             name,
             ArgType::Tensor(TensorType {
@@ -107,6 +110,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_input(
             name,
             ArgType::Tensor(TensorType {
@@ -124,6 +128,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_input(
             name,
             ArgType::Tensor(TensorType {
@@ -141,6 +146,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_input(
             name,
             ArgType::Tensor(TensorType {
@@ -270,7 +276,7 @@ impl TestNodeBuilder {
     }
 
     /// Add multiple tensor inputs with the same type but different names
-    pub fn input_tensors_f32<I>(
+    pub fn input_tensors_f32(
         mut self,
         name_prefix: &str,
         count: usize,
@@ -305,6 +311,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_output(
             name,
             ArgType::Tensor(TensorType {
@@ -322,6 +329,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_output(
             name,
             ArgType::Tensor(TensorType {
@@ -339,6 +347,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_output(
             name,
             ArgType::Tensor(TensorType {
@@ -356,6 +365,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_output(
             name,
             ArgType::Tensor(TensorType {
@@ -373,6 +383,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_output(
             name,
             ArgType::Tensor(TensorType {
@@ -390,6 +401,7 @@ impl TestNodeBuilder {
         rank: usize,
         static_shape: Option<Vec<usize>>,
     ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
         self.add_output(
             name,
             ArgType::Tensor(TensorType {

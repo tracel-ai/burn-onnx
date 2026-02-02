@@ -231,9 +231,16 @@ impl UnsqueezeProcessor {
             if let ArgType::Tensor(tensor) = &node.inputs[1].ty {
                 if let Some(static_shape) = &tensor.static_shape {
                     input_rank
-                        + *static_shape.first().ok_or_else(|| {
-                            ProcessError::Custom("Unsqueeze: empty axes shape".to_string())
-                        })?
+                        + static_shape
+                            .first()
+                            .ok_or_else(|| {
+                                ProcessError::Custom("Unsqueeze: empty axes shape".to_string())
+                            })?
+                            .ok_or_else(|| {
+                                ProcessError::Custom(
+                                    "Unsqueeze: symbolic axes shape dimension".to_string(),
+                                )
+                            })?
                 } else {
                     return Err(ProcessError::Custom(
                         "Unsqueeze: missing static shape for axes".to_string(),

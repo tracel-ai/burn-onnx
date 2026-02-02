@@ -100,7 +100,7 @@ fn determine_output_type(
     input: &Argument,
     input_info: &InputInfo,
     output_rank: usize,
-    static_shape: Option<Vec<usize>>,
+    static_shape: Option<Vec<Option<usize>>>,
     node: &RawNode,
 ) -> ArgType {
     // Case 1: Scalar output (rank 0)
@@ -140,7 +140,7 @@ fn determine_output_type(
 fn calculate_shape_output_size(
     input_size: usize,
     node: &RawNode,
-    static_shape: &Option<Vec<usize>>,
+    static_shape: &Option<Vec<Option<usize>>>,
 ) -> usize {
     // Try to get size from static reshape parameter
     if let Some(shape_values) = get_static_shape(node)
@@ -156,8 +156,9 @@ fn calculate_shape_output_size(
     // Try to get size from output's static shape
     if let Some(shape) = static_shape
         && shape.len() == 1
+        && let Some(dim) = shape[0]
     {
-        return shape[0];
+        return dim;
     }
 
     // Default: preserve input size
@@ -203,7 +204,7 @@ fn get_rank_from_shape_input(node: &RawNode) -> Option<usize> {
             .static_shape
             .as_ref()
             .filter(|dims| !dims.is_empty())
-            .map(|dims| dims[0]),
+            .and_then(|dims| dims[0]),
         _ => None,
     }
 }

@@ -111,7 +111,7 @@ impl NodeProcessor for CastProcessor {
                     output.ty = ArgType::Tensor(TensorType {
                         dtype: elem_type,
                         rank: 1,
-                        static_shape: Some(vec![rank]),
+                        static_shape: Some(vec![Some(rank)]),
                     });
                 } else {
                     // For int types, keep as Shape
@@ -317,7 +317,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 1);
-                assert_eq!(tensor.static_shape, Some(vec![3]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(3)]));
             }
             _ => panic!("Expected rank-1 tensor output when casting Shape to float"),
         }
@@ -361,7 +361,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::Bool);
                 assert_eq!(tensor.rank, 1);
-                assert_eq!(tensor.static_shape, Some(vec![3]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(3)]));
             }
             _ => panic!("Expected rank-1 bool tensor output when casting Shape to bool"),
         }

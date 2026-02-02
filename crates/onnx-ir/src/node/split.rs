@@ -91,7 +91,7 @@ impl NodeProcessor for SplitProcessor {
         // Extract the input type to determine rank and shape
         let (dtype, rank, input_static_shape) = match &node.inputs.first().unwrap().ty {
             ArgType::Tensor(tensor) => (tensor.dtype, tensor.rank, tensor.static_shape.clone()),
-            ArgType::Shape(r) => (crate::ir::DType::I64, 1, Some(vec![*r])),
+            ArgType::Shape(r) => (crate::ir::DType::I64, 1, Some(vec![Some(*r)])),
             _ => {
                 return Err(ProcessError::TypeMismatch {
                     expected: "Tensor or Shape".to_string(),
@@ -130,7 +130,7 @@ impl NodeProcessor for SplitProcessor {
                         .unwrap_or(0);
                     if i < sizes.len() {
                         let mut shape = input_shape.clone();
-                        shape[axis] = sizes[i];
+                        shape[axis] = Some(sizes[i]);
                         Some(shape)
                     } else {
                         None
@@ -166,7 +166,7 @@ impl NodeProcessor for SplitProcessor {
             ArgType::Shape(rank) => TensorType {
                 dtype: crate::ir::DType::I64,
                 rank: 1,
-                static_shape: Some(vec![*rank]),
+                static_shape: Some(vec![Some(*rank)]),
             },
             _ => {
                 return Err(ProcessError::TypeMismatch {
@@ -224,9 +224,8 @@ impl NodeProcessor for SplitProcessor {
         // Handle the case when num_outputs is provided to calculate uniform split size
         if let Some(num_outputs) = num_outputs
             && let Some(static_shape) = &tensor.static_shape
+            && let Some(dim_size) = static_shape[axis as usize]
         {
-            let dim_size = static_shape[axis as usize];
-
             // Validate that dimension size is sufficient for the number of outputs
             if dim_size == 0 {
                 return Err(ProcessError::Custom(format!(
@@ -305,8 +304,9 @@ impl NodeProcessor for SplitProcessor {
                     }
 
                     // Validate that sum of split sizes matches the dimension size (if static shape is available)
-                    if let Some(static_shape) = &tensor.static_shape {
-                        let dim_size = static_shape[axis as usize];
+                    if let Some(static_shape) = &tensor.static_shape
+                        && let Some(dim_size) = static_shape[axis as usize]
+                    {
                         let total_size: usize = usizes.iter().sum();
                         if total_size != dim_size {
                             return Err(ProcessError::Custom(format!(
@@ -330,9 +330,9 @@ impl NodeProcessor for SplitProcessor {
         if split_sizes.is_none()
             && split_size.is_none()
             && let Some(static_shape) = &tensor.static_shape
+            && let Some(dim_size) = static_shape[axis as usize]
         {
             let inferred_num_outputs = node.outputs.len();
-            let dim_size = static_shape[axis as usize];
 
             // Calculate inferred split size based on number of outputs
             let calculated_split_size =
@@ -729,7 +729,7 @@ mod tests {
                 ArgType::Tensor(t) => {
                     assert_eq!(t.dtype, DType::I64);
                     assert_eq!(t.rank, 1);
-                    assert_eq!(t.static_shape, Some(vec![1]));
+                    assert_eq!(t.static_shape, Some(vec![Some(1)]));
                 }
                 other => panic!("Expected Tensor, got {:?}", other),
             }
@@ -762,7 +762,14 @@ mod tests {
                 _ => panic!("Expected Tensor"),
             })
             .collect();
-        assert_eq!(shapes, vec![Some(vec![0]), Some(vec![1]), Some(vec![0])]);
+        assert_eq!(
+            shapes,
+            vec![
+                Some(vec![Some(0)]),
+                Some(vec![Some(1)]),
+                Some(vec![Some(0)])
+            ]
+        );
 
         // extract_config should also succeed (no rejection of size 0)
         let config = processor.extract_config(&node, 16).unwrap();

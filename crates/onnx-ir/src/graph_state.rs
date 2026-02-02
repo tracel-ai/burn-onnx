@@ -595,7 +595,7 @@ fn create_test_constant(
     let ty = crate::ir::ArgType::Tensor(crate::ir::TensorType {
         dtype: elem_type,
         rank: shape.len(),
-        static_shape: Some(shape.clone()),
+        static_shape: Some(shape.iter().map(|&d| Some(d)).collect()),
     });
 
     // Convert TensorData to TensorDataRef and store

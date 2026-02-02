@@ -269,6 +269,35 @@ fn test_all_dynamic_shapes() {
 }
 
 #[test]
+fn test_symbolic_batch_dim() {
+    // Reproduces issue #62: symbolic batch dim causes static_shape to be None
+    // even though 3 of 4 dimensions ([N, 3, 224, 224]) are concrete.
+    let graph = load_onnx("symbolic_batch_dim.onnx");
+
+    assert_eq!(graph.inputs.len(), 1);
+    let input = &graph.inputs[0];
+
+    // The input has rank 4: [N, 3, 224, 224]
+    match &input.ty {
+        onnx_ir::ir::ArgType::Tensor(t) => {
+            assert_eq!(t.rank, 4, "rank should be 4");
+            // Fixed: symbolic batch dim is None, concrete dims are preserved
+            assert_eq!(
+                t.static_shape,
+                Some(vec![None, Some(3), Some(224), Some(224)]),
+                "concrete dims should be preserved even with symbolic batch dim"
+            );
+            // static_shape_known() returns None since not all dims are concrete
+            assert!(
+                t.static_shape_known().is_none(),
+                "static_shape_known() should be None when any dim is symbolic"
+            );
+        }
+        other => panic!("Expected Tensor, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_circular_preferences() {
     // Test type inference convergence with circular dependencies
     // This tests edge case #14: Circular preferences convergence

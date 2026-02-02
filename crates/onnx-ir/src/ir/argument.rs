@@ -12,7 +12,7 @@ use super::tensor_data_ext::TensorData;
 use crate::tensor_store::ValueStore;
 
 pub type Rank = usize;
-pub type Shape = Vec<usize>;
+pub type Shape = Vec<Option<usize>>;
 
 /// Unique identifier for tensor data in the central store
 pub type DataId = usize;
@@ -83,8 +83,9 @@ pub struct TensorType {
     /// The number of dimensions in the tensor
     pub rank: Rank,
 
-    /// Static shape if known (populated during shape inference)
-    pub static_shape: Option<Vec<usize>>,
+    /// Static shape if known (populated during shape inference).
+    /// Each dimension is independently `Some(val)` or `None` (symbolic).
+    pub static_shape: Option<Vec<Option<usize>>>,
 }
 
 impl Default for TensorType {
@@ -98,12 +99,29 @@ impl Default for TensorType {
 }
 
 impl TensorType {
-    pub fn new(dtype: DType, rank: Rank, static_shape: Option<Vec<usize>>) -> Self {
+    pub fn new(dtype: DType, rank: Rank, static_shape: Option<Vec<Option<usize>>>) -> Self {
         Self {
             dtype,
             rank,
             static_shape,
         }
+    }
+
+    /// Create a TensorType with a fully-known static shape (all dims concrete).
+    pub fn new_known(dtype: DType, shape: Vec<usize>) -> Self {
+        let rank = shape.len();
+        Self {
+            dtype,
+            rank,
+            static_shape: Some(shape.into_iter().map(Some).collect()),
+        }
+    }
+
+    /// Returns the static shape only if ALL dimensions are known (no symbolic dims).
+    pub fn static_shape_known(&self) -> Option<Vec<usize>> {
+        self.static_shape
+            .as_ref()
+            .and_then(|dims| dims.iter().copied().collect::<Option<Vec<usize>>>())
     }
 }
 
@@ -149,10 +167,18 @@ impl ArgType {
         }
     }
 
-    /// Get the static shape if available
-    pub fn static_shape(&self) -> Option<&Vec<usize>> {
+    /// Get the static shape if available (per-dim, may contain `None` for symbolic dims)
+    pub fn static_shape(&self) -> Option<&Vec<Option<usize>>> {
         match self {
             ArgType::Tensor(t) => t.static_shape.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Get the static shape only if ALL dimensions are known (no symbolic dims)
+    pub fn static_shape_known(&self) -> Option<Vec<usize>> {
+        match self {
+            ArgType::Tensor(t) => t.static_shape_known(),
             _ => None,
         }
     }

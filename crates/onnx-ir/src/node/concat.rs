@@ -121,8 +121,7 @@ impl NodeProcessor for ConcatProcessor {
                     ArgType::Tensor(t) if t.rank == 1 => {
                         // Get tensor length from static shape or value
                         let len = t
-                            .static_shape
-                            .as_ref()
+                            .static_shape_known()
                             .map(|s| s[0])
                             .or_else(|| input.value().as_ref().map(|v| v.shape[0]))
                             .unwrap_or(1); // Default to 1 if unknown
@@ -177,7 +176,7 @@ impl NodeProcessor for ConcatProcessor {
                 node.outputs[0].ty = ArgType::Tensor(TensorType {
                     dtype: first_dtype,
                     rank: 1,
-                    static_shape: Some(vec![total_length]),
+                    static_shape: Some(vec![Some(total_length)]),
                 });
             }
             return Ok(());
@@ -232,7 +231,7 @@ impl NodeProcessor for ConcatProcessor {
                             .value()
                             .as_ref()
                             .map(|v| v.shape[0])
-                            .or_else(|| t.static_shape.as_ref().map(|s| s[0]))
+                            .or_else(|| t.static_shape_known().map(|s| s[0]))
                             .unwrap_or(1);
                         provisional_rank += contribution;
                     }
@@ -350,7 +349,7 @@ mod tests {
 
     fn create_test_node(axis: i64, input_rank: usize, num_inputs: usize) -> TestNodeBuilder {
         TestNodeBuilder::new(NodeType::Concat, "test_concat")
-            .input_tensors_f32::<Vec<usize>>("data", num_inputs, input_rank, None)
+            .input_tensors_f32("data", num_inputs, input_rank, None)
             .output_tensor_f32("output", input_rank, None)
             .attr_int("axis", axis)
     }
@@ -491,7 +490,7 @@ mod tests {
             ArgType::Tensor(t) => {
                 assert_eq!(t.rank, 1);
                 assert_eq!(t.dtype, DType::I64);
-                assert_eq!(t.static_shape, Some(vec![2])); // 2 scalar inputs
+                assert_eq!(t.static_shape, Some(vec![Some(2)])); // 2 scalar inputs
             }
             _ => panic!("Expected Tensor output, got {:?}", node.outputs[0].ty),
         }
@@ -547,7 +546,7 @@ mod tests {
             ArgType::Tensor(t) => {
                 assert_eq!(t.rank, 1);
                 assert_eq!(t.dtype, DType::I64);
-                assert_eq!(t.static_shape, Some(vec![4])); // 4 scalar inputs
+                assert_eq!(t.static_shape, Some(vec![Some(4)])); // 4 scalar inputs
             }
             _ => panic!("Expected Tensor output"),
         }

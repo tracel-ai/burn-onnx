@@ -115,7 +115,10 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 4);
-                assert_eq!(tensor.static_shape, Some(vec![1, 3, 224, 224]));
+                assert_eq!(
+                    tensor.static_shape,
+                    Some(vec![Some(1), Some(3), Some(224), Some(224)])
+                );
             }
             _ => panic!("Expected tensor output"),
         }
@@ -146,7 +149,7 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         if let ArgType::Tensor(tensor) = &node.outputs[0].ty {
-            assert_eq!(tensor.static_shape, Some(vec![10, 20]));
+            assert_eq!(tensor.static_shape, Some(vec![Some(10), Some(20)]));
         } else {
             panic!("Expected tensor output");
         }

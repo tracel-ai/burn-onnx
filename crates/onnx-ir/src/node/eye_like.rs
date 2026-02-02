@@ -159,7 +159,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, Some(vec![3, 3]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(3), Some(3)]));
             }
             _ => panic!("Expected tensor output"),
         }
@@ -220,7 +220,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::I32);
                 assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, Some(vec![3, 3]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(3), Some(3)]));
             }
             _ => panic!("Expected tensor output"),
         }

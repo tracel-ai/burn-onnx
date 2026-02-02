@@ -371,7 +371,7 @@ mod tests {
                     ty: ArgType::Tensor(TensorType {
                         dtype: DType::F32,
                         rank: 3,
-                        static_shape: Some(vec![0, 3, 4]),
+                        static_shape: Some(vec![Some(0), Some(3), Some(4)]),
                     }),
                     value_source: crate::ir::ValueSource::Dynamic,
                     value_store: None,
@@ -381,7 +381,7 @@ mod tests {
                     ty: ArgType::Tensor(TensorType {
                         dtype: DType::F32,
                         rank: 3,
-                        static_shape: Some(vec![0, 3, 4]),
+                        static_shape: Some(vec![Some(0), Some(3), Some(4)]),
                     }),
                     value_source: crate::ir::ValueSource::Dynamic,
                     value_store: None,
@@ -405,7 +405,7 @@ mod tests {
                 assert_eq!(t.rank, 3, "Rank should be preserved");
                 assert_eq!(
                     t.static_shape,
-                    Some(vec![0, 3, 4]),
+                    Some(vec![Some(0), Some(3), Some(4)]),
                     "Output shape should be [0, 3, 4]"
                 );
             }
@@ -417,7 +417,7 @@ mod tests {
     fn test_sum_processor_many_inputs() {
         let processor = SumProcessor;
         let num_inputs = 250;
-        let common_shape = vec![10, 5];
+        let common_shape: Vec<Option<usize>> = vec![Some(10), Some(5)];
 
         let inputs: Vec<Argument> = (0..num_inputs)
             .map(|i| Argument {
