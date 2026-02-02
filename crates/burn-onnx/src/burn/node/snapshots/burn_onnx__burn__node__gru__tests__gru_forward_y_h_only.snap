@@ -1,0 +1,18 @@
+---
+source: crates/burn-onnx/src/burn/node/gru.rs
+expression: code
+---
+pub fn forward(
+    &self,
+    input: Tensor<B, 3>,
+    W: Tensor<B, 3>,
+    R: Tensor<B, 3>,
+    B: Tensor<B, 2>,
+) -> Tensor<B, 3> {
+    let Y_h = {
+        let gru_output = self.gru1.forward(input.swap_dims(0, 1), None);
+        let batch_first_output = gru_output;
+        batch_first_output.clone().swap_dims(0, 1).unsqueeze_dims::<4>(&[1])
+    };
+    Y_h
+}

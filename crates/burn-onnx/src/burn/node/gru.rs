@@ -22,7 +22,7 @@
 
 use super::prelude::*;
 use burn_store::TensorSnapshot;
-use onnx_ir::gru::GruDirection;
+use onnx_ir::gru::{GruActivationFunction, GruDirection};
 
 /// Collect tensor snapshots for GRU burnpack serialization.
 ///
@@ -212,6 +212,18 @@ impl NodeCodegen for onnx_ir::gru::GruNode {
     }
 
     fn field(&self) -> Option<Field> {
+        if self.config.clip.is_some() {
+            panic!("GRU clip attribute is not supported. Burn's GRU module does not support cell state clipping.");
+        }
+        if self.config.gate_activation != GruActivationFunction::Sigmoid
+            || self.config.hidden_activation != GruActivationFunction::Tanh
+        {
+            panic!(
+                "Custom GRU activations are not supported. Burn's GRU uses fixed Sigmoid (gates) and Tanh (hidden). Got gate: {:?}, hidden: {:?}",
+                self.config.gate_activation, self.config.hidden_activation
+            );
+        }
+
         let name = Ident::new(&self.name, Span::call_site());
         let d_input = self.config.input_size.to_tokens();
         let d_hidden = self.config.hidden_size.to_tokens();
@@ -416,8 +428,8 @@ mod tests {
         let mut inputs = vec![input, w, r, b];
 
         if has_initial_h {
-            // sequence_lens (empty/optional) - use Scalar type to avoid test helper issues
-            inputs.push(Argument::new("", ArgType::Scalar(DType::I64)));
+            // sequence_lens (unused optional placeholder)
+            inputs.push(Argument::new("sequence_lens", ArgType::Scalar(DType::I64)));
             // initial_h
             inputs.push(Argument::new(
                 "initial_h",
@@ -479,6 +491,30 @@ mod tests {
     fn test_gru_field_reverse() {
         let node = create_gru_node("gru1", GruDirection::Reverse, false, false, 2);
         let code = codegen_field_init(&node);
+        assert_snapshot!(code);
+    }
+
+    #[test]
+    fn test_gru_forward_y_h_only() {
+        // Only Y_h output (no Y) - tests the (None, Some(y_h)) branch
+        let mut node = create_gru_node("gru1", GruDirection::Forward, false, false, 2);
+        // Remove the first output (Y), keep only Y_h
+        node.outputs.remove(0);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code);
+    }
+
+    #[test]
+    fn test_gru_forward_batch_first() {
+        let node = create_gru_node("gru1", GruDirection::Forward, true, false, 2);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code);
+    }
+
+    #[test]
+    fn test_gru_forward_with_initial_h() {
+        let node = create_gru_node("gru1", GruDirection::Forward, false, true, 2);
+        let code = codegen_forward_default(&node);
         assert_snapshot!(code);
     }
 }
