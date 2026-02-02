@@ -79,6 +79,8 @@ examples/
 - Use `quote!` macro for code generation
 - Add `insta` snapshot tests for ALL code generation branches - each config option, each input type
   variant, optional vs required inputs should have test coverage
+- **Inline snapshots only** - use `assert_snapshot!(code, @r"...")` with embedded expected output,
+  not external `.snap` files
 
 ### Testing
 

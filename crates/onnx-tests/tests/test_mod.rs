@@ -109,6 +109,7 @@ pub mod reshape;
 pub mod resize;
 pub mod round;
 pub mod scan;
+pub mod scatter_nd;
 pub mod shape;
 pub mod sigmoid;
 pub mod sign;

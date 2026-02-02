@@ -116,6 +116,7 @@ pub mod relu;
 pub mod reshape;
 pub mod resize;
 pub mod scan_node;
+pub mod scatter_nd;
 pub mod shape;
 pub mod size;
 pub mod slice;

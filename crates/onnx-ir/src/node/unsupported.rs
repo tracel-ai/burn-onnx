@@ -74,7 +74,6 @@ define_placeholder_node! {
     RotaryEmbeddingNode,
     ScatterNode,
     ScatterElementsNode,
-    ScatterNDNode,
     SequenceAtNode,
     SequenceConstructNode,
     SequenceEmptyNode,
@@ -150,11 +149,6 @@ impl NodeProcessor for UnsupportedProcessor {
                 outputs: builder.outputs,
             }),
             NodeType::ScatterElements => Node::ScatterElements(ScatterElementsNode {
-                name: builder.name,
-                inputs: builder.inputs,
-                outputs: builder.outputs,
-            }),
-            NodeType::ScatterND => Node::ScatterND(ScatterNDNode {
                 name: builder.name,
                 inputs: builder.inputs,
                 outputs: builder.outputs,

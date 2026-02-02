@@ -388,6 +388,13 @@ fn main() {
         .input("tests/loop/loop_multi_deps.onnx")
         .input("tests/loop/loop_nested.onnx")
         .input("tests/loop/loop_scan_outputs.onnx")
+        // ScatterND operator tests
+        .input("tests/scatter_nd/scatter_nd.onnx")
+        .input("tests/scatter_nd/scatter_nd_2d.onnx")
+        .input("tests/scatter_nd/scatter_nd_add.onnx")
+        .input("tests/scatter_nd/scatter_nd_mul.onnx")
+        .input("tests/scatter_nd/scatter_nd_max.onnx")
+        .input("tests/scatter_nd/scatter_nd_min.onnx")
         // Scan operator tests
         .input("tests/scan/scan_cumsum.onnx")
         .input("tests/scan/scan_reverse.onnx")
