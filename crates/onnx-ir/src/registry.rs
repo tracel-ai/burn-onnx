@@ -192,6 +192,10 @@ impl ProcessorRegistry {
             Box::new(crate::node::sigmoid::SigmoidProcessor),
         );
         registry.register(NodeType::Gelu, Box::new(crate::node::gelu::GeluProcessor));
+        registry.register(
+            NodeType::Softplus,
+            Box::new(crate::node::softplus::SoftplusProcessor),
+        );
 
         // Logical operations
         registry.register(NodeType::Not, Box::new(crate::node::not::NotProcessor));

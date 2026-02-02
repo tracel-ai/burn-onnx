@@ -186,7 +186,7 @@ functionality.
 | [Slice][167]                     | ✅             | ✅           |
 | [Softmax][168]                   | ✅             | ✅           |
 | [SoftmaxCrossEntropyLoss][169]   | ❌             | ❌           |
-| [Softplus][170]                  | ❌             | ✅           |
+| [Softplus][170]                  | ✅             | ✅           |
 | [Softsign][171]                  | ❌             | ❌           |
 | [SpaceToDepth][172]              | ✅             | ✅           |
 | [Split][173]                     | ✅             | ✅           |
