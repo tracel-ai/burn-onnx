@@ -25,7 +25,7 @@ broken_intra_doc_links = "deny"
 invalid_html_tags = "deny"
 
 [workspace.dependencies]
-bytemuck = "1.24.0"
+bytemuck = "1.25.0"
 derive-new = { version = "0.7.0", default-features = false }
 float-cmp = "0.10.0"
 insta = "1.45.0"
