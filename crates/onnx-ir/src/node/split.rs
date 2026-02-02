@@ -777,6 +777,18 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn test_split_single_output_is_noop() {
+        let node = create_test_node(3, 1, Some(vec![2, 3, 4]), None, None).build();
+        assert!(SplitProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_split_multiple_outputs_is_not_noop() {
+        let node = create_test_node(3, 2, Some(vec![2, 3, 4]), None, None).build();
+        assert!(!SplitProcessor.is_noop(&node));
+    }
+
     // TODO: Missing test for split_sizes that don't sum to dimension size.
     // E.g., shape=[10, 20], axis=0, split=[3, 4] (sum=7) should fail as it doesn't match dim size 10.
 

@@ -580,4 +580,16 @@ mod tests {
             _ => panic!("Expected Shape output, got {:?}", node.outputs[0].ty),
         }
     }
+
+    #[test]
+    fn test_concat_single_input_is_noop() {
+        let node = create_test_node(0, 3, 1).build();
+        assert!(ConcatProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_concat_multiple_inputs_is_not_noop() {
+        let node = create_test_node(0, 3, 2).build();
+        assert!(!ConcatProcessor.is_noop(&node));
+    }
 }

@@ -624,6 +624,36 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_expand_same_static_shape_is_noop() {
+        let node = TestNodeBuilder::new(NodeType::Expand, "test")
+            .input_tensor_f32("input", 3, Some(vec![2, 3, 4]))
+            .input_tensor_i64("shape", 1, Some(vec![3]))
+            .output_tensor_f32("output", 3, Some(vec![2, 3, 4]))
+            .build();
+        assert!(ExpandProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_expand_different_static_shape_is_not_noop() {
+        let node = TestNodeBuilder::new(NodeType::Expand, "test")
+            .input_tensor_f32("input", 3, Some(vec![1, 3, 4]))
+            .input_tensor_i64("shape", 1, Some(vec![3]))
+            .output_tensor_f32("output", 3, Some(vec![2, 3, 4]))
+            .build();
+        assert!(!ExpandProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_expand_no_static_shape_is_not_noop() {
+        let node = TestNodeBuilder::new(NodeType::Expand, "test")
+            .input_tensor_f32("input", 3, None)
+            .input_tensor_i64("shape", 1, Some(vec![3]))
+            .output_tensor_f32("output", 3, None)
+            .build();
+        assert!(!ExpandProcessor.is_noop(&node));
+    }
+
     // TODO: Add test for invalid shape values - Test negative values other than -1 (e.g., -2, -3) should return error - Missing constraint validation test
     // TODO: Add test for shape with value -1 - Per spec, -1 means copy from input dimension - Missing edge case test
     // TODO: Add test for incompatible broadcasting - Test case where input shape cannot be broadcast to target shape - Missing broadcast validation test

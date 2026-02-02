@@ -231,6 +231,46 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn test_flatten_rank2_axis1_is_noop() {
+        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 2, None)
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 1)
+            .build();
+        assert!(FlattenProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_flatten_rank2_axis_neg1_is_noop() {
+        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 2, None)
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", -1)
+            .build();
+        assert!(FlattenProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_flatten_rank2_axis0_is_not_noop() {
+        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 2, None)
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 0)
+            .build();
+        assert!(!FlattenProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_flatten_rank3_axis1_is_not_noop() {
+        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 3, None)
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 1)
+            .build();
+        assert!(!FlattenProcessor.is_noop(&node));
+    }
+
     // TODO: Add test for axis out of range - Test axis >= rank should return error - Missing constraint validation test
     // TODO: Add test for negative axis with opset < 11 - Should fail per spec, negative axis added in opset 11 - Missing opset validation test
     // TODO: Add test for axis=0 edge case - Flattens entire tensor to 1D then reshapes to (1, N) - Missing edge case test
