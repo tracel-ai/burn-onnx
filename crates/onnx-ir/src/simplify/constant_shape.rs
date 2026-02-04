@@ -208,8 +208,8 @@ fn extract_constant_shape_dim(
         return None;
     }
 
-    // The Shape node's input must have a known static shape
-    let static_shape = shape_node.inputs[0].ty.static_shape()?;
+    // The Shape node's input must have a fully known static shape (all dims concrete)
+    let static_shape = shape_node.inputs[0].ty.static_shape_known()?;
 
     // Account for Shape's start/end attributes (opset 15+)
     let rank = static_shape.len();
@@ -241,7 +241,7 @@ fn extract_constant_shape_dim(
 
 /// Extract the full static shape from a Shape node, accounting for start/end attributes.
 fn extract_full_static_shape(shape_node: &RawNode) -> Option<Vec<i64>> {
-    let static_shape = shape_node.inputs[0].ty.static_shape()?;
+    let static_shape = shape_node.inputs[0].ty.static_shape_known()?;
     let rank = static_shape.len();
 
     let mut start = shape_node
@@ -386,7 +386,7 @@ mod tests {
             ty: ArgType::Tensor(TensorType {
                 dtype: DType::F32,
                 rank: shape.len(),
-                static_shape: Some(shape),
+                static_shape: Some(shape.into_iter().map(Some).collect()),
             }),
             value_source: ValueSource::Dynamic,
             value_store: None,

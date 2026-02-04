@@ -706,7 +706,7 @@ mod tests {
 
     #[test]
     fn test_reshape_same_static_shape_is_noop() {
-        let shape = vec![2, 3, 4];
+        let shape: Vec<Option<usize>> = vec![Some(2), Some(3), Some(4)];
         let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape")
             .input_tensor_f32("data", 3, None)
             .input_tensor_i64_data("shape", vec![2, 3, 4], vec![3])
@@ -734,10 +734,10 @@ mod tests {
             .build();
 
         if let ArgType::Tensor(ref mut t) = node.inputs[0].ty {
-            t.static_shape = Some(vec![2, 3, 4]);
+            t.static_shape = Some(vec![Some(2), Some(3), Some(4)]);
         }
         if let ArgType::Tensor(ref mut t) = node.outputs[0].ty {
-            t.static_shape = Some(vec![6, 4]);
+            t.static_shape = Some(vec![Some(6), Some(4)]);
         }
 
         let processor = ReshapeProcessor;
