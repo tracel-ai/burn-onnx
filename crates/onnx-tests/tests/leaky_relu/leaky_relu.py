@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: leaky_relu.onnx
 
@@ -18,12 +26,11 @@ class Model(nn.Module):
 
 
 def main():
-
     # Set seed for reproducibility
     torch.manual_seed(42)
 
     torch.set_printoptions(precision=8)
-                           
+
     # Export to onnx
     model = Model()
     model.eval()
@@ -31,8 +38,14 @@ def main():
 
     file_name = "leaky_relu.onnx"
     test_input = torch.randn(2, 3, device=device)
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 
@@ -45,5 +58,5 @@ def main():
     print("Test output: {}".format(output))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

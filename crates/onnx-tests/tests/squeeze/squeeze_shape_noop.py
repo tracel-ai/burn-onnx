@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # Used to generate model: squeeze_shape_noop.onnx
 # Tests Burn's squeeze no-op behavior: Shape -> Squeeze(axis=0) -> Shape unchanged
@@ -12,6 +19,7 @@ from onnx.reference import ReferenceEvaluator
 
 # ONNX opset version to use for model generation
 OPSET_VERSION = 16
+
 
 def main():
     # Create an ONNX model: Shape -> Squeeze(axis=0)
@@ -27,8 +35,12 @@ def main():
     # Squeeze axis 0 on the shape output
     # In standard ONNX, this would fail since [6, 7] has axis 0 with size 6, not 1
     # But Burn treats this as a no-op, keeping Shape([6, 7]) unchanged
-    squeeze_axes = helper.make_tensor("squeeze_axes", TensorProto.INT64, dims=[1], vals=[0])
-    squeeze_node = helper.make_node("Squeeze", ["shape_output", "squeeze_axes"], ["squeeze_output"])
+    squeeze_axes = helper.make_tensor(
+        "squeeze_axes", TensorProto.INT64, dims=[1], vals=[0]
+    )
+    squeeze_node = helper.make_node(
+        "Squeeze", ["shape_output", "squeeze_axes"], ["squeeze_output"]
+    )
 
     # Output - Burn will keep this as Shape([6, 7]) since squeeze is a no-op
     output = helper.make_tensor_value_info("squeeze_output", TensorProto.INT64, [2])
@@ -39,13 +51,12 @@ def main():
         "SqueezeShapeNoOpTest",
         [input_tensor],
         [output],
-        [squeeze_axes]
+        [squeeze_axes],
     )
 
     # Create the model
     model = helper.make_model(
-        graph,
-        opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
     )
 
     # Note: This model might not pass strict ONNX validation in some implementations
@@ -56,7 +67,7 @@ def main():
     except Exception as e:
         print(f"ONNX validation note: {e}")
         print("This is expected - Burn handles this case gracefully")
-    
+
     # Save the model for Burn to handle
     onnx_name = "squeeze_shape_noop.onnx"
     onnx.save(model, onnx_name)
@@ -73,7 +84,7 @@ def main():
     # This may or may not work depending on the ONNX implementation
     try:
         session = ReferenceEvaluator(model, verbose=0)
-        output, = session.run(None, {"input": test_input})
+        (output,) = session.run(None, {"input": test_input})
         print(f"\nReferenceEvaluator output: {repr(output)}")
         print(f"Output shape: {output.shape}")
         print(f"Expected value: [6, 7], Actual: {output}")
@@ -85,6 +96,7 @@ def main():
     print()
     print("Note: This tests Burn's squeeze no-op handling for Shape types.")
     print("When squeezing a Shape with multiple elements, Burn keeps it unchanged.")
+
 
 if __name__ == "__main__":
     main()

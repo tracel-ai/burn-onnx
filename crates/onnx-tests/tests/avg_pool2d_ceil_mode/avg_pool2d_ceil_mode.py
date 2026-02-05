@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: avg_pool2d_ceil_mode.onnx
 # Tests ceil_mode=True for AvgPool2d which produces larger output when input doesn't divide evenly
@@ -19,7 +27,7 @@ class Model(nn.Module):
             stride=(2, 2),
             padding=(0, 0),
             ceil_mode=True,
-            count_include_pad=False
+            count_include_pad=False,
         )
 
     def forward(self, x):
@@ -41,17 +49,30 @@ def main():
 
     file_name = "avg_pool2d_ceil_mode.onnx"
     # 6x6 input with values 0-35 - doesn't divide evenly by stride 2 with kernel 3
-    test_input = torch.tensor([[[[
-        0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
-        [6.0, 7.0, 8.0, 9.0, 10.0, 11.0],
-        [12.0, 13.0, 14.0, 15.0, 16.0, 17.0],
-        [18.0, 19.0, 20.0, 21.0, 22.0, 23.0],
-        [24.0, 25.0, 26.0, 27.0, 28.0, 29.0],
-        [30.0, 31.0, 32.0, 33.0, 34.0, 35.0]
-    ]]], device=device)
+    test_input = torch.tensor(
+        [
+            [
+                [
+                    [0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                    [6.0, 7.0, 8.0, 9.0, 10.0, 11.0],
+                    [12.0, 13.0, 14.0, 15.0, 16.0, 17.0],
+                    [18.0, 19.0, 20.0, 21.0, 22.0, 23.0],
+                    [24.0, 25.0, 26.0, 27.0, 28.0, 29.0],
+                    [30.0, 31.0, 32.0, 33.0, 34.0, 35.0],
+                ]
+            ]
+        ],
+        device=device,
+    )
 
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=19)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=19,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 
@@ -63,5 +84,5 @@ def main():
     print("Test output: {}".format(output))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

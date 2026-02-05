@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/pad/pad_reflect.onnx
 
@@ -26,9 +33,7 @@ def main() -> None:
 
     # Pads: [top, left, bottom, right] for 2D = [1, 1, 1, 1]
     # ONNX format: [begin_dim0, begin_dim1, ..., end_dim0, end_dim1, ...]
-    pads = numpy_helper.from_array(
-        np.array([1, 1, 1, 1]).astype(np.int64), name="pads"
-    )
+    pads = numpy_helper.from_array(np.array([1, 1, 1, 1]).astype(np.int64), name="pads")
 
     initializers = [pads]
 
@@ -65,11 +70,9 @@ def test_reflect_padding(model) -> None:
     # [[1, 2, 3],
     #  [4, 5, 6],
     #  [7, 8, 9]]
-    input_tensor = np.array([
-        [1.0, 2.0, 3.0],
-        [4.0, 5.0, 6.0],
-        [7.0, 8.0, 9.0]
-    ], dtype=np.float32)
+    input_tensor = np.array(
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], dtype=np.float32
+    )
 
     result = sess.run(None, {"input_tensor": input_tensor})[0]
 
@@ -79,13 +82,16 @@ def test_reflect_padding(model) -> None:
     # Bottom row: reflect row 1 (index 1 from end) -> [4, 5, 6]
     # Left col: reflect col 1 -> [2, 5, 8]
     # Right col: reflect col 1 from end -> [2, 5, 8]
-    expected = np.array([
-        [5.0, 4.0, 5.0, 6.0, 5.0],
-        [2.0, 1.0, 2.0, 3.0, 2.0],
-        [5.0, 4.0, 5.0, 6.0, 5.0],
-        [8.0, 7.0, 8.0, 9.0, 8.0],
-        [5.0, 4.0, 5.0, 6.0, 5.0],
-    ], dtype=np.float32)
+    expected = np.array(
+        [
+            [5.0, 4.0, 5.0, 6.0, 5.0],
+            [2.0, 1.0, 2.0, 3.0, 2.0],
+            [5.0, 4.0, 5.0, 6.0, 5.0],
+            [8.0, 7.0, 8.0, 9.0, 8.0],
+            [5.0, 4.0, 5.0, 6.0, 5.0],
+        ],
+        dtype=np.float32,
+    )
 
     if not np.allclose(result, expected):
         print(f"Expected:\n{expected}")

@@ -12,7 +12,11 @@ impl NodeCodegen for onnx_ir::node::instance_norm::InstanceNormalizationNode {
 
     fn field(&self) -> Option<Field> {
         let name = Ident::new(&self.name, Span::call_site());
-        let num_features = self.config.num_features.to_tokens();
+        let scale_shape = self.inputs[1]
+            .ty
+            .static_shape_known()
+            .expect("InstanceNorm: scale tensor shape must be known at codegen time");
+        let num_features = scale_shape[0].to_tokens();
         let epsilon = self.config.epsilon;
 
         Some(Field::new(
@@ -78,10 +82,12 @@ mod tests {
     };
 
     fn create_instance_norm_node(name: &str) -> InstanceNormalizationNode {
-        let config = InstanceNormConfig::new(32, 1e-5);
+        let config = InstanceNormConfig::new(1e-5);
 
         InstanceNormalizationNodeBuilder::new(name)
             .input_tensor("input", 4, DType::F32)
+            .input_static_tensor_shape("scale", vec![32], DType::F32)
+            .input_static_tensor_shape("bias", vec![32], DType::F32)
             .output_tensor("output", 4, DType::F32)
             .config(config)
             .build()

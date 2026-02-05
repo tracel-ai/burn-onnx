@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/gather/gather_scalar.onnx
 
@@ -13,38 +19,40 @@ def build_model():
     return onnx.helper.make_model(
         ir_version=8,
         opset_imports=[onnx.helper.make_operatorsetid("", 16)],
-        graph=onnx.helper.make_graph(name="main_graph", nodes=[
-            onnx.helper.make_node(
-                "Gather",
-                inputs=["input1", "input2"],
-                outputs=["output1"],
-                name="/Gather",
-                axis=0
-            ),
-        ],
-        inputs=[
-            onnx.helper.make_value_info(
-                name="input1",
-                type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.FLOAT, shape=[2, 3]
+        graph=onnx.helper.make_graph(
+            name="main_graph",
+            nodes=[
+                onnx.helper.make_node(
+                    "Gather",
+                    inputs=["input1", "input2"],
+                    outputs=["output1"],
+                    name="/Gather",
+                    axis=0,
                 ),
-            ),
-            onnx.helper.make_value_info(
-                name="input2",
-                type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.INT64, shape=[]
+            ],
+            inputs=[
+                onnx.helper.make_value_info(
+                    name="input1",
+                    type_proto=onnx.helper.make_tensor_type_proto(
+                        elem_type=onnx.TensorProto.FLOAT, shape=[2, 3]
+                    ),
                 ),
-            ),
-
-        ],
-        outputs=[
-            onnx.helper.make_value_info(
-                name="output1",
-                type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.FLOAT, shape=[3]
+                onnx.helper.make_value_info(
+                    name="input2",
+                    type_proto=onnx.helper.make_tensor_type_proto(
+                        elem_type=onnx.TensorProto.INT64, shape=[]
+                    ),
                 ),
-            )
-        ]),
+            ],
+            outputs=[
+                onnx.helper.make_value_info(
+                    name="output1",
+                    type_proto=onnx.helper.make_tensor_type_proto(
+                        elem_type=onnx.TensorProto.FLOAT, shape=[3]
+                    ),
+                )
+            ],
+        ),
     )
 
 
@@ -58,5 +66,5 @@ def main():
     onnx.save(onnx_model, file_name)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

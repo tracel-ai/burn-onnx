@@ -82,6 +82,12 @@ impl_node_codegen_dispatch! {
 
     // Unary ops
     Abs,
+    Acos,
+    Acosh,
+    Asin,
+    Asinh,
+    Atan,
+    Atanh,
     Ceil,
     Cos,
     Cosh,
@@ -105,12 +111,14 @@ impl_node_codegen_dispatch! {
     // Activation ops
     Relu,
     Gelu,
+    Mish,
     LeakyRelu,
     HardSigmoid,
     HardSwish,
     Softmax,
     LogSoftmax,
     PRelu,
+    Softplus,
 
     // Shape ops
     Reshape,
@@ -127,6 +135,7 @@ impl_node_codegen_dispatch! {
     Slice,
     Gather,
     GatherElements,
+    ScatterND,
     Tile,
     Expand,
     Pad,
@@ -215,6 +224,7 @@ impl_node_codegen_dispatch! {
     // Recurrent neural network ops
     Lstm,
     Rnn,
+    Gru,
 
     // Reduce ops (handled by ReduceNode in onnx-ir)
     ReduceMax,

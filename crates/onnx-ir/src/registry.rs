@@ -24,6 +24,7 @@ pub trait ProcessorMethods: Send + Sync {
         opset: usize,
         output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError>;
+    fn is_noop(&self, node: &RawNode) -> bool;
     fn build_node(&self, builder: RawNode, opset: usize) -> Node;
 }
 
@@ -54,6 +55,10 @@ impl<T: crate::processor::NodeProcessor> ProcessorMethods for T {
         crate::processor::NodeProcessor::infer_types(self, node, opset, output_preferences)
     }
 
+    fn is_noop(&self, node: &RawNode) -> bool {
+        crate::processor::NodeProcessor::is_noop(self, node)
+    }
+
     fn build_node(&self, builder: RawNode, opset: usize) -> Node {
         crate::processor::NodeProcessor::build_node(self, builder, opset)
     }
@@ -78,6 +83,11 @@ impl ProcessorRegistry {
     /// Register a processor for a specific node type
     pub fn register(&mut self, node_type: NodeType, processor: Box<dyn ProcessorMethods>) {
         self.processors.insert(node_type, processor);
+    }
+
+    /// Check if a processor is registered for the given node type
+    pub fn contains(&self, node_type: &NodeType) -> bool {
+        self.processors.contains_key(node_type)
     }
 
     /// Get the processor for a node type, or the default processor if not found
@@ -161,29 +171,20 @@ impl ProcessorRegistry {
         registry.register(NodeType::Sinh, Box::new(crate::node::sinh::SinhProcessor));
         registry.register(NodeType::Cosh, Box::new(crate::node::cosh::CoshProcessor));
         registry.register(NodeType::Tanh, Box::new(crate::node::tanh::TanhProcessor));
-        registry.register(
-            NodeType::Asin,
-            Box::new(crate::node::elementwise::ElementwiseUnaryProcessor),
-        );
-        registry.register(
-            NodeType::Acos,
-            Box::new(crate::node::elementwise::ElementwiseUnaryProcessor),
-        );
-        registry.register(
-            NodeType::Atan,
-            Box::new(crate::node::elementwise::ElementwiseUnaryProcessor),
-        );
+        registry.register(NodeType::Asin, Box::new(crate::node::asin::AsinProcessor));
+        registry.register(NodeType::Acos, Box::new(crate::node::acos::AcosProcessor));
+        registry.register(NodeType::Atan, Box::new(crate::node::atan::AtanProcessor));
         registry.register(
             NodeType::Asinh,
-            Box::new(crate::node::elementwise::ElementwiseUnaryProcessor),
+            Box::new(crate::node::asinh::AsinhProcessor),
         );
         registry.register(
             NodeType::Acosh,
-            Box::new(crate::node::elementwise::ElementwiseUnaryProcessor),
+            Box::new(crate::node::acosh::AcoshProcessor),
         );
         registry.register(
             NodeType::Atanh,
-            Box::new(crate::node::elementwise::ElementwiseUnaryProcessor),
+            Box::new(crate::node::atanh::AtanhProcessor),
         );
 
         // Special functions
@@ -196,6 +197,11 @@ impl ProcessorRegistry {
             Box::new(crate::node::sigmoid::SigmoidProcessor),
         );
         registry.register(NodeType::Gelu, Box::new(crate::node::gelu::GeluProcessor));
+        registry.register(NodeType::Mish, Box::new(crate::node::mish::MishProcessor));
+        registry.register(
+            NodeType::Softplus,
+            Box::new(crate::node::softplus::SoftplusProcessor),
+        );
 
         // Logical operations
         registry.register(NodeType::Not, Box::new(crate::node::not::NotProcessor));
@@ -249,7 +255,7 @@ impl ProcessorRegistry {
         );
         registry.register(
             NodeType::ScatterND,
-            Box::new(crate::node::unsupported::UnsupportedProcessor),
+            Box::new(crate::node::scatter_nd::ScatterNDProcessor),
         );
         registry.register(
             NodeType::Unique,
@@ -607,6 +613,7 @@ impl ProcessorRegistry {
         // Recurrent neural network operations
         registry.register(NodeType::Lstm, Box::new(crate::node::lstm::LstmProcessor));
         registry.register(NodeType::Rnn, Box::new(crate::node::rnn::RnnProcessor));
+        registry.register(NodeType::Gru, Box::new(crate::node::gru::GruProcessor));
 
         registry
     }

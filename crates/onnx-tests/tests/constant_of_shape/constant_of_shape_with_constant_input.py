@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: constant_of_shape_with_constant_input.onnx
 
@@ -21,10 +28,10 @@ def build_model():
             "shape_value",
             data_type=onnx.TensorProto.INT64,
             dims=[3],  # 1D tensor with 3 elements
-            vals=[2, 3, 4]  # The shape values
-        )
+            vals=[2, 3, 4],  # The shape values
+        ),
     )
-    
+
     # Create ConstantOfShape that uses the constant as input
     constant_of_shape = onnx.helper.make_node(
         "ConstantOfShape",
@@ -35,10 +42,10 @@ def build_model():
             "value",
             data_type=onnx.TensorProto.INT64,
             dims=[1],
-            vals=[1]  # Fill value
-        )
+            vals=[1],  # Fill value
+        ),
     )
-    
+
     # Build the graph
     graph = onnx.helper.make_graph(
         name="main_graph",
@@ -49,21 +56,21 @@ def build_model():
                 name="output1",
                 type_proto=onnx.helper.make_tensor_type_proto(
                     elem_type=onnx.TensorProto.INT64,
-                    shape=[2, 3, 4]  # Expected output shape
+                    shape=[2, 3, 4],  # Expected output shape
                 ),
             )
         ],
         initializer=[],
-        value_info=[]
+        value_info=[],
     )
-    
+
     # Create the model
     model = onnx.helper.make_model(
         graph=graph,
         ir_version=8,
         opset_imports=[onnx.helper.make_operatorsetid("", 16)],
     )
-    
+
     return model
 
 

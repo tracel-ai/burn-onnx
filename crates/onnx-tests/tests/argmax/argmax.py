@@ -1,9 +1,18 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/argmax/argmax.onnx
 
 import torch
 import torch.nn as nn
+
 
 class Model(nn.Module):
     def __init__(self, argmax_dim: int = 0):
@@ -15,17 +24,23 @@ class Model(nn.Module):
         y = torch.argmax(input=x, dim=self._argmax_dim, keepdim=True)
         return y
 
-def main():
 
+def main():
     # Export to onnx
     model = Model(1)
     model.eval()
     device = torch.device("cpu")
     onnx_name = "argmax.onnx"
     dummy_input = torch.randn((3, 4), device=device)
-    torch.onnx.export(model, dummy_input, onnx_name,
-                      verbose=False, opset_version=16)
-    
+    torch.onnx.export(
+        model,
+        dummy_input,
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
+
     print("Finished exporting model to {}".format(onnx_name))
 
     # Output some test data for use in the test
@@ -36,6 +51,5 @@ def main():
     print("Test output data shape: {}".format(output.shape))
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

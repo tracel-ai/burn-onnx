@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate models: depth_to_space_*.onnx
 
@@ -11,10 +18,10 @@ from onnx.reference import ReferenceEvaluator
 
 def build_model(mode):
     # Define the graph inputs and outputs
-    input = onnx.helper.make_tensor_value_info(
-        'input', TensorProto.FLOAT, [2, 4, 2, 3])
+    input = onnx.helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 4, 2, 3])
     output = onnx.helper.make_tensor_value_info(
-        'output', TensorProto.FLOAT, [2, 1, 4, 6])
+        "output", TensorProto.FLOAT, [2, 1, 4, 6]
+    )
 
     # Create the DepthToSpace node
     depth_to_space = onnx.helper.make_node(
@@ -29,7 +36,7 @@ def build_model(mode):
     # Create the graph
     graph = onnx.helper.make_graph(
         [depth_to_space],
-        f'DepthToSpace{mode}Model',
+        f"DepthToSpace{mode}Model",
         [input],
         [output],
     )
@@ -38,7 +45,7 @@ def build_model(mode):
     model = onnx.helper.make_model(
         opset_imports=[onnx.helper.make_operatorsetid("", 16)],
         graph=graph,
-        producer_name='ONNX_Generator',
+        producer_name="ONNX_Generator",
     )
 
     return model
@@ -61,7 +68,7 @@ def export_onnx_model(mode):
     print(f"Test input data:\n{repr(test_input)}")
     print(f"Test input data shape: {test_input.shape}")
     session = ReferenceEvaluator(file_name, verbose=1)
-    test_output, = session.run(None, {"input": test_input})
+    (test_output,) = session.run(None, {"input": test_input})
     print(f"Test output:\n{repr(test_output)}")
     print(f"Test output shape: {test_output.shape}")
     print("\n\n")
@@ -73,5 +80,5 @@ if __name__ == "__main__":
     np.set_printoptions(precision=8)
 
     # Export models for DCR and CRD modes
-    export_onnx_model('DCR')
-    export_onnx_model('CRD')
+    export_onnx_model("DCR")
+    export_onnx_model("CRD")

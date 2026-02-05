@@ -382,7 +382,7 @@ mod tests {
             shape: ReshapeInput::Static(vec![]),
         };
         let node = ReshapeNodeBuilder::new("reshape1")
-            .input_shape("shape_in")
+            .input_shape("shape_in", 1)
             .output_scalar("dim", DType::I64)
             .config(config)
             .build();
@@ -401,7 +401,7 @@ mod tests {
             shape: ReshapeInput::Static(vec![]),
         };
         let node = ReshapeNodeBuilder::new("reshape1")
-            .input_shape("shape_data")
+            .input_shape("shape_data", 1)
             .output_scalar("size", DType::I32)
             .config(config)
             .build();
@@ -421,13 +421,13 @@ mod tests {
             shape: ReshapeInput::Static(vec![]),
         };
         let node = ReshapeNodeBuilder::new("reshape1")
-            .input_shape("input_shape")
-            .output_shape("output_shape")
+            .input_shape("input_shape", 3)
+            .output_shape("output_shape", 3)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input_shape: [i64; 1]) -> [i64; 1] {
+        pub fn forward(&self, input_shape: [i64; 3]) -> [i64; 3] {
             let output_shape = input_shape;
             output_shape
         }
@@ -441,14 +441,19 @@ mod tests {
             shape: ReshapeInput::Static(vec![]),
         };
         let node = ReshapeNodeBuilder::new("reshape1")
-            .input_shape("small_shape")
-            .output_shape("large_shape")
+            .input_shape("small_shape", 2)
+            .output_shape("large_shape", 4)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, small_shape: [i64; 1]) -> [i64; 1] {
-            let large_shape = small_shape;
+        pub fn forward(&self, small_shape: [i64; 2]) -> [i64; 4] {
+            let large_shape: [i64; 4usize] = {
+                let mut result = [0i64; 4usize];
+                let copy_len = 2usize.min(4usize);
+                result[..copy_len].copy_from_slice(&small_shape[..copy_len]);
+                result
+            };
             large_shape
         }
         ");
@@ -460,14 +465,19 @@ mod tests {
             shape: ReshapeInput::Static(vec![]),
         };
         let node = ReshapeNodeBuilder::new("reshape1")
-            .input_shape("big_shape")
-            .output_shape("tiny_shape")
+            .input_shape("big_shape", 4)
+            .output_shape("tiny_shape", 2)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, big_shape: [i64; 1]) -> [i64; 1] {
-            let tiny_shape = big_shape;
+        pub fn forward(&self, big_shape: [i64; 4]) -> [i64; 2] {
+            let tiny_shape: [i64; 2usize] = {
+                let mut result = [0i64; 2usize];
+                let copy_len = 4usize.min(2usize);
+                result[..copy_len].copy_from_slice(&big_shape[..copy_len]);
+                result
+            };
             tiny_shape
         }
         ");
@@ -480,15 +490,15 @@ mod tests {
             shape: ReshapeInput::Static(vec![3]),
         };
         let node = ReshapeNodeBuilder::new("reshape1")
-            .input_shape("dims")
+            .input_shape("dims", 3)
             .output_tensor("tensor_dims", 1, DType::I64)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dims: [i64; 1]) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, dims: [i64; 3]) -> Tensor<B, 1, Int> {
             let tensor_dims = {
-                let shape_array = dims as [i64; 1usize];
+                let shape_array = dims as [i64; 3usize];
                 Tensor::<
                     B,
                     1,
@@ -516,13 +526,13 @@ mod tests {
         };
         let node = ReshapeNodeBuilder::new("reshape1")
             .input_tensor("data", 3, DType::F32)
-            .input_shape("target_shape")
+            .input_shape("target_shape", 2)
             .output_tensor("reshaped", 2, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 3>, target_shape: [i64; 1]) -> Tensor<B, 2> {
+        pub fn forward(&self, data: Tensor<B, 3>, target_shape: [i64; 2]) -> Tensor<B, 2> {
             let reshaped = data.reshape(target_shape);
             reshaped
         }

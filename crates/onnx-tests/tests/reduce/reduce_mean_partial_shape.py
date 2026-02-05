@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # Regression test for partial static_shape in ReduceMean
 # used to generate model: onnx-tests/tests/reduce/reduce_mean_partial_shape.onnx
@@ -39,12 +47,13 @@ def main():
         onnx_name,
         verbose=False,
         opset_version=16,
-        input_names=['input'],
-        output_names=['output'],
+        external_data=False,
+        input_names=["input"],
+        output_names=["output"],
         dynamic_axes={
-            'input': {0: 'batch', 1: 'seq'},  # Only last dim is static
-            'output': {0: 'batch', 1: 'seq'}
-        }
+            "input": {0: "batch", 1: "seq"},  # Only last dim is static
+            "output": {0: "batch", 1: "seq"},
+        },
     )
 
     print(f"Finished exporting model to {onnx_name}")

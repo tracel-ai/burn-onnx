@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 """
 Generate ONNX model with Loop operator containing scan outputs.
 Tests the full ONNX Loop spec including scan outputs that collect values from each iteration.
@@ -127,7 +135,9 @@ def build_model():
             # Scan output: accumulated values from each iteration
             # Note: Dynamic shape [-1, batch_size, feature_size] where -1 = num_iterations
             helper.make_tensor_value_info(
-                "accumulated_values", TensorProto.FLOAT, [None, batch_size, feature_size]
+                "accumulated_values",
+                TensorProto.FLOAT,
+                [None, batch_size, feature_size],
             ),
             # Scan output: iteration numbers from each iteration
             helper.make_tensor_value_info(
@@ -163,9 +173,7 @@ def generate_test_data(model):
 
     # Test case 1: M=3 iterations
     M1 = 3
-    initial_accum1 = np.array(
-        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float32
-    )
+    initial_accum1 = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float32)
     outputs1 = sess.run(
         None,
         {
@@ -189,9 +197,7 @@ def generate_test_data(model):
 
     # Test case 2: M=5 iterations
     M2 = 5
-    initial_accum2 = np.array(
-        [[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]], dtype=np.float32
-    )
+    initial_accum2 = np.array([[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]], dtype=np.float32)
     outputs2 = sess.run(
         None,
         {

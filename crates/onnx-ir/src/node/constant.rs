@@ -72,7 +72,7 @@ impl NodeProcessor for ConstantProcessor {
             ArgType::Tensor(TensorType {
                 dtype: tensor_data.elem_type(),
                 rank: tensor_data.shape.len(),
-                static_shape: Some(tensor_data.shape.to_vec()),
+                static_shape: Some(tensor_data.shape.iter().map(|&d| Some(d)).collect()),
             })
         };
 
@@ -96,7 +96,7 @@ impl NodeProcessor for ConstantProcessor {
                 // Convert 1D tensor to Shape if requested and we have static shape info
                 ArgType::Tensor(tensor) if tensor.rank == 1 && wants_shape => {
                     if let Some(shape) = tensor.static_shape.as_ref() {
-                        if let Some(&shape_rank) = shape.first() {
+                        if let Some(&Some(shape_rank)) = shape.first() {
                             ArgType::Shape(shape_rank)
                         } else {
                             // Empty shape for rank-1 tensor is invalid, keep as Tensor
@@ -159,7 +159,7 @@ mod tests {
             crate::ir::ArgType::Tensor(crate::ir::TensorType {
                 dtype: elem_type,
                 rank: shape.len(),
-                static_shape: Some(shape),
+                static_shape: Some(shape.iter().map(|&d| Some(d)).collect()),
             })
         };
 

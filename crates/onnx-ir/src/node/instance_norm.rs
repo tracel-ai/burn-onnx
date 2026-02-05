@@ -31,8 +31,6 @@ use crate::processor::{
 /// Configuration for InstanceNorm operations
 #[derive(Debug, Clone, new)]
 pub struct InstanceNormConfig {
-    /// Number of features (channels)
-    pub num_features: usize,
     /// Small constant added for numerical stability
     pub epsilon: f64,
 }
@@ -102,25 +100,16 @@ impl NodeProcessor for InstanceNormProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
-        let weight_shape = node.inputs[1]
-            .value()
-            .ok_or_else(|| {
-                ProcessError::Custom("InstanceNorm: weight tensor must be present".to_string())
-            })?
-            .shape
-            .to_vec();
-
-        let num_features = weight_shape[0];
         let mut epsilon = 1e-5;
 
         for (key, value) in node.attrs.iter() {
             if key.as_str() == "epsilon" {
-                // TODO: Validate epsilon > 0 for numerical stability - Negative or zero epsilon could cause division by zero or numerical issues - burn/crates/onnx-ir/src/node/instance_norm.rs:128
+                // TODO: Validate epsilon > 0 for numerical stability
                 epsilon = value.clone().into_f32()
             }
         }
 
-        let config = InstanceNormConfig::new(num_features, epsilon as f64);
+        let config = InstanceNormConfig::new(epsilon as f64);
         Ok(config)
     }
 
@@ -165,7 +154,6 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.num_features, 64);
         assert!(f64::abs(config.epsilon - 1e-5) < 1e-6);
     }
 }

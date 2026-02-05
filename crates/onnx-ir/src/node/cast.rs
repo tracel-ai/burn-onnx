@@ -57,6 +57,12 @@ impl NodeProcessor for CastProcessor {
         }
     }
 
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Cast is a no-op when input and output types are identical
+        // (e.g., Cast(F32 tensor -> F32), Cast(Shape -> Shape))
+        node.inputs[0].ty == node.outputs[0].ty
+    }
+
     fn infer_types(
         &self,
         node: &mut RawNode,
@@ -105,7 +111,7 @@ impl NodeProcessor for CastProcessor {
                     output.ty = ArgType::Tensor(TensorType {
                         dtype: elem_type,
                         rank: 1,
-                        static_shape: Some(vec![rank]),
+                        static_shape: Some(vec![Some(rank)]),
                     });
                 } else {
                     // For int types, keep as Shape
@@ -311,7 +317,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 1);
-                assert_eq!(tensor.static_shape, Some(vec![3]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(3)]));
             }
             _ => panic!("Expected rank-1 tensor output when casting Shape to float"),
         }
@@ -355,9 +361,31 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::Bool);
                 assert_eq!(tensor.rank, 1);
-                assert_eq!(tensor.static_shape, Some(vec![3]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(3)]));
             }
             _ => panic!("Expected rank-1 bool tensor output when casting Shape to bool"),
         }
+    }
+
+    #[test]
+    fn test_cast_is_noop_same_type() {
+        let mut node = create_test_node(2, DataType::FLOAT.value() as i64);
+        let processor = CastProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        // F32 -> F32 is a no-op
+        assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_cast_is_not_noop_different_type() {
+        let mut node = create_test_node(2, DataType::INT64.value() as i64);
+        let processor = CastProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        // F32 -> I64 is not a no-op
+        assert!(!processor.is_noop(&node));
     }
 }

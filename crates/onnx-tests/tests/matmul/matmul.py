@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/matmul/matmul.onnx
 
@@ -29,7 +37,14 @@ def main():
     d = torch.arange(4, dtype=torch.float, device=device)
     test_input = (a, b, c, d)
 
-    torch.onnx.export(model, test_input, onnx_name, verbose=False, opset_version=16)
+    torch.onnx.export(
+        model,
+        test_input,
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print(f"Finished exporting model to {onnx_name}")
 

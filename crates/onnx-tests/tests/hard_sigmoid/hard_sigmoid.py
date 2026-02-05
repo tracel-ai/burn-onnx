@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: hard_sigmoid.onnx
 
@@ -29,7 +37,14 @@ def main():
 
     file_name = "hard_sigmoid.onnx"
     test_input = torch.randn(2, 3, device=device)
-    torch.onnx.export(model, test_input, file_name, verbose=False, opset_version=16)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 

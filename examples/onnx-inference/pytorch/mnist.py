@@ -1,3 +1,14 @@
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "torchvision",
+#   "onnx==1.19.0",
+# ]
+# ///
+
 # Originally copied and modified from: https://github.com/pytorch/examples/blob/main/mnist/main.py
 # under the following license:  BSD-3-Clause license
 
@@ -154,7 +165,7 @@ def main():
     if args.export_onnx:
         dummy_input = torch.randn(1, 1, 28, 28, device=device)
         torch.onnx.export(model, dummy_input, "mnist.onnx",
-                          verbose=True, opset_version=16)
+                          verbose=True, opset_version=16, external_data=False)
 
 
 if __name__ == '__main__':

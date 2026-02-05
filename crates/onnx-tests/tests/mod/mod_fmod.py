@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/mod/mod_fmod.onnx
 # Tests fmod=1 (C-style fmod)
@@ -7,27 +14,28 @@ import numpy as np
 import onnx
 from onnx import helper, TensorProto
 
+
 def main():
     # Create ONNX model with Mod operator using fmod=1 (C-style fmod)
     # Input tensors - 3D for consistency with other tests
-    x = helper.make_tensor_value_info('x', TensorProto.FLOAT, [1, 1, 4])
-    y = helper.make_tensor_value_info('y', TensorProto.FLOAT, [1, 1, 4])
+    x = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 1, 4])
+    y = helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 1, 4])
 
     # Output tensor
-    z = helper.make_tensor_value_info('z', TensorProto.FLOAT, [1, 1, 4])
+    z = helper.make_tensor_value_info("z", TensorProto.FLOAT, [1, 1, 4])
 
     # Create Mod node with fmod=1 (C-style fmod)
     mod_node = helper.make_node(
-        'Mod',
-        inputs=['x', 'y'],
-        outputs=['z'],
-        fmod=1  # C-style fmod
+        "Mod",
+        inputs=["x", "y"],
+        outputs=["z"],
+        fmod=1,  # C-style fmod
     )
 
     # Create the graph
     graph_def = helper.make_graph(
         [mod_node],
-        'mod_fmod_model',
+        "mod_fmod_model",
         [x, y],
         [z],
     )
@@ -35,8 +43,8 @@ def main():
     # Create the model with opset version 16
     model_def = helper.make_model(
         graph_def,
-        producer_name='onnx-tests',
-        opset_imports=[helper.make_operatorsetid("", 16)]
+        producer_name="onnx-tests",
+        opset_imports=[helper.make_operatorsetid("", 16)],
     )
 
     # Save the model
@@ -70,5 +78,6 @@ def main():
     except ImportError:
         print("onnx.reference not available, skipping inference test")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

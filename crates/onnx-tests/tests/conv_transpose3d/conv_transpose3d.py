@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/conv_transpose3d/conv_transpose3d.onnx
 
@@ -10,16 +18,21 @@ class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.transposed_conv = nn.ConvTranspose3d(
-            4, 6, (3, 5, 5), groups=2, stride=(2, 1, 1), padding=(4, 2, 1), dilation=(3, 1, 1), output_padding=(1, 0, 0),
+            4,
+            6,
+            (3, 5, 5),
+            groups=2,
+            stride=(2, 1, 1),
+            padding=(4, 2, 1),
+            dilation=(3, 1, 1),
+            output_padding=(1, 0, 0),
         )
 
     def forward(self, x):
-        
         return self.transposed_conv(x)
 
 
 def main():
-
     # Set seed for reproducibility
     torch.manual_seed(42)
 
@@ -32,8 +45,14 @@ def main():
 
     file_name = "conv_transpose3d.onnx"
     test_input = torch.ones(2, 4, 4, 5, 7, device=device)
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 
@@ -47,5 +66,5 @@ def main():
     print("Test output sum: {}".format(sum))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

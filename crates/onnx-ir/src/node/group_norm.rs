@@ -20,8 +20,6 @@ use crate::processor::{
 /// Configuration for GroupNorm operations
 #[derive(Debug, Clone, new)]
 pub struct GroupNormConfig {
-    /// Number of features (channels)
-    pub num_features: usize,
     /// Number of groups
     pub num_groups: usize,
     /// Small constant added for numerical stability
@@ -92,8 +90,13 @@ impl NodeProcessor for GroupNormProcessor {
             .extract_config(node, opset)
             .expect("Config extraction failed");
 
-        // TODO: Validate num_groups > 0 per ONNX spec - num_groups must be positive - Missing constraint validation
-        if config.num_groups > 0 && !config.num_features.is_multiple_of(config.num_groups) {
+        let num_features = node.inputs[1].value().map(|v| v.shape[0]).unwrap_or(0);
+
+        // TODO: Validate num_groups > 0 per ONNX spec - num_groups must be positive
+        if config.num_groups > 0
+            && num_features > 0
+            && !num_features.is_multiple_of(config.num_groups)
+        {
             return Err(ProcessError::Custom(
                 "GroupNorm: number of features must be divisible by the number of groups"
                     .to_string(),
@@ -107,16 +110,6 @@ impl NodeProcessor for GroupNormProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
-        let weight_shape = node.inputs[1]
-            .value()
-            .as_ref()
-            .ok_or_else(|| {
-                ProcessError::Custom("GroupNorm: weight tensor must be present".to_string())
-            })?
-            .shape
-            .to_vec();
-
-        let num_features = weight_shape[0];
         let mut num_groups = None;
         let mut epsilon = 1e-5;
         let mut stash_type = 1; // Default value is 1 (full precision)
@@ -137,7 +130,7 @@ impl NodeProcessor for GroupNormProcessor {
         })?;
 
         let full_precision = stash_type == 1;
-        let config = GroupNormConfig::new(num_features, num_groups, epsilon as f64, full_precision);
+        let config = GroupNormConfig::new(num_groups, epsilon as f64, full_precision);
         Ok(config)
     }
 
@@ -188,7 +181,6 @@ mod tests {
         let config = processor.extract_config(&node, 18).unwrap();
         processor.infer_types(&mut node, 18, &prefs).unwrap();
 
-        assert_eq!(config.num_features, 64);
         assert_eq!(config.num_groups, 8);
         assert!(f64::abs(config.epsilon - 1e-5) < 1e-6);
         assert!(config.full_precision); // stash_type == 1
@@ -202,7 +194,6 @@ mod tests {
         let config = processor.extract_config(&node, 18).unwrap();
         processor.infer_types(&mut node, 18, &prefs).unwrap();
 
-        assert_eq!(config.num_features, 64);
         assert_eq!(config.num_groups, 8);
         assert!(f64::abs(config.epsilon - 1e-5) < 1e-6);
         assert!(!config.full_precision); // stash_type == 0

@@ -784,8 +784,8 @@ mod tests {
         };
         let node = SliceNodeBuilder::new("slice1")
             .input_tensor("data", 3, DType::F32)
-            .input_shape("start_idx")
-            .input_shape("end_idx")
+            .input_shape("start_idx", 1)
+            .input_shape("end_idx", 1)
             .output_tensor("sliced", 3, DType::F32)
             .config(config)
             .build();
@@ -819,8 +819,8 @@ mod tests {
         };
         let node = SliceNodeBuilder::new("slice1")
             .input_tensor("tensor", 2, DType::F32)
-            .input_shape("starts")
-            .input_shape("ends")
+            .input_shape("starts", 2)
+            .input_shape("ends", 2)
             .output_tensor("result", 2, DType::F32)
             .config(config)
             .build();
@@ -829,10 +829,10 @@ mod tests {
         pub fn forward(
             &self,
             tensor: Tensor<B, 2>,
-            starts: [i64; 1],
-            ends: [i64; 1],
+            starts: [i64; 2],
+            ends: [i64; 2],
         ) -> Tensor<B, 2> {
-            let result = tensor.slice(s![starts[0]..ends[0], ..]);
+            let result = tensor.slice(s![starts[0]..ends[0], starts[1]..ends[1]]);
             result
         }
         ");
@@ -885,7 +885,7 @@ mod tests {
         };
         let node = SliceNodeBuilder::new("slice1")
             .input_tensor("data", 3, DType::F32)
-            .input_shape("end_pos")
+            .input_shape("end_pos", 1)
             .output_tensor("prefix", 3, DType::F32)
             .config(config)
             .build();
@@ -937,7 +937,7 @@ mod tests {
         };
         let node = SliceNodeBuilder::new("slice1")
             .input_tensor("tensor", 2, DType::F32)
-            .input_shape("begin")
+            .input_shape("begin", 1)
             .output_tensor("chunk", 2, DType::F32)
             .config(config)
             .build();
@@ -961,14 +961,14 @@ mod tests {
             steps: Some(SliceInput::Static(vec![1])),
         };
         let node = SliceNodeBuilder::new("slice1")
-            .input_shape("input_shape")
-            .output_shape("output_shape")
+            .input_shape("input_shape", 4)
+            .output_shape("output_shape", 4)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input_shape: [i64; 1]) -> [i64; 1] {
-            let output_shape: [i64; 1] = input_shape[1..1].try_into().unwrap();
+        pub fn forward(&self, input_shape: [i64; 4]) -> [i64; 4] {
+            let output_shape: [i64; 4] = input_shape[1..3].try_into().unwrap();
             output_shape
         }
         ");
@@ -983,14 +983,14 @@ mod tests {
             steps: Some(SliceInput::Static(vec![1])),
         };
         let node = SliceNodeBuilder::new("slice1")
-            .input_shape("dims")
-            .output_shape("last_two")
+            .input_shape("dims", 4)
+            .output_shape("last_two", 2)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dims: [i64; 1]) -> [i64; 1] {
-            let last_two: [i64; 1] = dims[0..1].try_into().unwrap();
+        pub fn forward(&self, dims: [i64; 4]) -> [i64; 2] {
+            let last_two: [i64; 2] = dims[2..4].try_into().unwrap();
             last_two
         }
         ");
@@ -1005,16 +1005,16 @@ mod tests {
             steps: Some(SliceInput::Static(vec![2])),
         };
         let node = SliceNodeBuilder::new("slice1")
-            .input_shape("shape_in")
-            .output_shape("shape_out")
+            .input_shape("shape_in", 3)
+            .output_shape("shape_out", 2)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_in: [i64; 1]) -> [i64; 1] {
-            let shape_out: [i64; 1] = {
-                let mut shape_out = [0i64; 1];
-                for (i, &s) in shape_in[0..1].iter().step_by(2usize).enumerate() {
+        pub fn forward(&self, shape_in: [i64; 3]) -> [i64; 2] {
+            let shape_out: [i64; 2] = {
+                let mut shape_out = [0i64; 2];
+                for (i, &s) in shape_in[0..3].iter().step_by(2usize).enumerate() {
                     shape_out[i] = s;
                 }
                 shape_out
@@ -1033,15 +1033,15 @@ mod tests {
             steps: Some(SliceInput::Static(vec![-1])),
         };
         let node = SliceNodeBuilder::new("slice1")
-            .input_shape("original")
-            .output_shape("reversed")
+            .input_shape("original", 4)
+            .output_shape("reversed", 4)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, original: [i64; 1]) -> [i64; 1] {
-            let reversed: [i64; 1] = {
-                let mut slice = original[0..1].to_vec();
+        pub fn forward(&self, original: [i64; 4]) -> [i64; 4] {
+            let reversed: [i64; 4] = {
+                let mut slice = original[0..4].to_vec();
                 slice.reverse();
                 slice.try_into().unwrap()
             };
@@ -1065,25 +1065,25 @@ mod tests {
             steps: None,
         };
         let node = SliceNodeBuilder::new("slice1")
-            .input_shape("shape_data")
+            .input_shape("shape_data", 5)
             .input_scalar("start", DType::I64)
             .input_scalar("end", DType::I64)
-            .output_shape("sliced_shape")
+            .output_shape("sliced_shape", 3)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_data: [i64; 1], start: i64, end: i64) -> [i64; 1] {
-            let sliced_shape: [i64; 1] = {
+        pub fn forward(&self, shape_data: [i64; 5], start: i64, end: i64) -> [i64; 3] {
+            let sliced_shape: [i64; 3] = {
                 let start_val = start as i64;
                 let end_val = end as i64;
                 let start_idx = if start_val < 0 {
-                    (1i64 + start_val) as usize
+                    (5i64 + start_val) as usize
                 } else {
                     start_val as usize
                 };
                 let end_idx = if end_val < 0 {
-                    (1i64 + end_val) as usize
+                    (5i64 + end_val) as usize
                 } else {
                     end_val as usize
                 };

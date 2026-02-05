@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/slice/slice_shape_with_steps.onnx
 
@@ -83,10 +89,14 @@ def main() -> None:
         nodes=[shape_node, starts_node, ends_node, axes_node, steps_node, slice_node],
         name="SliceShapeWithStepsGraph",
         inputs=[
-            helper.make_tensor_value_info("input_tensor", TensorProto.FLOAT, [2, 3, 4, 5, 6, 7]),
+            helper.make_tensor_value_info(
+                "input_tensor", TensorProto.FLOAT, [2, 3, 4, 5, 6, 7]
+            ),
         ],
         outputs=[
-            helper.make_tensor_value_info("output", TensorProto.INT64, [3])  # Will output [2, 4, 6]
+            helper.make_tensor_value_info(
+                "output", TensorProto.INT64, [3]
+            )  # Will output [2, 4, 6]
         ],
     )
 

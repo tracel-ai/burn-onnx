@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: constant_of_shape.onnx
 
@@ -14,31 +20,39 @@ def build_model():
     return onnx.helper.make_model(
         ir_version=8,
         opset_imports=[onnx.helper.make_operatorsetid("", 16)],
-        graph=onnx.helper.make_graph(name="main_graph", nodes=[
-            onnx.helper.make_node(
-                "ConstantOfShape",
-                inputs=["input1"],
-                outputs=["output1"],
-                name="/ConstantOfShape",
-                value=onnx.helper.make_tensor("value", data_type=onnx.TensorProto.FLOAT, dims=[1], vals=[1.125])
-            ),
-        ],
-        inputs=[
-            onnx.helper.make_value_info(
-                name="input1",
-                type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.INT64, shape=[3]
+        graph=onnx.helper.make_graph(
+            name="main_graph",
+            nodes=[
+                onnx.helper.make_node(
+                    "ConstantOfShape",
+                    inputs=["input1"],
+                    outputs=["output1"],
+                    name="/ConstantOfShape",
+                    value=onnx.helper.make_tensor(
+                        "value",
+                        data_type=onnx.TensorProto.FLOAT,
+                        dims=[1],
+                        vals=[1.125],
+                    ),
                 ),
-            )
-        ],
-        outputs=[
-            onnx.helper.make_value_info(
-                name="output1",
-                type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.FLOAT, shape=[2, 3, 2]
-                ),
-            )
-        ]),
+            ],
+            inputs=[
+                onnx.helper.make_value_info(
+                    name="input1",
+                    type_proto=onnx.helper.make_tensor_type_proto(
+                        elem_type=onnx.TensorProto.INT64, shape=[3]
+                    ),
+                )
+            ],
+            outputs=[
+                onnx.helper.make_value_info(
+                    name="output1",
+                    type_proto=onnx.helper.make_tensor_type_proto(
+                        elem_type=onnx.TensorProto.FLOAT, shape=[2, 3, 2]
+                    ),
+                )
+            ],
+        ),
     )
 
 

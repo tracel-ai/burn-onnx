@@ -1,52 +1,44 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/shape/shape.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
+# used to generate model: expand_shape.onnx
+
+import numpy as np
 import onnx
-import torch
-import torch.nn as nn
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, inp: torch.Tensor, shape_src: torch.Tensor) -> torch.Tensor:
-        return inp.expand_as(shape_src)
+OPSET_VERSION = 16
 
 
 def main():
-    # Set seed for reproducibility
-    torch.manual_seed(42)
+    node0 = helper.make_node("Shape", ["shape_src"], ["/Shape_output_0"])
+    node1 = helper.make_node("Expand", ["inp", "/Shape_output_0"], ["3"])
 
-    torch.set_printoptions(precision=8)
-
-    # Export to onnx
-    device = torch.device("cpu")
-    model = Model()
-    model.eval()
-    test_input = torch.ones(4, 1, device=device)
-    test_shape_src = torch.ones(4, 4, device=device)
-    file_name = "expand_shape.onnx"
-
-    torch.onnx.export(
-        model,
-        (test_input, test_shape_src),
-        file_name,
-        input_names=["inp", "shape_src"],
-        verbose=False,
-        opset_version=16,
+    inp_inp = helper.make_tensor_value_info("inp", TensorProto.FLOAT, [4, 1])
+    inp_shape_src = helper.make_tensor_value_info(
+        "shape_src", TensorProto.FLOAT, [4, 4]
     )
 
-    print(f"Finished exporting model to {file_name}")
+    out_n3 = helper.make_tensor_value_info("3", TensorProto.FLOAT, [4, 4])
 
-    # Output some test data for use in the test
-    print(f"Test input data: {test_input}")
-    print(f"Test input data shape: {test_input.shape}")
-    print(f"Test shape source tensor shape: {test_input.shape}")
-    output = model.forward(test_input, test_shape_src)
-    print(f"Test output data shape: {output.shape}")
+    graph = helper.make_graph(
+        [node0, node1],
+        "main_graph",
+        [inp_inp, inp_shape_src],
+        [out_n3],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    print(f"Test output: {output}")
+    onnx.save(model, "expand_shape.onnx")
+    print(f"Finished exporting model to expand_shape.onnx")
 
 
 if __name__ == "__main__":

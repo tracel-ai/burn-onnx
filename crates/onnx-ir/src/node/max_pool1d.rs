@@ -33,7 +33,7 @@ use crate::{
     node::padding::padding_config_1d,
 };
 
-use super::padding::PaddingConfig1d;
+use super::padding::{AutoPad, PaddingConfig1d};
 
 /// Configuration for MaxPool1d operations extracted from ONNX nodes
 #[derive(Debug, Clone, new)]
@@ -48,6 +48,8 @@ pub struct MaxPool1dConfig {
     pub padding: PaddingConfig1d,
     /// Whether to use ceil mode for output size calculation (opset 10+)
     pub ceil_mode: bool,
+    /// Auto padding mode
+    pub auto_pad: AutoPad,
 }
 
 /// Node representation for MaxPool1d operation
@@ -125,13 +127,7 @@ impl NodeProcessor for MaxPool1dProcessor {
                     }
                 }
                 "auto_pad" => {
-                    let auto_pad = value.clone().into_string();
-                    if auto_pad != "NOTSET" {
-                        return Err(ProcessError::InvalidAttribute {
-                            name: "auto_pad".to_string(),
-                            reason: format!("Unsupported 'auto_pad' value: {auto_pad}"),
-                        });
-                    }
+                    AutoPad::parse(&value.clone().into_string())?;
                 }
                 "ceil_mode" => {
                     // ceil_mode support requires opset 10+
@@ -164,6 +160,7 @@ impl NodeProcessor for MaxPool1dProcessor {
         let mut pads = vec![0, 0];
         let mut dilation = vec![1];
         let mut ceil_mode: i64 = 0;
+        let mut auto_pad = AutoPad::NotSet;
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
@@ -172,7 +169,7 @@ impl NodeProcessor for MaxPool1dProcessor {
                 "pads" => pads = value.clone().into_i64s(),
                 "dilations" => dilation = value.clone().into_i64s(),
                 "ceil_mode" => ceil_mode = value.clone().into_i64(),
-                "auto_pad" => {}
+                "auto_pad" => auto_pad = AutoPad::parse(&value.clone().into_string())?,
                 "storage_order" => {}
                 _ => {}
             }
@@ -186,6 +183,7 @@ impl NodeProcessor for MaxPool1dProcessor {
             dilation[0] as usize,
             padding,
             ceil_mode == 1,
+            auto_pad,
         );
 
         Ok(config)
@@ -260,7 +258,7 @@ mod tests {
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 2);
         assert_eq!(config.dilation, 1);
-        assert!(matches!(config.padding, PaddingConfig1d::Explicit(2)));
+        assert!(matches!(config.padding, PaddingConfig1d::Explicit(2, 2)));
     }
 
     #[test]
@@ -279,11 +277,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Asymmetric padding is not supported")]
     fn test_max_pool1d_config_asymmetric_padding() {
         let node = create_test_node(vec![4], vec![1], vec![1, 2], vec![1], 0, None);
         let processor = MaxPool1dProcessor;
-        let _ = processor.extract_config(&node, 16);
+        let config = processor.extract_config(&node, 16).unwrap();
+        // Asymmetric padding should now be captured instead of panicking
+        assert!(matches!(config.padding, PaddingConfig1d::Explicit(1, 2)));
+        assert!(config.padding.is_asymmetric());
     }
 
     #[test]
@@ -302,13 +302,14 @@ mod tests {
     }
 
     #[test]
-    fn test_max_pool1d_config_auto_pad_not_supported() {
+    fn test_max_pool1d_config_auto_pad_same_upper() {
         let node = create_test_node(vec![4], vec![1], vec![0, 0], vec![1], 0, Some("SAME_UPPER"));
         let mut node = node;
         let processor = MaxPool1dProcessor;
         let prefs = OutputPreferences::new();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::InvalidAttribute { .. })));
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert_eq!(config.auto_pad, AutoPad::SameUpper);
     }
 
     #[test]

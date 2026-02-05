@@ -11,6 +11,7 @@ mod processor;
 mod proto_conversion;
 mod protos;
 mod registry;
+mod simplify;
 mod tensor_store;
 
 // Public API - only expose essentials

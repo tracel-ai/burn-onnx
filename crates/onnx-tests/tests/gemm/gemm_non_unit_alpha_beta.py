@@ -1,7 +1,16 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 import numpy as np
 import onnx
 from onnx import helper, TensorProto, numpy_helper
+
 
 def create_gemm_model(output_path="gemm_non_unit_alpha_beta.onnx"):
     """
@@ -16,10 +25,10 @@ def create_gemm_model(output_path="gemm_non_unit_alpha_beta.onnx"):
     m, k, n = 2, 2, 2  # A: (m, k), B: (k, n), C: (m, n)
 
     # Define the graph inputs and outputs
-    A = helper.make_tensor_value_info('A', TensorProto.FLOAT, [m, k])
-    B = helper.make_tensor_value_info('B', TensorProto.FLOAT, [k, n])
-    C = helper.make_tensor_value_info('C', TensorProto.FLOAT, [])
-    Y = helper.make_tensor_value_info('Y', TensorProto.FLOAT, [m, n])
+    A = helper.make_tensor_value_info("A", TensorProto.FLOAT, [m, k])
+    B = helper.make_tensor_value_info("B", TensorProto.FLOAT, [k, n])
+    C = helper.make_tensor_value_info("C", TensorProto.FLOAT, [])
+    Y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [m, n])
 
     # Define Gemm node attributes
     alpha = 0.5
@@ -29,29 +38,29 @@ def create_gemm_model(output_path="gemm_non_unit_alpha_beta.onnx"):
 
     # Create the Gemm node
     gemm_node = helper.make_node(
-        'Gemm',                # op_type
-        ['A', 'B', 'C'],       # inputs
-        ['Y'],                 # outputs
-        name='GemmNode',       # name
-        alpha=alpha,           # attributes
+        "Gemm",  # op_type
+        ["A", "B", "C"],  # inputs
+        ["Y"],  # outputs
+        name="GemmNode",  # name
+        alpha=alpha,  # attributes
         beta=beta,
         transA=transA,
-        transB=transB
+        transB=transB,
     )
 
     # Create the graph
     graph = helper.make_graph(
-        [gemm_node],           # nodes
-        'GemmModel',           # name
-        [A, B, C],             # inputs
-        [Y],                   # outputs
+        [gemm_node],  # nodes
+        "GemmModel",  # name
+        [A, B, C],  # inputs
+        [Y],  # outputs
     )
 
     # Create the model
     model = helper.make_model(
         graph,
-        producer_name='ONNX_Generator',
-        opset_imports=[helper.make_opsetid("", 16)]  # Using opset 16
+        producer_name="ONNX_Generator",
+        opset_imports=[helper.make_opsetid("", 16)],  # Using opset 16
     )
 
     # Verify the model
@@ -63,5 +72,6 @@ def create_gemm_model(output_path="gemm_non_unit_alpha_beta.onnx"):
 
     return model
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     create_gemm_model()

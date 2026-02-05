@@ -22,29 +22,37 @@ def create_very_long_names_model():
     """Create model with very long node and tensor names."""
 
     # Long names (120+ characters)
-    long_input_name = 'input_with_extremely_long_name_that_exceeds_one_hundred_characters_to_test_string_handling_in_the_parser_and_ir_converter_xyz'
-    long_output_name = 'output_with_extremely_long_name_that_exceeds_one_hundred_characters_to_test_string_handling_in_the_parser_and_ir_converter_abc'
-    long_node_name = 'relu_node_with_extremely_long_name_that_exceeds_one_hundred_characters_to_test_string_handling_capabilities_qwerty'
+    long_input_name = "input_with_extremely_long_name_that_exceeds_one_hundred_characters_to_test_string_handling_in_the_parser_and_ir_converter_xyz"
+    long_output_name = "output_with_extremely_long_name_that_exceeds_one_hundred_characters_to_test_string_handling_in_the_parser_and_ir_converter_abc"
+    long_node_name = "relu_node_with_extremely_long_name_that_exceeds_one_hundred_characters_to_test_string_handling_capabilities_qwerty"
 
     # Input and output with long names
-    input_tensor = helper.make_tensor_value_info(long_input_name, TensorProto.FLOAT, [2, 3])
-    output_tensor = helper.make_tensor_value_info(long_output_name, TensorProto.FLOAT, [2, 3])
+    input_tensor = helper.make_tensor_value_info(
+        long_input_name, TensorProto.FLOAT, [2, 3]
+    )
+    output_tensor = helper.make_tensor_value_info(
+        long_output_name, TensorProto.FLOAT, [2, 3]
+    )
 
     # Node with long name
     nodes = [
-        helper.make_node('Relu', [long_input_name], [long_output_name], name=long_node_name),
+        helper.make_node(
+            "Relu", [long_input_name], [long_output_name], name=long_node_name
+        ),
     ]
 
     # Create the graph
     graph = helper.make_graph(
         nodes,
-        'very_long_names_model',
+        "very_long_names_model",
         [input_tensor],
         [output_tensor],
     )
 
     # Create the model
-    model = helper.make_model(graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)]
+    )
 
     # Check the model
     onnx.checker.check_model(model)
@@ -57,7 +65,7 @@ def main():
     model = create_very_long_names_model()
 
     # Save the model
-    output_path = '../fixtures/very_long_names.onnx'
+    output_path = "../fixtures/very_long_names.onnx"
     onnx.save(model, output_path)
     print(f"Model saved to {output_path}")
 
@@ -68,5 +76,5 @@ def main():
     print(f"  Tests string handling for 100+ character names")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

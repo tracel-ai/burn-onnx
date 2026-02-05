@@ -28,31 +28,7 @@ on:
       - '!LICENSE-MIT'
 
 env:
-  # Note: It is not possible to define top level env vars and pass them to composite actions.
-  # To work around this issue we use inputs and define all the env vars here.
-
-  RUST_PREVIOUS_VERSION: 1.89.0
-
-  # Dependency versioning
-  # from wgpu repo: https://github.com/gfx-rs/wgpu/blob/trunk/.github/workflows/ci.yml
-
-  # Sourced from https://archive.mesa3d.org/. Bumping this requires
-  # updating the mesa build in https://github.com/gfx-rs/ci-build and creating a new release.
-  MESA_VERSION: "24.2.3"
-  # Corresponds to https://github.com/gfx-rs/ci-build/releases
-  MESA_CI_BINARY_BUILD: "build19"
-
-  # Sourced from https://www.nuget.org/packages/Microsoft.Direct3D.WARP
-  WARP_VERSION: "1.0.13"
-  # Sourced from https://github.com/microsoft/DirectXShaderCompiler/releases
-  # Must also be changed in shaders.yaml
-  DXC_RELEASE: "v1.8.2407"
-  DXC_FILENAME: "dxc_2024_07_31_clang_cl.zip"
-
-  # Mozilla Grcov
-  GRCOV_LINK: "https://github.com/mozilla/grcov/releases/download"
-  GRCOV_VERSION: "0.8.19"
-
+  RUST_PREVIOUS_VERSION: 1.92.0
   # Test in release mode (make it an empty string to test in debug mode)
   TEST_RELEASE_FLAG: "--release"
 
@@ -80,14 +56,17 @@ jobs:
           - rust: stable
             toolchain: stable
     steps:
-      - name: Setup Rust
-        uses: tracel-ai/github-actions/setup-rust@v7
+      - name: Checkout
+        uses: actions/checkout@v6
+      # --------------------------------------------------------------------------------
+      - name: Install Rust
+        uses: tracel-ai/github-actions/install-rust@v9
         with:
           rust-toolchain: ${{ matrix.toolchain }}
           cache-key: ${{ matrix.rust }}-linux
       # --------------------------------------------------------------------------------
       - name: Audit
-        run: cargo xtask check audit
+        run: xtask check audit
       # --------------------------------------------------------------------------------
       - name: Format
         shell: bash
@@ -95,13 +74,13 @@ jobs:
           # work around for colors
           # see: https://github.com/rust-lang/rustfmt/issues/3385
           TERM: xterm-256color
-        run: cargo xtask check format
+        run: xtask check format
       # --------------------------------------------------------------------------------
       - name: Lint
-        run: cargo xtask check lint
+        run: xtask check lint
       # --------------------------------------------------------------------------------
       - name: Typos
-        uses: tracel-ai/github-actions/check-typos@v7
+        uses: tracel-ai/github-actions/check-typos@v9
 
   documentation:
     runs-on: ubuntu-22.04
@@ -113,17 +92,20 @@ jobs:
           - rust: stable
             toolchain: stable
     steps:
-      - name: Setup Rust
-        uses: tracel-ai/github-actions/setup-rust@v7
+      - name: Checkout
+        uses: actions/checkout@v6
+      # --------------------------------------------------------------------------------
+      - name: Install Rust
+        uses: tracel-ai/github-actions/install-rust@v9
         with:
           rust-toolchain: ${{ matrix.toolchain }}
           cache-key: ${{ matrix.rust }}-linux
       # --------------------------------------------------------------------------------
       - name: Documentation Build
-        run: cargo xtask doc build
+        run: xtask doc build
       # --------------------------------------------------------------------------------
       - name: Documentation Tests
-        run: cargo xtask doc tests
+        run: xtask doc tests
 
   linux-std-tests:
     runs-on: ubuntu-22.04
@@ -142,36 +124,18 @@ jobs:
           - rust: prev
             toolchain: ${{ needs.prepare-checks.outputs.rust-prev-version }}
     steps:
-      - name: Setup Rust
-        uses: tracel-ai/github-actions/setup-rust@v7
+      - name: Checkout
+        uses: actions/checkout@v6
+      # --------------------------------------------------------------------------------
+      - name: Install Rust
+        uses: tracel-ai/github-actions/install-rust@v9
         with:
           rust-toolchain: ${{ matrix.toolchain }}
           cache-key: ${{ matrix.rust }}-linux
           # Disable cache on linux-std (stable) runner which currently always runs out of disk space with tests + coverage
           enable-cache: ${{ matrix.rust != 'stable' }}
-      # # --------------------------------------------------------------------------------
-      # - name: Install grcov
-      #   if: matrix.rust == 'stable'
-      #   shell: bash
-      #   run: |
-      #     curl -L "$GRCOV_LINK/v$GRCOV_VERSION/grcov-x86_64-unknown-linux-musl.tar.bz2" |
-      #     tar xj -C $HOME/.cargo/bin
-      #     cargo xtask coverage install
-      # --------------------------------------------------------------------------------
       - name: Tests
-        run: cargo xtask test ${{ env.TEST_RELEASE_FLAG }}
-      # --------------------------------------------------------------------------------
-      # - name: Generate lcov.info
-      #   if: matrix.rust == 'stable'
-      #   # /* is to exclude std library code coverage from analysis
-      #   run: cargo xtask coverage generate --ignore "/*,xtask/*,examples/*" --profile release
-      # # --------------------------------------------------------------------------------
-      # - name: Codecov upload lcov.info
-      #   if: matrix.rust == 'stable'
-      #   uses: codecov/codecov-action@v5
-      #   with:
-      #     files: lcov.info
-      #     token: ${{ secrets.CODECOV_TOKEN }}
+        run: xtask test ${{ env.TEST_RELEASE_FLAG }}
 
   linux-no-std-tests:
     runs-on: ubuntu-22.04
@@ -185,23 +149,24 @@ jobs:
           - rust: prev
             toolchain: ${{ needs.prepare-checks.outputs.rust-prev-version }}
     steps:
-      - name: Setup Rust
-        uses: tracel-ai/github-actions/setup-rust@v7
+      - name: Checkout
+        uses: actions/checkout@v6
+      # --------------------------------------------------------------------------------
+      - name: Install Rust
+        uses: tracel-ai/github-actions/install-rust@v9
         with:
           rust-toolchain: ${{ matrix.toolchain }}
           cache-key: ${{ matrix.rust }}-linux-no-std
       # --------------------------------------------------------------------------------
       - name: Crates Build
-        run: cargo xtask --context no-std build
+        run: xtask --context no-std build
       # --------------------------------------------------------------------------------
       - name: Crates Tests
-        run: cargo xtask --context no-std test ${{ env.TEST_RELEASE_FLAG }}
+        run: xtask --context no-std test ${{ env.TEST_RELEASE_FLAG }}
 
   windows-std-tests:
     runs-on: windows-2022
     needs: [prepare-checks, code-quality]
-    env:
-      DISABLE_WGPU: '1'
     # Keep the stragegy to be able to easily add new rust versions if required
     strategy:
       matrix:
@@ -210,20 +175,14 @@ jobs:
           - rust: stable
             toolchain: stable
     steps:
-      - name: Setup Rust
-        uses: tracel-ai/github-actions/setup-rust@v7
+      - name: Checkout
+        uses: actions/checkout@v6
+      # --------------------------------------------------------------------------------
+      - name: Install Rust
+        uses: tracel-ai/github-actions/install-rust@v9
         with:
           rust-toolchain: ${{ matrix.toolchain }}
           cache-key: ${{ matrix.rust }}-windows
       # --------------------------------------------------------------------------------
-      - name: Setup Windows runner
-        if: env.DISABLE_WGPU != '1'
-        uses: tracel-ai/github-actions/setup-windows@v7
-        with:
-          dxc-release: ${{ env.DXC_RELEASE }}
-          dxc-filename: ${{ env.DXC_FILENAME }}
-          mesa-version: ${{ env.MESA_VERSION }}
-          warp-version: ${{ env.WARP_VERSION }}
-      # --------------------------------------------------------------------------------
       - name: Tests
-        run: cargo xtask test ${{ env.TEST_RELEASE_FLAG }}
+        run: xtask test ${{ env.TEST_RELEASE_FLAG }}

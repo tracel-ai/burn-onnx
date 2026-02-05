@@ -1,4 +1,5 @@
 use super::prelude::*;
+
 impl NodeCodegen for onnx_ir::max_pool1d::MaxPool1dNode {
     fn inputs(&self) -> &[Argument] {
         &self.inputs
@@ -12,9 +13,20 @@ impl NodeCodegen for onnx_ir::max_pool1d::MaxPool1dNode {
         let name = Ident::new(&self.name, Span::call_site());
         let kernel_size = self.config.kernel_size.to_tokens();
         let strides = self.config.stride.to_tokens();
-        let padding = self.config.padding.to_tokens();
         let dilation = self.config.dilation.to_tokens();
         let ceil_mode = self.config.ceil_mode;
+
+        let shape = self.inputs[0].ty.static_shape_known();
+        let input_spatial = shape.as_deref().map(|s| &s[2..]);
+        let padding = crate::burn::codegen::resolve_auto_pad_1d(
+            &self.config.auto_pad,
+            &self.config.padding,
+            input_spatial,
+            self.config.kernel_size,
+            self.config.stride,
+            self.config.dilation,
+        )
+        .to_tokens();
 
         Some(Field::new(
             self.name.clone(),
@@ -55,10 +67,29 @@ mod tests {
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::max_pool1d::{MaxPool1dConfig, MaxPool1dNode, MaxPool1dNodeBuilder};
-    use onnx_ir::padding::PaddingConfig1d;
+    use onnx_ir::padding::{AutoPad, PaddingConfig1d};
 
     fn create_max_pool1d_node(name: &str, ceil_mode: bool) -> MaxPool1dNode {
-        let config = MaxPool1dConfig::new(3, 1, 1, PaddingConfig1d::Valid, ceil_mode);
+        let config =
+            MaxPool1dConfig::new(3, 1, 1, PaddingConfig1d::Valid, ceil_mode, AutoPad::NotSet);
+
+        MaxPool1dNodeBuilder::new(name)
+            .input_tensor("input", 3, DType::F32)
+            .output_tensor("output", 3, DType::F32)
+            .config(config)
+            .build()
+    }
+
+    fn create_max_pool1d_node_asymmetric(name: &str) -> MaxPool1dNode {
+        // Asymmetric padding: left=1, right=2
+        let config = MaxPool1dConfig::new(
+            3,
+            1,
+            1,
+            PaddingConfig1d::Explicit(1, 2),
+            false,
+            AutoPad::NotSet,
+        );
 
         MaxPool1dNodeBuilder::new(name)
             .input_tensor("input", 3, DType::F32)
@@ -117,5 +148,53 @@ mod tests {
             .with_ceil_mode(true)
             .init();
         "#);
+    }
+
+    #[test]
+    fn test_max_pool1d_forward_asymmetric_padding() {
+        let node = create_max_pool1d_node_asymmetric("pool1");
+        let code = codegen_forward_default(&node);
+        // Asymmetric padding is now handled by the burn-nn module
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+            let output = self.pool1.forward(input);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_max_pool1d_field_init_auto_pad_same_upper() {
+        let config =
+            MaxPool1dConfig::new(3, 1, 1, PaddingConfig1d::Valid, false, AutoPad::SameUpper);
+        let node = MaxPool1dNodeBuilder::new("pool1")
+            .input_tensor_shape("input", vec![1, 3, 7], DType::F32)
+            .output_tensor("output", 3, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_field_init(&node);
+        assert_snapshot!(code, @r#"
+        let pool1 = MaxPool1dConfig::new(3)
+            .with_stride(1)
+            .with_padding(PaddingConfig1d::Explicit(1, 1))
+            .with_dilation(1)
+            .with_ceil_mode(false)
+            .init();
+        "#);
+    }
+
+    #[test]
+    fn test_max_pool1d_field_init_asymmetric_padding() {
+        let node = create_max_pool1d_node_asymmetric("pool1");
+        let code = codegen_field_init(&node);
+        // Asymmetric padding is passed directly to the module
+        assert_snapshot!(code, @r"
+        let pool1 = MaxPool1dConfig::new(3)
+            .with_stride(1)
+            .with_padding(PaddingConfig1d::Explicit(1, 2))
+            .with_dilation(1)
+            .with_ceil_mode(false)
+            .init();
+        ");
     }
 }

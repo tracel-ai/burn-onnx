@@ -13,15 +13,20 @@ impl NodeCodegen for onnx_ir::node::conv_transpose1d::ConvTranspose1dNode {
 
     fn field(&self) -> Option<Field> {
         let name = Ident::new(&self.name, Span::call_site());
-        let channels_in = self.config.channels_in.to_tokens();
-        let channels_out = self.config.channels_out.to_tokens();
+        let weight_shape = self.inputs[1]
+            .ty
+            .static_shape_known()
+            .expect("ConvTranspose1d: weight tensor shape must be known at codegen time");
+        let groups = self.config.groups;
+        let channels_in = weight_shape[0].to_tokens();
+        let channels_out = (weight_shape[1] * groups).to_tokens();
         let kernel_size = self.config.kernel_size.to_tokens();
         let stride = self.config.stride.to_tokens();
         let dilation = self.config.dilation.to_tokens();
-        let groups = self.config.groups.to_tokens();
+        let groups = groups.to_tokens();
         let padding = self.config.padding.to_tokens();
         let padding_out = self.config.padding_out.to_tokens();
-        let bias = self.config.bias;
+        let bias = self.inputs.len() == 3;
 
         Some(Field::new(
             self.name.clone(),
@@ -74,7 +79,7 @@ impl NodeCodegen for onnx_ir::node::conv_transpose1d::ConvTranspose1dNode {
         }
 
         // Bias tensor (input index 2, optional)
-        if self.config.bias
+        if self.inputs.len() > 2
             && let Some(bias_input) = self.inputs.get(2)
         {
             let bias_path = format!("{}.bias", field_name);
@@ -98,10 +103,12 @@ mod tests {
     };
 
     fn create_conv_transpose_1d_node(name: &str) -> ConvTranspose1dNode {
-        let config = ConvTranspose1dConfig::new(3, 64, 3, 1, 1, 1, true, 1, 0);
+        let config = ConvTranspose1dConfig::new(3, 1, 1, 1, 1, 0);
 
         ConvTranspose1dNodeBuilder::new(name)
             .input_tensor("input", 3, DType::F32)
+            .input_static_tensor_shape("weight", vec![3, 64, 3], DType::F32)
+            .input_static_tensor_shape("bias", vec![64], DType::F32)
             .output_tensor("output", 3, DType::F32)
             .config(config)
             .build()

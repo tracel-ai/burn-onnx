@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # This script generates ONNX model for testing squeeze without axes specified
 # When no axes are provided, all dimensions with size 1 should be squeezed
@@ -6,6 +13,7 @@
 import numpy as np
 import onnx
 from onnx import helper, TensorProto
+
 
 def main():
     # Create a tensor with shape [2, 1, 3, 1, 4]
@@ -25,7 +33,7 @@ def main():
         "Squeeze",
         inputs=["input"],  # No axes input
         outputs=["output"],
-        name="squeeze_all_ones"
+        name="squeeze_all_ones",
     )
 
     # Create the graph
@@ -40,12 +48,13 @@ def main():
     model_def = helper.make_model(
         graph_def,
         producer_name="squeeze_no_axes_test",
-        opset_imports=[helper.make_opsetid("", 16)]
+        opset_imports=[helper.make_opsetid("", 16)],
     )
 
     # Save the model
     onnx.save(model_def, "squeeze_no_axes.onnx")
     print("Model saved as squeeze_no_axes.onnx")
+
 
 if __name__ == "__main__":
     main()

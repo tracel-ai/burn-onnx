@@ -88,27 +88,73 @@ impl NodeProcessor for SplitProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        // Extract the input tensor type to determine rank and shape
-        let tensor = match &node.inputs.first().unwrap().ty {
-            ArgType::Tensor(tensor) => tensor,
+        // Extract the input type to determine rank and shape
+        let (dtype, rank, input_static_shape) = match &node.inputs.first().unwrap().ty {
+            ArgType::Tensor(tensor) => (tensor.dtype, tensor.rank, tensor.static_shape.clone()),
+            ArgType::Shape(r) => (crate::ir::DType::I64, 1, Some(vec![Some(*r)])),
             _ => {
                 return Err(ProcessError::TypeMismatch {
-                    expected: "Tensor".to_string(),
+                    expected: "Tensor or Shape".to_string(),
                     actual: format!("{:?}", node.inputs.first().unwrap().ty),
                 });
             }
         };
 
+        // Try to get static split sizes to compute output static shapes
+        let split_sizes: Option<Vec<usize>> = if node.inputs.len() > 1 {
+            node.inputs[1]
+                .value()
+                .and_then(|v| v.to_vec::<i64>().ok())
+                .map(|sizes| sizes.into_iter().map(|s| s as usize).collect())
+        } else {
+            None
+        };
+
         // Infer output types - all outputs have the same rank and element type as input
-        for output_arg in node.outputs.iter_mut() {
+        for (i, output_arg) in node.outputs.iter_mut().enumerate() {
+            let static_shape = if let Some(ref sizes) = split_sizes {
+                // When split sizes are known, compute output static shape
+                if let Some(ref input_shape) = input_static_shape {
+                    // Get the split axis (default 0)
+                    let axis = node
+                        .attrs
+                        .get("axis")
+                        .map(|v| {
+                            let a = v.clone().into_i64();
+                            if a < 0 {
+                                (a + rank as i64) as usize
+                            } else {
+                                a as usize
+                            }
+                        })
+                        .unwrap_or(0);
+                    if i < sizes.len() {
+                        let mut shape = input_shape.clone();
+                        shape[axis] = Some(sizes[i]);
+                        Some(shape)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             output_arg.ty = ArgType::Tensor(TensorType {
-                dtype: tensor.dtype,
-                rank: tensor.rank,
-                static_shape: None,
+                dtype,
+                rank,
+                static_shape,
             });
         }
 
         Ok(())
+    }
+
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Split is a no-op when there is only a single output
+        node.outputs.len() == 1
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
@@ -119,12 +165,17 @@ impl NodeProcessor for SplitProcessor {
         // Holds the custom split sizes if provided as input (Static or Runtime)
         let mut split_sizes: Option<SplitSizesInput> = None;
 
-        // Extract the input tensor type to determine rank and shape
+        // Extract the input type to determine rank and shape
         let tensor = match &node.inputs.first().unwrap().ty {
-            ArgType::Tensor(tensor) => tensor,
+            ArgType::Tensor(tensor) => tensor.clone(),
+            ArgType::Shape(rank) => TensorType {
+                dtype: crate::ir::DType::I64,
+                rank: 1,
+                static_shape: Some(vec![Some(*rank)]),
+            },
             _ => {
                 return Err(ProcessError::TypeMismatch {
-                    expected: "Tensor".to_string(),
+                    expected: "Tensor or Shape".to_string(),
                     actual: format!("{:?}", node.inputs.first().unwrap().ty),
                 });
             }
@@ -178,9 +229,8 @@ impl NodeProcessor for SplitProcessor {
         // Handle the case when num_outputs is provided to calculate uniform split size
         if let Some(num_outputs) = num_outputs
             && let Some(static_shape) = &tensor.static_shape
+            && let Some(dim_size) = static_shape[axis as usize]
         {
-            let dim_size = static_shape[axis as usize];
-
             // Validate that dimension size is sufficient for the number of outputs
             if dim_size == 0 {
                 return Err(ProcessError::Custom(format!(
@@ -237,11 +287,11 @@ impl NodeProcessor for SplitProcessor {
                 Some(tensor_data) => {
                     let sizes: Vec<i64> = tensor_data.to_vec().unwrap();
 
-                    // Validate that all split sizes are positive
+                    // Validate that all split sizes are non-negative
                     for (i, &size) in sizes.iter().enumerate() {
-                        if size <= 0 {
+                        if size < 0 {
                             return Err(ProcessError::Custom(format!(
-                                "Split: split size at index {} must be positive, got {}",
+                                "Split: split size at index {} must be non-negative, got {}",
                                 i, size
                             )));
                         }
@@ -259,8 +309,9 @@ impl NodeProcessor for SplitProcessor {
                     }
 
                     // Validate that sum of split sizes matches the dimension size (if static shape is available)
-                    if let Some(static_shape) = &tensor.static_shape {
-                        let dim_size = static_shape[axis as usize];
+                    if let Some(static_shape) = &tensor.static_shape
+                        && let Some(dim_size) = static_shape[axis as usize]
+                    {
                         let total_size: usize = usizes.iter().sum();
                         if total_size != dim_size {
                             return Err(ProcessError::Custom(format!(
@@ -284,9 +335,9 @@ impl NodeProcessor for SplitProcessor {
         if split_sizes.is_none()
             && split_size.is_none()
             && let Some(static_shape) = &tensor.static_shape
+            && let Some(dim_size) = static_shape[axis as usize]
         {
             let inferred_num_outputs = node.outputs.len();
-            let dim_size = static_shape[axis as usize];
 
             // Calculate inferred split size based on number of outputs
             let calculated_split_size =
@@ -656,6 +707,94 @@ mod tests {
 
     // TODO: Missing test for split with runtime split sizes (dynamic case).
     // Need test where split input has no static value to verify Runtime variant handling.
+
+    /// Regression test for #55: Split must accept Shape(rank) input.
+    /// Shape values flow through Split in models that reshape tensors based on
+    /// computed shapes (e.g., split a shape, replace one dimension, concat back).
+    #[test]
+    fn test_split_shape_input() {
+        // Shape(3) = a 3-element shape, like the output of Shape(rank-3 tensor)
+        // Split it with sizes [1, 1, 1] into 3 scalar-like outputs
+        let node = TestNodeBuilder::new(NodeType::Split, "test_split")
+            .input_shape("shape_input", 3)
+            .input_tensor_i64_data("split_sizes", vec![1, 1, 1], vec![3])
+            .output_tensor_i64("output_0", 0, None)
+            .output_tensor_i64("output_1", 0, None)
+            .output_tensor_i64("output_2", 0, None)
+            .build_with_graph_data(16);
+
+        let mut node = node;
+        let processor = SplitProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        // All outputs should be rank-1 I64 tensors with static_shape [1]
+        for output in &node.outputs {
+            match &output.ty {
+                ArgType::Tensor(t) => {
+                    assert_eq!(t.dtype, DType::I64);
+                    assert_eq!(t.rank, 1);
+                    assert_eq!(t.static_shape, Some(vec![Some(1)]));
+                }
+                other => panic!("Expected Tensor, got {:?}", other),
+            }
+        }
+    }
+
+    /// Regression test for #55: Split with zero-sized split parts is valid per ONNX spec.
+    /// Models use [0, N, 0] splits to extract the middle element of a shape.
+    #[test]
+    fn test_split_zero_sized_parts() {
+        let node = TestNodeBuilder::new(NodeType::Split, "test_split")
+            .input_shape("shape_input", 1)
+            .input_tensor_i64_data("split_sizes", vec![0, 1, 0], vec![3])
+            .output_tensor_i64("output_0", 0, None)
+            .output_tensor_i64("output_1", 0, None)
+            .output_tensor_i64("output_2", 0, None)
+            .build_with_graph_data(16);
+
+        let mut node = node;
+        let processor = SplitProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        // Check static shapes: [0], [1], [0]
+        let shapes: Vec<_> = node
+            .outputs
+            .iter()
+            .map(|o| match &o.ty {
+                ArgType::Tensor(t) => t.static_shape.clone(),
+                _ => panic!("Expected Tensor"),
+            })
+            .collect();
+        assert_eq!(
+            shapes,
+            vec![
+                Some(vec![Some(0)]),
+                Some(vec![Some(1)]),
+                Some(vec![Some(0)])
+            ]
+        );
+
+        // extract_config should also succeed (no rejection of size 0)
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert!(matches!(
+            &config.split_sizes,
+            Some(SplitSizesInput::Static(sizes)) if sizes == &vec![0, 1, 0]
+        ));
+    }
+
+    #[test]
+    fn test_split_single_output_is_noop() {
+        let node = create_test_node(3, 1, Some(vec![2, 3, 4]), None, None).build();
+        assert!(SplitProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_split_multiple_outputs_is_not_noop() {
+        let node = create_test_node(3, 2, Some(vec![2, 3, 4]), None, None).build();
+        assert!(!SplitProcessor.is_noop(&node));
+    }
 
     // TODO: Missing test for split_sizes that don't sum to dimension size.
     // E.g., shape=[10, 20], axis=0, split=[3, 4] (sum=7) should fail as it doesn't match dim size 10.

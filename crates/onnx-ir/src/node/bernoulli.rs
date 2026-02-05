@@ -125,7 +125,7 @@ mod tests {
         match &node.outputs[0].ty {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::I32);
-                assert_eq!(tensor.static_shape, Some(vec![3, 4, 2]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(3), Some(4), Some(2)]));
                 assert_eq!(tensor.rank, 4);
             }
             _ => panic!("Expected tensor output"),

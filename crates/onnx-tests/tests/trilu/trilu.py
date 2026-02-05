@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 import torch
 import torch.nn as nn
@@ -24,10 +32,10 @@ def main():
 
     # Set print options for better precision output
     torch.set_printoptions(precision=8)
-                           
+
     # Export Trilu Upper Model
     upper = True  # Change to False for lower triangular matrix
-    diagonal = 0         # Change k to adjust the diagonal
+    diagonal = 0  # Change k to adjust the diagonal
     lower_model = TriluModel(upper=upper, diagonal=diagonal)
     lower_model.eval()
     device = torch.device("cpu")
@@ -35,8 +43,14 @@ def main():
     # Generate test input: a 2D matrix or batch of 2D matrices
     upper_file_name = "trilu_upper.onnx"
     test_input = torch.randn(2, 4, 4, device=device)  # 2 batches of 4x4 matrices
-    torch.onnx.export(lower_model, test_input, upper_file_name,
-                      verbose=False, opset_version=16)
+    torch.onnx.export(
+        lower_model,
+        test_input,
+        upper_file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(upper_file_name))
 
@@ -47,7 +61,6 @@ def main():
     print("Test output data shape: {}".format(output.shape))
     print("Test output: {}".format(output))
 
-
     # Export Trilu Lower Model
     upper = False
     diagonal = 0
@@ -56,8 +69,14 @@ def main():
     # Generate test input: a 2D matrix or batch of 2D matrices
     upper_file_name = "trilu_lower.onnx"
     test_input = torch.randn(2, 4, 4, device=device)  # 2 batches of 4x4 matrices
-    torch.onnx.export(lower_model, test_input, upper_file_name,
-                      verbose=False, opset_version=16)
+    torch.onnx.export(
+        lower_model,
+        test_input,
+        upper_file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(upper_file_name))
 
@@ -67,5 +86,6 @@ def main():
     print("Test output data shape: {}".format(output.shape))
     print("Test output: {}".format(output))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

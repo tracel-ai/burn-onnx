@@ -100,9 +100,10 @@ impl NodeProcessor for ExpandProcessor {
         // Get input element type - Expand should preserve the input's element type
         let input_elem_type = match &node.inputs[0].ty {
             ArgType::Tensor(tensor) => tensor.dtype,
+            ArgType::Scalar(dtype) => *dtype,
             _ => {
                 return Err(ProcessError::TypeMismatch {
-                    expected: "Tensor".to_string(),
+                    expected: "Tensor or Scalar".to_string(),
                     actual: format!("{:?}", node.inputs[0].ty),
                 });
             }
@@ -116,7 +117,7 @@ impl NodeProcessor for ExpandProcessor {
                 node.outputs[0].ty = ArgType::Tensor(TensorType {
                     dtype: input_elem_type,
                     rank: shape.len(),
-                    static_shape: Some(shape.iter().map(|&dim| dim as usize).collect()),
+                    static_shape: Some(shape.iter().map(|&dim| Some(dim as usize)).collect()),
                 });
             }
             ExpandConfig::Runtime(_) => {
@@ -124,8 +125,10 @@ impl NodeProcessor for ExpandProcessor {
                 let output_rank = match &node.inputs[1].ty {
                     ArgType::Shape(rank) => *rank,
                     ArgType::Tensor(tensor) => {
-                        if let Some(static_shape) = &tensor.static_shape {
-                            static_shape[0]
+                        if let Some(static_shape) = &tensor.static_shape
+                            && let Some(Some(rank)) = static_shape.first()
+                        {
+                            *rank
                         } else {
                             // Check if output already has a rank set from ONNX
                             match &node.outputs[0].ty {
@@ -156,6 +159,17 @@ impl NodeProcessor for ExpandProcessor {
         }
 
         Ok(())
+    }
+
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Expand is a no-op when output shape == input shape (no actual broadcasting)
+        if let (ArgType::Tensor(in_t), ArgType::Tensor(out_t)) =
+            (&node.inputs[0].ty, &node.outputs[0].ty)
+            && let (Some(in_shape), Some(out_shape)) = (&in_t.static_shape, &out_t.static_shape)
+        {
+            return in_shape == out_shape;
+        }
+        false
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
@@ -232,7 +246,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 3);
-                assert_eq!(tensor.static_shape, Some(vec![2, 3, 4]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(3), Some(4)]));
             }
             _ => panic!("Expected tensor output"),
         }
@@ -429,7 +443,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 3);
-                assert_eq!(tensor.static_shape, Some(vec![5, 10, 15]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(5), Some(10), Some(15)]));
             }
             _ => panic!("Expected tensor output"),
         }
@@ -562,10 +576,84 @@ mod tests {
                     "Expand should use input type (Int64) not initial output type (Float32)"
                 );
                 assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, Some(vec![2, 3]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(3)]));
             }
             _ => panic!("Expected tensor output"),
         }
+    }
+
+    #[test]
+    fn test_expand_scalar_input_static_shape() {
+        let mut node = TestNodeBuilder::new(NodeType::Expand, "test_expand")
+            .input_scalar_f32("input")
+            .input_tensor_i64_data("shape", vec![2, 3], vec![2])
+            .output_tensor_f32("output", 0, None)
+            .build_with_graph_data(16);
+
+        let processor = ExpandProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(tensor) => {
+                assert_eq!(tensor.dtype, DType::F32);
+                assert_eq!(tensor.rank, 2);
+                assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(3)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_expand_scalar_input_runtime_shape() {
+        let mut node = TestNodeBuilder::new(NodeType::Expand, "test_expand")
+            .input_scalar_i64("input")
+            .input_tensor_i64("shape", 1, Some(vec![4]))
+            .output_tensor_i64("output", 0, None)
+            .build();
+
+        let processor = ExpandProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(tensor) => {
+                assert_eq!(tensor.dtype, DType::I64);
+                assert_eq!(tensor.rank, 4);
+                assert_eq!(tensor.static_shape, None);
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_expand_same_static_shape_is_noop() {
+        let node = TestNodeBuilder::new(NodeType::Expand, "test")
+            .input_tensor_f32("input", 3, Some(vec![2, 3, 4]))
+            .input_tensor_i64("shape", 1, Some(vec![3]))
+            .output_tensor_f32("output", 3, Some(vec![2, 3, 4]))
+            .build();
+        assert!(ExpandProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_expand_different_static_shape_is_not_noop() {
+        let node = TestNodeBuilder::new(NodeType::Expand, "test")
+            .input_tensor_f32("input", 3, Some(vec![1, 3, 4]))
+            .input_tensor_i64("shape", 1, Some(vec![3]))
+            .output_tensor_f32("output", 3, Some(vec![2, 3, 4]))
+            .build();
+        assert!(!ExpandProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_expand_no_static_shape_is_not_noop() {
+        let node = TestNodeBuilder::new(NodeType::Expand, "test")
+            .input_tensor_f32("input", 3, None)
+            .input_tensor_i64("shape", 1, Some(vec![3]))
+            .output_tensor_f32("output", 3, None)
+            .build();
+        assert!(!ExpandProcessor.is_noop(&node));
     }
 
     // TODO: Add test for invalid shape values - Test negative values other than -1 (e.g., -2, -3) should return error - Missing constraint validation test

@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/slice/slice_empty.onnx
 #
@@ -79,16 +86,14 @@ def main() -> None:
         inputs=[
             helper.make_tensor_value_info("input_tensor", TensorProto.FLOAT, [4, 3]),
         ],
-        outputs=[
-            helper.make_tensor_value_info("output", TensorProto.FLOAT, [0, 3])
-        ],
+        outputs=[helper.make_tensor_value_info("output", TensorProto.FLOAT, [0, 3])],
     )
 
     # Create the model
     model_def = helper.make_model(
         graph_def,
         producer_name="slice_empty",
-        opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+        opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)],
     )
 
     # Ensure valid ONNX
@@ -100,12 +105,15 @@ def main() -> None:
     print(f"Finished exporting model to {onnx_name}")
 
     # Test the model with sample data
-    test_input = np.array([
-        [1.0, 2.0, 3.0],
-        [4.0, 5.0, 6.0],
-        [7.0, 8.0, 9.0],
-        [10.0, 11.0, 12.0],
-    ], dtype=np.float32)
+    test_input = np.array(
+        [
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0],
+            [7.0, 8.0, 9.0],
+            [10.0, 11.0, 12.0],
+        ],
+        dtype=np.float32,
+    )
     print(f"\nTest input shape: {test_input.shape}")
     print(f"Test input:\n{test_input}")
 

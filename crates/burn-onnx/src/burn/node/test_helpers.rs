@@ -44,6 +44,9 @@ where
     // Register all inputs as variables
     for input in node.inputs().iter() {
         // Skip non-dynamic inputs (constants, initializers)
+        if !(input.is_dynamic() || input.is_constant()) {
+            continue;
+        }
         if !matches!(
             input.ty,
             ArgType::Tensor(_) | ArgType::Scalar(_) | ArgType::Shape(_)
@@ -67,11 +70,12 @@ where
     let dynamic_inputs: Vec<_> = node
         .inputs()
         .iter()
+        .filter(|arg| arg.is_dynamic() || arg.is_constant())
         .filter(|arg| {
             matches!(
                 arg.ty,
                 ArgType::Tensor(_) | ArgType::Scalar(_) | ArgType::Shape(_)
-            ) && arg.value().is_none()
+            )
         })
         .cloned()
         .collect();

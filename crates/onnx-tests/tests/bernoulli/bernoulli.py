@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: bernoulli.onnx
 
@@ -9,15 +15,13 @@ from onnx import TensorProto
 
 def build_model():
     # Define the graph inputs and outputs
-    input = onnx.helper.make_tensor_value_info(
-        'input', TensorProto.FLOAT, [10])
-    output = onnx.helper.make_tensor_value_info(
-        'output', TensorProto.FLOAT, [10])
+    input = onnx.helper.make_tensor_value_info("input", TensorProto.FLOAT, [10])
+    output = onnx.helper.make_tensor_value_info("output", TensorProto.FLOAT, [10])
 
     # Create the Bernoulli node
     bernoulli = onnx.helper.make_node(
         "Bernoulli",
-        inputs=['input'],
+        inputs=["input"],
         outputs=["output"],
         name="/Bernoulli",
         dtype=onnx.TensorProto.FLOAT,
@@ -35,7 +39,7 @@ def build_model():
     model = onnx.helper.make_model(
         opset_imports=[onnx.helper.make_operatorsetid("", 16)],
         graph=graph,
-        producer_name='ONNX_Generator',
+        producer_name="ONNX_Generator",
     )
 
     return model

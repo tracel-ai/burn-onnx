@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/expand/expand_max_semantics.onnx
 #
@@ -20,53 +27,48 @@ def main() -> None:
     # Shape [1, 1] with input [2, 3] should output [2, 3] (max semantics)
     shape_value = [1, 1]
     shape_tensor = helper.make_tensor(
-        name='shape',
+        name="shape",
         data_type=TensorProto.INT64,
         dims=[len(shape_value)],
         vals=shape_value,
     )
 
     shape_node = helper.make_node(
-        'Constant',
-        name='shape_constant',
+        "Constant",
+        name="shape_constant",
         inputs=[],
-        outputs=['shape'],
+        outputs=["shape"],
         value=shape_tensor,
     )
 
     # Define the Expand node
     expand_node = helper.make_node(
-        'Expand',
-        name='/Expand',
-        inputs=['input_tensor', 'shape'],
-        outputs=['output']
+        "Expand", name="/Expand", inputs=["input_tensor", "shape"], outputs=["output"]
     )
 
     # Create the graph
     # Input: [2, 3], Shape: [1, 1], Output: [2, 3] (max semantics)
     graph_def = helper.make_graph(
         nodes=[shape_node, expand_node],
-        name='ExpandMaxSemanticsGraph',
+        name="ExpandMaxSemanticsGraph",
         inputs=[
-            helper.make_tensor_value_info('input_tensor', TensorProto.FLOAT, [2, 3]),
+            helper.make_tensor_value_info("input_tensor", TensorProto.FLOAT, [2, 3]),
         ],
-        outputs=[
-            helper.make_tensor_value_info('output', TensorProto.FLOAT, [2, 3])
-        ],
+        outputs=[helper.make_tensor_value_info("output", TensorProto.FLOAT, [2, 3])],
     )
 
     # Create the model
     model_def = helper.make_model(
         graph_def,
-        producer_name='expand_max_semantics',
-        opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+        producer_name="expand_max_semantics",
+        opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)],
     )
 
     # Ensure valid ONNX:
     onnx.checker.check_model(model_def)
 
     # Save the model to a file
-    onnx_name = 'expand_max_semantics.onnx'
+    onnx_name = "expand_max_semantics.onnx"
     onnx.save(model_def, onnx_name)
     print(f"Finished exporting model to {onnx_name}")
 
@@ -85,9 +87,11 @@ def main() -> None:
 
     # Verify max-semantics: output should be [2, 3], same as input
     assert output.shape == (2, 3), f"Expected shape (2, 3), got {output.shape}"
-    assert np.allclose(output, test_input), "Output should equal input (no broadcasting)"
+    assert np.allclose(output, test_input), (
+        "Output should equal input (no broadcasting)"
+    )
     print("\nMax-semantics verification passed!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

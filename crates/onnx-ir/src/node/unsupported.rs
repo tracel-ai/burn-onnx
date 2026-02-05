@@ -43,7 +43,6 @@ define_placeholder_node! {
     EinsumNode,
     GatherNDNode,
     GlobalMaxPoolNode,
-    GruNode,
     HammingWindowNode,
     HannWindowNode,
     HardmaxNode,
@@ -73,7 +72,6 @@ define_placeholder_node! {
     RotaryEmbeddingNode,
     ScatterNode,
     ScatterElementsNode,
-    ScatterNDNode,
     SequenceAtNode,
     SequenceConstructNode,
     SequenceEmptyNode,
@@ -120,8 +118,7 @@ impl NodeProcessor for UnsupportedProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        // For unsupported nodes, we don't infer types
-        // They will keep whatever types were provided in the ONNX file
+        // Unsupported nodes keep whatever types were provided in the ONNX file.
         Ok(())
     }
 
@@ -149,11 +146,6 @@ impl NodeProcessor for UnsupportedProcessor {
                 outputs: builder.outputs,
             }),
             NodeType::ScatterElements => Node::ScatterElements(ScatterElementsNode {
-                name: builder.name,
-                inputs: builder.inputs,
-                outputs: builder.outputs,
-            }),
-            NodeType::ScatterND => Node::ScatterND(ScatterNDNode {
                 name: builder.name,
                 inputs: builder.inputs,
                 outputs: builder.outputs,

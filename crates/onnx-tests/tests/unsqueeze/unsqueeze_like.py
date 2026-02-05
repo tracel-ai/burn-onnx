@@ -1,46 +1,68 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: unsqueeze.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: unsqueeze_like.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-        self.axis = 3
-
-    def forward(self, x, scalar):
-        x = torch.unsqueeze(x, self.axis)
-        y = torch.unsqueeze(torch.tensor(scalar), 0)
-        return x, y
+OPSET_VERSION = 16
 
 
 def main():
-    # Set seed for reproducibility
-    torch.manual_seed(42)
+    node0 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([3], dtype=np.int64).reshape([1]), name="value"
+        ),
+    )
+    node1 = helper.make_node(
+        "Unsqueeze", ["onnx::Unsqueeze_0", "/Constant_output_0"], ["3"]
+    )
+    node2 = helper.make_node("Cast", ["onnx::Cast_1"], ["/Cast_output_0"], to=11)
+    node3 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_1_output_0"],
+        value=numpy_helper.from_array(
+            np.array([0], dtype=np.int64).reshape([1]), name="value"
+        ),
+    )
+    node4 = helper.make_node(
+        "Unsqueeze", ["/Cast_output_0", "/Constant_1_output_0"], ["6"]
+    )
 
-    torch.set_printoptions(precision=8)
+    inp_onnx__Unsqueeze_0 = helper.make_tensor_value_info(
+        "onnx::Unsqueeze_0", TensorProto.FLOAT, [3, 4, 5]
+    )
+    inp_onnx__Cast_1 = helper.make_tensor_value_info(
+        "onnx::Cast_1", TensorProto.DOUBLE, []
+    )
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
+    out_n3 = helper.make_tensor_value_info("3", TensorProto.FLOAT, [3, 4, 5, 1])
+    out_n6 = helper.make_tensor_value_info("6", TensorProto.DOUBLE, [1])
 
-    test_input = (torch.randn(3, 4, 5, device=device),1.0)
-    model = Model()
+    graph = helper.make_graph(
+        [node0, node1, node2, node3, node4],
+        "main_graph",
+        [inp_onnx__Unsqueeze_0, inp_onnx__Cast_1],
+        [out_n3, out_n6],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    output = model.forward(*test_input)
-
-    torch.onnx.export(model, test_input, "unsqueeze_like.onnx", verbose=False, opset_version=16)
-
-    print(f"Finished exporting model")
-
-    # Output some test data for use in the test
-    print(f"Test input data shape of ones: {test_input[0].shape}")
-    print(f"Test output data shape: {output[0].shape}")
-
+    onnx.save(model, "unsqueeze_like.onnx")
+    print(f"Finished exporting model to unsqueeze_like.onnx")
 
 
 if __name__ == "__main__":

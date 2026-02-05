@@ -1,40 +1,43 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/not/not.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: not.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, x):
-        return torch.logical_not(x)
+OPSET_VERSION = 16
 
 
 def main():
-    # Set random seed for reproducibility
-    torch.manual_seed(0)
+    node0 = helper.make_node("Cast", ["onnx::Cast_0"], ["/Cast_output_0"], to=9)
+    node1 = helper.make_node("Not", ["/Cast_output_0"], ["2"])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-    onnx_name = "not.onnx"
-    test_input = torch.tensor([[[[True, False, True, False]]]], device=device)
+    inp_onnx__Cast_0 = helper.make_tensor_value_info(
+        "onnx::Cast_0", TensorProto.BOOL, [1, 1, 1, 4]
+    )
 
-    # NOTE: torch exports logical_not with a cast node even if the input is already bool
-    # https://github.com/pytorch/pytorch/blob/main/torch/onnx/symbolic_opset9.py#L2204-L2207
-    torch.onnx.export(model, test_input, onnx_name, verbose=False, opset_version=16)
+    out_n2 = helper.make_tensor_value_info("2", TensorProto.BOOL, [1, 1, 1, 4])
 
-    print(f"Finished exporting model to {onnx_name}")
+    graph = helper.make_graph(
+        [node0, node1],
+        "main_graph",
+        [inp_onnx__Cast_0],
+        [out_n2],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    # Output some test data for use in the test
-    print(f"Test input data: {test_input}")
-    output = model.forward(test_input)
-    print(f"Test output data: {output}")
+    onnx.save(model, "not.onnx")
+    print(f"Finished exporting model to not.onnx")
 
 
 if __name__ == "__main__":

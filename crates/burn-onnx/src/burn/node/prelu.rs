@@ -8,7 +8,7 @@ fn num_parameters(node: &onnx_ir::prelu::PReluNode) -> usize {
         .get(1)
         .and_then(|slope| {
             if let ArgType::Tensor(tensor) = &slope.ty {
-                tensor.static_shape.as_ref()
+                tensor.static_shape_known()
             } else {
                 None
             }

@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: prelu_with_channel_slope.onnx
 
@@ -29,16 +37,27 @@ def main():
 
     file_name = "prelu_with_channel_slope.onnx"
     export_input = torch.randn(1, 3, 2, 2, device=device)
-    torch.onnx.export(model, export_input, file_name,
-                      verbose=False, opset_version=18, external_data=False)
+    torch.onnx.export(
+        model,
+        export_input,
+        file_name,
+        verbose=False,
+        opset_version=18,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 
-    test_input = torch.tensor([[
-        [[0.5, -0.5], [1.0, -1.0]],    # ch0: mix of pos/neg
-        [[0.1, 0.2], [0.3, 0.4]],      # ch1: all positive
-        [[-0.1, -0.2], [-0.3, -0.4]],  # ch2: all negative
-    ]], device=device)
+    test_input = torch.tensor(
+        [
+            [
+                [[0.5, -0.5], [1.0, -1.0]],  # ch0: mix of pos/neg
+                [[0.1, 0.2], [0.3, 0.4]],  # ch1: all positive
+                [[-0.1, -0.2], [-0.3, -0.4]],  # ch2: all negative
+            ]
+        ],
+        device=device,
+    )
 
     output = model.forward(test_input)
 
@@ -48,5 +67,5 @@ def main():
     print("// Slopes: {}".format(model.prelu.weight.tolist()))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

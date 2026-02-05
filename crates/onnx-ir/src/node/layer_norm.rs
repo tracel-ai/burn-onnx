@@ -30,14 +30,10 @@ use crate::processor::{
 /// Configuration for LayerNorm operations
 #[derive(Debug, Clone, new)]
 pub struct LayerNormConfig {
-    /// Number of features/model dimension
-    pub d_model: usize,
     /// Small constant added for numerical stability
     pub epsilon: f64,
     /// Whether to use full precision for intermediate calculations (stash_type == 1)
     pub full_precision: bool,
-    /// Whether the ONNX model includes a bias (beta) parameter
-    pub has_bias: bool,
 }
 
 impl LayerNormConfig {
@@ -50,12 +46,6 @@ impl LayerNormConfig {
     /// Set the full_precision value
     pub fn with_full_precision(mut self, full_precision: bool) -> Self {
         self.full_precision = full_precision;
-        self
-    }
-
-    /// Set the has_bias value
-    pub fn with_has_bias(mut self, has_bias: bool) -> Self {
-        self.has_bias = has_bias;
         self
     }
 }
@@ -147,15 +137,6 @@ impl NodeProcessor for LayerNormProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
-        let weight_shape = node.inputs[1]
-            .value()
-            .ok_or_else(|| {
-                ProcessError::Custom("LayerNorm: weight tensor must be present".to_string())
-            })?
-            .shape
-            .to_vec();
-
-        let num_features = weight_shape[0];
         let mut epsilon = 1e-5;
         let mut stash_type = 1; // Default value is 1 (full precision)
 
@@ -169,9 +150,7 @@ impl NodeProcessor for LayerNormProcessor {
         }
 
         let full_precision = stash_type == 1;
-        // Check if bias (3rd input) is present in the ONNX model
-        let has_bias = node.inputs.len() > 2;
-        let config = LayerNormConfig::new(num_features, epsilon as f64, full_precision, has_bias);
+        let config = LayerNormConfig::new(epsilon as f64, full_precision);
         Ok(config)
     }
 
@@ -222,7 +201,6 @@ mod tests {
         let config = processor.extract_config(&node, 17).unwrap();
         processor.infer_types(&mut node, 17, &prefs).unwrap();
 
-        assert_eq!(config.d_model, 64);
         assert!(f64::abs(config.epsilon - 1e-5) < 1e-6);
         assert!(config.full_precision); // stash_type == 1
     }
@@ -235,7 +213,6 @@ mod tests {
         let config = processor.extract_config(&node, 17).unwrap();
         processor.infer_types(&mut node, 17, &prefs).unwrap();
 
-        assert_eq!(config.d_model, 32);
         assert!(!config.full_precision); // stash_type == 0
     }
 

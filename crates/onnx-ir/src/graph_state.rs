@@ -205,6 +205,7 @@ impl GraphState {
             })
             .collect::<Vec<Argument>>();
 
+        let mut input_idx = 0usize;
         let inputs = inputs
             .iter()
             .filter_map(|x| {
@@ -215,7 +216,14 @@ impl GraphState {
 
                 // Only real graph inputs get added
                 // Preserve the original ONNX input name for better generated code usability
-                graph_input_map.insert(x.name.clone(), graph_input_map.len());
+                let idx = input_idx;
+                input_idx += 1;
+                graph_input_map.insert(x.name.clone(), idx);
+                // Also insert sanitized name for lookups using sanitized outer-scope references
+                let sanitized = crate::proto_conversion::sanitize_name(&x.name);
+                if sanitized != x.name {
+                    graph_input_map.insert(sanitized, idx);
+                }
 
                 // Try to convert from proto, but if no type is available (common for subgraph
                 // inputs that reference outer scope), use the outer scope argument
@@ -447,6 +455,16 @@ impl GraphState {
         Rc::make_mut(&mut self.tensor_store).store(data)
     }
 
+    /// Register a constant created by the simplifier.
+    ///
+    /// Stores the tensor data and maps the output name to its data ID so that
+    /// codegen can find it when generating Constant node code.
+    pub(crate) fn register_constant(&mut self, output_name: String, data: TensorDataRef) -> DataId {
+        let data_id = self.store_tensor_data(data);
+        Rc::make_mut(&mut self.constant_map).insert(output_name, data_id);
+        data_id
+    }
+
     /// Get data_id for a constant by output name (O(1) lookup via constant_map)
     pub(crate) fn get_constant_data_id_by_output(&self, output_name: &str) -> Option<DataId> {
         // First try the constant_map (O(1) lookup)
@@ -587,7 +605,7 @@ fn create_test_constant(
     let ty = crate::ir::ArgType::Tensor(crate::ir::TensorType {
         dtype: elem_type,
         rank: shape.len(),
-        static_shape: Some(shape.clone()),
+        static_shape: Some(shape.iter().map(|&d| Some(d)).collect()),
     });
 
     // Convert TensorData to TensorDataRef and store
@@ -600,4 +618,85 @@ fn create_test_constant(
 
     // Return node and data_id for registering in constant_map
     (constant_node, data_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protos::{
+        TypeProto, ValueInfoProto,
+        tensor_proto::DataType,
+        tensor_shape_proto::Dimension,
+        type_proto::{Tensor, Value},
+    };
+
+    /// Create a ValueInfoProto with a tensor type
+    fn make_tensor_value_info(name: &str, rank: usize) -> ValueInfoProto {
+        let dims: Vec<Dimension> = (0..rank)
+            .map(|_| {
+                let mut dim = Dimension::default();
+                dim.value = Some(tensor_shape_proto::dimension::Value::DimParam("N".into()));
+                dim
+            })
+            .collect();
+
+        let mut shape = crate::protos::TensorShapeProto::default();
+        shape.dim = dims;
+
+        let mut tensor = Tensor::default();
+        tensor.elem_type = DataType::FLOAT.value();
+        tensor.shape = protobuf::MessageField::some(shape);
+
+        let mut type_proto = TypeProto::default();
+        type_proto.value = Some(Value::TensorType(tensor));
+
+        let mut vi = ValueInfoProto::default();
+        vi.name = name.to_string();
+        vi.type_ = protobuf::MessageField::some(type_proto);
+        vi
+    }
+
+    use crate::protos::tensor_shape_proto;
+    use protobuf::Enum;
+
+    /// Regression test for https://github.com/tracel-ai/burn-onnx/issues/2
+    ///
+    /// Graph inputs with ONNX names containing colons (e.g. "samples:0") must be
+    /// findable via `init_in` using both the original name and the sanitized name
+    /// ("samples_0"). Before the fix, only the original name worked, causing
+    /// outer-scope references in Loop subgraphs to fall back to rank-0 defaults.
+    #[test]
+    fn init_in_finds_graph_input_by_sanitized_name() {
+        let input = make_tensor_value_info("samples:0", 2);
+        let output = make_tensor_value_info("output:0", 2);
+
+        let state = GraphState::new(&[input], &[output], &[], &[]);
+
+        // Lookup by original ONNX name
+        let arg = state.init_in("samples:0");
+        assert_eq!(arg.name, "samples_0");
+        assert!(matches!(arg.ty, ArgType::Tensor(ref t) if t.rank == 2));
+
+        // Lookup by sanitized name (the regression case)
+        let arg = state.init_in("samples_0");
+        assert_eq!(arg.name, "samples_0");
+        assert!(matches!(arg.ty, ArgType::Tensor(ref t) if t.rank == 2));
+    }
+
+    /// Verify that multiple graph inputs with colon names get correct indices.
+    /// This catches the index corruption bug where using map.len() as index
+    /// would assign wrong indices after inserting sanitized aliases.
+    #[test]
+    fn init_in_correct_indices_with_multiple_colon_inputs() {
+        let input_a = make_tensor_value_info("a:0", 2);
+        let input_b = make_tensor_value_info("b:0", 3);
+
+        let state = GraphState::new(&[input_a, input_b], &[], &[], &[]);
+
+        let arg_a = state.init_in("a_0");
+        assert!(matches!(arg_a.ty, ArgType::Tensor(ref t) if t.rank == 2));
+
+        let arg_b = state.init_in("b_0");
+        assert!(matches!(arg_b.ty, ArgType::Tensor(ref t) if t.rank == 3));
+    }
 }

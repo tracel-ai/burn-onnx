@@ -12,9 +12,18 @@ impl NodeCodegen for onnx_ir::linear::LinearNode {
 
     fn field(&self) -> Option<Field> {
         let name = Ident::new(&self.name, Span::call_site());
-        let d_input = self.config.d_input.to_tokens();
-        let d_output = self.config.d_output.to_tokens();
-        let bias = self.config.bias;
+        let weight_shape = self.inputs[1]
+            .ty
+            .static_shape_known()
+            .expect("Linear: weight tensor shape must be known at codegen time");
+        let (d_input, d_output) = if self.config.transpose_weight {
+            // Gemm layout: [out_features, in_features]
+            (weight_shape[1].to_tokens(), weight_shape[0].to_tokens())
+        } else {
+            // MatMul layout: [in_features, out_features]
+            (weight_shape[0].to_tokens(), weight_shape[1].to_tokens())
+        };
+        let bias = self.inputs.len() > 2;
 
         // ONNX Gemm stores weights as [d_output, d_input], which matches LinearLayout::Col.
         // MatMul-sourced Linear stores weights as [d_input, d_output], matching LinearLayout::Row.
@@ -90,43 +99,62 @@ mod tests {
     use super::super::test_helpers::*;
     use burn::tensor::DType;
     use insta::assert_snapshot;
-    use onnx_ir::ir::{ArgType, Argument, TensorType};
+    use onnx_ir::ir::{ArgType, Argument, TensorType, ValueSource};
     use onnx_ir::linear::{LinearConfig, LinearNode};
 
-    #[test]
-    fn test_linear_forward() {
-        // transpose_weight=true simulates Gemm-sourced Linear
-        let config = LinearConfig::new(128, 64, true, true);
+    fn static_tensor_arg(name: &str, shape: Vec<usize>, dtype: DType) -> Argument {
+        let mut arg = Argument::new(name, ArgType::Tensor(TensorType::new_known(dtype, shape)));
+        arg.value_source = ValueSource::Static(0);
+        arg
+    }
+
+    fn create_linear_node_gemm(name: &str) -> LinearNode {
+        // Gemm-sourced: transpose_weight=true, weight is [out=64, in=128]
+        let config = LinearConfig::new(true);
         let input = Argument::new(
             "input",
             ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
         );
-        let weight = Argument::new(
-            "weight",
-            ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
-        );
-        let bias = Argument::new(
-            "bias",
-            ArgType::Tensor(TensorType::new(DType::F32, 1, None)),
-        );
+        let weight = static_tensor_arg("weight", vec![64, 128], DType::F32);
+        let bias = static_tensor_arg("bias", vec![64], DType::F32);
 
-        let node = LinearNode {
-            name: "linear1".to_string(),
+        LinearNode {
+            name: name.to_string(),
             inputs: vec![input, weight, bias],
             outputs: vec![Argument::new(
                 "output",
                 ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
             )],
             config,
-        };
+        }
+    }
+
+    fn create_linear_node_matmul(name: &str) -> LinearNode {
+        // MatMul-sourced: transpose_weight=false, weight is [in=128, out=64]
+        let config = LinearConfig::new(false);
+        let input = Argument::new(
+            "input",
+            ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+        );
+        let weight = static_tensor_arg("weight", vec![128, 64], DType::F32);
+
+        LinearNode {
+            name: name.to_string(),
+            inputs: vec![input, weight],
+            outputs: vec![Argument::new(
+                "output",
+                ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+            )],
+            config,
+        }
+    }
+
+    #[test]
+    fn test_linear_forward() {
+        let node = create_linear_node_gemm("linear1");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<B, 2>,
-            weight: Tensor<B, 2>,
-            bias: Tensor<B, 1>,
-        ) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
             let output = self.linear1.forward(input);
             output
         }
@@ -135,29 +163,10 @@ mod tests {
 
     #[test]
     fn test_linear_forward_no_bias() {
-        // transpose_weight=false simulates MatMul-sourced Linear
-        let config = LinearConfig::new(128, 64, false, false);
-        let input = Argument::new(
-            "input",
-            ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
-        );
-        let weight = Argument::new(
-            "weight",
-            ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
-        );
-
-        let node = LinearNode {
-            name: "linear2".to_string(),
-            inputs: vec![input, weight],
-            outputs: vec![Argument::new(
-                "output",
-                ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
-            )],
-            config,
-        };
+        let node = create_linear_node_matmul("linear2");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>, weight: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
             let output = self.linear2.forward(input);
             output
         }

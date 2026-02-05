@@ -1,40 +1,53 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: split.onnx
 
-import torch
-import torch.nn as nn
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, x):
-        x = torch.split(x, 2)
-        return x
+OPSET_VERSION = 16
 
 
 def main():
-    # Set seed for reproducibility
-    torch.manual_seed(42)
+    node0 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([2, 2, 1], dtype=np.int64).reshape([3]), name="value"
+        ),
+    )
+    node1 = helper.make_node(
+        "Split", ["tensor", "/Constant_output_0"], ["2", "3", "4"], axis=0
+    )
 
-    torch.set_printoptions(precision=8)
+    inp_tensor = helper.make_tensor_value_info("tensor", TensorProto.INT64, [5, 2])
 
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
+    out_n2 = helper.make_tensor_value_info("2", TensorProto.INT64, [2, 2])
+    out_n3 = helper.make_tensor_value_info("3", TensorProto.INT64, [2, 2])
+    out_n4 = helper.make_tensor_value_info("4", TensorProto.INT64, [1, 2])
 
-    file_name = "split.onnx"
-    test_input = torch.arange(10, device=device).reshape(5, 2)
-    torch.onnx.export(model, test_input, file_name,
-                        verbose=False, opset_version=16)
-    print("Finished exporting model to {}".format(file_name))
+    graph = helper.make_graph(
+        [node0, node1],
+        "main_graph",
+        [inp_tensor],
+        [out_n2, out_n3, out_n4],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    print("Test input data shape: {}".format(test_input.shape))
-    print("Splitting input tensor into chunks of size 2")
-    output = model.forward(test_input)
-    print("Test output data length: {}".format(len(output)))
+    onnx.save(model, "split.onnx")
+    print(f"Finished exporting model to split.onnx")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

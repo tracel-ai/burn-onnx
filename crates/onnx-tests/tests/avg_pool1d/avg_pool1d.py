@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: avg_pool1d.onnx
 
@@ -37,8 +45,14 @@ def main():
 
     file_name = "avg_pool1d.onnx"
     input1 = torch.randn(1, 5, 5, device=device)
-    torch.onnx.export(model, (input1, input1, input1), file_name,
-                      verbose=False, opset_version=16)
+    torch.onnx.export(
+        model,
+        (input1, input1, input1),
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 
@@ -54,5 +68,5 @@ def main():
     print("Test output3: {}".format(output3))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

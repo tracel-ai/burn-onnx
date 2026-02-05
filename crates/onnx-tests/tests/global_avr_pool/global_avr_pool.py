@@ -1,49 +1,48 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: global_avr_pool.onnx
 
-import torch
-import torch.nn as nn
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-        self.pool1 = nn.AdaptiveAvgPool1d(1)
-        self.pool2 = nn.AdaptiveAvgPool2d((1, 1))
-
-    def forward(self, x_1d, x_2d):
-        y_1d = self.pool1(x_1d)
-        y_2d = self.pool2(x_2d)
-        return y_1d, y_2d
+OPSET_VERSION = 16
 
 
 def main():
+    node0 = helper.make_node("GlobalAveragePool", ["onnx::GlobalAveragePool_0"], ["2"])
+    node1 = helper.make_node("GlobalAveragePool", ["input"], ["3"])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
+    inp_onnx__GlobalAveragePool_0 = helper.make_tensor_value_info(
+        "onnx::GlobalAveragePool_0", TensorProto.FLOAT, [2, 4, 10]
+    )
+    inp_input = helper.make_tensor_value_info(
+        "input", TensorProto.FLOAT, [3, 10, 3, 15]
+    )
 
-    file_name = "global_avr_pool.onnx"
-    input1 = torch.ones(2, 4, 10, device=device)
-    input2 = torch.ones(3, 10, 3, 15, device=device)
-    torch.onnx.export(model, (input1, input2), file_name,
-                      verbose=False, opset_version=16)
+    out_n2 = helper.make_tensor_value_info("2", TensorProto.FLOAT, [2, 4, 1])
+    out_n3 = helper.make_tensor_value_info("3", TensorProto.FLOAT, [3, 10, 1, 1])
 
-    print("Finished exporting model to {}".format(file_name))
+    graph = helper.make_graph(
+        [node0, node1],
+        "torch_jit",
+        [inp_onnx__GlobalAveragePool_0, inp_input],
+        [out_n2, out_n3],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    # Output some test data for use in the test
-    print("Test input data shapes of ones: {}, {}".format(
-        input1.shape, input2.shape))
-    y_1d, y_2d = model.forward(input1, input2)
-    print("Test output data shapes: {}, {}".format(y_1d.shape, y_2d.shape))
-
-    sum1 = y_1d.sum().item()
-    sum2 = y_2d.sum().item()
-
-    print("Test output sums: {}, {}".format(sum1, sum2))
+    onnx.save(model, "global_avr_pool.onnx")
+    print(f"Finished exporting model to global_avr_pool.onnx")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

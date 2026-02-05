@@ -24,8 +24,8 @@ def create_empty_graph_model():
 
     # Input and output are the SAME tensor - no transformation needed
     # This creates a truly empty graph with no nodes
-    input_tensor = helper.make_tensor_value_info('data', TensorProto.FLOAT, [1, 4])
-    output_tensor = helper.make_tensor_value_info('data', TensorProto.FLOAT, [1, 4])
+    input_tensor = helper.make_tensor_value_info("data", TensorProto.FLOAT, [1, 4])
+    output_tensor = helper.make_tensor_value_info("data", TensorProto.FLOAT, [1, 4])
 
     # ZERO nodes - input IS the output
     nodes = []
@@ -33,13 +33,15 @@ def create_empty_graph_model():
     # Create the graph with no nodes
     graph = helper.make_graph(
         nodes,
-        'empty_graph_model',
+        "empty_graph_model",
         [input_tensor],
         [output_tensor],
     )
 
     # Create the model
-    model = helper.make_model(graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)]
+    )
 
     # Check the model - this is valid in ONNX!
     onnx.checker.check_model(model)
@@ -52,7 +54,7 @@ def main():
     model = create_empty_graph_model()
 
     # Save the model
-    output_path = '../fixtures/empty_graph.onnx'
+    output_path = "../fixtures/empty_graph.onnx"
     onnx.save(model, output_path)
     print(f"Model saved to {output_path}")
 
@@ -62,5 +64,5 @@ def main():
     print(f"  Tests absolute minimal graph structure with no operations")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

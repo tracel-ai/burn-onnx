@@ -2,6 +2,7 @@
 
 - [ ] Confirmed that `cargo xtask validate` command has been executed.
 - [ ] Confirm relevant documentation has been updated.
+- [ ] For new/modified ONNX operators: verified implementation matches `onnx-spec/ops/<OpName>.md`.
 
 ### Related Issues/PRs
 

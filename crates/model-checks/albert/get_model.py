@@ -8,6 +8,7 @@
 #   "sentencepiece>=0.2.0",
 #   "numpy",
 #   "torch",
+#   "onnxscript",
 # ]
 # ///
 
@@ -54,7 +55,8 @@ def download_and_convert_model(model_name, output_path):
         padding='max_length',
         max_length=seq_length,
         truncation=True,
-        return_tensors="pt"
+        return_tensors="pt",
+        return_token_type_ids=True,
     )
 
     input_ids = inputs['input_ids']

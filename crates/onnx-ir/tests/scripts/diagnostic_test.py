@@ -10,10 +10,11 @@
 
 import onnx
 
+
 def inspect_model(path):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Inspecting: {path}")
-    print('='*60)
+    print("=" * 60)
 
     model = onnx.load(path)
     graph = model.graph
@@ -32,9 +33,12 @@ def inspect_model(path):
 
     print(f"\nNodes ({len(graph.node)}):")
     for node in graph.node:
-        print(f"  - {node.op_type} '{node.name}': {list(node.input)} → {list(node.output)}")
+        print(
+            f"  - {node.op_type} '{node.name}': {list(node.input)} → {list(node.output)}"
+        )
 
-if __name__ == '__main__':
-    inspect_model('../fixtures/constant_lifting.onnx')
-    inspect_model('../fixtures/constant_multiple_refs.onnx')
-    inspect_model('../fixtures/matmul_dynamic_weights.onnx')
+
+if __name__ == "__main__":
+    inspect_model("../fixtures/constant_lifting.onnx")
+    inspect_model("../fixtures/constant_multiple_refs.onnx")
+    inspect_model("../fixtures/matmul_dynamic_weights.onnx")

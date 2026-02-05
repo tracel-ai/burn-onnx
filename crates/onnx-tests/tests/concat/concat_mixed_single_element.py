@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # Test: concat with Shape and single-element constant tensor
 
@@ -14,20 +21,14 @@ def build_model():
         inputs=[],
         outputs=["const_single"],
         value=onnx.helper.make_tensor(
-            name="const_value",
-            data_type=onnx.TensorProto.INT64,
-            dims=[1],
-            vals=[100]
+            name="const_value", data_type=onnx.TensorProto.INT64, dims=[1], vals=[100]
         ),
-        name="/Constant"
+        name="/Constant",
     )
 
     # Create Shape node to extract shape from input tensor
     shape_node = onnx.helper.make_node(
-        "Shape",
-        inputs=["input1"],
-        outputs=["shape1"],
-        name="/Shape"
+        "Shape", inputs=["input1"], outputs=["shape1"], name="/Shape"
     )
 
     # Create a Concat node that concatenates shape and single-element constant
@@ -36,7 +37,7 @@ def build_model():
         inputs=["shape1", "const_single"],
         outputs=["concatenated"],
         axis=0,
-        name="/Concat"
+        name="/Concat",
     )
 
     # Create the graph
@@ -55,17 +56,16 @@ def build_model():
             onnx.helper.make_value_info(
                 name="concatenated",
                 type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.INT64, shape=[3]  # 2 + 1 = 3
+                    elem_type=onnx.TensorProto.INT64,
+                    shape=[3],  # 2 + 1 = 3
                 ),
             )
-        ]
+        ],
     )
 
     # Create the model
     model = onnx.helper.make_model(
-        graph,
-        ir_version=8,
-        opset_imports=[onnx.helper.make_operatorsetid("", 16)]
+        graph, ir_version=8, opset_imports=[onnx.helper.make_operatorsetid("", 16)]
     )
 
     return model

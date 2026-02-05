@@ -20,11 +20,32 @@ use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
 
-/// Configuration for BatchNorm operations
+/// Configuration for BatchNorm operations.
+///
+/// When all weight inputs (scale, bias, mean, var) are static initializers,
+/// we use `Static` which allows generating a `BatchNorm` module.
+/// When any weight input comes from another node at runtime, we use `Runtime`
+/// which generates inline math in the forward pass.
+#[derive(Debug, Clone)]
+pub enum BatchNormConfig {
+    /// All weights are static initializers → use BatchNorm module
+    Static(BatchNormStaticConfig),
+    /// Some weights are runtime tensors → generate inline math
+    Runtime(BatchNormRuntimeConfig),
+}
+
+/// Static BatchNorm config — all weights are known at build time.
 #[derive(Debug, Clone, new)]
-pub struct BatchNormConfig {
-    /// Number of features (channels)
-    pub num_features: usize,
+pub struct BatchNormStaticConfig {
+    /// Small constant added for numerical stability
+    pub epsilon: f64,
+    /// Momentum for running statistics
+    pub momentum: f64,
+}
+
+/// Runtime BatchNorm config — weights come from other nodes.
+#[derive(Debug, Clone, new)]
+pub struct BatchNormRuntimeConfig {
     /// Small constant added for numerical stability
     pub epsilon: f64,
     /// Momentum for running statistics
@@ -55,18 +76,15 @@ impl NodeProcessor for BatchNormProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // Lift scale (input[1]), bias (input[2]), mean (input[3]), and variance (input[4])
-        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
-            node.inputs[1].to_static()?;
-        }
-        if node.inputs.len() > 2 && node.inputs[2].is_constant() {
-            node.inputs[2].to_static()?;
-        }
-        if node.inputs.len() > 3 && node.inputs[3].is_constant() {
-            node.inputs[3].to_static()?;
-        }
-        if node.inputs.len() > 4 && node.inputs[4].is_constant() {
-            node.inputs[4].to_static()?;
+        // Only lift weight inputs to static if ALL four are constants.
+        // Partially lifting would break: the Static path needs all 4 as snapshots,
+        // and the Runtime path needs all 4 as forward inputs.
+        let all_constant = (1..=4).all(|i| node.inputs.len() > i && node.inputs[i].is_constant());
+
+        if all_constant {
+            for i in 1..=4 {
+                node.inputs[i].to_static()?;
+            }
         }
 
         Ok(())
@@ -109,13 +127,6 @@ impl NodeProcessor for BatchNormProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
-        let weight_tensor = node.inputs[1].value().ok_or_else(|| {
-            ProcessError::Custom("BatchNorm: weight tensor must be present".to_string())
-        })?;
-
-        let weight_shape = weight_tensor.shape;
-        let num_features = weight_shape[0];
-
         let mut epsilon = 0f32;
         let mut momentum = 0f32;
 
@@ -127,8 +138,20 @@ impl NodeProcessor for BatchNormProcessor {
             }
         }
 
-        let config = BatchNormConfig::new(num_features, epsilon as f64, momentum as f64);
-        Ok(config)
+        // Check if all weight inputs (1-4) have static values
+        let all_static = (1..=4).all(|i| node.inputs[i].value().is_some());
+
+        if all_static {
+            Ok(BatchNormConfig::Static(BatchNormStaticConfig::new(
+                epsilon as f64,
+                momentum as f64,
+            )))
+        } else {
+            Ok(BatchNormConfig::Runtime(BatchNormRuntimeConfig::new(
+                epsilon as f64,
+                momentum as f64,
+            )))
+        }
     }
 
     fn build_node(&self, builder: RawNode, opset: usize) -> Node {
@@ -166,6 +189,18 @@ mod tests {
             .attr_float("momentum", momentum)
     }
 
+    fn create_runtime_test_node(epsilon: f32, momentum: f32) -> TestNodeBuilder {
+        TestNodeBuilder::new(NodeType::BatchNormalization, "test_batchnorm")
+            .input_tensor_f32("X", 4, None)
+            .input_tensor_f32("scale", 1, None)
+            .input_tensor_f32("bias", 1, None)
+            .input_tensor_f32("mean", 1, None)
+            .input_tensor_f32("var", 1, None)
+            .output_tensor_f32("output", 4, None)
+            .attr_float("epsilon", epsilon)
+            .attr_float("momentum", momentum)
+    }
+
     #[test]
     fn test_batch_norm_config_basic() {
         let node = create_test_node(1e-5, 0.9, 64).build_with_graph_data(16);
@@ -175,9 +210,13 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.num_features, 64);
-        assert!(f64::abs(config.epsilon - 1e-5) < 1e-6);
-        assert!(f64::abs(config.momentum - 0.9) < 1e-6);
+        match config {
+            BatchNormConfig::Static(c) => {
+                assert!(f64::abs(c.epsilon - 1e-5) < 1e-6);
+                assert!(f64::abs(c.momentum - 0.9) < 1e-6);
+            }
+            _ => panic!("Expected Static config"),
+        }
     }
 
     #[test]
@@ -189,8 +228,27 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.num_features, 32);
-        assert!(f64::abs(config.epsilon - 0.0) < 1e-6);
-        assert!(f64::abs(config.momentum - 0.0) < 1e-6);
+        match config {
+            BatchNormConfig::Static(c) => {
+                assert!(f64::abs(c.epsilon - 0.0) < 1e-6);
+                assert!(f64::abs(c.momentum - 0.0) < 1e-6);
+            }
+            _ => panic!("Expected Static config"),
+        }
+    }
+
+    #[test]
+    fn test_batch_norm_config_runtime() {
+        let node = create_runtime_test_node(1e-5, 0.9).build_with_graph_data(16);
+        let processor = BatchNormProcessor;
+        let config = processor.extract_config(&node, 16).unwrap();
+
+        match config {
+            BatchNormConfig::Runtime(c) => {
+                assert!(f64::abs(c.epsilon - 1e-5) < 1e-6);
+                assert!(f64::abs(c.momentum - 0.9) < 1e-6);
+            }
+            _ => panic!("Expected Runtime config"),
+        }
     }
 }

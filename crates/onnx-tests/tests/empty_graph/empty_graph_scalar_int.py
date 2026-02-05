@@ -1,7 +1,14 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+# ]
+# ///
 
 import onnx
 from onnx import TensorProto, helper
+
 
 def create_model():
     # Create a model that returns an int64 scalar input directly
@@ -10,20 +17,24 @@ def create_model():
 
     # Create input - scalar int64
     input_scalar = helper.make_tensor_value_info(
-        'input', TensorProto.INT64, []  # Empty shape means scalar
+        "input",
+        TensorProto.INT64,
+        [],  # Empty shape means scalar
     )
 
     # Create output - same as input (direct passthrough)
     output = helper.make_tensor_value_info(
-        'input', TensorProto.INT64, []  # Use same name as input for direct passthrough
+        "input",
+        TensorProto.INT64,
+        [],  # Use same name as input for direct passthrough
     )
 
     # Create empty graph (no nodes)
     graph = helper.make_graph(
         [],  # No nodes
-        'empty_graph_scalar_int',
+        "empty_graph_scalar_int",
         [input_scalar],
-        [output]
+        [output],
     )
 
     # Create the model
@@ -32,12 +43,13 @@ def create_model():
 
     return model
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     model = create_model()
 
     # Validate
     onnx.checker.check_model(model)
 
     # Save
-    onnx.save(model, 'empty_graph_scalar_int.onnx')
+    onnx.save(model, "empty_graph_scalar_int.onnx")
     print("Created empty_graph_scalar_int.onnx")

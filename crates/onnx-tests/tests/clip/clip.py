@@ -1,50 +1,83 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: clip_opset16.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: clip.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, x):
-        x1 = x.clamp(min=0.3)
-        x2 = x.clamp(min=0.5, max=0.7)
-        x3 = x.clamp(max=0.8)
-        return x1, x2, x3
+OPSET_VERSION = 16
 
 
 def main():
+    node0 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([0.30000001192092896], dtype=np.float32).reshape([]), name="value"
+        ),
+    )
+    node1 = helper.make_node("Clip", ["onnx::Clip_0", "/Constant_output_0", ""], ["5"])
+    node2 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_1_output_0"],
+        value=numpy_helper.from_array(
+            np.array([0.5], dtype=np.float32).reshape([]), name="value"
+        ),
+    )
+    node3 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_2_output_0"],
+        value=numpy_helper.from_array(
+            np.array([0.699999988079071], dtype=np.float32).reshape([]), name="value"
+        ),
+    )
+    node4 = helper.make_node(
+        "Clip", ["onnx::Clip_0", "/Constant_1_output_0", "/Constant_2_output_0"], ["10"]
+    )
+    node5 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_3_output_0"],
+        value=numpy_helper.from_array(
+            np.array([0.800000011920929], dtype=np.float32).reshape([]), name="value"
+        ),
+    )
+    node6 = helper.make_node(
+        "Clip", ["onnx::Clip_0", "", "/Constant_3_output_0"], ["15"]
+    )
 
-    # Set seed for reproducibility
-    torch.manual_seed(42)
+    inp_onnx__Clip_0 = helper.make_tensor_value_info(
+        "onnx::Clip_0", TensorProto.FLOAT, [6]
+    )
 
-    torch.set_printoptions(precision=8)
+    out_n5 = helper.make_tensor_value_info("5", TensorProto.FLOAT, [6])
+    out_n10 = helper.make_tensor_value_info("10", TensorProto.FLOAT, [6])
+    out_n15 = helper.make_tensor_value_info("15", TensorProto.FLOAT, [6])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
+    graph = helper.make_graph(
+        [node0, node1, node2, node3, node4, node5, node6],
+        "main_graph",
+        [inp_onnx__Clip_0],
+        [out_n5, out_n10, out_n15],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    file_name = "clip.onnx"
-    test_input = torch.rand(6, device=device)
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
-
-    print("Finished exporting model to {}".format(file_name))
-
-    # Output some test data for use in the test
-    print("Test input data: {}".format(test_input))
-    print("Test input data shape: {}".format(test_input.shape))
-    x1, x2, x3 = model.forward(test_input)
-    print("Test output data shape: {}, {}, {}".format(
-        x1.shape, x2.shape, x3.shape))
-
-    print("Test output: {}, {}, {}".format(x1, x2, x3))
+    onnx.save(model, "clip.onnx")
+    print(f"Finished exporting model to clip.onnx")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

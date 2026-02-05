@@ -1,61 +1,59 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-import torch
-import torch.nn as nn
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
+# used to generate model: topk.onnx
 
-class TopKModel(nn.Module):
-    def __init__(self, k=1, dim=-1, largest=True, sorted=True):
-        super(TopKModel, self).__init__()
-        self.k = k
-        self.dim = dim
-        self.largest = largest
-        self.sorted = sorted
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-    def forward(self, x):
-        values, indices = torch.topk(
-            x,
-            k=self.k,
-            dim=self.dim,
-            largest=self.largest,
-            sorted=self.sorted
-        )
-        return values, indices
+OPSET_VERSION = 16
 
 
 def main():
-    # Set seed for reproducibility
-    torch.manual_seed(42)
+    node0 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([2], dtype=np.int64).reshape([1]), name="value"
+        ),
+    )
+    node1 = helper.make_node(
+        "TopK",
+        ["onnx::TopK_0", "/Constant_output_0"],
+        ["4", "5"],
+        axis=1,
+        largest=1,
+        sorted=1,
+    )
 
-    # Set print options for better precision output
-    torch.set_printoptions(precision=8)
+    inp_onnx__TopK_0 = helper.make_tensor_value_info(
+        "onnx::TopK_0", TensorProto.FLOAT, [3, 5]
+    )
 
-    # Export TopK Model
-    k = 2  # Number of top elements to return
-    dim = 1  # Dimension along which to find top k elements
-    largest = True  # Whether to return largest or smallest elements
-    sorted = True  # Whether to return the elements in sorted order
+    out_n4 = helper.make_tensor_value_info("4", TensorProto.FLOAT, [3, 2])
+    out_n5 = helper.make_tensor_value_info("5", TensorProto.INT64, [3, 2])
 
-    model = TopKModel(k=k, dim=dim, largest=largest, sorted=sorted)
-    model.eval()
-    device = torch.device("cpu")
+    graph = helper.make_graph(
+        [node0, node1],
+        "main_graph",
+        [inp_onnx__TopK_0],
+        [out_n4, out_n5],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    # Generate test input
-    file_name = "topk.onnx"
-    test_input = torch.randn(3, 5, device=device)  # 3 sequences of 5 elements
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
+    onnx.save(model, "topk.onnx")
+    print(f"Finished exporting model to topk.onnx")
 
-    print("Finished exporting model to {}".format(file_name))
 
-    # Output some test data for use in the test
-    print("Test input data: {}".format(test_input))
-    print("Test input data shape: {}".format(test_input.shape))
-    values, indices = model.forward(test_input)
-    print("Test output values shape: {}".format(values.shape))
-    print("Test output values: {}".format(values))
-    print("Test output indices shape: {}".format(indices.shape))
-    print("Test output indices: {}".format(indices))
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -53,7 +53,8 @@ for node in &graph.nodes {
 
 ## Memory-Mapped Loading
 
-By default, ONNX-IR uses memory-mapped file I/O (mmap) when loading models from files. This provides:
+By default, ONNX-IR uses memory-mapped file I/O (mmap) when loading models from files. This
+provides:
 
 - **Reduced memory usage**: Tensor data is read directly from the file on demand
 - **Faster startup**: No need to copy the entire file into memory upfront

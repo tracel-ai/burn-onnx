@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/conv2d/conv2d.onnx
 
@@ -22,7 +30,6 @@ class Model(nn.Module):
 
 
 def main():
-
     # Set random seed for reproducibility
     torch.manual_seed(0)
 
@@ -33,7 +40,14 @@ def main():
 
     file_name = "conv2d.onnx"
     test_input = torch.ones(2, 4, 10, 15, device=device)
-    torch.onnx.export(model, test_input, file_name, verbose=False, opset_version=16)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 

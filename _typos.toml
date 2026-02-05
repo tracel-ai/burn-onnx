@@ -7,8 +7,12 @@ extend-exclude = [
     "*.proto",
     # ImageNet labels contain scientific names that look like typos
     "examples/image-classification-web/src/model/label.txt",
+    # Auto-generated ONNX operator specs contain formulas with variable names that look like typos
+    "onnx-spec/ops/",
 ]
 
 [default.extend-words]
 # Don't correct "arange" which is intentional
 arange = "arange"
+# "nd" is used in ONNX operator names like ScatterND, scatter_nd
+nd = "nd"

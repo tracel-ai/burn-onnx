@@ -62,6 +62,11 @@ impl NodeProcessor for GatherProcessor {
         }
     }
 
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Gather is a no-op when input is Scalar (single element, nothing to gather)
+        matches!(node.inputs[0].ty, ArgType::Scalar(_))
+    }
+
     fn input_preferences(
         &self,
         node: &RawNode,
@@ -494,6 +499,37 @@ mod tests {
             }
             other => panic!("Expected Scalar output, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_gather_is_noop_scalar_input() {
+        let mut node = TestNodeBuilder::new(NodeType::Gather, "test_gather_noop")
+            .attr_int("axis", 0)
+            .add_input("data", ArgType::Scalar(crate::ir::DType::I64))
+            .add_input("indices", ArgType::Scalar(crate::ir::DType::I64))
+            .add_output(
+                "output",
+                ArgType::Tensor(TensorType::new(crate::ir::DType::I64, 1, None)),
+            )
+            .build();
+
+        let processor = GatherProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        // Gathering from a scalar is always a no-op
+        assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_gather_is_not_noop_tensor_input() {
+        let mut node = create_test_node(0, 3, false).build();
+        let processor = GatherProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        // Gathering from a tensor is not a no-op
+        assert!(!processor.is_noop(&node));
     }
 
     // TODO: Add test for out-of-bounds indices - Per spec (opset 11+), out-of-bounds indices should raise error - Missing bounds checking test

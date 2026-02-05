@@ -1,8 +1,15 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/bitwise_not/bitwise_not.onnx
 
 import onnx
+
 
 def build_model():
     return onnx.helper.make_model(
@@ -15,7 +22,7 @@ def build_model():
                     "BitwiseNot",
                     inputs=["input"],
                     outputs=["output"],
-                    name="/BitwiseNot"
+                    name="/BitwiseNot",
                 ),
             ],
             inputs=[
@@ -33,17 +40,19 @@ def build_model():
                         elem_type=onnx.TensorProto.INT32, shape=[1, 4]
                     ),
                 )
-            ]
+            ],
         ),
     )
+
 
 def main():
     onnx_model = build_model()
     file_name = "bitwise_not.onnx"
-    
+
     onnx.checker.check_model(onnx_model)  # Ensure valid ONNX
     onnx.save(onnx_model, file_name)  # Save the model
     print(f"Finished exporting model to {file_name}")
+
 
 if __name__ == "__main__":
     main()

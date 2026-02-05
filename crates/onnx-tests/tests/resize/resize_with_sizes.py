@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/resize/resize.onnx
 
@@ -6,8 +13,11 @@ import onnx
 from onnx import helper, TensorProto
 import numpy as np
 
+
 def main() -> None:
-    input_tensor = helper.make_tensor_value_info("input_tensor", TensorProto.FLOAT, [1, 1, 4, 4])
+    input_tensor = helper.make_tensor_value_info(
+        "input_tensor", TensorProto.FLOAT, [1, 1, 4, 4]
+    )
 
     # Create sizes as a constant tensor
     sizes = np.array([1, 1, 2, 3], dtype=np.int64)

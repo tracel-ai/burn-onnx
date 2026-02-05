@@ -1,5 +1,4 @@
-
-expand:Œ
+expand:Œ
 .
 input_tensor
 shapeoutput/Expand"ExpandExpandGraphZ
@@ -14,4 +13,4 @@
 output
 
 
-B
+B

@@ -33,6 +33,11 @@ pub trait TensorDataExt {
     ///
     /// Useful for extracting numeric arrays that need to be f32.
     fn to_f32_vec(&self) -> Result<Vec<f32>, burn_tensor::DataError>;
+
+    /// Convert to `Vec<f64>`, handling all numeric types with automatic conversion
+    ///
+    /// Useful when f64 precision is needed (e.g., exact comparisons against identity values).
+    fn to_f64_vec(&self) -> Result<Vec<f64>, burn_tensor::DataError>;
 }
 
 impl TensorDataExt for burn_tensor::TensorData {
@@ -106,6 +111,24 @@ impl TensorDataExt for burn_tensor::TensorData {
             | DType::U16 => self.clone().convert::<f32>().to_vec(),
             other => Err(burn_tensor::DataError::TypeMismatch(format!(
                 "Cannot convert {:?} to Vec<f32>",
+                other
+            ))),
+        }
+    }
+
+    fn to_f64_vec(&self) -> Result<Vec<f64>, burn_tensor::DataError> {
+        use burn_tensor::DType;
+        match self.dtype {
+            DType::F32
+            | DType::F64
+            | DType::F16
+            | DType::I64
+            | DType::I32
+            | DType::I8
+            | DType::U8
+            | DType::U16 => self.clone().convert::<f64>().to_vec(),
+            other => Err(burn_tensor::DataError::TypeMismatch(format!(
+                "Cannot convert {:?} to Vec<f64>",
                 other
             ))),
         }

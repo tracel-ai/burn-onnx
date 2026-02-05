@@ -1,65 +1,40 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/shape/shape.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
+# used to generate model: shape.onnx
+
+import numpy as np
 import onnx
-import torch
-import torch.nn as nn
+from onnx import helper, TensorProto, numpy_helper
 
-
-# Trace with TorchScript to return the shape tensor (otherwise, would gather the shape
-# of each dim as a scalar)
-@torch.jit.script
-def shape(x):
-    return torch.tensor(x.shape)
-
-
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, x):
-        return shape(x)
+OPSET_VERSION = 16
 
 
 def main():
-    # Set seed for reproducibility
-    torch.manual_seed(42)
+    node0 = helper.make_node("Shape", ["x"], ["2"])
 
-    torch.set_printoptions(precision=8)
+    inp_x = helper.make_tensor_value_info("x", TensorProto.FLOAT, [None, 2])
 
-    # Export to onnx
-    device = torch.device("cpu")
-    model = Model()
-    model.eval()
-    test_input = torch.ones(4, 2, device=device)
-    file_name = "shape.onnx"
+    out_n2 = helper.make_tensor_value_info("2", TensorProto.INT64, [2])
 
-    torch.onnx.export(
-        model,
-        test_input,
-        file_name,
-        input_names=["x"],
-        dynamic_axes={"x": {0: "b"}},
-        verbose=False,
-        opset_version=16,
+    graph = helper.make_graph(
+        [node0],
+        "main_graph",
+        [inp_x],
+        [out_n2],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
     )
 
-    m = onnx.load(file_name)
-    # Remove cast node
-    m.graph.node.pop(1)
-    m.graph.node[0].output[0] = m.graph.output[0].name
-    onnx.save(m, file_name)
-
-    print(f"Finished exporting model to {file_name}")
-
-    # Output some test data for use in the test
-    print(f"Test input data: {test_input}")
-    print(f"Test input data shape: {test_input.shape}")
-    output = model.forward(test_input)
-    # print(f"Test output data shape: {output.shape}")
-
-    print(f"Test output: {output}")
+    onnx.save(model, "shape.onnx")
+    print(f"Finished exporting model to shape.onnx")
 
 
 if __name__ == "__main__":

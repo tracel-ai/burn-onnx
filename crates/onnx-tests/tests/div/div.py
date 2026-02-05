@@ -1,47 +1,54 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/add/add.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: div.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, x, k, m):
-
-        a = k / m
-
-        x = x / a
-
-        return x
+OPSET_VERSION = 16
 
 
 def main():
+    node0 = helper.make_node("Cast", ["onnx::Cast_1"], ["/Cast_output_0"], to=1)
+    node1 = helper.make_node("Cast", ["onnx::Cast_2"], ["/Cast_1_output_0"], to=1)
+    node2 = helper.make_node(
+        "Div", ["/Cast_output_0", "/Cast_1_output_0"], ["/Div_output_0"]
+    )
+    node3 = helper.make_node("Div", ["onnx::Div_0", "/Div_output_0"], ["6"])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-    onnx_name = "div.onnx"
-    dummy_input = torch.randn(1, 2, 3, 4, device=device)
+    inp_onnx__Div_0 = helper.make_tensor_value_info(
+        "onnx::Div_0", TensorProto.FLOAT, [1, 2, 3, 4]
+    )
+    inp_onnx__Cast_1 = helper.make_tensor_value_info(
+        "onnx::Cast_1", TensorProto.DOUBLE, []
+    )
+    inp_onnx__Cast_2 = helper.make_tensor_value_info(
+        "onnx::Cast_2", TensorProto.DOUBLE, []
+    )
 
-    scalar1, scalar2 = 9.0, 3.0
+    out_n6 = helper.make_tensor_value_info("6", TensorProto.FLOAT, [1, 2, 3, 4])
 
-    torch.onnx.export(model, (dummy_input, scalar1, scalar2), onnx_name,
-                      verbose=False, opset_version=16)
+    graph = helper.make_graph(
+        [node0, node1, node2, node3],
+        "torch_jit",
+        [inp_onnx__Div_0, inp_onnx__Cast_1, inp_onnx__Cast_2],
+        [out_n6],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    print("Finished exporting model to {}".format(onnx_name))
-
-    # Output some test data for use in the test
-    test_input = torch.tensor([[[[3.0, 6.0, 6.0, 9.0]]]])
-
-    print("Test input data: {}, {}, {}".format(test_input, scalar1, scalar2))
-    output = model.forward(test_input, scalar1, scalar2)
-    print("Test output data: {}".format(output))
+    onnx.save(model, "div.onnx")
+    print(f"Finished exporting model to div.onnx")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

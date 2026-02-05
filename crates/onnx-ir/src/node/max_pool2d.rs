@@ -27,7 +27,7 @@ use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
 
 use crate::ir::{Argument, Node, RawNode};
-use crate::node::padding::{PaddingConfig2d, padding_config_2d};
+use crate::node::padding::{AutoPad, PaddingConfig2d, padding_config_2d};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -45,6 +45,8 @@ pub struct MaxPool2dConfig {
     pub dilation: [usize; 2],
     /// Whether to use ceil mode for output size calculation (opset 10+)
     pub ceil_mode: bool,
+    /// Auto padding mode
+    pub auto_pad: AutoPad,
 }
 
 /// Node representation for MaxPool2d operation
@@ -121,13 +123,7 @@ impl NodeProcessor for MaxPool2dProcessor {
                     }
                 }
                 "auto_pad" => {
-                    let auto_pad = value.clone().into_string();
-                    if auto_pad != "NOTSET" {
-                        return Err(ProcessError::InvalidAttribute {
-                            name: "auto_pad".to_string(),
-                            reason: format!("Unsupported 'auto_pad' value: {auto_pad}"),
-                        });
-                    }
+                    AutoPad::parse(&value.clone().into_string())?;
                 }
                 "ceil_mode" => {
                     // ceil_mode support requires opset 10+
@@ -160,6 +156,7 @@ impl NodeProcessor for MaxPool2dProcessor {
         let mut pads = vec![0, 0, 0, 0];
         let mut dilations = vec![1, 1];
         let mut ceil_mode: i64 = 0;
+        let mut auto_pad = AutoPad::NotSet;
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
@@ -168,7 +165,7 @@ impl NodeProcessor for MaxPool2dProcessor {
                 "pads" => pads = value.clone().into_i64s(),
                 "dilations" => dilations = value.clone().into_i64s(),
                 "ceil_mode" => ceil_mode = value.clone().into_i64(),
-                "auto_pad" => {}
+                "auto_pad" => auto_pad = AutoPad::parse(&value.clone().into_string())?,
                 "storage_order" => {}
                 _ => {}
             }
@@ -182,6 +179,7 @@ impl NodeProcessor for MaxPool2dProcessor {
             padding,
             [dilations[0] as usize, dilations[1] as usize],
             ceil_mode == 1,
+            auto_pad,
         );
 
         Ok(config)
@@ -271,7 +269,10 @@ mod tests {
         assert_eq!(config.kernel_size, [2, 2]);
         assert_eq!(config.strides, [2, 2]);
         assert_eq!(config.dilation, [1, 1]);
-        assert!(matches!(config.padding, PaddingConfig2d::Explicit(1, 1)));
+        assert!(matches!(
+            config.padding,
+            PaddingConfig2d::Explicit(1, 1, 1, 1)
+        ));
     }
 
     #[test]
@@ -319,7 +320,7 @@ mod tests {
     }
 
     #[test]
-    fn test_max_pool2d_config_auto_pad_not_supported() {
+    fn test_max_pool2d_config_auto_pad_same_upper() {
         let node = create_test_node(
             vec![3, 3],
             vec![1, 1],
@@ -331,8 +332,9 @@ mod tests {
         let mut node = node;
         let processor = MaxPool2dProcessor;
         let prefs = OutputPreferences::new();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::InvalidAttribute { .. })));
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert_eq!(config.auto_pad, AutoPad::SameUpper);
     }
 
     #[test]

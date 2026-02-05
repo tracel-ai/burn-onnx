@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: random_uniform_like.onnx
 
@@ -20,7 +28,7 @@ def main():
 
     # Set print options for better precision output
     torch.set_printoptions(precision=8)
-                           
+
     # Export Random UniformLike Model
     model = RandomUniformLikeModel()
     model.eval()
@@ -29,11 +37,14 @@ def main():
     # Generate test input: a 2D matrix or batch of 2D matrices
     file_name = "random_uniform_like.onnx"
     test_input = torch.rand(2, 4, 4, device=device)  # 2 batches of 4x4 matrices
-    torch.onnx.export(model,
-                      test_input,
-                      file_name,
-                      verbose=False,
-                      opset_version=16)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 
@@ -45,5 +56,5 @@ def main():
     print("Test output: {}".format(output))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

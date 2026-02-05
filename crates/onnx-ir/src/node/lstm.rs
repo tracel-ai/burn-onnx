@@ -357,8 +357,8 @@ impl NodeProcessor for LstmProcessor {
         let input_size = if let ArgType::Tensor(t) = &weight_input.ty {
             if let Some(shape) = &t.static_shape {
                 if shape.len() == 3 {
-                    log::debug!("LSTM: using input_size from W static_shape: {}", shape[2]);
-                    Some(shape[2])
+                    log::debug!("LSTM: using input_size from W static_shape: {:?}", shape[2]);
+                    shape[2]
                 } else {
                     None
                 }
@@ -390,8 +390,8 @@ impl NodeProcessor for LstmProcessor {
             if let ArgType::Tensor(t) = &x_input.ty {
                 if let Some(shape) = &t.static_shape {
                     if shape.len() >= 3 {
-                        log::debug!("LSTM: using input_size from X static_shape: {}", shape[2]);
-                        Some(shape[2])
+                        log::debug!("LSTM: using input_size from X static_shape: {:?}", shape[2]);
+                        shape[2]
                     } else {
                         None
                     }

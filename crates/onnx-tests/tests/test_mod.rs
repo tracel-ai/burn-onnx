@@ -12,10 +12,16 @@ mod backend;
 
 // Import individual node modules
 pub mod abs;
+pub mod acos;
+pub mod acosh;
 pub mod add;
 pub mod and;
 pub mod argmax;
 pub mod argmin;
+pub mod asin;
+pub mod asinh;
+pub mod atan;
+pub mod atanh;
 pub mod attention;
 pub mod avg_pool;
 pub mod batch_norm;
@@ -58,6 +64,7 @@ pub mod greater;
 pub mod greater_or_equal;
 pub mod grid_sample;
 pub mod group_norm;
+pub mod gru;
 pub mod hard_sigmoid;
 pub mod hard_swish;
 pub mod identity;
@@ -81,6 +88,7 @@ pub mod max;
 pub mod maxpool;
 pub mod mean;
 pub mod min;
+pub mod mish;
 pub mod r#mod;
 pub mod mul;
 pub mod neg;
@@ -104,13 +112,16 @@ pub mod resize;
 pub mod rnn;
 pub mod round;
 pub mod scan;
+pub mod scatter_nd;
 pub mod shape;
 pub mod sigmoid;
 pub mod sign;
+pub mod simplify;
 pub mod sin;
 pub mod sinh;
 pub mod slice;
 pub mod softmax;
+pub mod softplus;
 pub mod space_to_depth;
 pub mod split;
 pub mod sqrt;
@@ -139,5 +150,46 @@ macro_rules! include_models {
                 include!(concat!(env!("OUT_DIR"), concat!("/model/", stringify!($model), ".rs")));
             }
         )*
+    };
+}
+
+/// Include models from both `model_simplified/` and `model_unsimplified/` directories.
+///
+/// Also generates `simplified_source::<model>()` and `unsimplified_source::<model>()`
+/// functions returning the generated source code as `&'static str` for snapshot testing.
+#[macro_export]
+macro_rules! include_simplified_models {
+    ($($model:ident),*) => {
+        pub mod simplified {
+            $(
+                #[allow(clippy::type_complexity)]
+                pub mod $model {
+                    include!(concat!(env!("OUT_DIR"), "/model_simplified/", stringify!($model), ".rs"));
+                }
+            )*
+        }
+        pub mod unsimplified {
+            $(
+                #[allow(clippy::type_complexity)]
+                pub mod $model {
+                    include!(concat!(env!("OUT_DIR"), "/model_unsimplified/", stringify!($model), ".rs"));
+                }
+            )*
+        }
+
+        pub mod simplified_source {
+            $(
+                pub fn $model() -> &'static str {
+                    include_str!(concat!(env!("OUT_DIR"), "/model_simplified/", stringify!($model), ".rs"))
+                }
+            )*
+        }
+        pub mod unsimplified_source {
+            $(
+                pub fn $model() -> &'static str {
+                    include_str!(concat!(env!("OUT_DIR"), "/model_unsimplified/", stringify!($model), ".rs"))
+                }
+            )*
+        }
     };
 }

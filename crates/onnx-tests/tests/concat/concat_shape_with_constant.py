@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: concat_shape_with_constant.onnx
 
@@ -17,28 +24,25 @@ def build_model():
             name="const_value",
             data_type=onnx.TensorProto.INT64,
             dims=[2],
-            vals=[10, 20]
+            vals=[10, 20],
         ),
-        name="/Constant"
+        name="/Constant",
     )
-    
+
     # Create Shape node to extract shape from input tensor
     shape_node = onnx.helper.make_node(
-        "Shape",
-        inputs=["input1"],
-        outputs=["shape1"],
-        name="/Shape"
+        "Shape", inputs=["input1"], outputs=["shape1"], name="/Shape"
     )
-    
+
     # Create a Concat node that concatenates the constant and the shape
     concat_node = onnx.helper.make_node(
         "Concat",
         inputs=["shape1", "const_shape"],
         outputs=["concatenated_shape"],
         axis=0,  # Required attribute
-        name="/Concat"
+        name="/Concat",
     )
-    
+
     # Create the graph
     graph = onnx.helper.make_graph(
         name="main_graph",
@@ -55,19 +59,18 @@ def build_model():
             onnx.helper.make_value_info(
                 name="concatenated_shape",
                 type_proto=onnx.helper.make_tensor_type_proto(
-                    elem_type=onnx.TensorProto.INT64, shape=[5]  # 3 + 2 = 5 dimensions total
+                    elem_type=onnx.TensorProto.INT64,
+                    shape=[5],  # 3 + 2 = 5 dimensions total
                 ),
             )
-        ]
+        ],
     )
-    
+
     # Create the model
     model = onnx.helper.make_model(
-        graph,
-        ir_version=8,
-        opset_imports=[onnx.helper.make_operatorsetid("", 16)]
+        graph, ir_version=8, opset_imports=[onnx.helper.make_operatorsetid("", 16)]
     )
-    
+
     return model
 
 
@@ -76,24 +79,24 @@ def main():
     file_name = "concat_shape_with_constant.onnx"
     onnx.save(onnx_model, file_name)
     onnx.checker.check_model(file_name)
-    
+
     print(f"Finished exporting model to {file_name}")
-    
+
     # Test with onnx.reference.ReferenceEvaluator
     try:
         from onnx.reference import ReferenceEvaluator
-        
+
         # Create test data
         test_input = np.ones((3, 4, 5), dtype=np.float32)
-        
+
         # Run inference
         sess = ReferenceEvaluator(onnx_model)
         result = sess.run(None, {"input1": test_input})
-        
+
         print(f"Test input shape: {test_input.shape}")
         print(f"Concatenated shape output: {result[0]}")
         print(f"Expected: [3, 4, 5, 10, 20]")
-        
+
     except ImportError:
         print("onnx.reference not available, skipping inference test")
 

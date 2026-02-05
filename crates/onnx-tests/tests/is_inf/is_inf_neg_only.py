@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: is_inf_neg_only.onnx
 
@@ -11,10 +18,8 @@ from onnx.reference import ReferenceEvaluator
 
 def build_model():
     # Define the graph inputs and outputs
-    input = onnx.helper.make_tensor_value_info(
-        'input', TensorProto.FLOAT, [1, 4])
-    output = onnx.helper.make_tensor_value_info(
-        'output', TensorProto.BOOL, [1, 4])
+    input = onnx.helper.make_tensor_value_info("input", TensorProto.FLOAT, [1, 4])
+    output = onnx.helper.make_tensor_value_info("output", TensorProto.BOOL, [1, 4])
 
     # Create the GroupNormalization node
     is_inf = onnx.helper.make_node(
@@ -28,7 +33,7 @@ def build_model():
     # Create the graph
     graph = onnx.helper.make_graph(
         [is_inf],
-        'IsInfModel',
+        "IsInfModel",
         [input],
         [output],
     )
@@ -37,7 +42,7 @@ def build_model():
     model = onnx.helper.make_model(
         opset_imports=[onnx.helper.make_operatorsetid("", 21)],
         graph=graph,
-        producer_name='ONNX_Generator',
+        producer_name="ONNX_Generator",
     )
 
     return model
@@ -62,6 +67,6 @@ if __name__ == "__main__":
     print(f"Test input data: {repr(test_input)}")
     print(f"Test input data shape: {test_input.shape}")
     session = ReferenceEvaluator("is_inf_neg_only.onnx", verbose=1)
-    test_output, = session.run(None, {"input": test_input})
+    (test_output,) = session.run(None, {"input": test_input})
     print(f"Test output: {repr(test_output)}")
     print(f"Test output shape: {test_output.shape}")

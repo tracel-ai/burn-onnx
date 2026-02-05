@@ -1,48 +1,67 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: reshape.onnx
 
-import torch
-import torch.nn as nn
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(self, x):
-        x = x.reshape(2, 2)
-        x = x.reshape(1, -1)  # -1 means infer from other dimensions
-        return x
+OPSET_VERSION = 16
 
 
 def main():
+    node0 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([2, 2], dtype=np.int64).reshape([2]), name="value"
+        ),
+    )
+    node1 = helper.make_node(
+        "Reshape",
+        ["onnx::Reshape_0", "/Constant_output_0"],
+        ["/Reshape_output_0"],
+        allowzero=0,
+    )
+    node2 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_1_output_0"],
+        value=numpy_helper.from_array(
+            np.array([1, -1], dtype=np.int64).reshape([2]), name="value"
+        ),
+    )
+    node3 = helper.make_node(
+        "Reshape", ["/Reshape_output_0", "/Constant_1_output_0"], ["4"], allowzero=0
+    )
 
-    # Set seed for reproducibility
-    torch.manual_seed(42)
+    inp_onnx__Reshape_0 = helper.make_tensor_value_info(
+        "onnx::Reshape_0", TensorProto.FLOAT, [4]
+    )
 
-    torch.set_printoptions(precision=8)
+    out_n4 = helper.make_tensor_value_info("4", TensorProto.FLOAT, [1, 4])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
+    graph = helper.make_graph(
+        [node0, node1, node2, node3],
+        "torch_jit",
+        [inp_onnx__Reshape_0],
+        [out_n4],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    file_name = "reshape.onnx"
-    test_input = torch.arange(4., device=device)
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
-
-    print("Finished exporting model to {}".format(file_name))
-
-    # Output some test data for use in the test
-    print("Test input data of ones: {}".format(test_input))
-    print("Test input data shape of ones: {}".format(test_input.shape))
-    output = model.forward(test_input)
-    print("Test output data shape: {}".format(output.shape))
-
-    print("Test output: {}".format(output))
+    onnx.save(model, "reshape.onnx")
+    print(f"Finished exporting model to reshape.onnx")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

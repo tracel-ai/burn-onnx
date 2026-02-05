@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: conv_transpose1d.onnx
 
@@ -10,14 +18,14 @@ class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
         self.transposed_conv = nn.ConvTranspose1d(
-            in_channels=4, 
-            out_channels=6, 
-            kernel_size=3, 
-            stride=2, 
-            padding=1, 
-            dilation=2, 
-            output_padding=1, 
-            groups=2
+            in_channels=4,
+            out_channels=6,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            dilation=2,
+            output_padding=1,
+            groups=2,
         )
 
     def forward(self, x):
@@ -25,7 +33,6 @@ class Model(nn.Module):
 
 
 def main():
-
     # Set seed for reproducibility
     torch.manual_seed(42)
 
@@ -38,8 +45,14 @@ def main():
 
     file_name = "conv_transpose1d.onnx"
     test_input = torch.ones(2, 4, 10, device=device)
-    torch.onnx.export(model, test_input, file_name,
-                      verbose=False, opset_version=16)
+    torch.onnx.export(
+        model,
+        test_input,
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 

@@ -16,7 +16,7 @@ use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
 
-use super::padding::{PaddingConfig1d, padding_config_1d};
+use super::padding::{AutoPad, PaddingConfig1d, padding_config_1d};
 
 /// Node representation for Conv1d operation
 #[derive(Debug, Clone, NodeBuilder)]
@@ -31,10 +31,6 @@ pub struct Conv1dNode {
 #[derive(Debug, Clone, new)]
 #[allow(clippy::too_many_arguments)]
 pub struct Conv1dConfig {
-    /// Input channels
-    pub channels_in: usize,
-    /// Output channels
-    pub channels_out: usize,
     /// Kernel size
     pub kernel_size: usize,
     /// Stride
@@ -43,10 +39,10 @@ pub struct Conv1dConfig {
     pub dilation: usize,
     /// Number of groups
     pub groups: usize,
-    /// Whether bias is used
-    pub bias: bool,
-    /// Padding configuration
+    /// Padding configuration (from explicit pads attribute)
     pub padding: PaddingConfig1d,
+    /// Auto padding mode
+    pub auto_pad: AutoPad,
 }
 
 /// Node processor for Conv1d operation
@@ -95,13 +91,8 @@ impl NodeProcessor for Conv1dProcessor {
             match key.as_str() {
                 "kernel_shape" | "strides" | "pads" | "dilations" | "group" => {}
                 "auto_pad" => {
-                    let auto_pad = value.clone().into_string();
-                    if auto_pad != "NOTSET" {
-                        return Err(ProcessError::InvalidAttribute {
-                            name: "auto_pad".to_string(),
-                            reason: format!("Unsupported 'auto_pad' value: {auto_pad}"),
-                        });
-                    }
+                    // Validate the value is a known auto_pad string
+                    AutoPad::parse(&value.clone().into_string())?;
                 }
                 _ => {
                     return Err(ProcessError::InvalidAttribute {
@@ -203,24 +194,15 @@ impl NodeProcessor for Conv1dProcessor {
         let mut pads = vec![0, 0];
         let mut dilations = vec![1];
         let mut group: usize = 1;
+        let mut auto_pad = AutoPad::NotSet;
 
-        let weight_arg = &node.inputs[1];
-        log::debug!(
-            "Conv1d '{}' weight arg: name='{}', value_source={:?}, has_store={}",
-            node.name,
-            weight_arg.name,
-            weight_arg.value_source,
-            weight_arg.value_store.is_some()
-        );
-        let weight_shape = weight_arg
+        let weight_shape = node.inputs[1]
             .value()
             .ok_or_else(|| {
                 ProcessError::Custom("Conv1d: weight tensor must be present".to_string())
             })?
             .shape
             .to_vec();
-
-        let bias = node.inputs.len() == 3;
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
@@ -229,13 +211,10 @@ impl NodeProcessor for Conv1dProcessor {
                 "pads" => pads = value.clone().into_i64s(),
                 "dilations" => dilations = value.clone().into_i64s(),
                 "group" => group = value.clone().into_i64() as usize,
-                "auto_pad" => {}
+                "auto_pad" => auto_pad = AutoPad::parse(&value.clone().into_string())?,
                 _ => {}
             }
         }
-
-        let channels_in = weight_shape[1] * group;
-        let channels_out = weight_shape[0];
 
         let padding = padding_config_1d(&pads);
 
@@ -252,14 +231,12 @@ impl NodeProcessor for Conv1dProcessor {
         };
 
         let config = Conv1dConfig::new(
-            channels_in,
-            channels_out,
             kernel_size,
             strides[0] as usize,
             dilations[0] as usize,
             group,
-            bias,
             padding,
+            auto_pad,
         );
 
         Ok(config)
@@ -342,13 +319,10 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels_in, 2);
-        assert_eq!(config.channels_out, 2);
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 1);
         assert_eq!(config.dilation, 1);
         assert_eq!(config.groups, 1);
-        assert!(!config.bias);
         assert!(matches!(config.padding, PaddingConfig1d::Valid));
     }
 
@@ -362,14 +336,11 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels_in, 2);
-        assert_eq!(config.channels_out, 2);
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 2);
         assert_eq!(config.dilation, 1);
         assert_eq!(config.groups, 1);
-        assert!(config.bias);
-        assert!(matches!(config.padding, PaddingConfig1d::Explicit(2)));
+        assert!(matches!(config.padding, PaddingConfig1d::Explicit(2, 2)));
     }
 
     #[test]
@@ -382,13 +353,10 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels_in, 2);
-        assert_eq!(config.channels_out, 2);
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 1);
         assert_eq!(config.dilation, 2);
         assert_eq!(config.groups, 1);
-        assert!(!config.bias);
         assert!(matches!(config.padding, PaddingConfig1d::Valid));
     }
 
@@ -402,23 +370,22 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels_in, 4);
-        assert_eq!(config.channels_out, 2);
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 1);
         assert_eq!(config.dilation, 1);
         assert_eq!(config.groups, 2);
-        assert!(!config.bias);
         assert!(matches!(config.padding, PaddingConfig1d::Valid));
     }
 
     #[test]
-    #[should_panic(expected = "Asymmetric padding is not supported")]
     fn test_conv1d_config_asymmetric_padding() {
         let node = create_test_node(vec![4], vec![1], vec![1, 2], vec![1], 1, false, None)
             .build_with_graph_data(16);
         let processor = Conv1dProcessor;
-        let _ = processor.extract_config(&node, 16);
+        let config = processor.extract_config(&node, 16).unwrap();
+        // Asymmetric padding should now be captured instead of panicking
+        assert!(matches!(config.padding, PaddingConfig1d::Explicit(1, 2)));
+        assert!(config.padding.is_asymmetric());
     }
 
     #[test]
@@ -448,18 +415,15 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels_in, 2);
-        assert_eq!(config.channels_out, 2);
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 1);
         assert_eq!(config.dilation, 1);
         assert_eq!(config.groups, 1);
-        assert!(!config.bias);
         assert!(matches!(config.padding, PaddingConfig1d::Valid));
     }
 
     #[test]
-    fn test_conv1d_config_autopad_not_supported() {
+    fn test_conv1d_config_autopad_same_upper() {
         let node = create_test_node(
             vec![4],
             vec![1],
@@ -473,8 +437,9 @@ mod tests {
         let mut node = node;
         let processor = Conv1dProcessor;
         let prefs = OutputPreferences::new();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::InvalidAttribute { .. })));
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert_eq!(config.auto_pad, AutoPad::SameUpper);
     }
 
     #[test]

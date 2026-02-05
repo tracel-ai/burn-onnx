@@ -1,43 +1,49 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/sqrt/sqrt.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: sqrt.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
+OPSET_VERSION = 16
 
-    def forward(self, x, y):
-        y_tensor = torch.tensor(y)  # Convert y to a PyTorch tensor
-        return torch.sqrt(x), torch.sqrt(y_tensor)
 
 def main():
-    # Set random seed for reproducibility
-    torch.manual_seed(0)
+    node0 = helper.make_node("Cast", ["onnx::Cast_1"], ["/Cast_output_0"], to=11)
+    node1 = helper.make_node("Sqrt", ["onnx::Sqrt_0"], ["3"])
+    node2 = helper.make_node("Sqrt", ["/Cast_output_0"], ["4"])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-    onnx_name = "sqrt.onnx"
-    test_input1 = torch.tensor([[[[1.0, 4.0, 9.0, 25.0]]]])
-    test_input2 = 36.0
-    torch.onnx.export(model, (test_input1, test_input2), onnx_name,
-                      verbose=False, opset_version=16)
+    inp_onnx__Sqrt_0 = helper.make_tensor_value_info(
+        "onnx::Sqrt_0", TensorProto.FLOAT, [1, 1, 1, 4]
+    )
+    inp_onnx__Cast_1 = helper.make_tensor_value_info(
+        "onnx::Cast_1", TensorProto.DOUBLE, []
+    )
 
-    print("Finished exporting model to {}".format(onnx_name))
+    out_n3 = helper.make_tensor_value_info("3", TensorProto.FLOAT, [1, 1, 1, 4])
+    out_n4 = helper.make_tensor_value_info("4", TensorProto.DOUBLE, [])
 
-    # Output some test data for use in the test
-    test_input1 = torch.tensor([[[[1.0, 4.0, 9.0, 25.0]]]])
-    test_input2 = 36.0
+    graph = helper.make_graph(
+        [node0, node1, node2],
+        "main_graph",
+        [inp_onnx__Sqrt_0, inp_onnx__Cast_1],
+        [out_n3, out_n4],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    print("Test input data: {}, {}".format(test_input1, test_input2))
-    output1, output2 = model.forward(test_input1, test_input2)
-    print("Test output data: {}, {}".format(output1, output2))
+    onnx.save(model, "sqrt.onnx")
+    print(f"Finished exporting model to sqrt.onnx")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

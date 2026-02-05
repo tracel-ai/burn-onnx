@@ -1,9 +1,18 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/greater/greater_broadcast.onnx
 
 import torch
 import torch.nn as nn
+
 
 class Model(nn.Module):
     def __init__(self):
@@ -11,6 +20,7 @@ class Model(nn.Module):
 
     def forward(self, x, y):
         return torch.gt(x, y)
+
 
 def main():
     # Set seed for reproducibility
@@ -27,13 +37,24 @@ def main():
     # Test broadcasting with different shapes
     # Shape [1, 4] vs [4, 4] - should broadcast to [4, 4]
     test_input1 = torch.tensor([[1.0, 2.0, 3.0, 4.0]], device=device)
-    test_input2 = torch.tensor([[0.5, 1.5, 2.5, 3.5],
-                                 [1.5, 2.5, 3.5, 4.5],
-                                 [2.5, 3.5, 4.5, 5.5],
-                                 [3.5, 4.5, 5.5, 6.5]], device=device)
-    
-    torch.onnx.export(model, (test_input1, test_input2), onnx_name, 
-                      verbose=False, opset_version=16)
+    test_input2 = torch.tensor(
+        [
+            [0.5, 1.5, 2.5, 3.5],
+            [1.5, 2.5, 3.5, 4.5],
+            [2.5, 3.5, 4.5, 5.5],
+            [3.5, 4.5, 5.5, 6.5],
+        ],
+        device=device,
+    )
+
+    torch.onnx.export(
+        model,
+        (test_input1, test_input2),
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(onnx_name))
 
@@ -42,5 +63,6 @@ def main():
     output = model.forward(test_input1, test_input2)
     print("Test output shape: {}, data: {}".format(output.shape, output))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

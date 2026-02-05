@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/pad/pad_edge.onnx
 
@@ -26,9 +33,7 @@ def main() -> None:
 
     # Pads: [top, left, bottom, right] for 2D = [1, 1, 1, 1]
     # ONNX format: [begin_dim0, begin_dim1, ..., end_dim0, end_dim1, ...]
-    pads = numpy_helper.from_array(
-        np.array([1, 1, 1, 1]).astype(np.int64), name="pads"
-    )
+    pads = numpy_helper.from_array(np.array([1, 1, 1, 1]).astype(np.int64), name="pads")
 
     initializers = [pads]
 
@@ -64,21 +69,21 @@ def test_edge_padding(model) -> None:
     # Input: 2x3 tensor
     # [[1, 2, 3],
     #  [4, 5, 6]]
-    input_tensor = np.array([
-        [1.0, 2.0, 3.0],
-        [4.0, 5.0, 6.0]
-    ], dtype=np.float32)
+    input_tensor = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float32)
 
     result = sess.run(None, {"input_tensor": input_tensor})[0]
 
     # Expected with edge padding (1,1,1,1):
     # Edge replicates the boundary values
-    expected = np.array([
-        [1.0, 1.0, 2.0, 3.0, 3.0],
-        [1.0, 1.0, 2.0, 3.0, 3.0],
-        [4.0, 4.0, 5.0, 6.0, 6.0],
-        [4.0, 4.0, 5.0, 6.0, 6.0],
-    ], dtype=np.float32)
+    expected = np.array(
+        [
+            [1.0, 1.0, 2.0, 3.0, 3.0],
+            [1.0, 1.0, 2.0, 3.0, 3.0],
+            [4.0, 4.0, 5.0, 6.0, 6.0],
+            [4.0, 4.0, 5.0, 6.0, 6.0],
+        ],
+        dtype=np.float32,
+    )
 
     if not np.allclose(result, expected):
         print(f"Expected:\n{expected}")

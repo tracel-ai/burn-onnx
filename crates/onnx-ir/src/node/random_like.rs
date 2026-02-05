@@ -233,7 +233,7 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F64);
                 assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, Some(vec![5, 10]));
+                assert_eq!(tensor.static_shape, Some(vec![Some(5), Some(10)]));
             }
             _ => panic!("Expected tensor output"),
         }

@@ -10,17 +10,17 @@ functionality.
 | ONNX OP                          | Import Support | Burn Support |
 |----------------------------------|:--------------:|:------------:|
 | [Abs][1]                         | ✅             | ✅           |
-| [Acos][2]                        | ❌             | ✅           |
-| [Acosh][3]                       | ❌             | ✅           |
+| [Acos][2]                        | ✅             | ✅           |
+| [Acosh][3]                       | ✅             | ✅           |
 | [Add][4]                         | ✅             | ✅           |
 | [AffineGrid][195]                | ❌             | ❌           |
 | [And][5]                         | ✅             | ✅           |
 | [ArgMax][6]                      | ✅             | ✅           |
 | [ArgMin][7]                      | ✅             | ✅           |
-| [Asin][8]                        | ❌             | ✅           |
-| [Asinh][9]                       | ❌             | ✅           |
-| [Atan][10]                       | ❌             | ✅           |
-| [Atanh][11]                      | ❌             | ✅           |
+| [Asin][8]                        | ✅             | ✅           |
+| [Asinh][9]                       | ✅             | ✅           |
+| [Atan][10]                       | ✅             | ✅           |
+| [Atanh][11]                      | ✅             | ✅           |
 | [Attention][194]                 | ✅             | ✅           |
 | [AveragePool1d][12]              | ✅             | ✅           |
 | [AveragePool2d][12]              | ✅             | ✅           |
@@ -83,14 +83,14 @@ functionality.
 | [GreaterOrEqual][67]             | ✅             | ✅           |
 | [GridSample][68]                 | ✅             | ✅           |
 | [GroupNormalization][69]         | ✅             | ✅           |
-| [GRU][70]                        | ❌             | ✅           |
+| [GRU][70]                        | ✅             | ✅           |
 | [HammingWindow][71]              | ❌             | ❌           |
 | [HannWindow][72]                 | ❌             | ❌           |
 | [Hardmax][73]                    | ❌             | ❌           |
 | [HardSigmoid][74]                | ✅             | ✅           |
 | [HardSwish][75]                  | ✅             | ✅           |
 | [Identity][76]                   | ✅             | ✅           |
-| [If][77]                         | ❌             | ✅           |
+| [If][77]                         | ✅             | ✅           |
 | [Im][78]                         | ❌             | ❌           |
 | [ImageDecoder][197]              | ❌             | ❌           |
 | [InstanceNormalization][79]      | ✅             | ✅           |
@@ -119,7 +119,7 @@ functionality.
 | [MeanVarianceNormalization][102] | ❌             | ❌           |
 | [MelWeightMatrix][103]           | ❌             | ❌           |
 | [Min][104]                       | ✅             | ✅           |
-| [Mish][105]                      | ❌             | ❌           |
+| [Mish][105]                      | ✅             | ✅           |
 | [Mod][106]                       | ✅             | ✅           |
 | [Mul][107]                       | ✅             | ✅           |
 | [Multinomial][108]               | ❌             | ❌           |
@@ -167,7 +167,7 @@ functionality.
 | [Scan][148]                      | ✅             | ✅           |
 | [Scatter][149]                   | ❌             | ✅           |
 | [ScatterElements][150]           | ❌             | ❌           |
-| [ScatterND][151]                 | ❌             | ❌           |
+| [ScatterND][151]                 | ✅             | ✅           |
 | [Selu][152]                      | ❌             | ❌           |
 | [SequenceAt][153]                | ❌             | ❌           |
 | [SequenceConstruct][154]         | ❌             | ❌           |
@@ -186,7 +186,7 @@ functionality.
 | [Slice][167]                     | ✅             | ✅           |
 | [Softmax][168]                   | ✅             | ✅           |
 | [SoftmaxCrossEntropyLoss][169]   | ❌             | ❌           |
-| [Softplus][170]                  | ❌             | ❌           |
+| [Softplus][170]                  | ✅             | ✅           |
 | [Softsign][171]                  | ❌             | ❌           |
 | [SpaceToDepth][172]              | ✅             | ✅           |
 | [Split][173]                     | ✅             | ✅           |

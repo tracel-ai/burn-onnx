@@ -30,6 +30,10 @@ examples/
 - Node structs contain: `name`, `inputs`, `outputs`, `config`
 - **Important**: Should extract and preserve ALL ONNX attributes faithfully, even if Burn doesn't
   support them yet. This allows onnx-ir to be reused by other projects
+- **Important**: Config structs should mirror ONNX semantics, not Burn semantics. Do NOT pre-compute
+  or translate ONNX attributes into Burn-specific values (e.g., do not resolve `auto_pad` into
+  explicit padding values). Store the original ONNX attribute and let burn-onnx handle the
+  translation during code generation
 
 ### burn-onnx
 
@@ -39,6 +43,14 @@ examples/
 - Entry point: `ModelGen` builder
 - **Important**: Rejection of unsupported features happens HERE, not in onnx-ir. If Burn API doesn't
   support a configuration, burn-onnx should emit a clear error during code generation
+- **Important**: Translation from ONNX semantics to Burn semantics happens HERE. For example,
+  resolving ONNX `auto_pad` into explicit padding values for Burn's API is a burn-onnx
+  responsibility, not onnx-ir's
+- **Important**: Always generate the simplest and most efficient Burn Rust code possible. Avoid
+  emitting dead code, no-op loops, or redundant operations when the result can be determined at
+  codegen time
+- **Important**: When in doubt about Burn APIs, search online for the latest documentation rather
+  than guessing
 
 ## Coding Conventions
 
@@ -57,7 +69,15 @@ examples/
 - Configuration structs should derive `Debug, Clone, Default` when possible
 - Type inference happens in processors, not in codegen
 - **Strive for full ONNX opset coverage** - extract all attributes even if not yet used by burn-onnx
+- **Support all opsets** - when implementing operators, set `min_opset` to the earliest opset version
+  that introduced the operator (not the latest version). Each `onnx-spec/ops/<OpName>.md` file shows
+  the first introduced opset and full version history
 - Config structs should include all ONNX operator attributes, using `Option<T>` for optional ones
+- **Declarative node architecture**: General processing in the onnx-ir framework (pipeline phases,
+  graph state, type inference loop, etc.) must NOT contain node-type-specific logic. All
+  node-specific behavior is declared in `NodeProcessor` implementations. If a general module needs
+  to handle a particular node type differently, that logic belongs in the node's processor, not in
+  the framework code
 
 ### burn-onnx Patterns
 
@@ -66,13 +86,33 @@ examples/
 - Use `quote!` macro for code generation
 - Add `insta` snapshot tests for ALL code generation branches - each config option, each input type
   variant, optional vs required inputs should have test coverage
+- **Inline snapshots only** - use `assert_snapshot!(code, @r"...")` with embedded expected output,
+  not external `.snap` files
 
 ### Testing
 
 - Unit tests go in the same file as implementation
 - Integration tests in `crates/onnx-tests/tests/<op_name>/`
+- Simplification comparison tests in `crates/onnx-tests/tests/simplify/`
 - Python scripts generate ONNX models for testing
 - Use `torch.manual_seed(42)` for reproducibility
+
+### Bug Fixes
+
+- Every bug fix **must** include an integration test that reproduces the bug
+- Workflow: write a failing test first, then fix the code to make it pass
+- The test should fail without the fix and pass with it
+
+### Simplification
+
+- `ModelGen::simplify(true)` enables an optional ONNX-IR pass that folds shape computations into
+  constants at codegen time (e.g., `Shape(x)` with static dims becomes a constant array)
+- Existing operator tests use `.simplify(false)` to test unsimplified codegen
+- Dedicated tests in `crates/onnx-tests/tests/simplify/` have their own ONNX models compiled both
+  with and without simplification to verify outputs match
+- The `build.rs` generates three model sets: `model/` (main, unsimplified), `model_simplified/`, and
+  `model_unsimplified/` (the latter two for simplify comparison tests)
+- When adding a new simplification pattern, add a test model via `tests/simplify/gen_models.py`
 
 ### Python Test Scripts
 

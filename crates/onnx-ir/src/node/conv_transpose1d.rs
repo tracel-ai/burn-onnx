@@ -34,10 +34,6 @@ pub struct ConvTranspose1dNode {
 #[derive(Debug, Clone, new)]
 #[allow(clippy::too_many_arguments)]
 pub struct ConvTranspose1dConfig {
-    /// Input channels
-    pub channels_in: usize,
-    /// Output channels
-    pub channels_out: usize,
     /// Kernel size
     pub kernel_size: usize,
     /// Stride
@@ -46,8 +42,6 @@ pub struct ConvTranspose1dConfig {
     pub dilation: usize,
     /// Number of groups
     pub groups: usize,
-    /// Whether bias is used
-    pub bias: bool,
     /// Padding size
     pub padding: usize,
     /// Output padding size
@@ -151,16 +145,6 @@ impl NodeProcessor for Convtranspose1dProcessor {
             .shape
             .to_vec();
 
-        // Check if bias is present (third input)
-        let bias = node.inputs.len() == 3;
-
-        // ONNX ConvTranspose weight tensor: (C x M/group x kL)
-        // where C is input channels and M is output channels.
-        // weight_shape[0] = C = in_channels
-        // weight_shape[1] = M/group = out_channels/groups
-        let channels_in = weight_shape[0];
-        let channels_out = weight_shape[1] * group;
-
         let kernel_size = if kernel_shape.is_empty() {
             // https://onnx.ai/onnx/operators/onnx__ConvTranspose.html
             // Spec says if kernel shape not present in attributes it should be inferred from the weight tensor
@@ -177,13 +161,10 @@ impl NodeProcessor for Convtranspose1dProcessor {
         };
 
         let config = ConvTranspose1dConfig::new(
-            channels_in,
-            channels_out,
             kernel_size,
             stride[0] as usize,
             dilations[0] as usize,
             group,
-            bias,
             pads[0] as usize,
             output_padding[0] as usize,
         );
@@ -280,15 +261,12 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels_in, 2);
-        assert_eq!(config.channels_out, 2);
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 1);
         assert_eq!(config.padding, 0);
         assert_eq!(config.dilation, 1);
         assert_eq!(config.padding_out, 0);
         assert_eq!(config.groups, 1);
-        assert!(!config.bias);
     }
 
     #[test]
@@ -310,15 +288,12 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels_in, 2); // weight_shape[0] = C = in_channels
-        assert_eq!(config.channels_out, 4); // weight_shape[1] * group = 2 * 2 = M = out_channels
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 2);
         assert_eq!(config.padding, 1);
         assert_eq!(config.dilation, 2);
         assert_eq!(config.padding_out, 1);
         assert_eq!(config.groups, 2);
-        assert!(config.bias);
     }
 
     #[test]
@@ -360,15 +335,12 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels_in, 2);
-        assert_eq!(config.channels_out, 2);
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 1);
         assert_eq!(config.padding, 0);
         assert_eq!(config.dilation, 1);
         assert_eq!(config.padding_out, 0);
         assert_eq!(config.groups, 1);
-        assert!(!config.bias);
     }
 
     #[test]

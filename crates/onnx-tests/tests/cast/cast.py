@@ -1,63 +1,80 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/cast/cast.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: cast.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-
-    def forward(
-        self,
-        x_bool,
-        x_int,
-        x_float,
-        x_scalar,
-    ):
-        # NOTE: we clone same-type casts for int and bool, otherwise the exporter would
-        # link other type casts to the output of the bool cast, leading to additional casts
-        return (
-            x_bool.clone().bool(),
-            x_bool.int(),
-            x_bool.float(),
-            x_int.bool(),
-            x_int.clone().int(),
-            x_int.float(),
-            x_float.bool(),
-            x_float.int(),
-            x_float.float(),
-            x_scalar.int(),
-        )
+OPSET_VERSION = 16
 
 
 def main():
-    # Set random seed for reproducibility
-    torch.manual_seed(0)
+    node0 = helper.make_node("Cast", ["onnx::Cast_0"], ["4"], to=9)
+    node1 = helper.make_node("Cast", ["onnx::Cast_0"], ["5"], to=6)
+    node2 = helper.make_node("Cast", ["onnx::Cast_0"], ["6"], to=1)
+    node3 = helper.make_node("Cast", ["onnx::Cast_1"], ["7"], to=9)
+    node4 = helper.make_node("Cast", ["onnx::Cast_1"], ["8"], to=6)
+    node5 = helper.make_node("Cast", ["onnx::Cast_1"], ["9"], to=1)
+    node6 = helper.make_node("Cast", ["onnx::Cast_2"], ["10"], to=9)
+    node7 = helper.make_node("Cast", ["onnx::Cast_2"], ["11"], to=6)
+    node8 = helper.make_node("Cast", ["onnx::Cast_2"], ["12"], to=1)
+    node9 = helper.make_node("Cast", ["onnx::Cast_3"], ["13"], to=6)
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-    onnx_name = "cast.onnx"
-    test_bool = torch.ones((2, 1), device=device, dtype=torch.bool)
-    test_int = torch.ones((2, 1), device=device, dtype=torch.int)
-    test_float = torch.ones((2, 1), device=device, dtype=torch.float)
-    test_scalar = torch.ones(1, device=device, dtype=torch.float).squeeze()
-    test_input = (test_bool, test_int, test_float, test_scalar)
+    inp_onnx__Cast_0 = helper.make_tensor_value_info(
+        "onnx::Cast_0", TensorProto.BOOL, [2, 1]
+    )
+    inp_onnx__Cast_1 = helper.make_tensor_value_info(
+        "onnx::Cast_1", TensorProto.INT32, [2, 1]
+    )
+    inp_onnx__Cast_2 = helper.make_tensor_value_info(
+        "onnx::Cast_2", TensorProto.FLOAT, [2, 1]
+    )
+    inp_onnx__Cast_3 = helper.make_tensor_value_info(
+        "onnx::Cast_3", TensorProto.FLOAT, []
+    )
 
-    # NOTE: torch exports logical_not with a cast node even if the input is already bool
-    # https://github.com/pytorch/pytorch/blob/main/torch/onnx/symbolic_opset9.py#L2204-L2207
-    torch.onnx.export(model, test_input, onnx_name, verbose=False, opset_version=16)
+    out_n4 = helper.make_tensor_value_info("4", TensorProto.BOOL, [2, 1])
+    out_n5 = helper.make_tensor_value_info("5", TensorProto.INT32, [2, 1])
+    out_n6 = helper.make_tensor_value_info("6", TensorProto.FLOAT, [2, 1])
+    out_n7 = helper.make_tensor_value_info("7", TensorProto.BOOL, [2, 1])
+    out_n8 = helper.make_tensor_value_info("8", TensorProto.INT32, [2, 1])
+    out_n9 = helper.make_tensor_value_info("9", TensorProto.FLOAT, [2, 1])
+    out_n10 = helper.make_tensor_value_info("10", TensorProto.BOOL, [2, 1])
+    out_n11 = helper.make_tensor_value_info("11", TensorProto.INT32, [2, 1])
+    out_n12 = helper.make_tensor_value_info("12", TensorProto.FLOAT, [2, 1])
+    out_n13 = helper.make_tensor_value_info("13", TensorProto.INT32, [])
 
-    print(f"Finished exporting model to {onnx_name}")
+    graph = helper.make_graph(
+        [node0, node1, node2, node3, node4, node5, node6, node7, node8, node9],
+        "main_graph",
+        [inp_onnx__Cast_0, inp_onnx__Cast_1, inp_onnx__Cast_2, inp_onnx__Cast_3],
+        [
+            out_n4,
+            out_n5,
+            out_n6,
+            out_n7,
+            out_n8,
+            out_n9,
+            out_n10,
+            out_n11,
+            out_n12,
+            out_n13,
+        ],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    # Output some test data for use in the test
-    print(f"Test input data: {test_input}")
-    output = model.forward(*test_input)
-    print(f"Test output data: {output}")
+    onnx.save(model, "cast.onnx")
+    print(f"Finished exporting model to cast.onnx")
 
 
 if __name__ == "__main__":

@@ -100,7 +100,7 @@ fn determine_output_type(
     input: &Argument,
     input_info: &InputInfo,
     output_rank: usize,
-    static_shape: Option<Vec<usize>>,
+    static_shape: Option<Vec<Option<usize>>>,
     node: &RawNode,
 ) -> ArgType {
     // Case 1: Scalar output (rank 0)
@@ -140,7 +140,7 @@ fn determine_output_type(
 fn calculate_shape_output_size(
     input_size: usize,
     node: &RawNode,
-    static_shape: &Option<Vec<usize>>,
+    static_shape: &Option<Vec<Option<usize>>>,
 ) -> usize {
     // Try to get size from static reshape parameter
     if let Some(shape_values) = get_static_shape(node)
@@ -156,8 +156,9 @@ fn calculate_shape_output_size(
     // Try to get size from output's static shape
     if let Some(shape) = static_shape
         && shape.len() == 1
+        && let Some(dim) = shape[0]
     {
-        return shape[0];
+        return dim;
     }
 
     // Default: preserve input size
@@ -203,7 +204,7 @@ fn get_rank_from_shape_input(node: &RawNode) -> Option<usize> {
             .static_shape
             .as_ref()
             .filter(|dims| !dims.is_empty())
-            .map(|dims| dims[0]),
+            .and_then(|dims| dims[0]),
         _ => None,
     }
 }
@@ -234,6 +235,26 @@ pub(crate) struct ReshapeProcessor;
 
 impl NodeProcessor for ReshapeProcessor {
     type Config = ReshapeConfig;
+
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Reshape is a no-op when both input and output are Scalar
+        if matches!(node.inputs[0].ty, ArgType::Scalar(_))
+            && matches!(node.outputs[0].ty, ArgType::Scalar(_))
+        {
+            return true;
+        }
+
+        // Reshape is a no-op when input and output have identical static shapes
+        if let (ArgType::Tensor(input_t), ArgType::Tensor(output_t)) =
+            (&node.inputs[0].ty, &node.outputs[0].ty)
+            && let (Some(in_shape), Some(out_shape)) =
+                (&input_t.static_shape, &output_t.static_shape)
+        {
+            return in_shape == out_shape;
+        }
+
+        false
+    }
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
@@ -653,5 +674,73 @@ mod tests {
             }
             other => panic!("Expected Tensor output, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_reshape_is_noop_scalar_to_scalar() {
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape_noop")
+            .add_input("data", ArgType::Scalar(DType::F32))
+            .input_tensor_i64_data("shape", vec![-1], vec![1])
+            .add_output(
+                "reshaped",
+                ArgType::Tensor(TensorType::new(DType::F32, 1, None)),
+            )
+            .build_with_graph_data(16);
+
+        let processor = ReshapeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        // Scalar reshaped to [-1] stays Scalar, so this is a no-op
+        assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_reshape_is_not_noop_tensor() {
+        let node = create_test_node(0, vec![2, 3]).process(ReshapeProcessor, 16);
+        let processor = ReshapeProcessor;
+
+        // Tensor reshape is not a no-op
+        assert!(!processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_reshape_same_static_shape_is_noop() {
+        let shape: Vec<Option<usize>> = vec![Some(2), Some(3), Some(4)];
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape")
+            .input_tensor_f32("data", 3, None)
+            .input_tensor_i64_data("shape", vec![2, 3, 4], vec![3])
+            .output_tensor_f32("reshaped", 3, None)
+            .build();
+
+        // Set matching static shapes on input and output
+        if let ArgType::Tensor(ref mut t) = node.inputs[0].ty {
+            t.static_shape = Some(shape.clone());
+        }
+        if let ArgType::Tensor(ref mut t) = node.outputs[0].ty {
+            t.static_shape = Some(shape);
+        }
+
+        let processor = ReshapeProcessor;
+        assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_reshape_different_static_shape_is_not_noop() {
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape")
+            .input_tensor_f32("data", 3, None)
+            .input_tensor_i64_data("shape", vec![6, 4], vec![2])
+            .output_tensor_f32("reshaped", 2, None)
+            .build();
+
+        if let ArgType::Tensor(ref mut t) = node.inputs[0].ty {
+            t.static_shape = Some(vec![Some(2), Some(3), Some(4)]);
+        }
+        if let ArgType::Tensor(ref mut t) = node.outputs[0].ty {
+            t.static_shape = Some(vec![Some(6), Some(4)]);
+        }
+
+        let processor = ReshapeProcessor;
+        assert!(!processor.is_noop(&node));
     }
 }

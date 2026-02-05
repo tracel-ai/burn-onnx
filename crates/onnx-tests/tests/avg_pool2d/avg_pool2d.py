@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: avg_pool2d.onnx
 
@@ -10,14 +18,15 @@ class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
 
-        self.pool2d1 = nn.AvgPool2d((4, 2), stride=(
-            2, 1))
+        self.pool2d1 = nn.AvgPool2d((4, 2), stride=(2, 1))
 
-        self.pool2d2 = nn.AvgPool2d((4, 2), stride=(
-            2, 1), padding=(2, 1), count_include_pad=True)
+        self.pool2d2 = nn.AvgPool2d(
+            (4, 2), stride=(2, 1), padding=(2, 1), count_include_pad=True
+        )
 
-        self.pool2d3 = nn.AvgPool2d((4, 2), stride=(
-            2, 1), padding=(2, 1), count_include_pad=False)
+        self.pool2d3 = nn.AvgPool2d(
+            (4, 2), stride=(2, 1), padding=(2, 1), count_include_pad=False
+        )
 
     def forward(self, x1, x2, x3):
         y1 = self.pool2d1(x1)
@@ -40,8 +49,14 @@ def main():
 
     file_name = "avg_pool2d.onnx"
     input1 = torch.randn(1, 1, 5, 5, device=device)
-    torch.onnx.export(model, (input1, input1, input1), file_name,
-                      verbose=False, opset_version=16)
+    torch.onnx.export(
+        model,
+        (input1, input1, input1),
+        file_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(file_name))
 
@@ -57,5 +72,5 @@ def main():
     print("Test output3: {}".format(output3))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

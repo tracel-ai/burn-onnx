@@ -86,6 +86,24 @@ impl NodeProcessor for FlattenProcessor {
         Ok(())
     }
 
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Flatten always produces rank 2. It's a no-op when input is rank 2 AND axis=1
+        // (the default), which splits dimensions as [d0, d1] -> [d0, d1] (identity).
+        // axis=0 would give [1, d0*d1] and axis=2 would give [d0*d1, 1].
+        if let ArgType::Tensor(in_t) = &node.inputs[0].ty {
+            if in_t.rank != 2 {
+                return false;
+            }
+            let axis = node
+                .attrs
+                .get("axis")
+                .map(|v| v.clone().into_i64())
+                .unwrap_or(1);
+            return axis == 1 || axis == -(in_t.rank as i64 - 1);
+        }
+        false
+    }
+
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
         // Extract the shape of the input tensor
         let tensor = match &node.inputs.first().unwrap().ty {
@@ -211,6 +229,46 @@ mod tests {
                 actual: 2
             })
         ));
+    }
+
+    #[test]
+    fn test_flatten_rank2_axis1_is_noop() {
+        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 2, None)
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 1)
+            .build();
+        assert!(FlattenProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_flatten_rank2_axis_neg1_is_noop() {
+        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 2, None)
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", -1)
+            .build();
+        assert!(FlattenProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_flatten_rank2_axis0_is_not_noop() {
+        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 2, None)
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 0)
+            .build();
+        assert!(!FlattenProcessor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_flatten_rank3_axis1_is_not_noop() {
+        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 3, None)
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 1)
+            .build();
+        assert!(!FlattenProcessor.is_noop(&node));
     }
 
     // TODO: Add test for axis out of range - Test axis >= rank should return error - Missing constraint validation test

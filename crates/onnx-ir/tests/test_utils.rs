@@ -5,7 +5,7 @@
 /// Provides helper functions for loading ONNX models and common test assertions.
 use std::path::PathBuf;
 
-/// Load an ONNX model from the tests directory
+/// Load an ONNX model from the tests directory (without simplification)
 ///
 /// # Arguments
 /// * `model_name` - Name of the ONNX file (e.g., "basic_model.onnx")
@@ -16,8 +16,18 @@ use std::path::PathBuf;
 /// # Panics
 /// Panics if the model file doesn't exist or parsing fails
 pub fn load_onnx(model_name: &str) -> onnx_ir::ir::OnnxGraph {
+    load_onnx_with_simplify(model_name, false)
+}
+
+/// Load an ONNX model with simplification enabled
+pub fn load_onnx_simplified(model_name: &str) -> onnx_ir::ir::OnnxGraph {
+    load_onnx_with_simplify(model_name, true)
+}
+
+fn load_onnx_with_simplify(model_name: &str, simplify: bool) -> onnx_ir::ir::OnnxGraph {
     let model_path = get_model_path(model_name);
     onnx_ir::OnnxGraphBuilder::new()
+        .simplify(simplify)
         .parse_file(&model_path)
         .unwrap_or_else(|e| {
             panic!(

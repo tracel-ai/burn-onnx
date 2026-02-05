@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+#   "onnxruntime",
+# ]
+# ///
+
 """
 Generate ONNX model that tests outer-scope CONSTANT/INITIALIZER references in subgraphs.
 
@@ -30,6 +39,7 @@ import numpy as np
 
 try:
     import onnxruntime as ort
+
     HAS_ORT = True
 except ImportError:
     HAS_ORT = False
@@ -45,67 +55,79 @@ def build_model():
     """
     # Parent graph initializers - these are the weights we want to access from subgraph
     # Weight for MatMul: input [1, 3] @ weight [3, 2] = output [1, 2]
-    weight_data = np.array([[1.0, 0.5],
-                            [2.0, 1.0],
-                            [0.5, 2.0]], dtype=np.float32)  # [3, 2]
+    weight_data = np.array(
+        [[1.0, 0.5], [2.0, 1.0], [0.5, 2.0]], dtype=np.float32
+    )  # [3, 2]
     bias_data = np.array([0.1, 0.2], dtype=np.float32)  # [2]
 
-    weight_init = numpy_helper.from_array(weight_data, name='weight')
-    bias_init = numpy_helper.from_array(bias_data, name='bias')
+    weight_init = numpy_helper.from_array(weight_data, name="weight")
+    bias_init = numpy_helper.from_array(bias_data, name="bias")
 
     # Then branch: MatMul + Add using parent's weight and bias
     # Note: 'weight' and 'bias' are NOT declared as inputs - they come from outer scope
-    then_matmul = helper.make_node('MatMul',
-                                    inputs=['x', 'weight'],
-                                    outputs=['matmul_out'])
-    then_add = helper.make_node('Add',
-                                 inputs=['matmul_out', 'bias'],
-                                 outputs=['then_out'])
+    then_matmul = helper.make_node(
+        "MatMul", inputs=["x", "weight"], outputs=["matmul_out"]
+    )
+    then_add = helper.make_node(
+        "Add", inputs=["matmul_out", "bias"], outputs=["then_out"]
+    )
     then_graph = helper.make_graph(
         nodes=[then_matmul, then_add],
-        name='then_branch',
+        name="then_branch",
         inputs=[],  # No explicit inputs - weight/bias come from outer scope
-        outputs=[helper.make_tensor_value_info('then_out', TensorProto.FLOAT, [1, 2])],
+        outputs=[helper.make_tensor_value_info("then_out", TensorProto.FLOAT, [1, 2])],
     )
 
     # Else branch: Simple multiply by 2
     # Need to match output shape [1, 2], so use a different x_else input
-    else_mul = helper.make_node('Mul', inputs=['x_slice', 'scale'], outputs=['else_out'])
+    else_mul = helper.make_node(
+        "Mul", inputs=["x_slice", "scale"], outputs=["else_out"]
+    )
     else_graph = helper.make_graph(
         nodes=[else_mul],
-        name='else_branch',
+        name="else_branch",
         inputs=[],
-        outputs=[helper.make_tensor_value_info('else_out', TensorProto.FLOAT, [1, 2])],
-        initializer=[numpy_helper.from_array(np.array([2.0], dtype=np.float32), name='scale')]
+        outputs=[helper.make_tensor_value_info("else_out", TensorProto.FLOAT, [1, 2])],
+        initializer=[
+            numpy_helper.from_array(np.array([2.0], dtype=np.float32), name="scale")
+        ],
     )
 
     # Main graph
     # Slice x to get first 2 elements for else branch (to match output shape)
-    slice_node = helper.make_node('Slice',
-                                   inputs=['x', 'starts', 'ends', 'axes'],
-                                   outputs=['x_slice'])
-    if_node = helper.make_node('If', inputs=['condition'], outputs=['output'],
-                                then_branch=then_graph, else_branch=else_graph)
+    slice_node = helper.make_node(
+        "Slice", inputs=["x", "starts", "ends", "axes"], outputs=["x_slice"]
+    )
+    if_node = helper.make_node(
+        "If",
+        inputs=["condition"],
+        outputs=["output"],
+        then_branch=then_graph,
+        else_branch=else_graph,
+    )
 
     main_graph = helper.make_graph(
         nodes=[slice_node, if_node],
-        name='outer_scope_constant',
+        name="outer_scope_constant",
         inputs=[
-            helper.make_tensor_value_info('x', TensorProto.FLOAT, [1, 3]),
-            helper.make_tensor_value_info('condition', TensorProto.BOOL, []),
+            helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 3]),
+            helper.make_tensor_value_info("condition", TensorProto.BOOL, []),
         ],
-        outputs=[helper.make_tensor_value_info('output', TensorProto.FLOAT, [1, 2])],
+        outputs=[helper.make_tensor_value_info("output", TensorProto.FLOAT, [1, 2])],
         initializer=[
             weight_init,  # Parent graph constant - accessed from subgraph
-            bias_init,    # Parent graph constant - accessed from subgraph
-            numpy_helper.from_array(np.array([0], dtype=np.int64), name='starts'),
-            numpy_helper.from_array(np.array([2], dtype=np.int64), name='ends'),
-            numpy_helper.from_array(np.array([1], dtype=np.int64), name='axes'),
-        ]
+            bias_init,  # Parent graph constant - accessed from subgraph
+            numpy_helper.from_array(np.array([0], dtype=np.int64), name="starts"),
+            numpy_helper.from_array(np.array([2], dtype=np.int64), name="ends"),
+            numpy_helper.from_array(np.array([1], dtype=np.int64), name="axes"),
+        ],
     )
 
-    model = helper.make_model(main_graph, producer_name='burn-onnx-test',
-                               opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        main_graph,
+        producer_name="burn-onnx-test",
+        opset_imports=[helper.make_opsetid("", 16)],
+    )
     model.ir_version = 8
     onnx.checker.check_model(model)
     return model
@@ -120,15 +142,13 @@ def test_model(model):
     x = np.array([[1.0, 2.0, 3.0]], dtype=np.float32)  # [1, 3]
 
     # Weight: [3, 2]
-    weight = np.array([[1.0, 0.5],
-                       [2.0, 1.0],
-                       [0.5, 2.0]], dtype=np.float32)
+    weight = np.array([[1.0, 0.5], [2.0, 1.0], [0.5, 2.0]], dtype=np.float32)
     bias = np.array([0.1, 0.2], dtype=np.float32)
 
     sess = ort.InferenceSession(model.SerializeToString())
 
-    out_then = sess.run(None, {'x': x, 'condition': np.array(True, dtype=bool)})[0]
-    out_else = sess.run(None, {'x': x, 'condition': np.array(False, dtype=bool)})[0]
+    out_then = sess.run(None, {"x": x, "condition": np.array(True, dtype=bool)})[0]
+    out_else = sess.run(None, {"x": x, "condition": np.array(False, dtype=bool)})[0]
 
     # Then branch: x @ weight + bias
     # [1, 3] @ [3, 2] = [1, 2]
@@ -157,18 +177,20 @@ def test_model(model):
     print(f"Then output: {out_then.flatten().tolist()}")
     print(f"Else output: {out_else.flatten().tolist()}")
 
-    assert np.allclose(out_then, expected_then, atol=1e-5), f"Then branch mismatch!\nGot: {out_then}\nExpected: {expected_then}"
+    assert np.allclose(out_then, expected_then, atol=1e-5), (
+        f"Then branch mismatch!\nGot: {out_then}\nExpected: {expected_then}"
+    )
     assert np.allclose(out_else, expected_else), "Else branch mismatch!"
     print("\nAll tests passed!")
 
 
 def main():
     model = build_model()
-    onnx.save(model, 'outer_scope_constant.onnx')
+    onnx.save(model, "outer_scope_constant.onnx")
     print("Saved outer_scope_constant.onnx")
 
     test_model(model)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

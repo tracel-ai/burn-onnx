@@ -20,13 +20,9 @@
 //! - **Sqrt**: Square root √x (improved shape inference)
 //!
 //! **Opset 7 Operations (Trigonometric):**
-//! - **Acos**: Arc cosine (domain [-1, 1])
-//! - **Asin**: Arc sine (domain [-1, 1])
-//! - **Atan**: Arc tangent
 //! - **Cos**: Cosine
 //! - **Sin**: Sine
 //! - **Tan**: Tangent
-// TODO: Missing test coverage for domain errors - Acos/Asin require input in [-1,1], Atanh in (-1,1), Acosh >= 1 - No tests validate behavior outside valid domain - Need edge case tests
 //!
 //! **Opset 9 Operations:**
 //! - **Erf**: Error function
@@ -34,9 +30,6 @@
 //! - **Sinh**: Hyperbolic sine
 //! - **Cosh**: Hyperbolic cosine
 //! - **Tanh**: Hyperbolic tangent
-//! - **Asinh**: Inverse hyperbolic sine
-//! - **Acosh**: Inverse hyperbolic cosine (domain [1, ∞))
-//! - **Atanh**: Inverse hyperbolic tangent (domain (-1, 1))
 //!
 //! **Opset 11 Operations:**
 //! - **Round**: Round to nearest integer (supports optional mode attribute)
@@ -76,9 +69,10 @@ pub struct ElementwiseUnaryNode {
     pub node_type: crate::ir::NodeType,
 }
 
-/// Node processor for element-wise binary
-/// Node processor for element-wise unary operations
-/// Used for: Neg, Abs, Ceil, Floor, Sqrt, Exp, Log, Sin, Cos, etc.
+/// Node processor for element-wise unary operations that don't yet have
+/// dedicated processors (Elu, Selu, Celu, Softsign,
+/// ThresholdedRelu). Will be removed as these ops get their own processors.
+#[allow(dead_code)]
 pub(crate) struct ElementwiseUnaryProcessor;
 
 impl NodeProcessor for ElementwiseUnaryProcessor {
@@ -105,18 +99,10 @@ impl NodeProcessor for ElementwiseUnaryProcessor {
         // Validate opset based on operation type
         // Note: Only operations still using ElementwiseUnaryNode are handled here
         let min_opset = match node.node_type {
-            // Opset 7 operations (inverse trigonometric functions)
-            crate::ir::NodeType::Acos | crate::ir::NodeType::Asin | crate::ir::NodeType::Atan => 7,
-            // Opset 9 operations (inverse hyperbolic functions)
-            crate::ir::NodeType::Asinh
-            | crate::ir::NodeType::Acosh
-            | crate::ir::NodeType::Atanh => 9,
             // Other activation functions
             crate::ir::NodeType::Elu => 6,
             crate::ir::NodeType::Selu => 6,
             crate::ir::NodeType::Celu => 12,
-            crate::ir::NodeType::Mish => 18,
-            crate::ir::NodeType::Softplus => 1,
             crate::ir::NodeType::Softsign => 1,
             crate::ir::NodeType::ThresholdedRelu => 10,
             _ => {
@@ -144,19 +130,10 @@ impl NodeProcessor for ElementwiseUnaryProcessor {
         };
 
         match builder.node_type {
-            // Inverse trig functions (still using ElementwiseUnaryNode)
-            NodeType::Acos => Node::Acos(node),
-            NodeType::Asin => Node::Asin(node),
-            NodeType::Atan => Node::Atan(node),
-            NodeType::Asinh => Node::Asinh(node),
-            NodeType::Acosh => Node::Acosh(node),
-            NodeType::Atanh => Node::Atanh(node),
-            // Other activation functions (still using ElementwiseUnaryNode)
+            // Activation functions (still using ElementwiseUnaryNode)
             NodeType::Elu => Node::Elu(node),
             NodeType::Selu => Node::Selu(node),
             NodeType::Celu => Node::Celu(node),
-            NodeType::Mish => Node::Mish(node),
-            NodeType::Softplus => Node::Softplus(node),
             NodeType::Softsign => Node::Softsign(node),
             NodeType::ThresholdedRelu => Node::ThresholdedRelu(node),
             _ => panic!(
@@ -178,8 +155,8 @@ mod tests {
         let prefs = OutputPreferences::new();
 
         let mut node = crate::ir::RawNode {
-            node_type: NodeType::Asin,
-            name: "test_asin".to_string(),
+            node_type: NodeType::Elu,
+            name: "test_elu".to_string(),
             inputs: vec![Argument {
                 name: "a".to_string(),
                 ty: ArgType::Tensor(TensorType {

@@ -23,19 +23,21 @@ def create_deep_chain_model(depth=30):
     """Create model with a deep chain of operations."""
 
     # Input and output
-    input_tensor = helper.make_tensor_value_info('input', TensorProto.FLOAT, [1, 4])
-    output_tensor = helper.make_tensor_value_info('output', TensorProto.FLOAT, [1, 4])
+    input_tensor = helper.make_tensor_value_info("input", TensorProto.FLOAT, [1, 4])
+    output_tensor = helper.make_tensor_value_info("output", TensorProto.FLOAT, [1, 4])
 
     # Create a deep chain: Relu → Abs → Relu → Abs → ... (alternating)
     nodes = []
-    current_input = 'input'
+    current_input = "input"
 
     for i in range(depth):
-        op_type = 'Relu' if i % 2 == 0 else 'Abs'
-        output_name = f'chain_{i}' if i < depth - 1 else 'output'
+        op_type = "Relu" if i % 2 == 0 else "Abs"
+        output_name = f"chain_{i}" if i < depth - 1 else "output"
 
         nodes.append(
-            helper.make_node(op_type, [current_input], [output_name], name=f'{op_type.lower()}_{i}')
+            helper.make_node(
+                op_type, [current_input], [output_name], name=f"{op_type.lower()}_{i}"
+            )
         )
 
         current_input = output_name
@@ -43,13 +45,15 @@ def create_deep_chain_model(depth=30):
     # Create the graph
     graph = helper.make_graph(
         nodes,
-        'deep_chain_model',
+        "deep_chain_model",
         [input_tensor],
         [output_tensor],
     )
 
     # Create the model
-    model = helper.make_model(graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        graph, producer_name="onnx-ir-test", opset_imports=[helper.make_opsetid("", 16)]
+    )
 
     # Check the model
     onnx.checker.check_model(model)
@@ -63,7 +67,7 @@ def main():
     model = create_deep_chain_model(depth)
 
     # Save the model
-    output_path = '../fixtures/deep_chain.onnx'
+    output_path = "../fixtures/deep_chain.onnx"
     onnx.save(model, output_path)
     print(f"Model saved to {output_path}")
 
@@ -73,5 +77,5 @@ def main():
     print(f"  Tests type inference convergence with deep graphs")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

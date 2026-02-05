@@ -7,7 +7,7 @@ use super::ir::{
     TensorType,
 };
 use super::protos::{
-    AttributeProto, NodeProto, TensorProto, TensorShapeProto, ValueInfoProto,
+    AttributeProto, NodeProto, TensorProto, ValueInfoProto,
     attribute_proto::AttributeType,
     tensor_proto::{DataLocation, DataType as DT},
     tensor_shape_proto::dimension::Value,
@@ -150,7 +150,7 @@ pub fn argument_from_initializer(initializer: &TensorProto) -> (Argument, Tensor
                     ty: ArgType::Tensor(TensorType {
                         dtype: td.elem_type(),
                         rank: td.shape.len(),
-                        static_shape: Some(td.shape.to_vec()),
+                        static_shape: Some(td.shape.iter().map(|&d| Some(d)).collect()),
                     }),
                     value_source: ValueSource::Constant, // Initializers are constants
                     value_store: None,
@@ -245,7 +245,7 @@ pub fn argument_from_initializer(initializer: &TensorProto) -> (Argument, Tensor
                     ty: ArgType::Tensor(TensorType {
                         dtype,
                         rank: shape_usize.len(),
-                        static_shape: Some(shape_usize),
+                        static_shape: Some(shape_usize.iter().map(|&d| Some(d)).collect()),
                     }),
                     value_source: ValueSource::Constant, // Initializers are constants
                     value_store: None,
@@ -295,7 +295,7 @@ pub fn argument_from_initializer_lazy_with_context(
             ty: ArgType::Tensor(TensorType {
                 dtype: data_ref.dtype(),
                 rank: data_ref.shape().len(),
-                static_shape: Some(data_ref.shape().to_vec()),
+                static_shape: Some(data_ref.shape().iter().map(|&d| Some(d)).collect()),
             }),
             value_source: ValueSource::Constant,
             value_store: None,
@@ -505,21 +505,6 @@ impl TryFrom<TensorProto> for TensorData {
         Ok(data_ref.to_tensor_data())
     }
 }
-impl TryFrom<TensorShapeProto> for Vec<usize> {
-    type Error = ParseError;
-    fn try_from(shape: TensorShapeProto) -> Result<Vec<usize>, Self::Error> {
-        let mut result = Vec::new();
-
-        for dim in shape.dim {
-            if let Value::DimValue(value) = dim.value.unwrap() {
-                result.push(value as usize);
-            }
-        }
-
-        Ok(result)
-    }
-}
-
 fn convert_vec_tensor_proto(tensors: Vec<TensorProto>) -> Result<Vec<TensorData>, ParseError> {
     let mut result = Vec::new();
     for tensor in tensors {
@@ -901,28 +886,16 @@ impl TryFrom<ValueInfoProto> for Argument {
         let ty = if tensor_proto.shape.dim.is_empty() {
             ArgType::Scalar(elem_type)
         } else {
-            let has_unknown_dim = tensor_proto.shape.dim.iter().any(|dim| match &dim.value {
-                None | Some(Value::DimParam(_)) => true,
-                Some(Value::DimValue(_)) => false,
-            });
-
-            let static_shape = if has_unknown_dim {
-                None
-            } else {
-                let shape: Vec<usize> = tensor_proto
-                    .shape
-                    .dim
-                    .iter()
-                    .filter_map(|d| {
-                        if let Some(Value::DimValue(v)) = &d.value {
-                            Some(*v as usize)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                Some(shape)
-            };
+            let static_shape: Vec<Option<usize>> = tensor_proto
+                .shape
+                .dim
+                .iter()
+                .map(|d| match &d.value {
+                    Some(Value::DimValue(v)) => Some(*v as usize),
+                    _ => None,
+                })
+                .collect();
+            let static_shape = Some(static_shape);
 
             ArgType::Tensor(TensorType {
                 rank: tensor_proto.shape.dim.len(),

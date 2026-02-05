@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
+
 import numpy as np
 import onnx
 from onnx import helper, TensorProto
@@ -11,10 +19,7 @@ output_tensor = helper.make_tensor_value_info("output", TensorProto.FLOAT, [3, 4
 
 # Create Identity node that takes graph input (not a constant)
 identity_node = helper.make_node(
-    "Identity",
-    inputs=["input"],
-    outputs=["output"],
-    name="identity_test"
+    "Identity", inputs=["input"], outputs=["output"], name="identity_test"
 )
 
 # Create the graph

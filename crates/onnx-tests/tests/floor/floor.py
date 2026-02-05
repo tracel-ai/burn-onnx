@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # Used to generate model: onnx-tests/tests/floor/floor.onnx
 
@@ -6,12 +14,14 @@ import torch
 import torch.nn as nn
 import onnx
 
+
 class FloorModel(nn.Module):
     def __init__(self):
         super().__init__()
 
     def forward(self, x):
         return torch.floor(x)
+
 
 def main():
     model = FloorModel()
@@ -26,6 +36,7 @@ def main():
         test_input,
         onnx_file,
         opset_version=16,
+        external_data=False,
     )
 
     print(f"Finished exporting model to {onnx_file}")
@@ -36,5 +47,5 @@ def main():
     print(f"Test output: {output}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

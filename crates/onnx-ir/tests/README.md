@@ -11,11 +11,11 @@ pipeline.
 1. Create a Python script in `scripts/` (e.g., `scripts/generate_foo_model.py`):
 
    ```python
-   #!/usr/bin/env -S uv run
+   #!/usr/bin/env -S uv run --script
    # /// script
    # dependencies = [
-   #   "onnx>=1.15.0",
-   #   "numpy>=1.24.0",
+   #   "onnx==1.19.0",
+   #   "numpy",
    # ]
    # ///
 
@@ -67,6 +67,6 @@ Focus on **how the pipeline works**, not **what operations it supports**.
 ## Requirements
 
 - **uv**: For running Python scripts with automatic dependency management
-  - Install: `pip install uv` or `cargo install uv`
+  - Install: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **Rust**: For running the smoke tests
 - **Python 3.8+**: Required by uv (installed automatically with dependencies)

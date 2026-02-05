@@ -42,11 +42,39 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
             _ => panic!("pow function only supports RHS scalar or tensor types"),
         };
 
-        let function = match (power_type, &rhs_arg.ty) {
-            (PowerType::Int, ArgType::Tensor(_)) => quote! { #lhs.powi(#rhs) },
-            (PowerType::Int, ArgType::Scalar(_)) => quote! { #lhs.powi_scalar(#rhs) },
-            (PowerType::Float, ArgType::Tensor(_)) => quote! { #lhs.powf(#rhs) },
-            (PowerType::Float, ArgType::Scalar(_)) => quote! { #lhs.powf_scalar(#rhs) },
+        let function = match (power_type, &lhs_arg.ty, &rhs_arg.ty) {
+            (PowerType::Int, ArgType::Tensor(lhs_t), ArgType::Tensor(rhs_t)) => {
+                let lhs_rank = lhs_t.rank;
+                let rhs_rank = rhs_t.rank;
+                if lhs_rank == rhs_rank {
+                    quote! { #lhs.powi(#rhs) }
+                } else if lhs_rank > rhs_rank {
+                    let num_dims = lhs_rank - rhs_rank;
+                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
+                    quote! { #lhs.powi(#rhs.unsqueeze_dims(&[#(#dims),*])) }
+                } else {
+                    let num_dims = rhs_rank - lhs_rank;
+                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
+                    quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).powi(#rhs) }
+                }
+            }
+            (PowerType::Float, ArgType::Tensor(lhs_t), ArgType::Tensor(rhs_t)) => {
+                let lhs_rank = lhs_t.rank;
+                let rhs_rank = rhs_t.rank;
+                if lhs_rank == rhs_rank {
+                    quote! { #lhs.powf(#rhs) }
+                } else if lhs_rank > rhs_rank {
+                    let num_dims = lhs_rank - rhs_rank;
+                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
+                    quote! { #lhs.powf(#rhs.unsqueeze_dims(&[#(#dims),*])) }
+                } else {
+                    let num_dims = rhs_rank - lhs_rank;
+                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
+                    quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).powf(#rhs) }
+                }
+            }
+            (PowerType::Int, _, ArgType::Scalar(_)) => quote! { #lhs.powi_scalar(#rhs) },
+            (PowerType::Float, _, ArgType::Scalar(_)) => quote! { #lhs.powf_scalar(#rhs) },
             _ => panic!("Invalid power type combination"),
         };
 
@@ -122,6 +150,68 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, base: Tensor<B, 2>, exponent: f32) -> Tensor<B, 2> {
             let output = base.powf_scalar(exponent);
+            output
+        }
+        ");
+    }
+
+    fn create_pow_node_broadcast(
+        name: &str,
+        base_rank: usize,
+        exp_rank: usize,
+        base_dtype: DType,
+        exp_dtype: DType,
+    ) -> PowNode {
+        PowNodeBuilder::new(name)
+            .input_tensor("base", base_rank, base_dtype)
+            .input_tensor("exponent", exp_rank, exp_dtype)
+            .output_tensor("output", base_rank.max(exp_rank), base_dtype)
+            .build()
+    }
+
+    #[test]
+    fn test_pow_float_broadcast_lhs_larger() {
+        let node = create_pow_node_broadcast("pow1", 3, 2, DType::F32, DType::F32);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, base: Tensor<B, 3>, exponent: Tensor<B, 2>) -> Tensor<B, 3> {
+            let output = base.powf(exponent.unsqueeze_dims(&[0isize]));
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_pow_float_broadcast_rhs_larger() {
+        let node = create_pow_node_broadcast("pow1", 2, 3, DType::F32, DType::F32);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, base: Tensor<B, 2>, exponent: Tensor<B, 3>) -> Tensor<B, 3> {
+            let output = base.unsqueeze_dims(&[0isize]).powf(exponent);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_pow_int_broadcast_lhs_larger() {
+        let node = create_pow_node_broadcast("pow1", 3, 2, DType::F32, DType::I32);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, base: Tensor<B, 3>, exponent: Tensor<B, 2, Int>) -> Tensor<B, 3> {
+            let output = base.powi(exponent.unsqueeze_dims(&[0isize]));
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_pow_int_broadcast_rhs_larger() {
+        let node = create_pow_node_broadcast("pow1", 2, 3, DType::F32, DType::I32);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, base: Tensor<B, 2>, exponent: Tensor<B, 3, Int>) -> Tensor<B, 3> {
+            let output = base.unsqueeze_dims(&[0isize]).powi(exponent);
             output
         }
         ");

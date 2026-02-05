@@ -1,51 +1,47 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/add/add.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: pow.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-        # self.b = 5.0
-
-    def forward(self, x, k):
-        # raise a tensor to tensor power
-        x = x.pow(x)
-
-        # raise a scalar constant to a power of a scalar
-        # d = torch.pow(self.b, k)
-
-        # raise a tensor input to a power of a scalar
-        x = torch.pow(x, k)
-
-        return x
+OPSET_VERSION = 16
 
 
 def main():
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
-    onnx_name = "pow.onnx"
-    dummy_input = torch.randn(1, 2, 3, 4, dtype=torch.float32, device=device)
+    node0 = helper.make_node("Pow", ["onnx::Pow_0", "onnx::Pow_0"], ["/Pow_output_0"])
+    node1 = helper.make_node("Cast", ["onnx::Cast_1"], ["/Cast_output_0"], to=1)
+    node2 = helper.make_node("Pow", ["/Pow_output_0", "/Cast_output_0"], ["4"])
 
-    scalar = 2.0
-
-    torch.onnx.export(
-        model, (dummy_input, scalar), onnx_name, verbose=False, opset_version=16
+    inp_onnx__Pow_0 = helper.make_tensor_value_info(
+        "onnx::Pow_0", TensorProto.FLOAT, [1, 2, 3, 4]
+    )
+    inp_onnx__Cast_1 = helper.make_tensor_value_info(
+        "onnx::Cast_1", TensorProto.DOUBLE, []
     )
 
-    print(f"Finished exporting model to {onnx_name}")
+    out_n4 = helper.make_tensor_value_info("4", TensorProto.FLOAT, [1, 2, 3, 4])
 
-    # Output some test data for use in the test
-    test_input = torch.tensor([[[[1.0, 2.0, 3.0, 4.0]]]])
+    graph = helper.make_graph(
+        [node0, node1, node2],
+        "main_graph",
+        [inp_onnx__Pow_0, inp_onnx__Cast_1],
+        [out_n4],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    print(f"Test input data: {test_input}, {scalar}")
-    output = model.forward(test_input, scalar)
-    print(f"Test output data: {output}")
+    onnx.save(model, "pow.onnx")
+    print(f"Finished exporting model to pow.onnx")
 
 
 if __name__ == "__main__":

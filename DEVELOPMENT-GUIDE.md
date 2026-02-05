@@ -290,6 +290,7 @@ implement:
 4. **`extract_config()`** - Extract config from attributes/inputs (override if Config != `()`)
 5. **`spec()`** - Define opset and input/output requirements (optional)
 6. **`lift_constants()`** - Request constant lifting for inputs (optional)
+7. **`is_noop()`** - Return `true` if the node is a no-op (optional, default `false`)
 
 Example `build_node()` implementation:
 
@@ -367,8 +368,37 @@ through a 5-phase pipeline:
 #### Phase 4: Post-processing
 
 - Lifts constants: Makes constant values accessible on downstream node inputs
-- Eliminates Identity nodes: Removes no-op nodes and rewires the graph
-- Re-runs constant lifting after Identity elimination
+- Eliminates no-op nodes: Removes nodes whose processor's `is_noop()` returns `true` (Identity,
+  same-type Cast, scalar Reshape, scalar Gather, etc.) and rewires the graph
+- Re-runs constant lifting after no-op elimination
+
+#### Phase 4b: Simplification (Optional)
+
+When `ModelGen::simplify(true)` is enabled, an additional simplification pass runs after
+post-processing. This pass folds shape-related computations into constants at codegen time:
+
+- **Shape folding**: `Shape(x)` with static dims becomes a constant array
+- **Gather on shape**: `Gather(Shape(x), const_idx)` becomes a scalar constant
+- **Slice on shape**: `Slice(Shape(x), start, end)` becomes a sub-array constant
+- **Concat of shapes**: `Concat(Shape(x), Shape(y))` becomes a concatenated constant
+- **Reshape from shape**: `Reshape(x, Shape(y))` uses a folded constant shape
+- **Binary ops on shapes**: `Add/Mul/Sub/Div(Shape(x), const)` becomes a constant
+- **Cast on shape**: `Cast(Shape(x))` becomes a constant
+- **Where on shapes**: `Where(cond, Shape(x), Shape(y))` becomes a conditional constant
+- **Expand from shape**: `Expand(x, Shape(y))` uses a folded constant shape
+- **ConstantOfShape optimization**: `ConstantOfShape(Shape(x))` uses a known shape
+
+Simplification is enabled by default. Existing operator tests explicitly use `.simplify(false)` when they need to test unsimplified codegen paths.
+Use `--no-simplify` to disable it:
+
+```sh
+cargo run -p burn-onnx -- model.onnx ./out             # simplification enabled (default)
+cargo run -p burn-onnx -- model.onnx ./out --no-simplify  # simplification disabled
+```
+
+Existing operator tests use `.simplify(false)` to test unsimplified codegen. Dedicated comparison
+tests in `crates/onnx-tests/tests/simplify/` verify that simplified and unsimplified codegen produce
+identical outputs.
 
 #### Phase 5: Finalization
 
@@ -394,6 +424,8 @@ handling ONNX operations. Each processor implements:
   `Default::default()`)
 - `lift_constants()` - Request constant lifting for specific inputs (default does nothing)
 - `input_preferences()` - Declare preferred input types from producers (default returns `None`)
+- `is_noop()` - Return `true` if this node is a no-op after type inference, causing it to be
+  eliminated during post-processing (default returns `false`)
 
 Design principles: Each processor is self-contained, handling type inference, config extraction, and
 node construction. Processors return strongly-typed `Node` enum variants, ensuring type safety

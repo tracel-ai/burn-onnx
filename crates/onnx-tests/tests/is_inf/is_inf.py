@@ -1,39 +1,44 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate model: onnx-tests/tests/is_inf/is_inf.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
-import torch.nn as nn
+# used to generate model: is_inf.onnx
 
+import numpy as np
+import onnx
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
+OPSET_VERSION = 16
 
-    def forward(self, x):
-        return torch.isinf(x)
 
 def main():
-    # Set seed for reproducibility
-    torch.manual_seed(42)
-    torch.set_printoptions(precision=8)
+    node0 = helper.make_node("Cast", ["onnx::Cast_0"], ["/Cast_output_0"], to=11)
+    node1 = helper.make_node("IsInf", ["/Cast_output_0"], ["2"])
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
+    inp_onnx__Cast_0 = helper.make_tensor_value_info(
+        "onnx::Cast_0", TensorProto.FLOAT, [4, 4]
+    )
 
-    onnx_name = "is_inf.onnx"
+    out_n2 = helper.make_tensor_value_info("2", TensorProto.BOOL, [4, 4])
 
-    test_input1 = torch.randn(4, 4, device=device)
-    test_input1 = torch.where(test_input1 > 0, test_input1, torch.inf)
-    torch.onnx.export(model, (test_input1,), onnx_name, verbose=False, opset_version=16)
+    graph = helper.make_graph(
+        [node0, node1],
+        "main_graph",
+        [inp_onnx__Cast_0],
+        [out_n2],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    print("Finished exporting model to {}".format(onnx_name))
+    onnx.save(model, "is_inf.onnx")
+    print(f"Finished exporting model to is_inf.onnx")
 
-    print("Test input data: {}".format(test_input1))
-    output = model.forward(test_input1)
-    print("Test output data: {}".format(output))
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

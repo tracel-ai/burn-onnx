@@ -37,12 +37,6 @@ use crate::processor::{
 /// Configuration for Linear operations
 #[derive(Debug, Clone, new)]
 pub struct LinearConfig {
-    /// Input dimension (features)
-    pub d_input: usize,
-    /// Output dimension (features)
-    pub d_output: usize,
-    /// Whether bias is used
-    pub bias: bool,
     /// Whether weight needs transposition for Burn's expected layout.
     /// - true: Weight is in ONNX Gemm layout [out_features, in_features] (from Gemm with transB=1)
     /// - false: Weight is already in [in_features, out_features] format (from MatMul)
@@ -130,14 +124,6 @@ impl NodeProcessor for LinearProcessor {
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
         use crate::ir::AttributeValue;
 
-        let weight_shape = node.inputs[1]
-            .value()
-            .ok_or_else(|| {
-                ProcessError::Custom("Linear: weight tensor must be present".to_string())
-            })?
-            .shape
-            .to_vec();
-
         // Check if weight needs transposition (set by node_conversion phase)
         // - Gemm with transB=1 → transpose_weight=true (weight is [out, in])
         // - MatMul → transpose_weight=false (weight is [in, out])
@@ -147,20 +133,7 @@ impl NodeProcessor for LinearProcessor {
             .map(|v| matches!(v, AttributeValue::Int64(1)))
             .unwrap_or(false);
 
-        // TODO: Validate weight_shape.len() == 2 - Linear requires exactly 2D weight matrix
-        let (in_size, out_size) = if transpose_weight {
-            // Gemm layout: [out_features, in_features]
-            (weight_shape[1], weight_shape[0])
-        } else {
-            // MatMul layout: [in_features, out_features]
-            (weight_shape[0], weight_shape[1])
-        };
-
-        // check if the bias is present (could be Constant, Static, or Dynamic)
-        let bias = node.inputs.len() == 3 && !node.inputs[2].is_optional();
-
-        let config = LinearConfig::new(in_size, out_size, bias, transpose_weight);
-        Ok(config)
+        Ok(LinearConfig::new(transpose_weight))
     }
 
     fn build_node(&self, builder: RawNode, opset: usize) -> Node {
@@ -236,22 +209,6 @@ mod tests {
         let processor = LinearProcessor;
         let config = processor.extract_config(&node, 16).unwrap();
 
-        assert_eq!(config.d_input, 5);
-        assert_eq!(config.d_output, 10);
-        assert!(!config.bias);
-        assert!(config.transpose_weight);
-    }
-
-    #[test]
-    fn test_linear_config_gemm_source_with_bias() {
-        // Gemm layout: weight shape [10, 5] means [out_features=10, in_features=5]
-        let node = create_gemm_linear_node(true, vec![10, 5]).process(LinearProcessor, 16);
-        let processor = LinearProcessor;
-        let config = processor.extract_config(&node, 16).unwrap();
-
-        assert_eq!(config.d_input, 5);
-        assert_eq!(config.d_output, 10);
-        assert!(config.bias);
         assert!(config.transpose_weight);
     }
 
@@ -262,32 +219,7 @@ mod tests {
         let processor = LinearProcessor;
         let config = processor.extract_config(&node, 16).unwrap();
 
-        assert_eq!(config.d_input, 5);
-        assert_eq!(config.d_output, 10);
-        assert!(!config.bias);
         assert!(!config.transpose_weight);
-    }
-
-    #[test]
-    fn test_linear_config_matmul_source_with_bias() {
-        // MatMul layout: weight shape [5, 10] means [in_features=5, out_features=10]
-        let node = create_matmul_linear_node(true, vec![5, 10]).process(LinearProcessor, 16);
-        let processor = LinearProcessor;
-        let config = processor.extract_config(&node, 16).unwrap();
-
-        assert_eq!(config.d_input, 5);
-        assert_eq!(config.d_output, 10);
-        assert!(config.bias);
-        assert!(!config.transpose_weight);
-    }
-
-    #[test]
-    #[should_panic(expected = "index out of bounds")]
-    fn test_linear_config_invalid_weight_dims() {
-        let node = create_matmul_linear_node(false, vec![10]).build_with_graph_data(16);
-        let processor = LinearProcessor;
-        // This should panic when accessing weight_shape[1] on a 1D weight tensor
-        let _ = processor.extract_config(&node, 16);
     }
 
     #[test]

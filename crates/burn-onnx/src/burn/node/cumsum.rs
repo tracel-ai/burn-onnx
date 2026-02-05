@@ -227,7 +227,7 @@ mod tests {
 
         CumSumNodeBuilder::new(name)
             .input_tensor("input", rank, DType::F32)
-            .input_shape("axis") // Shape type for runtime axis (rank 1 by default)
+            .input_shape("axis", 1) // Shape type for runtime axis
             .output_tensor("output", rank, DType::F32)
             .config(config)
             .build()

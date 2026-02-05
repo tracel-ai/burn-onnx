@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+#   "onnxruntime",
+# ]
+# ///
+
 """
 Generate ONNX model that tests outer-scope variable references in Loop subgraphs.
 
@@ -18,6 +27,7 @@ import numpy as np
 
 try:
     import onnxruntime as ort
+
     HAS_ORT = True
 except ImportError:
     HAS_ORT = False
@@ -35,49 +45,52 @@ def build_model():
         }
     """
     # Loop body: accum + y (y comes from outer scope, not passed as loop input)
-    body_add = helper.make_node('Add', inputs=['accum', 'y'], outputs=['accum_out'])
-    body_cond = helper.make_node('Identity', inputs=['cond_in'], outputs=['cond_out'])
+    body_add = helper.make_node("Add", inputs=["accum", "y"], outputs=["accum_out"])
+    body_cond = helper.make_node("Identity", inputs=["cond_in"], outputs=["cond_out"])
 
     body_graph = helper.make_graph(
         nodes=[body_add, body_cond],
-        name='loop_body',
+        name="loop_body",
         inputs=[
-            helper.make_tensor_value_info('iter', TensorProto.INT64, []),
-            helper.make_tensor_value_info('cond_in', TensorProto.BOOL, []),
-            helper.make_tensor_value_info('accum', TensorProto.FLOAT, [2, 3]),
+            helper.make_tensor_value_info("iter", TensorProto.INT64, []),
+            helper.make_tensor_value_info("cond_in", TensorProto.BOOL, []),
+            helper.make_tensor_value_info("accum", TensorProto.FLOAT, [2, 3]),
             # Note: 'y' is NOT declared as input - it's an outer-scope reference
         ],
         outputs=[
-            helper.make_tensor_value_info('cond_out', TensorProto.BOOL, []),
-            helper.make_tensor_value_info('accum_out', TensorProto.FLOAT, [2, 3]),
+            helper.make_tensor_value_info("cond_out", TensorProto.BOOL, []),
+            helper.make_tensor_value_info("accum_out", TensorProto.FLOAT, [2, 3]),
         ],
     )
 
     # Main graph
-    relu_node = helper.make_node('Relu', inputs=['x'], outputs=['y'])
+    relu_node = helper.make_node("Relu", inputs=["x"], outputs=["y"])
 
     # Loop: 3 iterations, initial accum = zeros
     loop_node = helper.make_node(
-        'Loop',
-        inputs=['max_iter', 'cond_init', 'accum_init'],
-        outputs=['output'],
-        body=body_graph
+        "Loop",
+        inputs=["max_iter", "cond_init", "accum_init"],
+        outputs=["output"],
+        body=body_graph,
     )
 
     main_graph = helper.make_graph(
         nodes=[relu_node, loop_node],
-        name='outer_scope_loop',
+        name="outer_scope_loop",
         inputs=[
-            helper.make_tensor_value_info('x', TensorProto.FLOAT, [2, 3]),
-            helper.make_tensor_value_info('max_iter', TensorProto.INT64, []),
-            helper.make_tensor_value_info('cond_init', TensorProto.BOOL, []),
-            helper.make_tensor_value_info('accum_init', TensorProto.FLOAT, [2, 3]),
+            helper.make_tensor_value_info("x", TensorProto.FLOAT, [2, 3]),
+            helper.make_tensor_value_info("max_iter", TensorProto.INT64, []),
+            helper.make_tensor_value_info("cond_init", TensorProto.BOOL, []),
+            helper.make_tensor_value_info("accum_init", TensorProto.FLOAT, [2, 3]),
         ],
-        outputs=[helper.make_tensor_value_info('output', TensorProto.FLOAT, [2, 3])],
+        outputs=[helper.make_tensor_value_info("output", TensorProto.FLOAT, [2, 3])],
     )
 
-    model = helper.make_model(main_graph, producer_name='burn-onnx-test',
-                               opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        main_graph,
+        producer_name="burn-onnx-test",
+        opset_imports=[helper.make_opsetid("", 16)],
+    )
     model.ir_version = 8
     onnx.checker.check_model(model)
     return model
@@ -99,12 +112,15 @@ def test_model(model):
     # y = Relu(x) = [[0, 2, 0], [3, 0, 1]]
     y = np.maximum(x, 0)
 
-    out = sess.run(None, {
-        'x': x,
-        'max_iter': max_iter,
-        'cond_init': cond_init,
-        'accum_init': accum_init
-    })[0]
+    out = sess.run(
+        None,
+        {
+            "x": x,
+            "max_iter": max_iter,
+            "cond_init": cond_init,
+            "accum_init": accum_init,
+        },
+    )[0]
 
     # Loop runs 3 times: accum = 0 + y + y + y = 3*y
     expected = 3 * y
@@ -122,11 +138,11 @@ def test_model(model):
 
 def main():
     model = build_model()
-    onnx.save(model, 'outer_scope_loop.onnx')
+    onnx.save(model, "outer_scope_loop.onnx")
     print("Saved outer_scope_loop.onnx")
 
     test_model(model)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

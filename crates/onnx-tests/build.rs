@@ -4,11 +4,37 @@ fn main() {
     // Re-run this build script if the onnx-tests directory changes.
     println!("cargo:rerun-if-changed=tests");
 
-    // Add onnx models.
-    // All models are now saved in burnpack format (.bpk files)
-    ModelGen::new()
+    // Add onnx models (unsimplified, used by existing tests).
+    let mut model_gen = ModelGen::new();
+    model_gen.simplify(false);
+    add_all_inputs(&mut model_gen);
+    model_gen.out_dir("model/").run_from_script();
+
+    // Generate simplified models for comparison testing.
+    let mut simplified = ModelGen::new();
+    simplified.simplify(true);
+    add_simplify_inputs(&mut simplified);
+    simplified.out_dir("model_simplified/").run_from_script();
+
+    // Generate unsimplified models in a separate dir for comparison testing.
+    let mut unsimplified = ModelGen::new();
+    unsimplified.simplify(false);
+    add_simplify_inputs(&mut unsimplified);
+    unsimplified
+        .out_dir("model_unsimplified/")
+        .run_from_script();
+}
+
+fn add_all_inputs(model_gen: &mut ModelGen) {
+    model_gen
         .input("tests/abs/abs.onnx")
+        .input("tests/acos/acos.onnx")
+        .input("tests/acosh/acosh.onnx")
         .input("tests/add/add.onnx")
+        .input("tests/asin/asin.onnx")
+        .input("tests/asinh/asinh.onnx")
+        .input("tests/atan/atan.onnx")
+        .input("tests/atanh/atanh.onnx")
         .input("tests/add/add_shape.onnx")
         .input("tests/add/add_broadcast.onnx")
         .input("tests/initializer_to_const/initializer_to_const.onnx")
@@ -41,7 +67,11 @@ fn main() {
         .input("tests/avg_pool1d_ceil_mode/avg_pool1d_ceil_mode.onnx")
         .input("tests/avg_pool2d/avg_pool2d.onnx")
         .input("tests/avg_pool2d_ceil_mode/avg_pool2d_ceil_mode.onnx")
+        .input("tests/avg_pool/avg_pool1d_asymmetric_padding.onnx")
+        .input("tests/avg_pool/avg_pool2d_asymmetric_padding.onnx")
         .input("tests/batch_norm/batch_norm.onnx")
+        .input("tests/batch_norm/batch_norm_runtime.onnx")
+        .input("tests/batch_norm/batch_norm_partial_constant.onnx")
         .input("tests/bitshift/bitshift_left.onnx")
         .input("tests/bitshift/bitshift_left_scalar.onnx")
         .input("tests/bitshift/scalar_bitshift_left.onnx")
@@ -77,6 +107,8 @@ fn main() {
         .input("tests/concat/concat_mixed_three_elements.onnx")
         .input("tests/concat/concat_multiple_mixed.onnx")
         .input("tests/concat/concat_with_constants.onnx")
+        .input("tests/concat/concat_scalar_direct.onnx")
+        .input("tests/concat/concat_scalar_from_gather.onnx")
         .input("tests/constant/constant_f32.onnx")
         .input("tests/constant/constant_f64.onnx")
         .input("tests/constant/constant_i32.onnx")
@@ -101,6 +133,8 @@ fn main() {
         .input("tests/conv1d/conv1d.onnx")
         .input("tests/conv2d/conv2d.onnx")
         .input("tests/conv3d/conv3d.onnx")
+        .input("tests/conv/conv1d_asymmetric_padding.onnx")
+        .input("tests/conv/conv2d_asymmetric_padding.onnx")
         .input("tests/conv_transpose1d/conv_transpose1d.onnx")
         .input("tests/conv_transpose2d/conv_transpose2d.onnx")
         .input("tests/conv_transpose3d/conv_transpose3d.onnx")
@@ -139,6 +173,7 @@ fn main() {
         .input("tests/exp/exp.onnx")
         .input("tests/expand/expand.onnx")
         .input("tests/expand/expand_tensor.onnx")
+        .input("tests/expand/expand_scalar.onnx")
         .input("tests/expand/expand_shape.onnx")
         .input("tests/expand/expand_with_where_shape.onnx")
         .input("tests/expand/expand_max_semantics.onnx")
@@ -214,6 +249,9 @@ fn main() {
         .input("tests/less_or_equal/less_or_equal_broadcast.onnx")
         .input("tests/linear/linear.onnx")
         .input("tests/log/log.onnx")
+        .input("tests/gru/gru.onnx")
+        .input("tests/gru/gru_reverse.onnx")
+        .input("tests/gru/gru_with_initial_state.onnx")
         .input("tests/lstm/lstm.onnx")
         .input("tests/lstm/lstm_bidirectional.onnx")
         .input("tests/lstm/lstm_reverse.onnx")
@@ -233,11 +271,16 @@ fn main() {
         .input("tests/matmulinteger/matmulinteger_ranks.onnx")
         .input("tests/matmul/matmul_ranks.onnx")
         .input("tests/max/max.onnx")
+        .input("tests/max/max_broadcast.onnx")
         .input("tests/maxpool1d/maxpool1d.onnx")
         .input("tests/maxpool1d_ceil_mode/maxpool1d_ceil_mode.onnx")
         .input("tests/maxpool2d/maxpool2d.onnx")
         .input("tests/maxpool2d_ceil_mode/maxpool2d_ceil_mode.onnx")
+        .input("tests/maxpool/maxpool1d_asymmetric_padding.onnx")
+        .input("tests/maxpool/maxpool2d_asymmetric_padding.onnx")
         .input("tests/min/min.onnx")
+        .input("tests/min/min_broadcast.onnx")
+        .input("tests/mish/mish.onnx")
         .input("tests/mean/mean.onnx")
         .input("tests/mul/mul.onnx")
         .input("tests/mul/mul_shape.onnx")
@@ -254,6 +297,7 @@ fn main() {
         .input("tests/pad/pad_edge.onnx")
         .input("tests/pow/pow.onnx")
         .input("tests/pow/pow_int.onnx")
+        .input("tests/pow/pow_broadcast.onnx")
         .input("tests/prelu/prelu.onnx")
         .input("tests/prelu/prelu_with_channel_slope.onnx")
         .input("tests/random_normal/random_normal.onnx")
@@ -296,6 +340,7 @@ fn main() {
         .input("tests/resize/resize_2d_nearest_scale.onnx")
         .input("tests/resize/resize_with_shape.onnx")
         .input("tests/resize/resize_with_sizes_tensor.onnx")
+        .input("tests/resize/resize_with_scales_tensor.onnx")
         .input("tests/rnn/rnn.onnx")
         .input("tests/rnn/rnn_bidirectional.onnx")
         .input("tests/rnn/rnn_reverse.onnx")
@@ -327,6 +372,7 @@ fn main() {
         .input("tests/slice/slice_shape_with_steps.onnx")
         .input("tests/slice/slice_empty.onnx")
         .input("tests/softmax/softmax.onnx")
+        .input("tests/softplus/softplus.onnx")
         .input("tests/space_to_depth/space_to_depth.onnx")
         .input("tests/sqrt/sqrt.onnx")
         .input("tests/squeeze/squeeze_multiple.onnx")
@@ -355,6 +401,7 @@ fn main() {
         .input("tests/unsqueeze/unsqueeze_runtime_axes.onnx")
         .input("tests/unsqueeze/unsqueeze_like.onnx")
         .input("tests/unsqueeze/unsqueeze_int_to_shape.onnx")
+        .input("tests/unsqueeze/unsqueeze_scalar_axes.onnx")
         .input("tests/unsqueeze/squeeze_unsqueeze_roundtrip.onnx")
         .input("tests/split/split.onnx")
         .input("tests/xor/xor.onnx")
@@ -370,6 +417,14 @@ fn main() {
         .input("tests/loop/loop_multi_deps.onnx")
         .input("tests/loop/loop_nested.onnx")
         .input("tests/loop/loop_scan_outputs.onnx")
+        // ScatterND operator tests
+        .input("tests/scatter_nd/scatter_nd.onnx")
+        .input("tests/scatter_nd/scatter_nd_2d.onnx")
+        .input("tests/scatter_nd/scatter_nd_add.onnx")
+        .input("tests/scatter_nd/scatter_nd_mul.onnx")
+        .input("tests/scatter_nd/scatter_nd_max.onnx")
+        .input("tests/scatter_nd/scatter_nd_min.onnx")
+        .input("tests/scatter_nd/scatter_nd_bool.onnx")
         // Scan operator tests
         .input("tests/scan/scan_cumsum.onnx")
         .input("tests/scan/scan_reverse.onnx")
@@ -382,10 +437,21 @@ fn main() {
         .input("tests/subgraph/outer_scope_multi_var.onnx")
         .input("tests/subgraph/outer_scope_loop.onnx")
         .input("tests/subgraph/outer_scope_scan.onnx")
-        .input("tests/subgraph/outer_scope_constant.onnx")
-        .out_dir("model/")
-        .run_from_script();
+        .input("tests/subgraph/outer_scope_constant.onnx");
+}
 
-    // Note: Previous record type variants (NamedMpk, PrettyJson, Bincode, etc.)
-    // have been removed. All models now use burnpack format exclusively.
+fn add_simplify_inputs(model_gen: &mut ModelGen) {
+    model_gen
+        .input("tests/simplify/simplify_shape_folding.onnx")
+        .input("tests/simplify/simplify_gather_on_shape.onnx")
+        .input("tests/simplify/simplify_slice_on_shape.onnx")
+        .input("tests/simplify/simplify_concat_shapes.onnx")
+        .input("tests/simplify/simplify_reshape_from_shape.onnx")
+        .input("tests/simplify/simplify_binary_ops_on_shape.onnx")
+        .input("tests/simplify/simplify_cast_shape.onnx")
+        .input("tests/simplify/simplify_where_on_shapes.onnx")
+        .input("tests/simplify/simplify_expand_from_shape.onnx")
+        .input("tests/simplify/simplify_constant_of_shape_opt.onnx")
+        .input("tests/simplify/simplify_gather_shape_chain.onnx")
+        .input("tests/simplify/simplify_permute_via_shape_gather.onnx");
 }

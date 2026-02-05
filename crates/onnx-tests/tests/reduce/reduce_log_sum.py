@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/reduce/reduce_log_sum.onnx
 
@@ -11,18 +18,20 @@ from onnx.reference import ReferenceEvaluator
 
 def build_model():
     # Define the graph inputs and outputs
-    input = onnx.helper.make_tensor_value_info(
-        'input', TensorProto.FLOAT, [1, 1, 2, 4])
-    output1 = onnx.helper.make_tensor_value_info(
-        'output1', TensorProto.FLOAT, [1])
+    input = onnx.helper.make_tensor_value_info("input", TensorProto.FLOAT, [1, 1, 2, 4])
+    output1 = onnx.helper.make_tensor_value_info("output1", TensorProto.FLOAT, [1])
     output2 = onnx.helper.make_tensor_value_info(
-        'output2', TensorProto.FLOAT, [1, 1, 2, 4])
+        "output2", TensorProto.FLOAT, [1, 1, 2, 4]
+    )
     output3 = onnx.helper.make_tensor_value_info(
-        'output3', TensorProto.FLOAT, [1, 1, 2, 1])
+        "output3", TensorProto.FLOAT, [1, 1, 2, 1]
+    )
     output4 = onnx.helper.make_tensor_value_info(
-        'output4', TensorProto.FLOAT, [1, 2, 4])
+        "output4", TensorProto.FLOAT, [1, 2, 4]
+    )
     output5 = onnx.helper.make_tensor_value_info(
-        'output5', TensorProto.FLOAT, [1, 2, 4])
+        "output5", TensorProto.FLOAT, [1, 2, 4]
+    )
 
     # ReduceLogSum, keepdims=0, axes=None
     reduce_log_sum_1 = onnx.helper.make_node(
@@ -31,7 +40,7 @@ def build_model():
         outputs=["output1"],
         name="ReduceLogSum_1",
         keepdims=0,
-        axes=None
+        axes=None,
     )
     # ReduceLogSum, keepdims=1, axes=[1]
     reduce_log_sum_2 = onnx.helper.make_node(
@@ -40,7 +49,7 @@ def build_model():
         outputs=["output2"],
         name="ReduceLogSum_2",
         keepdims=1,
-        axes=[1]
+        axes=[1],
     )
     # ReduceSumSquare, keepdims=1, axes=[-1]
     reduce_log_sum_3 = onnx.helper.make_node(
@@ -49,7 +58,7 @@ def build_model():
         outputs=["output3"],
         name="ReduceLogSum_3",
         keepdims=1,
-        axes=[-1]
+        axes=[-1],
     )
     # ReduceLogSum, keepdims=0, axes=[0]
     reduce_log_sum_4 = onnx.helper.make_node(
@@ -58,7 +67,7 @@ def build_model():
         outputs=["output4"],
         name="ReduceLogSum_4",
         keepdims=0,
-        axes=[0]
+        axes=[0],
     )
     # ReduceLogSum, keepdims=0, axes=[0, 2]
     reduce_log_sum_5 = onnx.helper.make_node(
@@ -67,13 +76,19 @@ def build_model():
         outputs=["output5"],
         name="ReduceLogSum_5",
         keepdims=0,
-        axes=[0, 2]
+        axes=[0, 2],
     )
 
     # Create the graph
     graph = onnx.helper.make_graph(
-        [reduce_log_sum_1, reduce_log_sum_2, reduce_log_sum_3, reduce_log_sum_4, reduce_log_sum_5],
-        'ReduceLogSumModel',
+        [
+            reduce_log_sum_1,
+            reduce_log_sum_2,
+            reduce_log_sum_3,
+            reduce_log_sum_4,
+            reduce_log_sum_5,
+        ],
+        "ReduceLogSumModel",
         [input],
         [output1, output2, output3, output4, output5],
     )
@@ -82,7 +97,7 @@ def build_model():
     model = onnx.helper.make_model(
         opset_imports=[onnx.helper.make_operatorsetid("", 16)],
         graph=graph,
-        producer_name='ONNX_Generator',
+        producer_name="ONNX_Generator",
     )
 
     return model
@@ -94,10 +109,16 @@ if __name__ == "__main__":
     np.set_printoptions(precision=8)
 
     # Build model
-    test_input = np.array([[[
-        [1.0, 4.0, 9.0, 25.0],
-        [2.0, 5.0, 10.0, 26.0],
-    ]]])
+    test_input = np.array(
+        [
+            [
+                [
+                    [1.0, 4.0, 9.0, 25.0],
+                    [2.0, 5.0, 10.0, 26.0],
+                ]
+            ]
+        ]
+    )
     onnx_model = build_model()
     file_name = "reduce_log_sum.onnx"
 

@@ -1,10 +1,18 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 import onnx
 import onnx.helper as helper
 import onnx.checker as checker
 import onnx.numpy_helper
 import numpy as np
+
 
 def build_model():
     # Scalar inputs
@@ -14,9 +22,7 @@ def build_model():
 
     # Create bitwise XOR node
     xor_node = helper.make_node(
-        "BitwiseXor",
-        inputs=["input1", "input2"],
-        outputs=["output"]
+        "BitwiseXor", inputs=["input1", "input2"], outputs=["output"]
     )
 
     # Create the graph
@@ -32,6 +38,7 @@ def build_model():
     checker.check_model(model_def)
 
     return model_def
+
 
 if __name__ == "__main__":
     model = build_model()

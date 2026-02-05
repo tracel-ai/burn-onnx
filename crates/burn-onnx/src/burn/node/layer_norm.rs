@@ -13,9 +13,13 @@ impl NodeCodegen for onnx_ir::node::layer_norm::LayerNormalizationNode {
 
     fn field(&self) -> Option<Field> {
         let name = Ident::new(&self.name, Span::call_site());
-        let num_features = self.config.d_model.to_tokens();
+        let scale_shape = self.inputs[1]
+            .ty
+            .static_shape_known()
+            .expect("LayerNorm: scale tensor shape must be known at codegen time");
+        let num_features = scale_shape[0].to_tokens();
         let epsilon = self.config.epsilon;
-        let has_bias = self.config.has_bias;
+        let has_bias = self.inputs.len() > 2;
 
         Some(Field::new(
             self.name.clone(),
@@ -44,8 +48,8 @@ impl NodeCodegen for onnx_ir::node::layer_norm::LayerNormalizationNode {
             }
         }
 
-        // Beta (bias) tensor at input index 2 - only if ONNX model has bias
-        if self.config.has_bias
+        // Beta (bias) tensor at input index 2 - only if present
+        if self.inputs.len() > 2
             && let Some(beta_input) = self.inputs.get(2)
         {
             let beta_path = format!("{}.beta", field_name);
@@ -53,7 +57,7 @@ impl NodeCodegen for onnx_ir::node::layer_norm::LayerNormalizationNode {
                 snapshots.push(snapshot);
             }
         }
-        // When has_bias is false, Burn's LayerNorm is configured with .with_bias(false),
+        // When bias is absent, Burn's LayerNorm is configured with .with_bias(false),
         // so no beta parameter exists and no snapshot is needed
 
         snapshots
@@ -94,11 +98,12 @@ mod tests {
     };
 
     fn create_layer_norm_node(name: &str) -> LayerNormalizationNode {
-        // has_bias = true (most common case with bias)
-        let config = LayerNormConfig::new(512, 1e-5, true, true);
+        let config = LayerNormConfig::new(1e-5, true);
 
         LayerNormalizationNodeBuilder::new(name)
             .input_tensor("input", 3, DType::F32)
+            .input_static_tensor_shape("scale", vec![512], DType::F32)
+            .input_static_tensor_shape("bias", vec![512], DType::F32)
             .output_tensor("output", 3, DType::F32)
             .config(config)
             .build()

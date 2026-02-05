@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
 # This script generates ONNX model for testing squeeze of a scalar (no-op)
 # using ONNX tools directly without PyTorch
@@ -12,15 +19,12 @@ def main():
     # Create a constant scalar value
     scalar_value = np.array(1.5, dtype=np.float32)
     scalar_tensor = numpy_helper.from_array(scalar_value, name="scalar_const")
-    
+
     # Create nodes
     nodes = [
         # Constant node that outputs a scalar
         helper.make_node(
-            "Constant",
-            inputs=[],
-            outputs=["scalar"],
-            value=scalar_tensor
+            "Constant", inputs=[], outputs=["scalar"], value=scalar_tensor
         ),
         # Squeeze node on the scalar (should be no-op)
         # In opset 16, axes is provided as input, not attribute
@@ -30,23 +34,22 @@ def main():
             outputs=["output"],
         ),
     ]
-    
+
     # Create the graph
     graph = helper.make_graph(
         nodes,
         "main_graph",
         inputs=[],  # No inputs, using constant
         outputs=[
-            helper.make_tensor_value_info("output", TensorProto.FLOAT, [])  # Scalar output
+            helper.make_tensor_value_info(
+                "output", TensorProto.FLOAT, []
+            )  # Scalar output
         ],
     )
-    
+
     # Create the model with opset 16
-    model = helper.make_model(
-        graph,
-        opset_imports=[helper.make_opsetid("", 16)]
-    )
-    
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 16)])
+
     # Check and save
     onnx.checker.check_model(model)
     onnx.save(model, "squeeze_scalar.onnx")

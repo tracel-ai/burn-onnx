@@ -20,6 +20,8 @@
 //! 2. Clearly documented as a known limitation with validation moved to infer_types
 //!    Impact: HIGH - Models padding batch/channel dimensions will fail with cryptic error messages.
 //!
+//! Tracking issue: https://github.com/tracel-ai/burn/issues/4269
+//!
 //! TODO: Missing type constraint validation
 //! Spec defines type constraints for T (data/output), but implementation doesn't validate.
 //! Should validate constant_value type matches data type when provided.
@@ -113,6 +115,25 @@ pub(crate) struct PadProcessor;
 
 impl NodeProcessor for PadProcessor {
     type Config = PadConfig;
+
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Pad is a no-op when all pad values are zero (static only)
+        // Check pads attribute first
+        if let Some(pads_attr) = node.attrs.get("pads") {
+            let pads = pads_attr.clone().into_i64s();
+            return pads.iter().all(|&p| p == 0);
+        }
+
+        // Check pads input (input[1]) if it has static data
+        if let Some(input) = node.inputs.get(1)
+            && let Some(tensor_data) = input.value()
+            && let Ok(pad_values) = tensor_data.to_vec::<i64>()
+        {
+            return pad_values.iter().all(|&p| p == 0);
+        }
+
+        false
+    }
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
@@ -760,5 +781,37 @@ mod tests {
         let _prefs = OutputPreferences::new();
         let result = processor.extract_config(&node, 16);
         assert!(matches!(result, Err(ProcessError::Custom(_))));
+    }
+
+    #[test]
+    fn test_pad_zero_pads_attr_is_noop() {
+        let node = create_test_node(Some(vec![0, 0, 0, 0]), None, None, None, None, 2)
+            .build_with_graph_data(16);
+        let processor = PadProcessor;
+        assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_pad_nonzero_pads_attr_is_not_noop() {
+        let node = create_test_node(Some(vec![0, 0, 1, 1]), None, None, None, None, 2)
+            .build_with_graph_data(16);
+        let processor = PadProcessor;
+        assert!(!processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_pad_zero_pads_input_is_noop() {
+        let node = create_test_node(None, Some(vec![0, 0, 0, 0]), None, None, None, 2)
+            .build_with_graph_data(16);
+        let processor = PadProcessor;
+        assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_pad_nonzero_pads_input_is_not_noop() {
+        let node = create_test_node(None, Some(vec![0, 0, 1, 0]), None, None, None, 2)
+            .build_with_graph_data(16);
+        let processor = PadProcessor;
+        assert!(!processor.is_noop(&node));
     }
 }

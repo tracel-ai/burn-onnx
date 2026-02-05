@@ -13,13 +13,29 @@ impl NodeCodegen for onnx_ir::conv3d::Conv3dNode {
 
     fn field(&self) -> Option<Field> {
         let name = Ident::new(&self.name, Span::call_site());
-        let channels = self.config.channels.to_tokens();
+        let weight_shape = self.inputs[1]
+            .ty
+            .static_shape_known()
+            .expect("Conv3d: weight tensor shape must be known at codegen time");
+        let groups = self.config.groups;
+        let channels = [weight_shape[1] * groups, weight_shape[0]].to_tokens();
         let kernel_size = self.config.kernel_size.to_tokens();
         let stride = self.config.stride.to_tokens();
         let dilation = self.config.dilation.to_tokens();
-        let groups = self.config.groups.to_tokens();
-        let padding = self.config.padding.to_tokens();
-        let bias = self.config.bias;
+        let groups = groups.to_tokens();
+        let bias = self.inputs.len() == 3;
+
+        let shape = self.inputs[0].ty.static_shape_known();
+        let input_spatial = shape.as_deref().map(|s| &s[2..]);
+        let padding = crate::burn::codegen::resolve_auto_pad_3d(
+            &self.config.auto_pad,
+            &self.config.padding,
+            input_spatial,
+            &self.config.kernel_size,
+            &self.config.stride,
+            &self.config.dilation,
+        )
+        .to_tokens();
 
         Some(Field::new(
             self.name.clone(),
@@ -47,6 +63,7 @@ impl NodeCodegen for onnx_ir::conv3d::Conv3dNode {
             let #output = self.#field.forward(#input);
         }
     }
+
     fn register_imports(&self, imports: &mut BurnImports) {
         imports.register("burn::nn::PaddingConfig3d");
         imports.register("burn::nn::conv::Conv3d");
@@ -83,21 +100,41 @@ mod tests {
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::conv3d::{Conv3dConfig, Conv3dNode, Conv3dNodeBuilder};
-    use onnx_ir::padding::PaddingConfig3d;
+    use onnx_ir::padding::{AutoPad, PaddingConfig3d};
 
     fn create_conv3d_node(name: &str) -> Conv3dNode {
         let config = Conv3dConfig::new(
-            [3, 64],
             [3, 3, 3],
             [1, 1, 1],
             [1, 1, 1],
             1,
-            true,
-            PaddingConfig3d::Explicit(1, 1, 1),
+            PaddingConfig3d::Explicit(1, 1, 1, 1, 1, 1),
+            AutoPad::NotSet,
         );
 
         Conv3dNodeBuilder::new(name)
             .input_tensor("input", 5, DType::F32)
+            .input_static_tensor_shape("weight", vec![64, 3, 3, 3, 3], DType::F32)
+            .input_static_tensor_shape("bias", vec![64], DType::F32)
+            .output_tensor("output", 5, DType::F32)
+            .config(config)
+            .build()
+    }
+
+    fn create_conv3d_node_asymmetric(name: &str) -> Conv3dNode {
+        let config = Conv3dConfig::new(
+            [3, 3, 3],
+            [1, 1, 1],
+            [1, 1, 1],
+            1,
+            PaddingConfig3d::Explicit(1, 2, 3, 4, 5, 6),
+            AutoPad::NotSet,
+        );
+
+        Conv3dNodeBuilder::new(name)
+            .input_tensor("input", 5, DType::F32)
+            .input_static_tensor_shape("weight", vec![64, 3, 3, 3, 3], DType::F32)
+            .input_static_tensor_shape("bias", vec![64], DType::F32)
             .output_tensor("output", 5, DType::F32)
             .config(config)
             .build()
@@ -125,5 +162,42 @@ mod tests {
             output
         }
         ");
+    }
+
+    #[test]
+    fn test_conv3d_field_init_auto_pad_same_upper() {
+        let config = Conv3dConfig::new(
+            [3, 3, 3],
+            [1, 1, 1],
+            [1, 1, 1],
+            1,
+            PaddingConfig3d::Valid,
+            AutoPad::SameUpper,
+        );
+        let node = Conv3dNodeBuilder::new("conv1")
+            .input_tensor_shape("input", vec![1, 3, 7, 7, 7], DType::F32)
+            .input_static_tensor_shape("weight", vec![64, 3, 3, 3, 3], DType::F32)
+            .input_static_tensor_shape("bias", vec![64], DType::F32)
+            .output_tensor("output", 5, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_field_init(&node);
+        assert_snapshot!(code, @r"
+        let conv1 = Conv3dConfig::new([3, 64], [3, 3, 3])
+            .with_stride([1, 1, 1])
+            .with_padding(PaddingConfig3d::Explicit(1, 1, 1))
+            .with_dilation([1, 1, 1])
+            .with_groups(1)
+            .with_bias(true)
+            .init(device);
+        ");
+    }
+
+    #[test]
+    #[should_panic(expected = "Asymmetric 3D padding is not supported by Burn")]
+    fn test_conv3d_field_init_asymmetric_padding() {
+        let node = create_conv3d_node_asymmetric("conv1");
+        // Asymmetric 3D padding panics at codegen time since Burn doesn't support it
+        let _ = codegen_field_init(&node);
     }
 }

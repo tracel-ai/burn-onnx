@@ -13,10 +13,75 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
         let output = arg_to_ident(self.outputs.first().unwrap());
         let dim = self.config.axis.to_tokens();
 
+        // Check if any inputs are scalars
+        let has_scalar = self.inputs.iter().any(|arg| arg.ty.is_scalar());
+
         // Determine if this is tensor or shape concatenation based on output type
         match &self.outputs.first().unwrap().ty {
+            ArgType::Tensor(_) if has_scalar => {
+                let all_scalars = self.inputs.iter().all(|arg| arg.ty.is_scalar());
+
+                if all_scalars {
+                    // All scalars - create a single tensor directly
+                    let dtype = self.inputs[0].ty.elem_type();
+                    let dtype_tokens = dtype.to_tokens();
+                    let kind = match dtype {
+                        DType::Bool => quote! { , Bool },
+                        _ if dtype.is_float() => quote! {},
+                        _ => quote! { , Int },
+                    };
+                    let scalar_inputs: Vec<_> =
+                        self.inputs.iter().map(|arg| scope.arg(arg)).collect();
+
+                    quote! {
+                        let #output: Tensor<B, 1 #kind> = Tensor::from_data_dtype(
+                            burn::tensor::TensorData::from([#(#scalar_inputs),*]),
+                            &*self.device,
+                            #dtype_tokens
+                        );
+                    }
+                } else {
+                    // Mixed scalar/tensor - convert individual scalars to rank-1 tensors, then cat
+                    let mut inits = Vec::new();
+                    let mut input_exprs = Vec::new();
+
+                    for (i, input_arg) in self.inputs.iter().enumerate() {
+                        let input = scope.arg(input_arg);
+
+                        if input_arg.ty.is_scalar() {
+                            let dtype = input_arg.ty.elem_type();
+                            let dtype_tokens = dtype.to_tokens();
+                            let kind = match dtype {
+                                DType::Bool => quote! { , Bool },
+                                _ if dtype.is_float() => quote! {},
+                                _ => quote! { , Int },
+                            };
+                            let temp_name =
+                                Ident::new(&format!("scalar_as_tensor_{}", i), Span::call_site());
+                            let init = quote! {
+                                let #temp_name: Tensor<B, 1 #kind> = Tensor::from_data_dtype(
+                                    burn::tensor::TensorData::from([#input]),
+                                    &*self.device,
+                                    #dtype_tokens
+                                );
+                            };
+                            inits.push(init);
+                            input_exprs.push(quote! { #temp_name });
+                        } else {
+                            input_exprs.push(input);
+                        }
+                    }
+
+                    quote! {
+                        let #output = {
+                            #(#inits)*
+                            burn::tensor::Tensor::cat([#(#input_exprs),*].into(), #dim)
+                        };
+                    }
+                }
+            }
             ArgType::Tensor(_) => {
-                // Tensor concatenation
+                // Tensor concatenation (no scalars)
                 let inputs = self.inputs.iter().map(|arg| scope.arg(arg));
 
                 quote! {
@@ -34,10 +99,17 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
                 let output_rank = shape;
 
                 // Generate code to concatenate shape arrays
+                // Handle scalar inputs by converting them to single-element arrays
                 let mut shape_parts = Vec::new();
                 for input in &self.inputs {
                     let input_name = arg_to_ident(input);
-                    shape_parts.push(quote! { &#input_name[..] });
+                    if input.ty.is_scalar() {
+                        // Scalar: wrap in array and slice
+                        shape_parts.push(quote! { &[#input_name][..] });
+                    } else {
+                        // Shape or tensor: already an array, just slice
+                        shape_parts.push(quote! { &#input_name[..] });
+                    }
                 }
 
                 quote! {
@@ -94,6 +166,53 @@ mod tests {
             input2: Tensor<B, 2>,
         ) -> Tensor<B, 2> {
             let output = burn::tensor::Tensor::cat([input0, input1, input2].into(), 1);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_concat_scalar_inputs() {
+        let config = ConcatConfig { axis: 0 };
+        let node = ConcatNodeBuilder::new("concat_scalars")
+            .input_scalar("s0", DType::I64)
+            .input_scalar("s1", DType::I64)
+            .output_tensor("output", 1, DType::I64)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, s0: i64, s1: i64) -> Tensor<B, 1, Int> {
+            let output: Tensor<B, 1, Int> = Tensor::from_data_dtype(
+                burn::tensor::TensorData::from([s0, s1]),
+                &*self.device,
+                burn::tensor::DType::I64,
+            );
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_concat_mixed_scalar_and_tensor() {
+        let config = ConcatConfig { axis: 0 };
+        let node = ConcatNodeBuilder::new("concat_mixed")
+            .input_scalar("s0", DType::F32)
+            .input_tensor("t0", 1, DType::F32)
+            .config(config)
+            .output_tensor("output", 1, DType::F32)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, s0: f32, t0: Tensor<B, 1>) -> Tensor<B, 1> {
+            let output = {
+                let scalar_as_tensor_0: Tensor<B, 1> = Tensor::from_data_dtype(
+                    burn::tensor::TensorData::from([s0]),
+                    &*self.device,
+                    burn::tensor::DType::F32,
+                );
+                burn::tensor::Tensor::cat([scalar_as_tensor_0, t0].into(), 0)
+            };
             output
         }
         ");

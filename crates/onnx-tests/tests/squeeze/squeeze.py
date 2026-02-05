@@ -1,61 +1,53 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
-# used to generate models: squeeze_opset13.onnx,
-# squeeze_opset16.onnx, and squeeze_multiple.onnx
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+# ]
+# ///
 
-import torch
+# used to generate model: squeeze.onnx
+
+import numpy as np
 import onnx
-import torch.nn as nn
-from onnx import helper, TensorProto
+from onnx import helper, TensorProto, numpy_helper
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-        self.dims = 2
-
-    def forward(self, x):
-        x = torch.squeeze(x, self.dims)
-        return x
+OPSET_VERSION = 16
 
 
 def main():
-    # Set seed for reproducibility
-    torch.manual_seed(42)
+    node0 = helper.make_node(
+        "Constant",
+        [],
+        ["/Constant_output_0"],
+        value=numpy_helper.from_array(
+            np.array([2], dtype=np.int64).reshape([1]), name="value"
+        ),
+    )
+    node1 = helper.make_node(
+        "Squeeze", ["onnx::Squeeze_0", "/Constant_output_0"], ["2"]
+    )
 
-    torch.set_printoptions(precision=8)
+    inp_onnx__Squeeze_0 = helper.make_tensor_value_info(
+        "onnx::Squeeze_0", TensorProto.FLOAT, [3, 4, 1, 5]
+    )
 
-    # Export to onnx
-    model = Model()
-    model.eval()
-    device = torch.device("cpu")
+    out_n2 = helper.make_tensor_value_info("2", TensorProto.FLOAT, [3, 4, 5])
 
-    test_input = torch.randn(3, 4, 1, 5, device=device)
+    graph = helper.make_graph(
+        [node0, node1],
+        "main_graph",
+        [inp_onnx__Squeeze_0],
+        [out_n2],
+    )
+    model = helper.make_model(
+        graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
+    )
 
-    # Export to ONNX
-    torch.onnx.export(model, test_input, "squeeze.onnx", verbose=False, opset_version=16)
+    onnx.save(model, "squeeze.onnx")
+    print(f"Finished exporting model to squeeze.onnx")
 
-    print("Finished exporting model")
-
-    # Output some test data for use in the test
-    output = model(test_input)
-    print(f"Test input data: {test_input}")
-    print(f"Test input data shape: {test_input.shape}")
-    print(f"Test output data shape: {output.shape}")
-    print(f"Test output: {output}")
-
-    # Test for squeezing multiple dimensions
-    test_input_ms = helper.make_tensor_value_info("input", TensorProto.FLOAT, [3, 4, 1, 5, 1])
-    output = helper.make_tensor_value_info("output", TensorProto.FLOAT, [3, 4, 5])
-    squeeze = helper.make_node(op_type="Squeeze", inputs=["input", "axes"], outputs=["output"], name="SqueezeOp")
-    axes = helper.make_tensor("axes", TensorProto.INT64, dims=[2], vals=[2, 4])
-    graph = helper.make_graph([squeeze], "SqueezeMultiple", [test_input_ms], [output], [axes])
-    opset = helper.make_opsetid("", 16)
-    m = helper.make_model(graph, opset_imports=[opset])
-
-    onnx.checker.check_model(m, full_check=True)
-    onnx.save(m, "squeeze_multiple.onnx")
-
-    print("Finished exporting model with multiple squeeze axes specified to 13")
 
 if __name__ == "__main__":
     main()

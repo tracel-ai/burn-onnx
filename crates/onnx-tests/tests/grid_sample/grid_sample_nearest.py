@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
+
 """
 Generate ONNX model for GridSample with nearest neighbor interpolation.
 """
@@ -15,7 +24,9 @@ class GridSampleNearestModel(nn.Module):
         super().__init__()
 
     def forward(self, x, grid):
-        return F.grid_sample(x, grid, mode='nearest', padding_mode='zeros', align_corners=False)
+        return F.grid_sample(
+            x, grid, mode="nearest", padding_mode="zeros", align_corners=False
+        )
 
 
 def main():
@@ -39,6 +50,7 @@ def main():
         input_names=["input", "grid"],
         output_names=["output"],
         opset_version=16,
+        external_data=False,
         dynamic_axes=None,
     )
 

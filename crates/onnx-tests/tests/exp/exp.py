@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "torch==2.10.0",
+#   "onnxscript",
+#   "onnx==1.19.0",
+# ]
+# ///
 
 # used to generate model: onnx-tests/tests/exp/exp.onnx
 
@@ -18,16 +26,22 @@ def main():
     # Set random seed for reproducibility
     torch.manual_seed(0)
     import math
-    
+
     # Export to onnx
     model = Model()
     model.eval()
     device = torch.device("cpu")
     onnx_name = "exp.onnx"
-    test_input = torch.tensor([[[[0, math.log(2.)]]]], device=device)
+    test_input = torch.tensor([[[[0, math.log(2.0)]]]], device=device)
 
-    torch.onnx.export(model, (test_input), onnx_name,
-                      verbose=False, opset_version=16)
+    torch.onnx.export(
+        model,
+        (test_input),
+        onnx_name,
+        verbose=False,
+        opset_version=16,
+        external_data=False,
+    )
 
     print("Finished exporting model to {}".format(onnx_name))
 
@@ -37,5 +51,5 @@ def main():
     print("Test output data: {}".format(output))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

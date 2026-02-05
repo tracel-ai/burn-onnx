@@ -35,8 +35,6 @@ pub struct ConvTranspose2dNode {
 #[derive(Debug, Clone, PartialEq, Eq, new)]
 #[allow(clippy::too_many_arguments)]
 pub struct ConvTranspose2dConfig {
-    /// Input and output channels [in, out].
-    pub channels: [usize; 2],
     /// Size of the kernel.
     pub kernel_size: [usize; 2],
     /// Stride of the convolutional kernel.
@@ -49,8 +47,6 @@ pub struct ConvTranspose2dConfig {
     pub padding_out: [usize; 2],
     /// Groups.
     pub groups: usize,
-    /// Use bias.
-    pub bias: bool,
 }
 
 pub(crate) struct Convtranspose2dProcessor;
@@ -150,26 +146,17 @@ impl NodeProcessor for Convtranspose2dProcessor {
             ));
         }
 
-        let weight_shape = node.inputs[1]
-            .value()
-            .ok_or_else(|| {
-                ProcessError::Custom("ConvTranspose2d: weight tensor must be present".to_string())
-            })?
-            .shape
-            .to_vec();
-
-        // check if the bias is present
-        let bias = node.inputs.len() == 3;
-
-        // ONNX ConvTranspose weight tensor: (C x M/group x kH x kW)
-        // where C is input channels and M is output channels.
-        // weight_shape[0] = C = in_channels
-        // weight_shape[1] = M/group = out_channels/groups
-        let channels: [usize; 2] = [weight_shape[0], weight_shape[1] * group];
-
         let kernel_size = if kernel_shape.is_empty() {
-            // https://onnx.ai/onnx/operators/onnx__ConvTranspose.html
-            // Spec says if kernel shape not present in attributes it should be inferred from the weight tensor
+            let weight_shape = node.inputs[1]
+                .value()
+                .ok_or_else(|| {
+                    ProcessError::Custom(
+                        "ConvTranspose2d: weight tensor must be present".to_string(),
+                    )
+                })?
+                .shape
+                .to_vec();
+
             if weight_shape.len() != 4 {
                 return Err(ProcessError::Custom(format!(
                     "expected to infer kernel shape from a weight tensor of rank 4 but got shape {weight_shape:?}"
@@ -178,19 +165,16 @@ impl NodeProcessor for Convtranspose2dProcessor {
 
             [weight_shape[2], weight_shape[3]]
         } else {
-            // Was set explicitly via attributes- use that
             [kernel_shape[0] as _, kernel_shape[1] as _]
         };
 
         let config = ConvTranspose2dConfig::new(
-            channels,
             kernel_size,
             [stride[0] as usize, stride[1] as usize],
             [dilations[0] as usize, dilations[1] as usize],
             [pads[0] as usize, pads[1] as usize],
             [output_padding[0] as usize, output_padding[1] as usize],
             group,
-            bias,
         );
 
         Ok(config)
@@ -283,14 +267,12 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels, [2, 4]); // [in_channels, out_channels]
         assert_eq!(config.kernel_size, [2, 2]);
         assert_eq!(config.stride, [1, 1]);
         assert_eq!(config.dilation, [1, 1]);
         assert_eq!(config.padding, [0, 0]);
         assert_eq!(config.padding_out, [0, 0]);
         assert_eq!(config.groups, 1);
-        assert!(!config.bias);
     }
 
     #[test]
@@ -358,29 +340,6 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         assert_eq!(config.groups, 2);
-        assert_eq!(config.channels, [2, 8]); // [in_channels, out_channels] with groups=2
-    }
-
-    #[test]
-    fn test_conv_transpose2d_config_with_bias() {
-        let node = create_test_node(
-            vec![2, 2],
-            vec![1, 1],
-            vec![0, 0, 0, 0],
-            vec![1, 1],
-            vec![0, 0],
-            1,
-            true,
-            None,
-        )
-        .build_with_graph_data(16);
-        let mut node = node;
-        let processor = Convtranspose2dProcessor;
-        let prefs = OutputPreferences::new();
-        let config = processor.extract_config(&node, 16).unwrap();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        assert!(config.bias);
     }
 
     #[test]
@@ -422,14 +381,12 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels, [2, 4]); // [in_channels, out_channels]
         assert_eq!(config.kernel_size, [2, 2]);
         assert_eq!(config.stride, [1, 1]);
         assert_eq!(config.dilation, [1, 1]);
         assert_eq!(config.padding, [0, 0]);
         assert_eq!(config.padding_out, [0, 0]);
         assert_eq!(config.groups, 1);
-        assert!(!config.bias);
     }
 
     #[test]

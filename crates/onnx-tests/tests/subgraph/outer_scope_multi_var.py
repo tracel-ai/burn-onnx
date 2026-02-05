@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#   "onnx==1.19.0",
+#   "numpy",
+#   "onnxruntime",
+# ]
+# ///
+
 """
 Generate ONNX model that tests MULTIPLE outer-scope variable references in subgraphs.
 
@@ -22,6 +31,7 @@ import numpy as np
 
 try:
     import onnxruntime as ort
+
     HAS_ORT = True
 except ImportError:
     HAS_ORT = False
@@ -42,44 +52,56 @@ def build_model():
         }
     """
     # Then branch: y1 + y2 + y3 (all come from outer scope)
-    then_add1 = helper.make_node('Add', inputs=['y1', 'y2'], outputs=['then_sum1'])
-    then_add2 = helper.make_node('Add', inputs=['then_sum1', 'y3'], outputs=['then_out'])
+    then_add1 = helper.make_node("Add", inputs=["y1", "y2"], outputs=["then_sum1"])
+    then_add2 = helper.make_node(
+        "Add", inputs=["then_sum1", "y3"], outputs=["then_out"]
+    )
     then_graph = helper.make_graph(
         nodes=[then_add1, then_add2],
-        name='then_branch',
+        name="then_branch",
         inputs=[],  # No explicit inputs - y1, y2, y3 come from outer scope
-        outputs=[helper.make_tensor_value_info('then_out', TensorProto.FLOAT, [2, 3])],
+        outputs=[helper.make_tensor_value_info("then_out", TensorProto.FLOAT, [2, 3])],
     )
 
     # Else branch: y1 * y2 * y3 (all come from outer scope)
-    else_mul1 = helper.make_node('Mul', inputs=['y1', 'y2'], outputs=['else_prod1'])
-    else_mul2 = helper.make_node('Mul', inputs=['else_prod1', 'y3'], outputs=['else_out'])
+    else_mul1 = helper.make_node("Mul", inputs=["y1", "y2"], outputs=["else_prod1"])
+    else_mul2 = helper.make_node(
+        "Mul", inputs=["else_prod1", "y3"], outputs=["else_out"]
+    )
     else_graph = helper.make_graph(
         nodes=[else_mul1, else_mul2],
-        name='else_branch',
+        name="else_branch",
         inputs=[],  # No explicit inputs - y1, y2, y3 come from outer scope
-        outputs=[helper.make_tensor_value_info('else_out', TensorProto.FLOAT, [2, 3])],
+        outputs=[helper.make_tensor_value_info("else_out", TensorProto.FLOAT, [2, 3])],
     )
 
     # Main graph
-    relu_node = helper.make_node('Relu', inputs=['x'], outputs=['y1'])
-    sigmoid_node = helper.make_node('Sigmoid', inputs=['x'], outputs=['y2'])
-    tanh_node = helper.make_node('Tanh', inputs=['x'], outputs=['y3'])
-    if_node = helper.make_node('If', inputs=['condition'], outputs=['output'],
-                                then_branch=then_graph, else_branch=else_graph)
+    relu_node = helper.make_node("Relu", inputs=["x"], outputs=["y1"])
+    sigmoid_node = helper.make_node("Sigmoid", inputs=["x"], outputs=["y2"])
+    tanh_node = helper.make_node("Tanh", inputs=["x"], outputs=["y3"])
+    if_node = helper.make_node(
+        "If",
+        inputs=["condition"],
+        outputs=["output"],
+        then_branch=then_graph,
+        else_branch=else_graph,
+    )
 
     main_graph = helper.make_graph(
         nodes=[relu_node, sigmoid_node, tanh_node, if_node],
-        name='outer_scope_multi_var',
+        name="outer_scope_multi_var",
         inputs=[
-            helper.make_tensor_value_info('x', TensorProto.FLOAT, [2, 3]),
-            helper.make_tensor_value_info('condition', TensorProto.BOOL, []),
+            helper.make_tensor_value_info("x", TensorProto.FLOAT, [2, 3]),
+            helper.make_tensor_value_info("condition", TensorProto.BOOL, []),
         ],
-        outputs=[helper.make_tensor_value_info('output', TensorProto.FLOAT, [2, 3])],
+        outputs=[helper.make_tensor_value_info("output", TensorProto.FLOAT, [2, 3])],
     )
 
-    model = helper.make_model(main_graph, producer_name='burn-onnx-test',
-                               opset_imports=[helper.make_opsetid("", 16)])
+    model = helper.make_model(
+        main_graph,
+        producer_name="burn-onnx-test",
+        opset_imports=[helper.make_opsetid("", 16)],
+    )
     # Use IR version 8 for compatibility with ONNX Runtime
     model.ir_version = 8
     onnx.checker.check_model(model)
@@ -101,12 +123,12 @@ def test_model(model):
     sess = ort.InferenceSession(model.SerializeToString())
 
     # Compute expected values
-    y1 = np.maximum(x, 0)      # Relu
-    y2 = sigmoid(x)            # Sigmoid
-    y3 = np.tanh(x)            # Tanh
+    y1 = np.maximum(x, 0)  # Relu
+    y2 = sigmoid(x)  # Sigmoid
+    y3 = np.tanh(x)  # Tanh
 
-    out_then = sess.run(None, {'x': x, 'condition': np.array(True, dtype=bool)})[0]
-    out_else = sess.run(None, {'x': x, 'condition': np.array(False, dtype=bool)})[0]
+    out_then = sess.run(None, {"x": x, "condition": np.array(True, dtype=bool)})[0]
+    out_else = sess.run(None, {"x": x, "condition": np.array(False, dtype=bool)})[0]
 
     expected_then = y1 + y2 + y3
     expected_else = y1 * y2 * y3
@@ -130,11 +152,11 @@ def test_model(model):
 
 def main():
     model = build_model()
-    onnx.save(model, 'outer_scope_multi_var.onnx')
+    onnx.save(model, "outer_scope_multi_var.onnx")
     print("Saved outer_scope_multi_var.onnx")
 
     test_model(model)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -13,7 +13,7 @@ use onnx_ir_derive::NodeBuilder;
 
 use crate::ir::{Argument, Node, RawNode};
 
-use crate::node::padding::{PaddingConfig3d, padding_config_3d};
+use crate::node::padding::{AutoPad, PaddingConfig3d, padding_config_3d};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -29,9 +29,8 @@ pub struct Conv3dNode {
 
 /// Configuration for Conv3d operations.
 #[derive(Debug, Clone, PartialEq, Eq, new)]
+#[allow(clippy::too_many_arguments)]
 pub struct Conv3dConfig {
-    /// Input and output channels [in, out].
-    pub channels: [usize; 2],
     /// Size of the kernel.
     pub kernel_size: [usize; 3],
     /// Stride of the convolutional kernel.
@@ -40,10 +39,10 @@ pub struct Conv3dConfig {
     pub dilation: [usize; 3],
     /// Groups.
     pub groups: usize,
-    /// Use bias.
-    pub bias: bool,
     /// Padding.
     pub padding: PaddingConfig3d,
+    /// Auto padding mode
+    pub auto_pad: AutoPad,
 }
 
 pub(crate) struct Conv3dProcessor;
@@ -90,6 +89,7 @@ impl NodeProcessor for Conv3dProcessor {
         let mut pads = vec![0, 0, 0, 0, 0, 0];
         let mut dilations = vec![1, 1, 1];
         let mut group: usize = 1;
+        let mut auto_pad = AutoPad::NotSet;
 
         let weight_shape = node.inputs[1]
             .value()
@@ -99,9 +99,6 @@ impl NodeProcessor for Conv3dProcessor {
             .shape
             .to_vec();
 
-        // check if the bias is present
-        let bias = node.inputs.len() == 3;
-
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
                 "kernel_shape" => kernel_shape = value.clone().into_i64s(),
@@ -110,13 +107,7 @@ impl NodeProcessor for Conv3dProcessor {
                 "dilations" => dilations = value.clone().into_i64s(),
                 "group" => group = value.clone().into_i64() as usize,
                 "auto_pad" => {
-                    let auto_pad = value.clone().into_string();
-                    if auto_pad != "NOTSET" {
-                        return Err(ProcessError::InvalidAttribute {
-                            name: "auto_pad".to_string(),
-                            reason: format!("Unsupported 'auto_pad' value: {auto_pad}"),
-                        });
-                    }
+                    auto_pad = AutoPad::parse(&value.clone().into_string())?;
                 }
                 _ => {
                     // TODO: According to spec, there may be other valid attributes that are not handled
@@ -128,10 +119,6 @@ impl NodeProcessor for Conv3dProcessor {
                 }
             }
         }
-
-        // the channels are inverted in the weight tensor
-        let channels_in = weight_shape[1] * group;
-        let channels_out = weight_shape[0];
 
         let padding = padding_config_3d(&pads);
 
@@ -153,7 +140,6 @@ impl NodeProcessor for Conv3dProcessor {
         };
 
         let config = Conv3dConfig::new(
-            [channels_in, channels_out],
             kernel_size,
             [
                 strides[0] as usize,
@@ -166,8 +152,8 @@ impl NodeProcessor for Conv3dProcessor {
                 dilations[2] as usize,
             ],
             group,
-            bias,
             padding,
+            auto_pad,
         );
 
         Ok(config)
@@ -255,12 +241,12 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels, [2, 4]);
+        // channels removed from config (derived in burn-onnx)
         assert_eq!(config.kernel_size, [2, 2, 2]);
         assert_eq!(config.stride, [1, 1, 1]);
         assert_eq!(config.dilation, [1, 1, 1]);
         assert_eq!(config.groups, 1);
-        assert!(!config.bias);
+        // bias removed from config (derived in burn-onnx)
         assert!(matches!(config.padding, PaddingConfig3d::Valid));
     }
 
@@ -283,7 +269,10 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         assert_eq!(config.kernel_size, [3, 3, 3]);
-        assert!(matches!(config.padding, PaddingConfig3d::Explicit(1, 1, 1)));
+        assert!(matches!(
+            config.padding,
+            PaddingConfig3d::Explicit(1, 1, 1, 1, 1, 1)
+        ));
     }
 
     #[test]
@@ -305,28 +294,7 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         assert_eq!(config.groups, 2);
-        assert_eq!(config.channels, [4, 4]); // channels_in is adjusted by groups
-    }
-
-    #[test]
-    fn test_conv3d_config_with_bias() {
-        let node = create_test_node(
-            vec![2, 2, 2],
-            vec![1, 1, 1],
-            vec![0, 0, 0, 0, 0, 0],
-            vec![1, 1, 1],
-            1,
-            true,
-            None,
-        )
-        .build_with_graph_data(16);
-        let mut node = node;
-        let processor = Conv3dProcessor;
-        let prefs = OutputPreferences::new();
-        let config = processor.extract_config(&node, 16).unwrap();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        assert!(config.bias);
+        // channels removed from config (derived in burn-onnx)
     }
 
     #[test]
@@ -347,17 +315,17 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert_eq!(config.channels, [2, 4]);
+        // channels removed from config (derived in burn-onnx)
         assert_eq!(config.kernel_size, [2, 2, 2]);
         assert_eq!(config.stride, [1, 1, 1]);
         assert_eq!(config.dilation, [1, 1, 1]);
         assert_eq!(config.groups, 1);
-        assert!(!config.bias);
+        // bias removed from config (derived in burn-onnx)
         assert!(matches!(config.padding, PaddingConfig3d::Valid));
     }
 
     #[test]
-    fn test_conv3d_config_autopad_not_supported() {
+    fn test_conv3d_config_autopad_same_upper() {
         let node = create_test_node(
             vec![2, 2, 2],
             vec![1, 1, 1],
@@ -369,8 +337,8 @@ mod tests {
         )
         .build_with_graph_data(16);
         let processor = Conv3dProcessor;
-        let result = processor.extract_config(&node, 16);
-        assert!(matches!(result, Err(ProcessError::InvalidAttribute { .. })));
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert_eq!(config.auto_pad, AutoPad::SameUpper);
     }
 
     #[test]
