@@ -99,7 +99,7 @@ pub struct RnnConfig {
     pub has_initial_h: bool,
     /// Tensor layout: false = seq_length major (default), true = batch_size major
     pub batch_first: bool,
-    /// Cell state clipping threshold (None = no clipping)
+    /// Hidden state clipping threshold (None = no clipping)
     pub clip: Option<f32>,
     /// Activation function for hidden state output (default: Tanh)
     pub hidden_activation: RnnActivationFunction,
@@ -285,8 +285,8 @@ impl NodeProcessor for RnnProcessor {
         let input_size = if let ArgType::Tensor(t) = &weight_input.ty {
             if let Some(shape) = &t.static_shape {
                 if shape.len() == 3 {
-                    log::debug!("RNN: using input_size from W static_shape: {}", shape[2]);
-                    Some(shape[2])
+                    log::debug!("RNN: using input_size from W static_shape: {:?}", shape[2]);
+                    shape[2]
                 } else {
                     None
                 }
@@ -324,8 +324,8 @@ impl NodeProcessor for RnnProcessor {
             if let ArgType::Tensor(t) = &x_input.ty {
                 if let Some(shape) = &t.static_shape {
                     if shape.len() >= 3 {
-                        log::debug!("RNN: using input_size from X static_shape: {}", shape[2]);
-                        Some(shape[2])
+                        log::debug!("RNN: using input_size from X static_shape: {:?}", shape[2]);
+                        shape[2]
                     } else {
                         None
                     }

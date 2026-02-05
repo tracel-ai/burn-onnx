@@ -90,7 +90,7 @@ fn collect_rnn_snapshots(
     let device = Default::default();
 
     let gate_name = "gate"; // Rnn has only one gate
-    
+
     // Determine direction prefixes based on Rnn type
     let direction_prefixes: Vec<&str> = match config.direction {
         RnnDirection::Forward | RnnDirection::Reverse => vec![""],
@@ -126,7 +126,6 @@ fn collect_rnn_snapshots(
                 .squeeze::<1>() // [2*hidden_size]
         });
 
-        
         let onnx_gate_idx = 0; // Rnn has only one gate
         let start = onnx_gate_idx * hidden_size;
         let end = start + hidden_size;
@@ -198,7 +197,6 @@ fn collect_rnn_snapshots(
                 zeros_data, &path, "Linear", dtype,
             ));
         }
-        
     }
 
     snapshots
@@ -401,7 +399,6 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
         } else {
             quote! { final_state.hidden.unsqueeze_dims::<3>(&[0]) }
         };
-        
 
         // Y output transformation
         // For unidirectional: unsqueeze at dim 1 to add num_directions=1
@@ -522,8 +519,8 @@ mod tests {
             true,  // has_bias
             false, // has_initial_h
             batch_first,
-            None,                            // clip
-            RnnActivationFunction::Tanh,    // hidden_activation
+            None,                        // clip
+            RnnActivationFunction::Tanh, // hidden_activation
         );
 
         let input = Argument::new(
@@ -601,7 +598,6 @@ mod tests {
                         reshaped.swap_dims(1, 2)
                     },
                     final_state.hidden,
-                    final_state.cell,
                 )
             };
             (Y, Y_h)
