@@ -256,7 +256,7 @@ mod tests {
             &device,
         );
 
-        let (output, h_n) = model.forward(input, h_0, c_0);
+        let (output, h_n) = model.forward(input, h_0);
 
         // Test output shapes
         // ONNX model has a Squeeze node that removes the num_directions dimension
