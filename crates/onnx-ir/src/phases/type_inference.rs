@@ -91,7 +91,11 @@ pub(super) fn iterative_type_inference_with_preferences(
             for node in nodes.iter_mut() {
                 for input in &mut node.inputs {
                     if let Some(new_type) = output_types.get(&input.name) {
-                        input.ty = new_type.clone();
+                        // Merge static_shape: keep more informative dimension values
+                        // from the existing input type (which may come from value_info)
+                        let mut merged_type = new_type.clone();
+                        merged_type.merge_static_shape(&input.ty);
+                        input.ty = merged_type;
                     }
                 }
             }
@@ -134,9 +138,16 @@ pub(super) fn iterative_type_inference_with_preferences(
                 // Update all downstream nodes that use this output
                 for downstream_node in &mut nodes[i + 1..] {
                     for input in &mut downstream_node.inputs {
-                        if &input.name == output_name && input.ty != *output_ty {
-                            types_changed = true;
-                            input.ty = output_ty.clone();
+                        if &input.name == output_name {
+                            // Merge static_shape: keep more informative dimension values
+                            let mut merged_type = output_ty.clone();
+                            let shape_changed = merged_type.merge_static_shape(&input.ty);
+                            if input.ty != merged_type {
+                                types_changed = true;
+                                input.ty = merged_type;
+                            } else if shape_changed {
+                                types_changed = true;
+                            }
                         }
                     }
                 }
@@ -152,11 +163,16 @@ pub(super) fn iterative_type_inference_with_preferences(
 
         for node in nodes.iter_mut() {
             for input in &mut node.inputs {
-                if let Some(new_type) = output_types.get(&input.name)
-                    && input.ty != *new_type
-                {
-                    types_changed = true;
-                    input.ty = new_type.clone();
+                if let Some(new_type) = output_types.get(&input.name) {
+                    // Merge static_shape: keep more informative dimension values
+                    let mut merged_type = new_type.clone();
+                    let shape_changed = merged_type.merge_static_shape(&input.ty);
+                    if input.ty != merged_type {
+                        types_changed = true;
+                        input.ty = merged_type;
+                    } else if shape_changed {
+                        types_changed = true;
+                    }
                 }
             }
         }
@@ -227,7 +243,119 @@ pub(super) fn iterative_type_inference_with_preferences(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{NodeType, RawNode};
+    use crate::ir::{Argument, NodeType, RawNode, TensorType};
+    use burn_tensor::DType;
+
+    #[test]
+    fn test_static_shape_merge_preserves_value_info() {
+        // Scenario: Producer sets static_shape to None, but consumer's input
+        // (from value_info) has partial shape info [None, Some(1)].
+        // The merge should preserve the value_info shape.
+
+        let mut nodes = vec![
+            // Producer: Relu outputs a tensor with unknown shape
+            RawNode {
+                node_type: NodeType::Relu,
+                name: "relu1".to_string(),
+                inputs: vec![Argument::new(
+                    "input",
+                    ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+                )],
+                outputs: vec![Argument::new(
+                    "relu1_out",
+                    ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+                )],
+                attrs: Default::default(),
+            },
+            // Consumer: Another Relu whose input has shape info from value_info
+            RawNode {
+                node_type: NodeType::Relu,
+                name: "relu2".to_string(),
+                inputs: vec![Argument::new(
+                    "relu1_out", // References relu1's output
+                    ArgType::Tensor(TensorType::new(
+                        DType::F32,
+                        2,
+                        Some(vec![None, Some(10)]), // value_info provided this
+                    )),
+                )],
+                outputs: vec![Argument::new(
+                    "relu2_out",
+                    ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+                )],
+                attrs: Default::default(),
+            },
+        ];
+
+        iterative_type_inference_with_preferences(&mut nodes, 17).unwrap();
+
+        // The consumer's input should have merged shape info preserved
+        let consumer_input = &nodes[1].inputs[0];
+        let shape = consumer_input
+            .ty
+            .static_shape()
+            .expect("shape should exist");
+        assert_eq!(shape, &vec![None, Some(10)]);
+    }
+
+    #[test]
+    fn test_static_shape_merge_combines_dimension_info() {
+        // Scenario: Producer infers static_shape [Some(5), None], but consumer's
+        // input has [None, Some(10)] from value_info. Merge should give [Some(5), Some(10)].
+
+        let mut nodes = vec![
+            // Producer: Relu with partially known output shape
+            RawNode {
+                node_type: NodeType::Relu,
+                name: "relu1".to_string(),
+                inputs: vec![Argument::new(
+                    "input",
+                    ArgType::Tensor(TensorType::new(
+                        DType::F32,
+                        2,
+                        Some(vec![Some(5), None]), // Known first dim
+                    )),
+                )],
+                outputs: vec![Argument::new(
+                    "relu1_out",
+                    ArgType::Tensor(TensorType::new(
+                        DType::F32,
+                        2,
+                        Some(vec![Some(5), None]), // Relu preserves shape
+                    )),
+                )],
+                attrs: Default::default(),
+            },
+            // Consumer: Input has different partial shape from value_info
+            RawNode {
+                node_type: NodeType::Relu,
+                name: "relu2".to_string(),
+                inputs: vec![Argument::new(
+                    "relu1_out",
+                    ArgType::Tensor(TensorType::new(
+                        DType::F32,
+                        2,
+                        Some(vec![None, Some(10)]), // value_info knows second dim
+                    )),
+                )],
+                outputs: vec![Argument::new(
+                    "relu2_out",
+                    ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+                )],
+                attrs: Default::default(),
+            },
+        ];
+
+        iterative_type_inference_with_preferences(&mut nodes, 17).unwrap();
+
+        // The consumer's input should have merged shape: [Some(5), Some(10)]
+        let consumer_input = &nodes[1].inputs[0];
+        let shape = consumer_input
+            .ty
+            .static_shape()
+            .expect("shape should exist");
+        assert_eq!(shape, &vec![Some(5), Some(10)]);
+    }
 
     #[test]
     fn test_unsupported_ops_detected_before_inference() {
