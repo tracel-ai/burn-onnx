@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = [
+#     "torch",
+#     "onnx",
+# ]
+# ///
 
 # Used to generate model: rnn.onnx
 # RNN with forward direction, bias enabled
