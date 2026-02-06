@@ -379,7 +379,7 @@ impl NodeProcessor for RnnProcessor {
             if acts.is_empty() {
                 // Empty means use defaults
                 RnnActivationFunction::Tanh
-            } else if acts.len() >= 1 {
+            } else {
                 let hidden: RnnActivationFunction = acts[0].parse()?;
 
                 // For bidirectional, verify both directions use the same activations
@@ -393,11 +393,6 @@ impl NodeProcessor for RnnProcessor {
                 }
 
                 hidden
-            } else {
-                return Err(ProcessError::Custom(format!(
-                    "RNN activations must have at least 3 elements, got {}",
-                    acts.len()
-                )));
             }
         } else {
             // No activations attribute means use defaults
