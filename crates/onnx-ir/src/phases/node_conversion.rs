@@ -505,11 +505,23 @@ fn convert_matmul_to_linear(
         return;
     }
 
-    // Check if the second input is a 2D tensor
-    if let ArgType::Tensor(ref tensor_type) = node.inputs[1].ty {
-        assert_eq!(tensor_type.rank, 2, "Weight must be a 2D tensor");
-    } else {
-        panic!("Tensor input is expected");
+    // Check if the second input is a 2D tensor; if not, skip conversion
+    match &node.inputs[1].ty {
+        ArgType::Tensor(tensor_type) if tensor_type.rank == 2 => {
+            // Weight is 2D, proceed with conversion
+        }
+        ArgType::Tensor(tensor_type) => {
+            log::debug!(
+                "Keeping MatMul node {} (weight is {}D, not 2D)",
+                node.name,
+                tensor_type.rank
+            );
+            return;
+        }
+        _ => {
+            log::debug!("Keeping MatMul node {} (weight is not a tensor)", node.name);
+            return;
+        }
     }
 
     // Convert the node to Linear
@@ -607,5 +619,37 @@ mod tests {
         assert_eq!(node.node_type, NodeType::ConvTranspose);
         remap_node_type(&mut node);
         assert_eq!(node.node_type, NodeType::ConvTranspose1d);
+    }
+
+    #[test]
+    fn should_skip_matmul_to_linear_for_1d_weight() {
+        use crate::ir::TensorData;
+
+        // Create MatMul node with 1D weight (should NOT be converted to Linear)
+        let weight_data = vec![1.0, 2.0, 3.0, 4.0];
+        let weight_shape = vec![4]; // 1D tensor
+
+        let node = TestNodeBuilder::new(NodeType::MatMul, "test_matmul")
+            .input_tensor_f32("input", 2, None)
+            .input_tensor_f32_data("weight", weight_data.clone(), weight_shape.clone())
+            .output_tensor_f32("output", 1, None)
+            .build();
+
+        // Create GraphState and register the weight as a constant
+        let mut graph_state = crate::graph_state::GraphState::new(&[], &[], &[], &[]);
+        graph_state.register_test_constant(
+            "weight".to_string(),
+            TensorData::new(weight_data, weight_shape),
+        );
+
+        let mut node = node;
+        let empty_nodes: Vec<NodeProto> = vec![];
+        let mut iter = empty_nodes.iter().peekable();
+
+        // This should NOT panic - it should gracefully skip conversion
+        convert_matmul_to_linear(&mut node, &mut iter, &mut graph_state);
+
+        // Node type should remain MatMul (not converted to Linear)
+        assert_eq!(node.node_type, NodeType::MatMul);
     }
 }

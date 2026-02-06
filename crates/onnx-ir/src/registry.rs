@@ -243,7 +243,7 @@ impl ProcessorRegistry {
         );
         registry.register(
             NodeType::GatherND,
-            Box::new(crate::node::unsupported::UnsupportedProcessor),
+            Box::new(crate::node::gathernd::GatherNDProcessor),
         );
         registry.register(
             NodeType::Scatter,

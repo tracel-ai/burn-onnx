@@ -19,9 +19,9 @@
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
 
-use crate::ir::{ArgType, Argument, Node, RawNode};
+use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
 use crate::processor::{
-    InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError, same_as_input,
+    InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
 
 /// Configuration for Transpose operations
@@ -91,8 +91,22 @@ impl NodeProcessor for TransposeProcessor {
             )));
         }
 
-        // Infer output type
-        same_as_input(node);
+        let input_tensor = match &node.inputs[0].ty {
+            ArgType::Tensor(t) => t,
+            _ => unreachable!(), // already validated above
+        };
+
+        // Permute static_shape according to perm
+        let permuted_static_shape = input_tensor
+            .static_shape
+            .as_ref()
+            .map(|shape| config.perm.iter().map(|&i| shape[i as usize]).collect());
+
+        node.outputs[0].ty = ArgType::Tensor(TensorType {
+            dtype: input_tensor.dtype,
+            rank: input_tensor.rank,
+            static_shape: permuted_static_shape,
+        });
 
         Ok(())
     }
