@@ -50,18 +50,17 @@ fn to_burn_activation(onnx_activation: RnnActivationFunction) -> ActivationConfi
 
 /// Collect tensor snapshots for Rnn burnpack serialization.
 ///
-/// This function handles the complex weight transformation from ONNX's packed format
-/// to Burn's individual GateController structure using NdArray backend for tensor ops.
+/// This function handles the weight transformation from ONNX's packed RNN format
+/// to Burn's Rnn weight structure using NdArray backend for tensor ops.
 ///
 /// ONNX Rnn weight layout:
-/// - W: `[num_directions, 4*hidden_size, input_size]` - gates ordered as [i, o, f, c]
-/// - R: `[num_directions, 4*hidden_size, hidden_size]` - gates ordered as [i, o, f, c]
-/// - B: `[num_directions, 8*hidden_size]` - Wb[i,o,f,c] then Rb[i,o,f,c]
+/// - W: `[num_directions, hidden_size, input_size]`
+/// - R: `[num_directions, hidden_size, hidden_size]`
+/// - B: `[num_directions, 2*hidden_size]` - Wb then Rb
 ///
 /// Burn Rnn structure (per direction):
-/// - input_gate.input_transform: weight `[input_size, hidden_size]`, bias `[hidden_size]`
-/// - input_gate.hidden_transform: weight `[hidden_size, hidden_size]`, bias `[hidden_size]`
-/// - forget_gate, output_gate, cell_gate: same structure
+/// - input_transform: weight `[input_size, hidden_size]`, bias `[hidden_size]`
+/// - hidden_transform: weight `[hidden_size, hidden_size]`, bias `[hidden_size]`
 #[allow(clippy::single_range_in_vec_init)]
 fn collect_rnn_snapshots(
     field_name: &str,
@@ -456,9 +455,9 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
             }
             (None, Some(y_h)) => {
                 quote! {
-                    let (#y_h) = {
+                    let #y_h = {
                         #forward_call
-                        #hidden_expr,
+                        #hidden_expr
                     };
                 }
             }
@@ -545,6 +544,10 @@ mod tests {
             ));
         }
 
+        if num_outputs > 2 {
+            panic!("RnnNode can only have up to 2 outputs (Y and Y_h)");
+        }
+
         RnnNode {
             name: name.to_string(),
             inputs: vec![input, w, r, b],
@@ -555,7 +558,7 @@ mod tests {
 
     #[test]
     fn test_rnn_forward_basic() {
-        let node = create_rnn_node("Rnn1", RnnDirection::Forward, false, 3);
+        let node = create_rnn_node("Rnn1", RnnDirection::Forward, false, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(
@@ -579,7 +582,7 @@ mod tests {
 
     #[test]
     fn test_rnn_forward_bidirectional() {
-        let node = create_rnn_node("Rnn1", RnnDirection::Bidirectional, false, 3);
+        let node = create_rnn_node("Rnn1", RnnDirection::Bidirectional, false, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(
@@ -607,7 +610,7 @@ mod tests {
 
     #[test]
     fn test_rnn_forward_reverse() {
-        let node = create_rnn_node("Rnn1", RnnDirection::Reverse, false, 3);
+        let node = create_rnn_node("Rnn1", RnnDirection::Reverse, false, 2);
         let code = codegen_forward_default(&node);
         // Note: reverse is now handled by the Rnn module's config, not by flip() in codegen
         assert_snapshot!(code, @r"
