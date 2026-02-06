@@ -123,6 +123,43 @@ impl TensorType {
             .as_ref()
             .and_then(|dims| dims.iter().copied().collect::<Option<Vec<usize>>>())
     }
+
+    /// Merge static_shape from another TensorType, keeping the most informative value
+    /// for each dimension. Returns true if any dimension was updated.
+    ///
+    /// Merge rules:
+    /// - If self has no shape info but other does, use other's shape
+    /// - If both have shape info with matching rank, merge dimension by dimension
+    ///   (prefer known values over unknown)
+    /// - If ranks differ, no merge is possible (other types like dtype/rank take precedence)
+    pub fn merge_static_shape(&mut self, other: &TensorType) -> bool {
+        // Ranks must match for any merge to be valid
+        if self.rank != other.rank {
+            return false;
+        }
+
+        match (&mut self.static_shape, &other.static_shape) {
+            // self has no shape info, other does -> take other's shape
+            (None, Some(other_shape)) if other_shape.len() == self.rank => {
+                self.static_shape = Some(other_shape.clone());
+                true
+            }
+            // Both have shape info with matching length -> merge dimension by dimension
+            (Some(self_shape), Some(other_shape)) if self_shape.len() == other_shape.len() => {
+                let mut changed = false;
+                for (self_dim, other_dim) in self_shape.iter_mut().zip(other_shape.iter()) {
+                    // If self doesn't know this dimension but other does, take other's value
+                    if self_dim.is_none() && other_dim.is_some() {
+                        *self_dim = *other_dim;
+                        changed = true;
+                    }
+                }
+                changed
+            }
+            // Other cases: no merge possible or nothing to merge
+            _ => false,
+        }
+    }
 }
 
 impl Default for ArgType {
@@ -132,6 +169,23 @@ impl Default for ArgType {
 }
 
 impl ArgType {
+    /// Merge static_shape information from another ArgType.
+    ///
+    /// Used during type inference to preserve shape info from value_info when
+    /// syncing inferred types. The inferred type (self) provides the base
+    /// dtype/rank, but we merge in any more-specific dimension info from other.
+    ///
+    /// Returns true if any shape dimension was updated.
+    pub fn merge_static_shape(&mut self, other: &ArgType) -> bool {
+        match (self, other) {
+            (ArgType::Tensor(self_tensor), ArgType::Tensor(other_tensor)) => {
+                self_tensor.merge_static_shape(other_tensor)
+            }
+            // Non-tensor types have no static_shape to merge
+            _ => false,
+        }
+    }
+
     /// Check if this is a scalar type
     pub fn is_scalar(&self) -> bool {
         matches!(self, Self::Scalar(_))
@@ -353,5 +407,108 @@ impl Argument {
             value_source: ValueSource::Static(data_id),
             value_store: Some(value_store),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_merge_static_shape_none_with_some() {
+        // Inferred type has no shape info, value_info has partial shape
+        let mut inferred = TensorType::new(DType::F32, 2, None);
+        let value_info = TensorType::new(DType::F32, 2, Some(vec![None, Some(1)]));
+
+        let changed = inferred.merge_static_shape(&value_info);
+
+        assert!(changed);
+        assert_eq!(inferred.static_shape, Some(vec![None, Some(1)]));
+    }
+
+    #[test]
+    fn test_merge_static_shape_some_with_none() {
+        // Inferred type has shape info, value_info has none
+        let mut inferred = TensorType::new(DType::F32, 2, Some(vec![Some(5), None]));
+        let value_info = TensorType::new(DType::F32, 2, None);
+
+        let changed = inferred.merge_static_shape(&value_info);
+
+        assert!(!changed);
+        assert_eq!(inferred.static_shape, Some(vec![Some(5), None]));
+    }
+
+    #[test]
+    fn test_merge_static_shape_dimension_by_dimension() {
+        // Both have partial info, different dimensions known
+        let mut inferred = TensorType::new(DType::F32, 2, Some(vec![Some(5), None]));
+        let value_info = TensorType::new(DType::F32, 2, Some(vec![None, Some(1)]));
+
+        let changed = inferred.merge_static_shape(&value_info);
+
+        assert!(changed);
+        assert_eq!(inferred.static_shape, Some(vec![Some(5), Some(1)]));
+    }
+
+    #[test]
+    fn test_merge_static_shape_no_change_when_same() {
+        // Both have the same info
+        let mut inferred = TensorType::new(DType::F32, 2, Some(vec![Some(5), Some(1)]));
+        let value_info = TensorType::new(DType::F32, 2, Some(vec![Some(5), Some(1)]));
+
+        let changed = inferred.merge_static_shape(&value_info);
+
+        assert!(!changed);
+        assert_eq!(inferred.static_shape, Some(vec![Some(5), Some(1)]));
+    }
+
+    #[test]
+    fn test_merge_static_shape_inferred_takes_precedence_when_both_known() {
+        // Both know a dimension but with different values - inferred wins
+        let mut inferred = TensorType::new(DType::F32, 2, Some(vec![Some(5), Some(2)]));
+        let value_info = TensorType::new(DType::F32, 2, Some(vec![Some(10), Some(1)]));
+
+        let changed = inferred.merge_static_shape(&value_info);
+
+        // Inferred already has values, so no change
+        assert!(!changed);
+        assert_eq!(inferred.static_shape, Some(vec![Some(5), Some(2)]));
+    }
+
+    #[test]
+    fn test_merge_static_shape_rank_mismatch_no_merge() {
+        // Ranks don't match - can't merge
+        let mut inferred = TensorType::new(DType::F32, 3, None);
+        let value_info = TensorType::new(DType::F32, 2, Some(vec![None, Some(1)]));
+
+        let changed = inferred.merge_static_shape(&value_info);
+
+        assert!(!changed);
+        assert_eq!(inferred.static_shape, None);
+    }
+
+    #[test]
+    fn test_merge_argtype_tensor() {
+        let mut inferred =
+            ArgType::Tensor(TensorType::new(DType::F32, 2, Some(vec![Some(5), None])));
+        let value_info = ArgType::Tensor(TensorType::new(DType::F32, 2, Some(vec![None, Some(1)])));
+
+        let changed = inferred.merge_static_shape(&value_info);
+
+        assert!(changed);
+        assert_eq!(
+            inferred,
+            ArgType::Tensor(TensorType::new(DType::F32, 2, Some(vec![Some(5), Some(1)])))
+        );
+    }
+
+    #[test]
+    fn test_merge_argtype_non_tensor_no_op() {
+        let mut inferred = ArgType::Scalar(DType::F32);
+        let value_info = ArgType::Scalar(DType::F32);
+
+        let changed = inferred.merge_static_shape(&value_info);
+
+        assert!(!changed);
     }
 }
