@@ -11,8 +11,8 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
     use crate::backend::TestBackend;
+    use burn::tensor::{Tensor, TensorData};
 
     #[test]
     fn gathernd_full_index() {
@@ -78,8 +78,7 @@ mod tests {
         let model: gathernd_neg_idx::Model<TestBackend> = gathernd_neg_idx::Model::default();
         let device = Default::default();
 
-        let data =
-            Tensor::<TestBackend, 2>::from_floats([[0., 1.], [2., 3.], [4., 5.]], &device);
+        let data = Tensor::<TestBackend, 2>::from_floats([[0., 1.], [2., 3.], [4., 5.]], &device);
         let output = model.forward(data);
 
         let expected = TensorData::from([[4f32, 5.], [0., 1.]]);
