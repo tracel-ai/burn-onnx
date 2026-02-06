@@ -1,8 +1,9 @@
 #!/usr/bin/env -S uv run --script
+
 # /// script
 # dependencies = [
-#     "torch",
-#     "onnx",
+#   "onnx==1.19.0",
+#   "torch==2.10.0",
 # ]
 # ///
 
