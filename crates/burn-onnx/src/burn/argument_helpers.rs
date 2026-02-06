@@ -37,10 +37,18 @@ pub fn arg_type_tokens(arg: &Argument) -> TokenStream {
 /// Get the type TokenStream for a scalar DType
 pub fn scalar_type_tokens(dtype: &DType) -> TokenStream {
     match dtype {
-        DType::I32 => quote! { i32 },
-        DType::I64 => quote! { i64 },
+        DType::F16 => quote! { half::f16 },
+        DType::BF16 => quote! { half::bf16 },
         DType::F32 => quote! { f32 },
         DType::F64 => quote! { f64 },
+        DType::I8 => quote! { i8 },
+        DType::I16 => quote! { i16 },
+        DType::I32 => quote! { i32 },
+        DType::I64 => quote! { i64 },
+        DType::U8 => quote! { u8 },
+        DType::U16 => quote! { u16 },
+        DType::U32 => quote! { u32 },
+        DType::U64 => quote! { u64 },
         DType::Bool => quote! { bool },
         _ => panic!("Unsupported scalar dtype: {:?}", dtype),
     }
@@ -91,5 +99,39 @@ pub fn codegen_return_expr(outputs: &[Argument]) -> TokenStream {
     } else {
         let names: Vec<_> = outputs.iter().map(arg_ident).collect();
         quote! { (#(#names),*) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scalar_type_tokens_float_types() {
+        assert_eq!(scalar_type_tokens(&DType::F16).to_string(), "half :: f16");
+        assert_eq!(scalar_type_tokens(&DType::BF16).to_string(), "half :: bf16");
+        assert_eq!(scalar_type_tokens(&DType::F32).to_string(), "f32");
+        assert_eq!(scalar_type_tokens(&DType::F64).to_string(), "f64");
+    }
+
+    #[test]
+    fn scalar_type_tokens_signed_int_types() {
+        assert_eq!(scalar_type_tokens(&DType::I8).to_string(), "i8");
+        assert_eq!(scalar_type_tokens(&DType::I16).to_string(), "i16");
+        assert_eq!(scalar_type_tokens(&DType::I32).to_string(), "i32");
+        assert_eq!(scalar_type_tokens(&DType::I64).to_string(), "i64");
+    }
+
+    #[test]
+    fn scalar_type_tokens_unsigned_int_types() {
+        assert_eq!(scalar_type_tokens(&DType::U8).to_string(), "u8");
+        assert_eq!(scalar_type_tokens(&DType::U16).to_string(), "u16");
+        assert_eq!(scalar_type_tokens(&DType::U32).to_string(), "u32");
+        assert_eq!(scalar_type_tokens(&DType::U64).to_string(), "u64");
+    }
+
+    #[test]
+    fn scalar_type_tokens_bool() {
+        assert_eq!(scalar_type_tokens(&DType::Bool).to_string(), "bool");
     }
 }
