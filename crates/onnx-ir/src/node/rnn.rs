@@ -86,6 +86,7 @@ impl std::str::FromStr for RnnActivationFunction {
 }
 
 #[derive(Debug, Clone, new)]
+#[allow(clippy::too_many_arguments)]
 pub struct RnnConfig {
     // Size of the input features
     pub input_size: usize,
