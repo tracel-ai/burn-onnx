@@ -39,16 +39,14 @@ pub enum TensorKind {
 
 impl From<onnx_ir::ir::DType> for TensorKind {
     fn from(dtype: onnx_ir::ir::DType) -> Self {
-        use onnx_ir::ir::DType;
-
-        match dtype {
-            DType::F32 => TensorKind::Float,
-            DType::F64 => TensorKind::Float,
-            DType::I32 => TensorKind::Int,
-            DType::I64 => TensorKind::Int,
-            DType::I8 | DType::U8 => TensorKind::Int,
-            DType::Bool => TensorKind::Bool,
-            _ => panic!("Unsupported tensor type"),
+        if dtype.is_float() {
+            TensorKind::Float
+        } else if dtype.is_int() || dtype.is_uint() {
+            TensorKind::Int
+        } else if dtype.is_bool() {
+            TensorKind::Bool
+        } else {
+            panic!("Unsupported tensor type: {dtype:?}")
         }
     }
 }
@@ -238,4 +236,39 @@ pub fn create_lazy_snapshot(
         container_stack,
         ParamId::new(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use onnx_ir::ir::DType;
+
+    #[test]
+    fn tensor_kind_from_dtype_float_types() {
+        assert_eq!(TensorKind::from(DType::F16), TensorKind::Float);
+        assert_eq!(TensorKind::from(DType::BF16), TensorKind::Float);
+        assert_eq!(TensorKind::from(DType::F32), TensorKind::Float);
+        assert_eq!(TensorKind::from(DType::F64), TensorKind::Float);
+    }
+
+    #[test]
+    fn tensor_kind_from_dtype_signed_int_types() {
+        assert_eq!(TensorKind::from(DType::I8), TensorKind::Int);
+        assert_eq!(TensorKind::from(DType::I16), TensorKind::Int);
+        assert_eq!(TensorKind::from(DType::I32), TensorKind::Int);
+        assert_eq!(TensorKind::from(DType::I64), TensorKind::Int);
+    }
+
+    #[test]
+    fn tensor_kind_from_dtype_unsigned_int_types() {
+        assert_eq!(TensorKind::from(DType::U8), TensorKind::Int);
+        assert_eq!(TensorKind::from(DType::U16), TensorKind::Int);
+        assert_eq!(TensorKind::from(DType::U32), TensorKind::Int);
+        assert_eq!(TensorKind::from(DType::U64), TensorKind::Int);
+    }
+
+    #[test]
+    fn tensor_kind_from_dtype_bool() {
+        assert_eq!(TensorKind::from(DType::Bool), TensorKind::Bool);
+    }
 }

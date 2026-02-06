@@ -337,15 +337,20 @@ macro_rules! impl_reduce_node {
                     onnx_ir::ir::ArgType::Scalar(dtype) => {
                         // For scalar outputs, extract the scalar value using .into_scalar()
                         match dtype {
+                            onnx_ir::ir::DType::F16 => quote! { #raw_output_expr.into_scalar().elem::<half::f16>() },
+                            onnx_ir::ir::DType::BF16 => quote! { #raw_output_expr.into_scalar().elem::<half::bf16>() },
+                            onnx_ir::ir::DType::F32 => quote! { #raw_output_expr.into_scalar().elem::<f32>() },
+                            onnx_ir::ir::DType::F64 => quote! { #raw_output_expr.into_scalar().elem::<f64>() },
                             onnx_ir::ir::DType::I8 => quote! { #raw_output_expr.into_scalar().elem::<i8>() },
                             onnx_ir::ir::DType::I16 => quote! { #raw_output_expr.into_scalar().elem::<i16>() },
                             onnx_ir::ir::DType::I32 => quote! { #raw_output_expr.into_scalar().elem::<i32>() },
                             onnx_ir::ir::DType::I64 => quote! { #raw_output_expr.into_scalar().elem::<i64>() },
-                            onnx_ir::ir::DType::F16 => quote! { #raw_output_expr.into_scalar().elem::<half::f16>() },
-                            onnx_ir::ir::DType::F32 => quote! { #raw_output_expr.into_scalar().elem::<f32>() },
-                            onnx_ir::ir::DType::F64 => quote! { #raw_output_expr.into_scalar().elem::<f64>() },
+                            onnx_ir::ir::DType::U8 => quote! { #raw_output_expr.into_scalar().elem::<u8>() },
+                            onnx_ir::ir::DType::U16 => quote! { #raw_output_expr.into_scalar().elem::<u16>() },
+                            onnx_ir::ir::DType::U32 => quote! { #raw_output_expr.into_scalar().elem::<u32>() },
+                            onnx_ir::ir::DType::U64 => quote! { #raw_output_expr.into_scalar().elem::<u64>() },
                             onnx_ir::ir::DType::Bool => quote! { #raw_output_expr.into_scalar().elem::<bool>() },
-                            _ => panic!("Unsupported scalar type for reduce output"),
+                            _ => panic!("Unsupported scalar type {:?} for reduce output", dtype),
                         }
                     }
                     onnx_ir::ir::ArgType::Tensor(_) => raw_output_expr,

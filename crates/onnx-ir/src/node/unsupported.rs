@@ -41,7 +41,6 @@ define_placeholder_node! {
     DetNode,
     DynamicQuantizeLinearNode,
     EinsumNode,
-    GatherNDNode,
     GlobalMaxPoolNode,
     HammingWindowNode,
     HannWindowNode,
@@ -131,11 +130,6 @@ impl NodeProcessor for UnsupportedProcessor {
 
         match builder.node_type {
             NodeType::GlobalMaxPool => Node::GlobalMaxPool(GlobalMaxPoolNode {
-                name: builder.name,
-                inputs: builder.inputs,
-                outputs: builder.outputs,
-            }),
-            NodeType::GatherND => Node::GatherND(GatherNDNode {
                 name: builder.name,
                 inputs: builder.inputs,
                 outputs: builder.outputs,

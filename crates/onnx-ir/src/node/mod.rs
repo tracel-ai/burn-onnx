@@ -77,6 +77,7 @@ pub mod eye_like;
 pub mod flatten;
 pub mod gather;
 pub mod gather_elements;
+pub mod gathernd;
 pub mod gemm;
 pub mod global_avg_pool;
 pub mod grid_sample;

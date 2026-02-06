@@ -56,20 +56,15 @@ impl NodeProcessor for NonZeroProcessor {
         // Note: Implementation correctly validates inputs/outputs per spec (1 input, 1 output)
 
         match &node.inputs[0].ty {
-            ArgType::Tensor(_tensor) => {
-                // TODO: Missing test coverage for zero-size input tensors (e.g., shape [0, 5] or [3, 0])
-                // The spec allows zero-size tensors, but there's no test validating behavior when
-                // input tensor has zero elements. Should return [rank, 0] shaped output.
-                // Add test: nonzero_zero_size_tensor
-
+            ArgType::Tensor(tensor) => {
                 // Output is always a 2D Int64 tensor
                 // Shape: [input_tensor_rank, num_nonzero_elements]
-                // First dimension equals input tensor rank
+                // First dimension equals input tensor rank (statically known)
                 // Second dimension is dynamic (depends on data)
                 node.outputs[0].ty = ArgType::Tensor(TensorType {
                     dtype: DType::I64,
                     rank: 2,
-                    static_shape: None, // Dynamic shape - second dimension depends on number of nonzero elements
+                    static_shape: Some(vec![Some(tensor.rank), None]),
                 });
             }
             _ => {
@@ -113,7 +108,8 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::I64);
                 assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, None); // Dynamic shape
+                // First dim = input rank (3), second dim = dynamic
+                assert_eq!(tensor.static_shape, Some(vec![Some(3), None]));
             }
             _ => panic!("Expected tensor output"),
         }
@@ -134,7 +130,8 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::I64);
                 assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, None); // Dynamic shape
+                // First dim = input rank (1), second dim = dynamic
+                assert_eq!(tensor.static_shape, Some(vec![Some(1), None]));
             }
             _ => panic!("Expected tensor output"),
         }
@@ -155,7 +152,8 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::I64);
                 assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, None); // Dynamic shape
+                // First dim = input rank (4), second dim = dynamic
+                assert_eq!(tensor.static_shape, Some(vec![Some(4), None]));
             }
             _ => panic!("Expected tensor output"),
         }

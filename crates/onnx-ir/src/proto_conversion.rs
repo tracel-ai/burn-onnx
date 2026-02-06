@@ -228,16 +228,23 @@ pub fn argument_from_initializer(initializer: &TensorProto) -> (Argument, Tensor
                 let shape_usize: Vec<usize> = dims.iter().map(|&d| d as usize).collect();
 
                 let td = match dtype {
+                    DType::F16 => TensorData::new(Vec::<half::f16>::new(), shape_usize.clone()),
+                    DType::BF16 => TensorData::new(Vec::<half::bf16>::new(), shape_usize.clone()),
                     DType::F32 => TensorData::new(Vec::<f32>::new(), shape_usize.clone()),
                     DType::F64 => TensorData::new(Vec::<f64>::new(), shape_usize.clone()),
-                    DType::F16 => TensorData::new(Vec::<half::f16>::new(), shape_usize.clone()),
+                    DType::I8 => TensorData::new(Vec::<i8>::new(), shape_usize.clone()),
+                    DType::I16 => TensorData::new(Vec::<i16>::new(), shape_usize.clone()),
                     DType::I32 => TensorData::new(Vec::<i32>::new(), shape_usize.clone()),
                     DType::I64 => TensorData::new(Vec::<i64>::new(), shape_usize.clone()),
-                    DType::U16 => TensorData::new(Vec::<u16>::new(), shape_usize.clone()),
                     DType::U8 => TensorData::new(Vec::<u8>::new(), shape_usize.clone()),
-                    DType::I8 => TensorData::new(Vec::<i8>::new(), shape_usize.clone()),
+                    DType::U16 => TensorData::new(Vec::<u16>::new(), shape_usize.clone()),
+                    DType::U32 => TensorData::new(Vec::<u32>::new(), shape_usize.clone()),
+                    DType::U64 => TensorData::new(Vec::<u64>::new(), shape_usize.clone()),
                     DType::Bool => TensorData::new(Vec::<bool>::new(), shape_usize.clone()),
-                    _ => panic!("Unsupported dtype {:?} for empty tensor", dtype),
+                    _ => panic!(
+                        "Unsupported dtype {:?} for empty tensor '{}' (data_type={})",
+                        dtype, name, initializer.data_type
+                    ),
                 };
 
                 let arg = Argument {
