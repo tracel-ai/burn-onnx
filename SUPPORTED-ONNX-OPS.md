@@ -73,7 +73,7 @@ functionality.
 | [Floor][57]                      | ✅             | ✅           |
 | [Gather][58]                     | ✅             | ✅           |
 | [GatherElements][59]             | ✅             | ✅           |
-| [GatherND][60]                   | ❌             | ❌           |
+| [GatherND][60]                   | ✅             | ✅           |
 | [Gelu][61]                       | ✅             | ✅           |
 | [Gemm][62]                       | ✅             | ✅           |
 | [GlobalAveragePool][63]          | ✅             | ✅           |

@@ -236,7 +236,7 @@ define_node_enum! {
     Flatten => flatten::FlattenNode,
     Gather => gather::GatherNode,
     GatherElements => gather_elements::GatherElementsNode,
-    GatherND => unsupported::GatherNDNode,
+    GatherND => gathernd::GatherNDNode,
     Pad => pad::PadNode,
     Reshape => reshape::ReshapeNode,
     Resize => resize::ResizeNode,

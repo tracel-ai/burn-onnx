@@ -135,6 +135,7 @@ impl_node_codegen_dispatch! {
     Slice,
     Gather,
     GatherElements,
+    GatherND,
     ScatterND,
     Tile,
     Expand,

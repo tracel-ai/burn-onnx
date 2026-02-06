@@ -61,6 +61,7 @@ pub(crate) mod flatten;
 pub(crate) mod floor;
 pub(crate) mod gather;
 pub(crate) mod gather_elements;
+pub(crate) mod gathernd;
 pub(crate) mod gelu;
 pub(crate) mod gemm;
 pub(crate) mod global_avg_pool;

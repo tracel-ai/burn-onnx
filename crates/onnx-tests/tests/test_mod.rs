@@ -56,6 +56,7 @@ pub mod flatten;
 pub mod floor;
 pub mod gather;
 pub mod gather_elements;
+pub mod gathernd;
 pub mod gelu;
 pub mod gemm;
 pub mod global_avr_pool;
