@@ -416,6 +416,28 @@ handling ONNX operations. Each processor implements:
 - `infer_types()` - Infer output types from inputs and configuration
 - `build_node()` - Construct the final `Node` enum variant
 
+**Static Shape Inference:**
+
+The `infer_types()` method should always produce a `static_shape` (`Some(vec![...])`) on tensor
+outputs, even when the input has no static shape info. Use `None` for unknown individual dimensions
+and `Some(value)` for known ones. This enables downstream merging via `merge_static_shape()`.
+
+- **Always produce `Some(vec![...])`**, never leave `static_shape` as `None` when you know the
+  output rank. Start with `vec![None; rank]` and fill in whatever dimensions you can determine.
+- **Extract dimension info from all available sources**: input `static_shape`, weight tensor data
+  (via `node.inputs[N].value().map(|d| d.shape)`), weight `static_shape`, and operator config.
+- **Use `unwrap_or_else`** instead of `.map()` on input static shape to avoid short-circuiting:
+  ```rust
+  // Good: always produces partial shape
+  let mut shape = tensor.static_shape.clone()
+      .unwrap_or_else(|| vec![None; tensor.rank]);
+  shape[1] = Some(out_channels); // fill in what we know
+  Some(shape)
+
+  // Bad: returns None entirely when input has no static_shape
+  tensor.static_shape.as_ref().map(|s| { ... })
+  ```
+
 **Optional (have defaults):**
 
 - `spec()` - Define opset requirements and input/output count validation (`NodeSpec`, `InputSpec`,

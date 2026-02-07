@@ -29,7 +29,7 @@
 
 use derive_new::new;
 
-use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
+use crate::ir::{ArgType, Argument, AttributeValue, Node, RawNode, TensorType};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -112,10 +112,40 @@ impl NodeProcessor for LinearProcessor {
             }
         };
 
+        // Compute output static_shape: same as input but last dim = out_features
+        let static_shape = {
+            let transpose_weight = node
+                .attrs
+                .get("transpose_weight")
+                .map(|v| matches!(v, AttributeValue::Int64(1)))
+                .unwrap_or(false);
+            let out_features = node.inputs[1]
+                .value()
+                .and_then(|data| {
+                    let idx = if transpose_weight { 0 } else { 1 };
+                    data.shape.get(idx).copied()
+                })
+                .or_else(|| match &node.inputs[1].ty {
+                    ArgType::Tensor(weight) => weight.static_shape.as_ref().and_then(|ws| {
+                        let idx = if transpose_weight { 0 } else { 1 };
+                        ws.get(idx).copied().flatten()
+                    }),
+                    _ => None,
+                });
+            let mut shape: Vec<Option<usize>> = tensor
+                .static_shape
+                .clone()
+                .unwrap_or_else(|| vec![None; tensor.rank]);
+            if let Some(last) = shape.last_mut() {
+                *last = out_features;
+            }
+            Some(shape)
+        };
+
         node.outputs[0].ty = ArgType::Tensor(TensorType {
             dtype: tensor.dtype,
             rank: tensor.rank,
-            static_shape: None,
+            static_shape,
         });
 
         Ok(())
@@ -234,5 +264,90 @@ mod tests {
             result,
             Err(ProcessError::InvalidInputCount { .. })
         ));
+    }
+
+    #[test]
+    fn test_linear_static_shape_gemm() {
+        // Gemm: weight [out=10, in=5], input has static shape [batch=2, in=5]
+        let mut node = TestNodeBuilder::new(NodeType::Linear, "test_linear")
+            .input_tensor_f32("input", 2, Some(vec![2, 5]))
+            .input_tensor_f32_data("weight", vec![0.0; 50], vec![10, 5])
+            .output_tensor_f32("output", 2, None)
+            .attr_int("transpose_weight", 1)
+            .build_with_graph_data(16);
+
+        let processor = LinearProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.static_shape, Some(vec![Some(2), Some(10)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_linear_static_shape_matmul() {
+        // MatMul: weight [in=5, out=10], input has static shape [batch=2, in=5]
+        let mut node = TestNodeBuilder::new(NodeType::Linear, "test_linear")
+            .input_tensor_f32("input", 2, Some(vec![2, 5]))
+            .input_tensor_f32_data("weight", vec![0.0; 50], vec![5, 10])
+            .output_tensor_f32("output", 2, None)
+            .build_with_graph_data(16);
+
+        let processor = LinearProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.static_shape, Some(vec![Some(2), Some(10)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_linear_no_input_static_shape_still_infers_out_features() {
+        // No input static shape -> output still has out_features from weight
+        let node = create_gemm_linear_node(false, vec![10, 5]).process(LinearProcessor, 16);
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.static_shape, Some(vec![None, Some(10)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_linear_partial_static_shape() {
+        // Input has partial static shape (batch unknown)
+        let mut node = TestNodeBuilder::new(NodeType::Linear, "test_linear")
+            .add_input(
+                "input",
+                ArgType::Tensor(TensorType {
+                    dtype: crate::ir::DType::F32,
+                    rank: 2,
+                    static_shape: Some(vec![None, Some(5)]),
+                }),
+            )
+            .input_tensor_f32_data("weight", vec![0.0; 50], vec![10, 5])
+            .output_tensor_f32("output", 2, None)
+            .attr_int("transpose_weight", 1)
+            .build_with_graph_data(16);
+
+        let processor = LinearProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.static_shape, Some(vec![None, Some(10)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
     }
 }

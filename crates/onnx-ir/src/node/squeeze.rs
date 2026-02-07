@@ -133,6 +133,48 @@ impl NodeProcessor for SqueezeProcessor {
                     }
                 };
 
+                // Compute output static_shape by removing squeezed dimensions
+                let static_shape = {
+                    let input_shape = tensor
+                        .static_shape
+                        .clone()
+                        .unwrap_or_else(|| vec![None; tensor.rank]);
+                    match axes_vec {
+                        None => {
+                            // Squeeze all dims of size 1
+                            Some(
+                                input_shape
+                                    .iter()
+                                    .filter(|dim| **dim != Some(1))
+                                    .copied()
+                                    .collect(),
+                            )
+                        }
+                        Some(ref axes_vec) => {
+                            // Normalize axes and remove those positions
+                            let rank = tensor.rank as i64;
+                            let remove: Vec<usize> = axes_vec
+                                .iter()
+                                .map(|&a| {
+                                    if a < 0 {
+                                        (a + rank) as usize
+                                    } else {
+                                        a as usize
+                                    }
+                                })
+                                .collect();
+                            Some(
+                                input_shape
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(i, _)| !remove.contains(i))
+                                    .map(|(_, dim)| *dim)
+                                    .collect(),
+                            )
+                        }
+                    }
+                };
+
                 // When all dimensions are squeezed (rank=0), represent as Scalar not Tensor
                 // This maintains consistency with proto conversion which converts 0-dim tensors to Scalar
                 node.outputs[0].ty = if output_rank == 0 {
@@ -141,7 +183,7 @@ impl NodeProcessor for SqueezeProcessor {
                     ArgType::Tensor(TensorType {
                         dtype: tensor.dtype,
                         rank: output_rank,
-                        static_shape: None,
+                        static_shape,
                     })
                 };
             }
@@ -320,6 +362,90 @@ mod tests {
                 );
             }
             other => panic!("Unexpected output type: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_squeeze_propagates_static_shape() {
+        // Input [2, 1, 3, 1] with axes [1, 3] -> output [2, 3]
+        let mut node = TestNodeBuilder::new(NodeType::Squeeze, "test_squeeze")
+            .input_tensor_f32("data", 4, Some(vec![2, 1, 3, 1]))
+            .input_tensor_i64_data("axes", vec![1, 3], vec![2])
+            .output_tensor_f32("squeezed", 2, None)
+            .build_with_graph_data(16);
+
+        let processor = SqueezeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![Some(2), Some(3)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_squeeze_no_axes_removes_size_1() {
+        // Input [2, 1, 3, 1] with no axes -> squeeze all 1s -> [2, 3]
+        let mut node = TestNodeBuilder::new(NodeType::Squeeze, "test_squeeze")
+            .input_tensor_f32("data", 4, Some(vec![2, 1, 3, 1]))
+            .output_tensor_f32("squeezed", 2, None)
+            .build();
+
+        let processor = SqueezeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![Some(2), Some(3)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_squeeze_no_static_shape_with_axes() {
+        // Input rank 4, no static_shape, axes [1] -> output rank 3, all dims unknown
+        let node = create_test_node(Some(vec![1]), 4).build_with_graph_data(16);
+        let mut node = node;
+        let processor = SqueezeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 3);
+                // Even without input static_shape, produces partial shape
+                assert_eq!(t.static_shape, Some(vec![None, None, None]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_squeeze_negative_axes() {
+        // Input [2, 1, 3] with axes [-2] -> output [2, 3]
+        let mut node = TestNodeBuilder::new(NodeType::Squeeze, "test_squeeze")
+            .input_tensor_f32("data", 3, Some(vec![2, 1, 3]))
+            .input_tensor_i64_data("axes", vec![-2], vec![1])
+            .output_tensor_f32("squeezed", 2, None)
+            .build_with_graph_data(16);
+
+        let processor = SqueezeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![Some(2), Some(3)]));
+            }
+            _ => panic!("Expected tensor output"),
         }
     }
 }

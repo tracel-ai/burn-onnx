@@ -383,10 +383,58 @@ impl NodeProcessor for ReshapeProcessor {
         // Determine output rank
         let output_rank = infer_reshape_output_rank(node);
 
-        // Get static shape if available
-        let static_shape = match &node.outputs[0].ty {
-            ArgType::Tensor(t) => t.static_shape.clone(),
-            _ => None,
+        // Compute static_shape from shape input values
+        let static_shape = if let Some(shape_values) = get_static_shape(node) {
+            let input_static = match &node.inputs[0].ty {
+                ArgType::Tensor(t) => t.static_shape.as_ref(),
+                _ => None,
+            };
+
+            let mut dims: Vec<Option<usize>> = shape_values
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| {
+                    if v > 0 {
+                        Some(v as usize)
+                    } else if v == 0 {
+                        // Copy from input at same position
+                        input_static.and_then(|s| s.get(i).copied().flatten())
+                    } else {
+                        // v == -1: infer later
+                        None
+                    }
+                })
+                .collect();
+
+            // Try to resolve -1 dimension
+            if shape_values.contains(&-1) {
+                let input_total = input_static
+                    .and_then(|s| s.iter().try_fold(1usize, |acc, dim| dim.map(|d| acc * d)));
+                if let Some(total) = input_total {
+                    let known_product: Option<usize> = dims
+                        .iter()
+                        .filter(|d| d.is_some())
+                        .try_fold(1usize, |acc, d| d.map(|v| acc * v));
+                    if let Some(product) = known_product
+                        && product > 0
+                    {
+                        let inferred = total / product;
+                        for (i, v) in shape_values.iter().enumerate() {
+                            if *v == -1 {
+                                dims[i] = Some(inferred);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Some(dims)
+        } else {
+            // Fall back to output's existing static_shape
+            match &node.outputs[0].ty {
+                ArgType::Tensor(t) => t.static_shape.clone(),
+                _ => None,
+            }
         };
 
         // Set output type
@@ -742,5 +790,116 @@ mod tests {
 
         let processor = ReshapeProcessor;
         assert!(!processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_reshape_static_shape_positive_values() {
+        // Input [2, 3, 4], reshape to [6, 4]
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape")
+            .input_tensor_f32("data", 3, Some(vec![2, 3, 4]))
+            .input_tensor_i64_data("shape", vec![6, 4], vec![2])
+            .output_tensor_f32("reshaped", 2, None)
+            .build_with_graph_data(16);
+
+        let processor = ReshapeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![Some(6), Some(4)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_reshape_static_shape_with_neg1() {
+        // Input [2, 3, 4] (total=24), reshape to [4, -1] -> [4, 6]
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape")
+            .input_tensor_f32("data", 3, Some(vec![2, 3, 4]))
+            .input_tensor_i64_data("shape", vec![4, -1], vec![2])
+            .output_tensor_f32("reshaped", 2, None)
+            .build_with_graph_data(16);
+
+        let processor = ReshapeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![Some(4), Some(6)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_reshape_static_shape_with_zero() {
+        // Input [2, 3, 4], reshape to [0, 12] -> [2, 12] (0 copies from input)
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape")
+            .input_tensor_f32("data", 3, Some(vec![2, 3, 4]))
+            .input_tensor_i64_data("shape", vec![0, 12], vec![2])
+            .output_tensor_f32("reshaped", 2, None)
+            .build_with_graph_data(16);
+
+        let processor = ReshapeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![Some(2), Some(12)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_reshape_static_shape_unknown_input() {
+        // Input with no static_shape, reshape to [3, 4]
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape")
+            .input_tensor_f32("data", 2, None)
+            .input_tensor_i64_data("shape", vec![3, 4], vec![2])
+            .output_tensor_f32("reshaped", 2, None)
+            .build_with_graph_data(16);
+
+        let processor = ReshapeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                // Positive values are always known, 0 needs input, -1 needs input total
+                assert_eq!(t.static_shape, Some(vec![Some(3), Some(4)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_reshape_neg1_without_input_shape() {
+        // Input with no static_shape, reshape to [-1, 4] -> -1 can't be resolved
+        let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape")
+            .input_tensor_f32("data", 2, None)
+            .input_tensor_i64_data("shape", vec![-1, 4], vec![2])
+            .output_tensor_f32("reshaped", 2, None)
+            .build_with_graph_data(16);
+
+        let processor = ReshapeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![None, Some(4)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
     }
 }

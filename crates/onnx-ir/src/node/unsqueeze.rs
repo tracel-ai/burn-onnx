@@ -225,7 +225,7 @@ impl UnsqueezeProcessor {
             }
         };
 
-        let output_rank = if let Some(axes) = axes {
+        let output_rank = if let Some(ref axes) = axes {
             input_rank + axes.len()
         } else if node.inputs.len() == 2 {
             if let ArgType::Tensor(tensor) = &node.inputs[1].ty {
@@ -265,7 +265,7 @@ impl UnsqueezeProcessor {
                 } else {
                     node.outputs[0].ty = ArgType::Tensor(TensorType {
                         rank: output_rank,
-                        static_shape: None,
+                        static_shape: Some(vec![Some(1)]),
                         dtype: *elem_type,
                     });
                 }
@@ -277,9 +277,49 @@ impl UnsqueezeProcessor {
                     ArgType::Shape(_) => crate::ir::DType::I64,
                 };
 
+                // Compute output static_shape by inserting Some(1) at the unsqueezed axes
+                let static_shape = if let Some(axes) = axes {
+                    let input_shape = match &node.inputs[0].ty {
+                        ArgType::Tensor(t) => t.static_shape.clone(),
+                        _ => None,
+                    };
+                    // Start with input dims or all-None
+                    let input_dims: Vec<Option<usize>> =
+                        input_shape.unwrap_or_else(|| vec![None; input_rank]);
+                    let mut output_dims = Vec::with_capacity(output_rank);
+                    output_dims.resize(output_rank, None);
+
+                    // Normalize axes to positive indices in the output
+                    let mut normalized: Vec<usize> = axes
+                        .iter()
+                        .map(|&a| {
+                            if a < 0 {
+                                (a + output_rank as i64) as usize
+                            } else {
+                                a as usize
+                            }
+                        })
+                        .collect();
+                    normalized.sort();
+
+                    // Place Some(1) at unsqueezed positions, input dims elsewhere
+                    let mut input_idx = 0;
+                    for (out_idx, dim) in output_dims.iter_mut().enumerate() {
+                        if normalized.contains(&out_idx) {
+                            *dim = Some(1);
+                        } else {
+                            *dim = input_dims[input_idx];
+                            input_idx += 1;
+                        }
+                    }
+                    Some(output_dims)
+                } else {
+                    None
+                };
+
                 node.outputs[0].ty = ArgType::Tensor(TensorType {
                     rank: output_rank,
-                    static_shape: None,
+                    static_shape,
                     dtype: output_elem,
                 });
             }
@@ -601,5 +641,66 @@ mod tests {
 
         let result = processor.extract_config(&node, 16);
         assert!(matches!(result, Err(ProcessError::Custom(_))));
+    }
+
+    #[test]
+    fn test_unsqueeze_static_shape_with_known_input() {
+        // Input [2, 3] with axes [0, 3] -> output [1, 2, 3, 1]
+        let mut node = create_test_node_with_input(2, vec![0, 3], true).build_with_graph_data(16);
+        // Set static_shape on input
+        if let ArgType::Tensor(ref mut t) = node.inputs[0].ty {
+            t.static_shape = Some(vec![Some(2), Some(3)]);
+        }
+        let processor = UnsqueezeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 4);
+                assert_eq!(
+                    t.static_shape,
+                    Some(vec![Some(1), Some(2), Some(3), Some(1)])
+                );
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_unsqueeze_static_shape_no_input_shape() {
+        // Input rank 2, no static_shape, axes [1] -> output has Some(1) at axis 1, None elsewhere
+        let mut node = create_test_node_with_input(2, vec![1], true).build_with_graph_data(16);
+        let processor = UnsqueezeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 3);
+                assert_eq!(t.static_shape, Some(vec![None, Some(1), None]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_unsqueeze_static_shape_negative_axes() {
+        // Input [4, 5] with axes [-1] -> output [4, 5, 1]
+        let mut node = create_test_node_with_attr(2, vec![-1]).build();
+        if let ArgType::Tensor(ref mut t) = node.inputs[0].ty {
+            t.static_shape = Some(vec![Some(4), Some(5)]);
+        }
+        let processor = UnsqueezeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 11, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 3);
+                assert_eq!(t.static_shape, Some(vec![Some(4), Some(5), Some(1)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
     }
 }

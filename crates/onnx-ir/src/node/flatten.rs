@@ -76,12 +76,30 @@ impl NodeProcessor for FlattenProcessor {
         }
 
         // Get reference to config for type inference
-        let _config = self
+        let config = self
             .extract_config(node, opset)
             .expect("Config extraction failed");
 
+        // Compute output static_shape: [product(dims[..axis]), product(dims[axis..])]
+        let static_shape = if let Some(input_shape) = &tensor.static_shape {
+            let axis = config.axis;
+            let left = input_shape[..axis]
+                .iter()
+                .try_fold(1usize, |acc, dim| dim.map(|d| acc * d));
+            let right = input_shape[axis..]
+                .iter()
+                .try_fold(1usize, |acc, dim| dim.map(|d| acc * d));
+            Some(vec![left, right])
+        } else {
+            Some(vec![None, None])
+        };
+
         // Infer output type - Flatten to a 2D tensor
-        node.outputs[0].ty = ArgType::Tensor(TensorType { rank: 2, ..tensor });
+        node.outputs[0].ty = ArgType::Tensor(TensorType {
+            dtype: tensor.dtype,
+            rank: 2,
+            static_shape,
+        });
 
         Ok(())
     }
@@ -275,7 +293,97 @@ mod tests {
     // TODO: Add test for negative axis with opset < 11 - Should fail per spec, negative axis added in opset 11 - Missing opset validation test
     // TODO: Add test for axis=0 edge case - Flattens entire tensor to 1D then reshapes to (1, N) - Missing edge case test
     // TODO: Add test for axis=rank edge case - Should produce (N, 1) output - Missing edge case test
-    // TODO: Add test for static shape preservation - Should compute output static shape when input has static shape - Missing shape inference test
     // TODO: Add test for different data types - Spec supports all data types, not just f32 - Missing type coverage
     // TODO: Add test for unexpected attributes - Should reject unknown attributes per implementation - Missing attribute validation test
+
+    #[test]
+    fn test_flatten_static_shape_known() {
+        // Input [2, 3, 4, 5], axis=2 -> output [2*3, 4*5] = [6, 20]
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 4, Some(vec![2, 3, 4, 5]))
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 2)
+            .build();
+
+        let processor = FlattenProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![Some(6), Some(20)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_flatten_static_shape_partial() {
+        // Input [None, 3, 4], axis=1 -> output [None, 12]
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .add_input(
+                "data",
+                ArgType::Tensor(TensorType {
+                    dtype: crate::ir::DType::F32,
+                    rank: 3,
+                    static_shape: Some(vec![None, Some(3), Some(4)]),
+                }),
+            )
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 1)
+            .build();
+
+        let processor = FlattenProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![None, Some(12)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_flatten_no_static_shape() {
+        let mut node = create_test_node(1).build();
+        let processor = FlattenProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                // Even without input static_shape, output always has rank-2 shape
+                assert_eq!(t.static_shape, Some(vec![None, None]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_flatten_axis_0() {
+        // Input [2, 3, 4], axis=0 -> output [1, 24]
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 3, Some(vec![2, 3, 4]))
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 0)
+            .build();
+
+        let processor = FlattenProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                // axis=0: left product = empty = 1, right product = 2*3*4 = 24
+                assert_eq!(t.static_shape, Some(vec![Some(1), Some(24)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
 }

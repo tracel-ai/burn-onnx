@@ -72,6 +72,12 @@ examples/
 - Use `NodeBuilder` derive macro for test builders
 - Configuration structs should derive `Debug, Clone, Default` when possible
 - Type inference happens in processors, not in codegen
+- **Always produce partial `static_shape`**: `infer_types()` should always set `static_shape` to
+  `Some(vec![...])` on tensor outputs, using `None` for unknown dimensions and `Some(value)` for
+  known ones. Never leave `static_shape` as `None` when the output rank is known. Start with
+  `tensor.static_shape.clone().unwrap_or_else(|| vec![None; rank])` and fill in whatever dimensions
+  can be determined from inputs, weights, or config. This enables per-dimension merging via
+  `merge_static_shape()`
 - **Strive for full ONNX opset coverage** - extract all attributes even if not yet used by burn-onnx
 - **Support all opsets** - when implementing operators, set `min_opset` to the earliest opset version
   that introduced the operator (not the latest version). Each `onnx-spec/ops/<OpName>.md` file shows

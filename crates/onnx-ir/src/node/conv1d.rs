@@ -178,11 +178,48 @@ impl NodeProcessor for Conv1dProcessor {
             }
         }
 
+        // Compute output static_shape: [batch, out_channels, L_out]
+        let static_shape = {
+            let batch = tensor
+                .static_shape
+                .as_ref()
+                .and_then(|s| s.first().copied().flatten());
+            let out_channels = node.inputs[1]
+                .value()
+                .and_then(|data| data.shape.first().copied())
+                .or_else(|| {
+                    weight_tensor
+                        .static_shape
+                        .as_ref()
+                        .and_then(|s| s.first().copied().flatten())
+                });
+            let l_out = self.extract_config(node, _opset).ok().and_then(|config| {
+                let l_in = tensor
+                    .static_shape
+                    .as_ref()
+                    .and_then(|s| s.get(2).copied().flatten())?;
+                let (pad_left, pad_right) = config.padding.as_tuple();
+                let padding = pad_left + pad_right;
+                let dilation = config.dilation;
+                let kernel = config.kernel_size;
+                let stride = config.stride;
+                // L_out = floor((L_in + padding - dilation * (kernel - 1) - 1) / stride + 1)
+                let numerator = l_in as isize + padding as isize
+                    - dilation as isize * (kernel as isize - 1)
+                    - 1;
+                if numerator < 0 {
+                    return None;
+                }
+                Some(numerator as usize / stride + 1)
+            });
+            Some(vec![batch, out_channels, l_out])
+        };
+
         // Conv1d preserves rank (same as input)
         node.outputs[0].ty = ArgType::Tensor(TensorType {
             dtype: tensor.dtype,
             rank: tensor.rank,
-            static_shape: None,
+            static_shape,
         });
 
         Ok(())
@@ -461,5 +498,80 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         assert_eq!(config.kernel_size, 4); // Inferred via weight tensor shape
+    }
+
+    #[test]
+    fn test_conv1d_static_shape_known() {
+        // Input [1, 2, 10], weight [2, 2, 4], stride=1, pad=0, dilation=1
+        // L_out = (10 + 0 - 1*(4-1) - 1) / 1 + 1 = (10 - 3 - 1) / 1 + 1 = 7
+        let mut node = TestNodeBuilder::new(NodeType::Conv1d, "test")
+            .input_tensor_f32("data", 3, Some(vec![1, 2, 10]))
+            .input_tensor_f32_data("weight", vec![0.1; 16], vec![2, 2, 4])
+            .output_tensor_f32("output", 3, None)
+            .attr_ints("kernel_shape", vec![4])
+            .attr_ints("strides", vec![1])
+            .attr_ints("pads", vec![0, 0])
+            .attr_ints("dilations", vec![1])
+            .attr_int("group", 1)
+            .build_with_graph_data(16);
+
+        let processor = Conv1dProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 3);
+                assert_eq!(t.static_shape, Some(vec![Some(1), Some(2), Some(7)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_conv1d_static_shape_with_padding() {
+        // Input [1, 2, 10], weight [2, 2, 4], stride=2, pad=[2, 2], dilation=1
+        // L_out = (10 + 4 - 1*(4-1) - 1) / 2 + 1 = (10 + 4 - 3 - 1) / 2 + 1 = 10/2 + 1 = 6
+        let mut node = TestNodeBuilder::new(NodeType::Conv1d, "test")
+            .input_tensor_f32("data", 3, Some(vec![1, 2, 10]))
+            .input_tensor_f32_data("weight", vec![0.1; 16], vec![2, 2, 4])
+            .output_tensor_f32("output", 3, None)
+            .attr_ints("kernel_shape", vec![4])
+            .attr_ints("strides", vec![2])
+            .attr_ints("pads", vec![2, 2])
+            .attr_ints("dilations", vec![1])
+            .attr_int("group", 1)
+            .build_with_graph_data(16);
+
+        let processor = Conv1dProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 3);
+                assert_eq!(t.static_shape, Some(vec![Some(1), Some(2), Some(6)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_conv1d_static_shape_no_input_shape() {
+        // No input static_shape -> batch and spatial are None, out_channels is known
+        let node = create_test_node(vec![4], vec![1], vec![0, 0], vec![1], 1, false, None)
+            .build_with_graph_data(16);
+        let mut node = node;
+        let processor = Conv1dProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 3);
+                assert_eq!(t.static_shape, Some(vec![None, Some(2), None]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
     }
 }
