@@ -99,6 +99,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/cast/cast_shape_to_float.onnx")
         .input("tests/cast/cast_shape_to_bool.onnx")
         .input("tests/ceil/ceil.onnx")
+        .input("tests/celu/celu.onnx")
         .input("tests/clip/clip.onnx")
         .input("tests/concat/concat.onnx")
         .input("tests/concat/concat_shape.onnx")

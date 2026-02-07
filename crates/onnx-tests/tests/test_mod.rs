@@ -33,6 +33,7 @@ pub mod bitwise_or;
 pub mod bitwise_xor;
 pub mod cast;
 pub mod ceil;
+pub mod celu;
 pub mod clip;
 pub mod concat;
 pub mod constant;

@@ -190,7 +190,7 @@ define_node_enum! {
     HardSigmoid => hard_sigmoid::HardSigmoidNode,
     Elu => elementwise::ElementwiseUnaryNode,
     Selu => elementwise::ElementwiseUnaryNode,
-    Celu => elementwise::ElementwiseUnaryNode,
+    Celu => celu::CeluNode,
     Gelu => gelu::GeluNode,
     Mish => mish::MishNode,
     Softplus => softplus::SoftplusNode,

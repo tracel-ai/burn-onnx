@@ -118,6 +118,7 @@ impl_node_codegen_dispatch! {
     Softmax,
     LogSoftmax,
     PRelu,
+    Celu,
     Softplus,
     Softsign,
 

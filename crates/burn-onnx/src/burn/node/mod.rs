@@ -36,6 +36,7 @@ pub(crate) mod bool_or;
 pub(crate) mod bool_xor;
 pub(crate) mod cast;
 pub(crate) mod ceil;
+pub(crate) mod celu;
 pub(crate) mod clip;
 pub(crate) mod concat;
 pub(crate) mod constant;

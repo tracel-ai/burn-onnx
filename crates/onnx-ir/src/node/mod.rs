@@ -23,6 +23,7 @@ pub mod atan;
 pub mod atanh;
 pub mod bitwisenot;
 pub mod ceil;
+pub mod celu;
 pub mod cos;
 pub mod cosh;
 pub mod erf;

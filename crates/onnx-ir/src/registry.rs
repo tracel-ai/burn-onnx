@@ -206,6 +206,10 @@ impl ProcessorRegistry {
             NodeType::Softsign,
             Box::new(crate::node::softsign::SoftsignProcessor),
         );
+        registry.register(
+            NodeType::Celu,
+            Box::new(crate::node::celu::CeluProcessor),
+        );
 
         // Logical operations
         registry.register(NodeType::Not, Box::new(crate::node::not::NotProcessor));

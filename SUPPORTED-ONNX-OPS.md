@@ -35,7 +35,7 @@ functionality.
 | [Cast][22]                       | ✅             | ✅           |
 | [CastLike][23]                   | ❌             | ❌           |
 | [Ceil][24]                       | ✅             | ✅           |
-| [Celu][25]                       | ❌             | ❌           |
+| [Celu][25]                       | ✅             | ✅           |
 | [CenterCropPad][26]              | ❌             | ❌           |
 | [Clip][27]                       | ✅             | ✅           |
 | [Col2Im][28]                     | ❌             | ❌           |
