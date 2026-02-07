@@ -257,6 +257,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/gru/gru.onnx")
         .input("tests/gru/gru_reverse.onnx")
         .input("tests/gru/gru_with_initial_state.onnx")
+        .input("tests/gru/gru_bidirectional.onnx")
         .input("tests/lstm/lstm.onnx")
         .input("tests/lstm/lstm_bidirectional.onnx")
         .input("tests/lstm/lstm_reverse.onnx")
