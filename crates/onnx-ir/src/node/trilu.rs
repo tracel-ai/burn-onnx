@@ -59,8 +59,8 @@ impl NodeProcessor for TriluProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // Lift diagonal input (input[1]) if present and not optional
-        if node.inputs.len() > 1 && !node.inputs[1].is_optional() {
+        // Lift diagonal input (input[1]) if present, not optional, and constant
+        if node.inputs.len() > 1 && !node.inputs[1].is_optional() && node.inputs[1].is_constant() {
             node.inputs[1].to_static()?;
         }
 
