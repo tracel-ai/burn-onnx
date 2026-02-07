@@ -1,5 +1,11 @@
 use crate::include_models;
-include_models!(pad, pad_reflect, pad_edge, pad_runtime_constant);
+include_models!(
+    pad,
+    pad_reflect,
+    pad_edge,
+    pad_runtime_constant,
+    pad_optional_constant_value
+);
 
 #[cfg(test)]
 mod tests {
@@ -66,6 +72,24 @@ mod tests {
             [5.0_f32, 1., 2., 5.],
             [5.0_f32, 3., 4., 5.],
             [5.0_f32, 5., 5., 5.],
+        ]);
+
+        output.assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn pad_optional_constant_value() {
+        let device = Default::default();
+        let model: pad_optional_constant_value::Model<TestBackend> =
+            pad_optional_constant_value::Model::new(&device);
+
+        let input = Tensor::<TestBackend, 2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
+        let output = model.forward(input).to_data();
+        let expected = TensorData::from([
+            [0.0_f32, 0., 0., 0., 0.],
+            [0.0_f32, 1., 2., 3., 0.],
+            [0.0_f32, 4., 5., 6., 0.],
+            [0.0_f32, 0., 0., 0., 0.],
         ]);
 
         output.assert_eq(&expected, true);

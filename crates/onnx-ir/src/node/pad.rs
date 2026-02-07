@@ -125,7 +125,7 @@ impl NodeProcessor for PadProcessor {
         }
 
         // Check pads input (input[1]) if it has static data
-        if let Some(input) = node.inputs.get(1)
+        if let Some(input) = node.get_input(1)
             && let Some(tensor_data) = input.value()
             && let Ok(pad_values) = tensor_data.to_vec::<i64>()
         {
@@ -147,13 +147,13 @@ impl NodeProcessor for PadProcessor {
     // TODO mark axes inputs as Shape if inputs are constant
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // Lift pads input (input[1]) if present
-        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
+        // Lift pads input (input[1]) if present and not optional
+        if node.inputs.len() > 1 && !node.inputs[1].is_optional() && node.inputs[1].is_constant() {
             node.inputs[1].to_static()?;
         }
 
-        // Lift constant_value input (input[2]) if present
-        if node.inputs.len() > 2 && node.inputs[2].is_constant() {
+        // Lift constant_value input (input[2]) if present and not optional
+        if node.inputs.len() > 2 && !node.inputs[2].is_optional() && node.inputs[2].is_constant() {
             node.inputs[2].to_static()?;
         }
 
@@ -284,8 +284,7 @@ impl NodeProcessor for PadProcessor {
             }
 
             // Check for pads input
-            if node.inputs.len() > 1 {
-                let input = &node.inputs[1];
+            if let Some(input) = node.get_input(1) {
                 match input.value() {
                     None => {
                         // Runtime input - store reference instead of cloning the argument
@@ -371,7 +370,7 @@ impl NodeProcessor for PadProcessor {
             }
 
             // Check for constant value input
-            if let Some(input) = node.inputs.get(2) {
+            if let Some(input) = node.get_input(2) {
                 match input.value() {
                     None => {
                         // Runtime input - store reference instead of cloning the argument
@@ -645,6 +644,32 @@ mod tests {
         assert!(
             matches!(&config.constant_value, ConstantValueInput::Static(v) if (*v - 0.0).abs() < 1e-6)
         );
+    }
+
+    #[test]
+    fn test_pad_optional_constant_value_defaults_to_zero() {
+        // When constant_value input is present but optional (empty name),
+        // it should fall through to the default of 0.0
+        let builder = TestNodeBuilder::new(NodeType::Pad, "test_pad")
+            .input_tensor_f32("data", 2, None)
+            .input_tensor_i64_data("pads", vec![0, 0, 1, 1], vec![4])
+            .add_input(
+                "",
+                ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank: 0,
+                    static_shape: None,
+                }),
+            )
+            .output_tensor_f32("output", 2, None);
+
+        let node = builder.build_with_graph_data(16);
+        let processor = PadProcessor;
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert!(
+            matches!(&config.constant_value, ConstantValueInput::Static(v) if (*v - 0.0).abs() < 1e-6)
+        );
+        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![0, 1, 0, 1]));
     }
 
     #[test]
