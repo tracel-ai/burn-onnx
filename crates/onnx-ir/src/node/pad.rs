@@ -294,9 +294,9 @@ impl NodeProcessor for PadProcessor {
                         )));
                     }
                     Some(tensor_data) => {
-                        let pad_values: Vec<i64> =
+                        let pad_values =
                             tensor_data
-                                .to_vec()
+                                .to_i64_vec()
                                 .map_err(|e| ProcessError::TypeMismatch {
                                     expected: "i64-compatible tensor for pads".to_string(),
                                     actual: e.to_string(),
@@ -844,5 +844,21 @@ mod tests {
             .build_with_graph_data(16);
         let processor = PadProcessor;
         assert!(!processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_pad_incompatible_pads_dtype_returns_error() {
+        use burn_tensor::TensorData;
+
+        // Construct a pads input with bool dtype, which cannot be converted to i64
+        let bool_data = TensorData::new(vec![false, false, true, true], vec![4]);
+        let node = TestNodeBuilder::new(NodeType::Pad, "test_pad")
+            .input_tensor_f32("data", 2, None)
+            .input_tensor_with_data("pads", DType::Bool, 1, bool_data)
+            .output_tensor_f32("output", 2, None)
+            .build_with_graph_data(16);
+        let processor = PadProcessor;
+        let result = processor.extract_config(&node, 16);
+        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
     }
 }
