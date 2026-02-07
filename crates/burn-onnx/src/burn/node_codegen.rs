@@ -119,6 +119,7 @@ impl_node_codegen_dispatch! {
     LogSoftmax,
     PRelu,
     Softplus,
+    Softsign,
 
     // Shape ops
     Reshape,
