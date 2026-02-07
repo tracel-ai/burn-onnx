@@ -1,4 +1,5 @@
 use super::prelude::*;
+use onnx_ir::ir::ArgType;
 use std::str::FromStr;
 
 impl NodeCodegen for onnx_ir::pad::PadNode {
@@ -26,15 +27,23 @@ impl NodeCodegen for onnx_ir::pad::PadNode {
         // Generate PadMode based on the mode in config (using fully qualified path)
         let pad_mode = match &self.config.mode {
             onnx_ir::pad::PadMode::Constant => {
-                // Extract static constant value from the enum wrapper
-                let constant_value_f32 = match &self.config.constant_value {
-                    onnx_ir::pad::ConstantValueInput::Static(value) => value,
-                    onnx_ir::pad::ConstantValueInput::Runtime(_) => {
-                        panic!("Runtime constant value is not supported in burn-onnx")
+                let constant_value = match &self.config.constant_value {
+                    onnx_ir::pad::ConstantValueInput::Static(value) => {
+                        let literal = TokenStream::from_str(&format!("{}_f32", value)).unwrap();
+                        quote! { #literal }
+                    }
+                    onnx_ir::pad::ConstantValueInput::Runtime(runtime_ref) => {
+                        let arg = &self.inputs[runtime_ref.input_index];
+                        let value = scope.arg(arg);
+                        match &arg.ty {
+                            ArgType::Tensor(_) => quote! { #value.into_scalar() },
+                            ArgType::Scalar(_) => quote! { #value },
+                            ArgType::Shape(_) => {
+                                panic!("Pad: constant_value cannot be a shape")
+                            }
+                        }
                     }
                 };
-                let constant_value_string = format!("{}_f32", constant_value_f32);
-                let constant_value = TokenStream::from_str(&constant_value_string).unwrap();
                 quote! { burn::tensor::ops::PadMode::Constant(#constant_value) }
             }
             onnx_ir::pad::PadMode::Reflect => {
@@ -56,6 +65,7 @@ mod tests {
     use super::super::test_helpers::*;
     use burn::tensor::DType;
     use insta::assert_snapshot;
+    use onnx_ir::ir::RuntimeInputRef;
     use onnx_ir::pad::{ConstantValueInput, PadConfig, PadInput, PadMode, PadNode, PadNodeBuilder};
 
     fn create_pad_node(
@@ -120,6 +130,65 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
             let output = input.pad((1, 1, 1, 1), burn::tensor::ops::PadMode::Edge);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_pad_constant_runtime_value() {
+        let config = PadConfig {
+            pads: PadInput::Static(vec![1, 1, 1, 1]),
+            constant_value: ConstantValueInput::Runtime(RuntimeInputRef {
+                name: "constant_value".to_string(),
+                input_index: 1,
+            }),
+            mode: PadMode::Constant,
+        };
+        let node = PadNodeBuilder::new("pad1")
+            .input_tensor("input", 2, DType::F32)
+            .input_tensor("constant_value", 0, DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<B, 2>,
+            constant_value: Tensor<B, 0>,
+        ) -> Tensor<B, 2> {
+            let output = input
+                .pad(
+                    (1, 1, 1, 1),
+                    burn::tensor::ops::PadMode::Constant(constant_value.into_scalar()),
+                );
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_pad_constant_runtime_scalar() {
+        let config = PadConfig {
+            pads: PadInput::Static(vec![1, 1, 1, 1]),
+            constant_value: ConstantValueInput::Runtime(RuntimeInputRef {
+                name: "constant_value".to_string(),
+                input_index: 1,
+            }),
+            mode: PadMode::Constant,
+        };
+        let node = PadNodeBuilder::new("pad1")
+            .input_tensor("input", 2, DType::F32)
+            .input_scalar("constant_value", DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<B, 2>, constant_value: f32) -> Tensor<B, 2> {
+            let output = input
+                .pad((1, 1, 1, 1), burn::tensor::ops::PadMode::Constant(constant_value));
             output
         }
         ");
