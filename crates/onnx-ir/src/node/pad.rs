@@ -287,6 +287,9 @@ impl NodeProcessor for PadProcessor {
             if node.inputs.len() > 1 {
                 let input = &node.inputs[1];
                 match input.value() {
+                    None if input.name.is_empty() => {
+                        // Empty name means "not provided" in ONNX; fall through to error
+                    }
                     None => {
                         // Runtime input - store reference instead of cloning the argument
                         return Ok(PadInput::Runtime(RuntimeInputRef::new(
@@ -373,6 +376,9 @@ impl NodeProcessor for PadProcessor {
             // Check for constant value input
             if let Some(input) = node.inputs.get(2) {
                 match input.value() {
+                    None if input.name.is_empty() => {
+                        // Empty name means "not provided" in ONNX; fall through to default
+                    }
                     None => {
                         // Runtime input - store reference instead of cloning the argument
                         return Ok(ConstantValueInput::Runtime(RuntimeInputRef::new(
@@ -813,5 +819,38 @@ mod tests {
             .build_with_graph_data(16);
         let processor = PadProcessor;
         assert!(!processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_pad_empty_name_constant_value_defaults_to_zero() {
+        // ONNX uses empty string for "optional input not provided"
+        let builder = TestNodeBuilder::new(NodeType::Pad, "test_pad")
+            .input_tensor_f32("data", 2, None)
+            .input_tensor_i64_data("pads", vec![0, 0, 1, 1], vec![4])
+            .input_tensor_f32("", 0, None) // Empty name = not provided
+            .output_tensor_f32("output", 2, None);
+
+        let node = builder.build_with_graph_data(16);
+        let processor = PadProcessor;
+        let config = processor.extract_config(&node, 16).unwrap();
+
+        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![0, 1, 0, 1]));
+        assert!(
+            matches!(&config.constant_value, ConstantValueInput::Static(v) if (*v - 0.0).abs() < 1e-6)
+        );
+    }
+
+    #[test]
+    fn test_pad_empty_name_pads_is_error() {
+        // Empty pads input name means "not provided", which should error
+        let builder = TestNodeBuilder::new(NodeType::Pad, "test_pad")
+            .input_tensor_f32("data", 2, None)
+            .input_tensor_i64("", 1, None) // Empty name = not provided
+            .output_tensor_f32("output", 2, None);
+
+        let node = builder.build();
+        let processor = PadProcessor;
+        let result = processor.extract_config(&node, 16);
+        assert!(matches!(result, Err(ProcessError::Custom(_))));
     }
 }
