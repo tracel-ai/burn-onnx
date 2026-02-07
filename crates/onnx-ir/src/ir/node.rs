@@ -194,7 +194,7 @@ define_node_enum! {
     Gelu => gelu::GeluNode,
     Mish => mish::MishNode,
     Softplus => softplus::SoftplusNode,
-    Softsign => elementwise::ElementwiseUnaryNode,
+    Softsign => softsign::SoftsignNode,
     ThresholdedRelu => elementwise::ElementwiseUnaryNode,
     HardSwish => hard_swish::HardSwishNode,
     PRelu => prelu::PReluNode,

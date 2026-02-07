@@ -125,6 +125,7 @@ pub(crate) mod size;
 pub(crate) mod slice;
 pub(crate) mod softmax;
 pub(crate) mod softplus;
+pub(crate) mod softsign;
 pub(crate) mod space_to_depth;
 pub(crate) mod split;
 pub(crate) mod sqrt;
