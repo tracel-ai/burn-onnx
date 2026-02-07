@@ -383,6 +383,13 @@ impl NodeProcessor for ReshapeProcessor {
         // Determine output rank
         let output_rank = infer_reshape_output_rank(node);
 
+        // Check allowzero attribute for static_shape computation
+        let allowzero = node
+            .attrs
+            .get("allowzero")
+            .map(|v| v.clone().into_i64())
+            .unwrap_or(0);
+
         // Compute static_shape from shape input values
         let static_shape = if let Some(shape_values) = get_static_shape(node) {
             let input_static = match &node.inputs[0].ty {
@@ -397,8 +404,13 @@ impl NodeProcessor for ReshapeProcessor {
                     if v > 0 {
                         Some(v as usize)
                     } else if v == 0 {
-                        // Copy from input at same position
-                        input_static.and_then(|s| s.get(i).copied().flatten())
+                        if allowzero == 1 {
+                            // allowzero=1: 0 means literal zero dimension
+                            Some(0)
+                        } else {
+                            // allowzero=0 (default): copy from input at same position
+                            input_static.and_then(|s| s.get(i).copied().flatten())
+                        }
                     } else {
                         // v == -1: infer later
                         None
@@ -417,6 +429,7 @@ impl NodeProcessor for ReshapeProcessor {
                         .try_fold(1usize, |acc, d| d.map(|v| acc * v));
                     if let Some(product) = known_product
                         && product > 0
+                        && total % product == 0
                     {
                         let inferred = total / product;
                         for (i, v) in shape_values.iter().enumerate() {

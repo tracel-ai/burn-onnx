@@ -208,7 +208,7 @@ impl NodeProcessor for Conv2dProcessor {
                 let numerator = input_dim as isize + padding as isize
                     - dilation as isize * (kernel as isize - 1)
                     - 1;
-                if numerator < 0 {
+                if numerator < 0 || stride == 0 {
                     return None;
                 }
                 Some(numerator as usize / stride + 1)

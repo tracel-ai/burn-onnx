@@ -314,7 +314,7 @@ impl UnsqueezeProcessor {
                     }
                     Some(output_dims)
                 } else {
-                    None
+                    Some(vec![None; output_rank])
                 };
 
                 node.outputs[0].ty = ArgType::Tensor(TensorType {
