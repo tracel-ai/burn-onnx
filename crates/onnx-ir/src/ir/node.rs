@@ -372,7 +372,7 @@ define_node_enum! {
     QLinearMatMul => unsupported::QLinearMatMulNode,
     QuantizeLinear => unsupported::QuantizeLinearNode,
     RMSNormalization => unsupported::RMSNormalizationNode,
-    Rnn => unsupported::RnnNode,
+    Rnn => rnn::RnnNode,
     RegexFullMatch => unsupported::RegexFullMatchNode,
     ReverseSequence => unsupported::ReverseSequenceNode,
     RoiAlign => unsupported::RoiAlignNode,

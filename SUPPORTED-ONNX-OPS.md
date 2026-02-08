@@ -140,7 +140,7 @@ functionality.
 | [QLinearMatMul][124]             | ❌             | ❌           |
 | [QuantizeLinear][125]            | ❌             | ❌           |
 | [RMSNormalization][198]          | ❌             | ❌           |
-| [RNN][145]                       | ❌             | ✅           |
+| [RNN][145]                       | ✅             | ✅           |
 | [RandomNormal][126]              | ✅             | ✅           |
 | [RandomNormalLike][127]          | ✅             | ✅           |
 | [RandomUniform][128]             | ✅             | ✅           |
