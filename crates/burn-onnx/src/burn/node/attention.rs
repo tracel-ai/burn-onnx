@@ -12,11 +12,11 @@ fn use_burn_attention(node: &onnx_ir::attention::AttentionNode) -> bool {
 
 fn has_non_bool_mask(node: &onnx_ir::attention::AttentionNode) -> bool {
     match node.inputs.get(3) {
-        Some(mask) => match &mask.ty {
+        Some(mask) if !mask.is_optional() => match &mask.ty {
             ArgType::Tensor(t) => !t.dtype.is_bool(),
             _ => false,
         },
-        None => false,
+        _ => false,
     }
 }
 
@@ -149,23 +149,29 @@ fn forward_burn_attention(
             };
             let #output_y = burn::tensor::module::attention(q, k, v, Some(mask));
         }
-    } else if let Some(mask_input) = node.inputs.get(3) {
+    } else if let Some(mask_input) = node.inputs.get(3).filter(|a| !a.is_optional()) {
         // Bool mask: ONNX true=attend -> Burn true=masked, so invert
         let mask_arg = scope.arg(mask_input);
         let mask_rank = match &mask_input.ty {
             ArgType::Tensor(t) => t.rank,
             _ => panic!("Attention mask must be a tensor"),
         };
-        if mask_rank < 4 {
-            quote! {
+        match mask_rank {
+            2 => quote! {
+                // [seq_q, seq_k] -> [1, 1, seq_q, seq_k]
                 let mask = #mask_arg.bool_not().unsqueeze::<4>();
                 let #output_y = burn::tensor::module::attention(q, k, v, Some(mask));
-            }
-        } else {
-            quote! {
+            },
+            3 => quote! {
+                // [batch, seq_q, seq_k] -> [batch, 1, seq_q, seq_k]
+                let mask = #mask_arg.bool_not().unsqueeze_dim::<4>(1);
+                let #output_y = burn::tensor::module::attention(q, k, v, Some(mask));
+            },
+            4 => quote! {
                 let mask = #mask_arg.bool_not();
                 let #output_y = burn::tensor::module::attention(q, k, v, Some(mask));
-            }
+            },
+            _ => panic!("Attention mask must be rank 2, 3, or 4"),
         }
     } else {
         quote! {
@@ -291,7 +297,7 @@ fn forward_custom(
         panic!("Attention: past_[key,value] and present_[key,value] must be used together.")
     }
 
-    if node.inputs.get(3).is_some() || node.config.is_causal {
+    if node.inputs.get(3).is_some_and(|a| !a.is_optional()) || node.config.is_causal {
         body.extend(quote! {
             let q_dims = q.dims();
             let k_dims = k.dims();
@@ -304,7 +310,7 @@ fn forward_custom(
         [batch_size, q_num_heads, q_sequence_length, k_dims[2]]
     }};
 
-    let mut attn_mask = if let Some(mask_input) = node.inputs.get(3) {
+    let mut attn_mask = if let Some(mask_input) = node.inputs.get(3).filter(|a| !a.is_optional()) {
         let mask_arg = scope.arg(mask_input);
         let mask = match &mask_input.ty {
             onnx_ir::ir::ArgType::Tensor(t) => match &t.dtype {
@@ -744,6 +750,47 @@ mod tests {
                 let k = key;
                 let v = value;
                 let mask = mask.bool_not().unsqueeze::<4>();
+                let output = burn::tensor::module::attention(q, k, v, Some(mask));
+                (output,)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_attention_with_bool_mask_rank3() {
+        let config = AttentionConfig {
+            is_causal: false,
+            kv_num_heads: None,
+            q_num_heads: None,
+            qk_matmul_output_mode: AttentionQkMatmulOutputMode::Matmul,
+            scale: None,
+            softcap: 0.0,
+            softmax_precision: None,
+        };
+        let node = AttentionNodeBuilder::new("attn1")
+            .input_tensor("query", 4, DType::F32)
+            .input_tensor("key", 4, DType::F32)
+            .input_tensor("value", 4, DType::F32)
+            .input_tensor("mask", 3, DType::Bool)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            query: Tensor<B, 4>,
+            key: Tensor<B, 4>,
+            value: Tensor<B, 4>,
+            mask: Tensor<B, 3, Bool>,
+        ) -> Tensor<B, 4> {
+            let (output,) = {
+                let q = query;
+                let k = key;
+                let v = value;
+                let mask = mask.bool_not().unsqueeze_dim::<4>(1);
                 let output = burn::tensor::module::attention(q, k, v, Some(mask));
                 (output,)
             };
