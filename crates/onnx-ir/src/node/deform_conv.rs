@@ -277,14 +277,6 @@ impl NodeProcessor for DeformConvProcessor {
         let mut group: usize = 1;
         let mut offset_group: usize = 1;
 
-        let weight_shape = node.inputs[1]
-            .value()
-            .ok_or_else(|| {
-                ProcessError::Custom("DeformConv: weight tensor must be present".to_string())
-            })?
-            .shape
-            .to_vec();
-
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
                 "kernel_shape" => kernel_shape = value.clone().into_i64s(),
@@ -299,11 +291,27 @@ impl NodeProcessor for DeformConvProcessor {
 
         let padding = padding_config_2d(&pads);
 
+        // Only require weight shape when kernel_shape attribute is absent
         let kernel_size = if kernel_shape.is_empty() {
+            let weight_shape = node.inputs[1]
+                .value()
+                .map(|v| v.shape.to_vec())
+                .or_else(|| {
+                    if let ArgType::Tensor(t) = &node.inputs[1].ty {
+                        t.static_shape_known().map(|s| s.to_vec())
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    ProcessError::Custom(
+                        "DeformConv: kernel_shape attribute missing and weight shape is unknown"
+                            .to_string(),
+                    )
+                })?;
             if weight_shape.len() != 4 {
                 return Err(ProcessError::Custom(format!(
-                    "DeformConv: expected to infer kernel shape from a weight tensor of rank 4 but got shape {:?}",
-                    weight_shape
+                    "DeformConv: expected weight tensor of rank 4 but got shape {weight_shape:?}",
                 )));
             }
             [weight_shape[2], weight_shape[3]]
