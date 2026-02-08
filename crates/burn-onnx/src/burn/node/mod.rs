@@ -53,6 +53,7 @@ pub(crate) mod cumsum;
 pub(crate) mod depth_to_space;
 pub(crate) mod div;
 pub(crate) mod dropout;
+pub(crate) mod elu;
 pub(crate) mod equal;
 pub(crate) mod erf;
 pub(crate) mod exp;

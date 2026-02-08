@@ -63,7 +63,7 @@ functionality.
 | [Dropout][47]                    | ✅             | ✅           |
 | [DynamicQuantizeLinear][48]      | ❌             | ❌           |
 | [Einsum][49]                     | ❌             | ❌           |
-| [Elu][50]                        | ❌             | ❌           |
+| [Elu][50]                        | ✅             | ✅           |
 | [Equal][51]                      | ✅             | ✅           |
 | [Erf][52]                        | ✅             | ✅           |
 | [Exp][53]                        | ✅             | ✅           |

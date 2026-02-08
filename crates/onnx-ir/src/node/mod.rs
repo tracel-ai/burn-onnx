@@ -12,6 +12,7 @@
 pub mod test_utils;
 
 pub mod elementwise;
+pub mod elu;
 
 // Unary element-wise operations
 pub mod abs;

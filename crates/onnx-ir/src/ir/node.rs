@@ -188,7 +188,7 @@ define_node_enum! {
     LogSoftmax => log_softmax::LogSoftmaxNode,
     LeakyRelu => leaky_relu::LeakyReluNode,
     HardSigmoid => hard_sigmoid::HardSigmoidNode,
-    Elu => elementwise::ElementwiseUnaryNode,
+    Elu => elu::EluNode,
     Selu => elementwise::ElementwiseUnaryNode,
     Celu => celu::CeluNode,
     Gelu => gelu::GeluNode,

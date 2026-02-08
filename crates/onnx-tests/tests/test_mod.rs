@@ -47,6 +47,7 @@ pub mod cumsum;
 pub mod depth_to_space;
 pub mod div;
 pub mod dropout;
+pub mod elu;
 pub mod empty_graph;
 pub mod equal;
 pub mod erf;

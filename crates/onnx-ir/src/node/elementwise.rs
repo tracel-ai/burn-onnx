@@ -70,7 +70,7 @@ pub struct ElementwiseUnaryNode {
 }
 
 /// Node processor for element-wise unary operations that don't yet have
-/// dedicated processors (Elu, Selu,
+/// dedicated processors (Selu,
 /// ThresholdedRelu). Will be removed as these ops get their own processors.
 #[allow(dead_code)]
 pub(crate) struct ElementwiseUnaryProcessor;
@@ -100,7 +100,6 @@ impl NodeProcessor for ElementwiseUnaryProcessor {
         // Note: Only operations still using ElementwiseUnaryNode are handled here
         let min_opset = match node.node_type {
             // Other activation functions
-            crate::ir::NodeType::Elu => 6,
             crate::ir::NodeType::Selu => 6,
             crate::ir::NodeType::ThresholdedRelu => 10,
             _ => {
@@ -129,7 +128,6 @@ impl NodeProcessor for ElementwiseUnaryProcessor {
 
         match builder.node_type {
             // Activation functions (still using ElementwiseUnaryNode)
-            NodeType::Elu => Node::Elu(node),
             NodeType::Selu => Node::Selu(node),
             NodeType::ThresholdedRelu => Node::ThresholdedRelu(node),
             _ => panic!(
@@ -151,8 +149,8 @@ mod tests {
         let prefs = OutputPreferences::new();
 
         let mut node = crate::ir::RawNode {
-            node_type: NodeType::Elu,
-            name: "test_elu".to_string(),
+            node_type: NodeType::Selu,
+            name: "test_selu".to_string(),
             inputs: vec![Argument {
                 name: "a".to_string(),
                 ty: ArgType::Tensor(TensorType {
