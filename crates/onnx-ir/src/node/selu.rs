@@ -81,8 +81,8 @@ impl NodeProcessor for SeluProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
-        let mut alpha = 1.67326319217681884765625_f64;
-        let mut gamma = 1.05070102214813232421875_f64;
+        let mut alpha = 1.673_263_192_176_818_8_f64;
+        let mut gamma = 1.050_701_022_148_132_3_f64;
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {

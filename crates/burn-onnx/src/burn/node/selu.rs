@@ -1,7 +1,7 @@
 use super::prelude::*;
 
-const DEFAULT_ALPHA: f64 = 1.67326319217681884765625;
-const DEFAULT_GAMMA: f64 = 1.05070102214813232421875;
+const DEFAULT_ALPHA: f64 = 1.673_263_192_176_818_8;
+const DEFAULT_GAMMA: f64 = 1.050_701_022_148_132_3;
 
 impl NodeCodegen for onnx_ir::selu::SeluNode {
     fn inputs(&self) -> &[Argument] {
@@ -45,10 +45,7 @@ mod tests {
     use onnx_ir::selu::{SeluConfig, SeluNode, SeluNodeBuilder};
 
     fn create_node(name: &str) -> SeluNode {
-        let config = SeluConfig::new(
-            1.67326319217681884765625,
-            1.05070102214813232421875,
-        );
+        let config = SeluConfig::new(1.67326319217681884765625, 1.05070102214813232421875);
 
         SeluNodeBuilder::new(name)
             .input_tensor("input", 2, DType::F32)
