@@ -298,6 +298,10 @@ impl ProcessorRegistry {
             NodeType::ConvTranspose3d,
             Box::new(crate::node::conv_transpose3d::Convtranspose3dProcessor),
         );
+        registry.register(
+            NodeType::DeformConv,
+            Box::new(crate::node::deform_conv::DeformConvProcessor),
+        );
 
         // Normalization operations
         registry.register(

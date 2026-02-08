@@ -341,7 +341,7 @@ define_node_enum! {
     ConvInteger => unsupported::ConvIntegerNode,
     ConvTranspose => unsupported::ConvTransposeNode,
     Dft => unsupported::DftNode,
-    DeformConv => unsupported::DeformConvNode,
+    DeformConv => deform_conv::DeformConvNode,
     DequantizeLinear => unsupported::DequantizeLinearNode,
     Det => unsupported::DetNode,
     DynamicQuantizeLinear => unsupported::DynamicQuantizeLinearNode,
