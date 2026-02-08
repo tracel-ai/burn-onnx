@@ -34,8 +34,8 @@ def main():
     print("Finished exporting model to {}".format(file_name))
 
     # Compute expected outputs using the reference evaluator
-    np.random.seed(42)
-    test_input = np.random.randn(2, 3).astype(np.float32) * 3.0
+    # Hand-crafted input: includes boundary value (2.0 == alpha), above (2.5), and below (-1.0, 0.0, 1.5)
+    test_input = np.array([[-1.0, 0.0, 2.0], [2.5, 1.5, 5.0]], dtype=np.float32)
 
     ref = ReferenceEvaluator(model)
     [output] = ref.run(None, {"X": test_input})
