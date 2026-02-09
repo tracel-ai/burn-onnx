@@ -76,7 +76,7 @@ burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = fa
 # burn-tensor = { version = "0.21.0", default-features = false }
 
 ### For xtask crate ###
-tracel-xtask = "=4.12.3"
+tracel-xtask = "=4.13.1"
 # ### For local development. ###
 # tracel-xtask = { path = "../xtask/crates/tracel-xtask", default-features = false }
 
