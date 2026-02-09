@@ -188,10 +188,88 @@ def constant_fold_concat():
     )
 
 
+def constant_fold_cast():
+    """Shape->Gather folds to i64 constant, then Cast(to=FLOAT) folds to f32.
+
+    x: [2, 3, 4]
+    dim = Shape(x)[1] = 3   (folded by constant_shape)
+    float_dim = Cast(dim, to=FLOAT) = 3.0  (folded by constant_fold)
+    """
+    graph = helper.make_graph(
+        name="main_graph",
+        nodes=[
+            helper.make_node("Shape", ["x"], ["shape1"]),
+            helper.make_node(
+                "Constant", [], ["idx"],
+                value=helper.make_tensor("v", TensorProto.INT64, [], [1]),
+            ),
+            helper.make_node("Gather", ["shape1", "idx"], ["dim"], axis=0),
+            helper.make_node("Cast", ["dim"], ["float_dim"], to=TensorProto.FLOAT),
+        ],
+        inputs=[
+            helper.make_value_info(
+                "x",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 3, 4]),
+            ),
+        ],
+        outputs=[
+            helper.make_value_info(
+                "float_dim",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[]),
+            ),
+        ],
+    )
+    save(
+        helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", 16)]),
+        "constant_fold_cast.onnx",
+    )
+
+
+def constant_fold_sqrt():
+    """Shape->Gather->Cast->Sqrt cascade: computes sqrt(head_dim) at compile time.
+
+    x: [2, 3, 64]
+    dim = Shape(x)[2] = 64       (folded by constant_shape)
+    float_dim = Cast(dim) = 64.0  (folded by constant_fold: Cast)
+    scale = Sqrt(float_dim) = 8.0 (folded by constant_fold: Sqrt)
+    """
+    graph = helper.make_graph(
+        name="main_graph",
+        nodes=[
+            helper.make_node("Shape", ["x"], ["shape1"]),
+            helper.make_node(
+                "Constant", [], ["idx"],
+                value=helper.make_tensor("v", TensorProto.INT64, [], [2]),
+            ),
+            helper.make_node("Gather", ["shape1", "idx"], ["dim"], axis=0),
+            helper.make_node("Cast", ["dim"], ["float_dim"], to=TensorProto.FLOAT),
+            helper.make_node("Sqrt", ["float_dim"], ["scale"]),
+        ],
+        inputs=[
+            helper.make_value_info(
+                "x",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 3, 64]),
+            ),
+        ],
+        outputs=[
+            helper.make_value_info(
+                "scale",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[]),
+            ),
+        ],
+    )
+    save(
+        helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", 16)]),
+        "constant_fold_sqrt.onnx",
+    )
+
+
 if __name__ == "__main__":
     print("Generating constant fold test models:")
     constant_fold_cascade()
     constant_fold_chain()
     constant_fold_blocked()
     constant_fold_concat()
+    constant_fold_cast()
+    constant_fold_sqrt()
     print("Done.")

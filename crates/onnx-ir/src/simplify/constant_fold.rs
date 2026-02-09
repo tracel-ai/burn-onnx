@@ -104,6 +104,8 @@ fn try_evaluate(node: &RawNode) -> Option<(TensorData, ArgType)> {
         NodeType::Mul => eval_binary(node, BinaryOp::Mul),
         NodeType::Div => eval_binary(node, BinaryOp::Div),
         NodeType::Neg => eval_neg(node),
+        NodeType::Sqrt => eval_sqrt(node),
+        NodeType::Cast => eval_cast(node),
         NodeType::Concat => eval_concat(node),
         NodeType::Unsqueeze | NodeType::Squeeze | NodeType::Reshape => eval_reshape(node),
         _ => None,
@@ -241,6 +243,80 @@ fn eval_neg(node: &RawNode) -> Option<(TensorData, ArgType)> {
             let vals = data.to_f64_vec().ok()?;
             let result: Vec<f64> = vals.iter().map(|v| -v).collect();
             let shape = data.shape.clone();
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        _ => None,
+    }
+}
+
+/// Evaluate square root on a constant float input.
+fn eval_sqrt(node: &RawNode) -> Option<(TensorData, ArgType)> {
+    let data = node.inputs[0].value()?;
+    let output_ty = node.outputs[0].ty.clone();
+    let shape = data.shape.clone();
+
+    match data.dtype {
+        DType::F32 => {
+            let vals = data.to_f64_vec().ok()?;
+            let result: Vec<f32> = vals.iter().map(|&v| v.sqrt() as f32).collect();
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        DType::F64 => {
+            let vals = data.to_f64_vec().ok()?;
+            let result: Vec<f64> = vals.iter().map(|v| v.sqrt()).collect();
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        _ => None,
+    }
+}
+
+/// Evaluate Cast by converting constant data to the target dtype from the output type.
+fn eval_cast(node: &RawNode) -> Option<(TensorData, ArgType)> {
+    let data = node.inputs[0].value()?;
+    let output_ty = node.outputs[0].ty.clone();
+    let shape = data.shape.clone();
+
+    let target_dtype = match &output_ty {
+        ArgType::Scalar(d) => *d,
+        ArgType::Tensor(t) => t.dtype,
+        ArgType::Shape(_) => DType::I64,
+    };
+
+    if data.dtype == target_dtype {
+        return Some((data.clone(), output_ty));
+    }
+
+    match (data.dtype, target_dtype) {
+        // Integer -> Float
+        (DType::I64 | DType::I32, DType::F32) => {
+            let vals = data.to_i64_vec().ok()?;
+            let result: Vec<f32> = vals.iter().map(|&v| v as f32).collect();
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        (DType::I64 | DType::I32, DType::F64) => {
+            let vals = data.to_i64_vec().ok()?;
+            let result: Vec<f64> = vals.iter().map(|&v| v as f64).collect();
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        // Float -> Float
+        (DType::F32 | DType::F64, DType::F32) => {
+            let vals = data.to_f64_vec().ok()?;
+            let result: Vec<f32> = vals.iter().map(|&v| v as f32).collect();
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        (DType::F32 | DType::F64, DType::F64) => {
+            let vals = data.to_f64_vec().ok()?;
+            Some((TensorData::new(vals, shape), output_ty))
+        }
+        // Float -> Integer
+        (DType::F32 | DType::F64, DType::I64) => {
+            let vals = data.to_f64_vec().ok()?;
+            let result: Vec<i64> = vals.iter().map(|&v| v as i64).collect();
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        (DType::F32 | DType::F64, DType::I32) => {
+            let vals = data.to_f64_vec().ok()?;
+            let result: Vec<i32> = vals.iter().map(|&v| v as i32).collect();
             Some((TensorData::new(result, shape), output_ty))
         }
         _ => None,
@@ -590,5 +666,84 @@ mod tests {
         assert_eq!(add_node.inputs[0].value_source, ValueSource::Constant);
         let val = add_node.inputs[0].value().unwrap().scalar_i64().unwrap();
         assert_eq!(val, 12);
+    }
+
+    #[test]
+    fn test_cast_i64_to_f32() {
+        let nodes = vec![raw_node(
+            "cast",
+            NodeType::Cast,
+            vec![const_i64_scalar("a", 3)],
+            vec![scalar_out("out", DType::F32)],
+        )];
+
+        let state = test_state();
+        let result = fold_constants(nodes, &mut [], &state);
+        assert_eq!(result[0].node_type, NodeType::Constant);
+        let val = result[0].inputs[0].value().unwrap().scalar_f32().unwrap();
+        assert!((val - 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_cast_f32_to_i64() {
+        let nodes = vec![raw_node(
+            "cast",
+            NodeType::Cast,
+            vec![const_f32_scalar("a", 7.9)],
+            vec![scalar_out("out", DType::I64)],
+        )];
+
+        let state = test_state();
+        let result = fold_constants(nodes, &mut [], &state);
+        assert_eq!(result[0].node_type, NodeType::Constant);
+        let val = result[0].inputs[0].value().unwrap().scalar_i64().unwrap();
+        assert_eq!(val, 7); // truncation
+    }
+
+    #[test]
+    fn test_cast_same_dtype_noop() {
+        let nodes = vec![raw_node(
+            "cast",
+            NodeType::Cast,
+            vec![const_i64_scalar("a", 42)],
+            vec![scalar_out("out", DType::I64)],
+        )];
+
+        let state = test_state();
+        let result = fold_constants(nodes, &mut [], &state);
+        assert_eq!(result[0].node_type, NodeType::Constant);
+        let val = result[0].inputs[0].value().unwrap().scalar_i64().unwrap();
+        assert_eq!(val, 42);
+    }
+
+    #[test]
+    fn test_sqrt_f32() {
+        let nodes = vec![raw_node(
+            "sqrt",
+            NodeType::Sqrt,
+            vec![const_f32_scalar("a", 9.0)],
+            vec![scalar_out("out", DType::F32)],
+        )];
+
+        let state = test_state();
+        let result = fold_constants(nodes, &mut [], &state);
+        assert_eq!(result[0].node_type, NodeType::Constant);
+        let val = result[0].inputs[0].value().unwrap().scalar_f32().unwrap();
+        assert!((val - 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_sqrt_i64_not_folded() {
+        // Sqrt on integer is not supported
+        let nodes = vec![raw_node(
+            "sqrt",
+            NodeType::Sqrt,
+            vec![const_i64_scalar("a", 9)],
+            vec![scalar_out("out", DType::I64)],
+        )];
+
+        let state = test_state();
+        let result = fold_constants(nodes, &mut [], &state);
+        assert_eq!(result[0].node_type, NodeType::Sqrt);
     }
 }

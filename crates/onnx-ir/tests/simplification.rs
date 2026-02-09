@@ -165,3 +165,48 @@ fn test_constant_fold_concat() {
         "only constants should remain"
     );
 }
+
+/// Cast on a folded Shape->Gather constant: Shape(x)[1]=3 -> Cast(to=FLOAT) -> 3.0
+#[test]
+fn test_constant_fold_cast() {
+    let graph = load_onnx_simplified("constant_fold_cast.onnx");
+
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Cast { .. })),
+        "Cast on constant should be folded"
+    );
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Gather { .. })),
+        "Gather should be folded by constant_shape"
+    );
+    assert_eq!(
+        count_operation_nodes(&graph),
+        0,
+        "only constants should remain"
+    );
+}
+
+/// Full SDPA scale cascade: Shape(x)[2]=64 -> Cast -> Sqrt -> 8.0
+///
+/// Tests three passes cascading across fixed-point iterations:
+/// 1. constant_shape folds Gather to i64 constant 64
+/// 2. constant_fold folds Cast(64) to f32 constant 64.0
+/// 3. constant_fold folds Sqrt(64.0) to f32 constant 8.0
+#[test]
+fn test_constant_fold_sqrt() {
+    let graph = load_onnx_simplified("constant_fold_sqrt.onnx");
+
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Sqrt { .. })),
+        "Sqrt on constant should be folded"
+    );
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Cast { .. })),
+        "Cast on constant should be folded"
+    );
+    assert_eq!(
+        count_operation_nodes(&graph),
+        0,
+        "only constants should remain"
+    );
+}

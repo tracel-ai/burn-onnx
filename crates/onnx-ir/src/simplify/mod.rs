@@ -15,6 +15,19 @@
 //! 8. **Dead node elimination** - remove unreferenced nodes (cascading)
 //!
 //! All passes run in a fixed-point loop until the graph stabilizes.
+//!
+//! ## Design note: constant_shape only folds Shape->Gather and Shape->Slice
+//!
+//! The constant shape pass intentionally does NOT replace bare `Shape(x)` nodes
+//! with constant arrays, even when all input dimensions are statically known.
+//! This is because `static_shape` values come from the ONNX export-time graph
+//! and may not match runtime shapes for models with dynamic spatial dimensions
+//! (e.g., rf-detr exports with fixed dims but runs with variable input sizes).
+//!
+//! Only `Shape->Gather(idx)` and `Shape->Slice(start,end)` are folded, because
+//! these patterns extract specific dimensions that are typically batch/channel/head
+//! dims which remain constant across inputs. The constant_fold pass then cascades
+//! on these scalar/array constants (e.g., `Cast(const_3)`, `Sqrt(const_3.0)`).
 
 mod coalesce_attention;
 mod constant_fold;
