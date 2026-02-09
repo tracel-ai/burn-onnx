@@ -115,6 +115,7 @@ pub mod reshape;
 pub mod resize;
 pub mod round;
 pub mod scan;
+pub mod scatter_elements;
 pub mod scatter_nd;
 pub mod selu;
 pub mod shape;

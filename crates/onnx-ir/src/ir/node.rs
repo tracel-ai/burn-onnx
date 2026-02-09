@@ -251,7 +251,7 @@ define_node_enum! {
     Reshape => reshape::ReshapeNode,
     Resize => resize::ResizeNode,
     Scatter => unsupported::ScatterNode,
-    ScatterElements => unsupported::ScatterElementsNode,
+    ScatterElements => scatter_elements::ScatterElementsNode,
     ScatterND => scatter_nd::ScatterNDNode,
     Shape => shape::ShapeNode,
     Size => size::SizeNode,

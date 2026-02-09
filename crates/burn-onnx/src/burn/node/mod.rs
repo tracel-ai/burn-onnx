@@ -118,6 +118,7 @@ pub(crate) mod reshape;
 pub(crate) mod resize;
 pub(crate) mod round;
 pub(crate) mod scan_node;
+pub(crate) mod scatter_elements;
 pub(crate) mod scatter_nd;
 pub(crate) mod selu;
 pub(crate) mod shape;

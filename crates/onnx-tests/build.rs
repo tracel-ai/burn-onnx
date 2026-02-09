@@ -429,6 +429,13 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/loop/loop_multi_deps.onnx")
         .input("tests/loop/loop_nested.onnx")
         .input("tests/loop/loop_scan_outputs.onnx")
+        // ScatterElements operator tests
+        .input("tests/scatter_elements/scatter_elements.onnx")
+        .input("tests/scatter_elements/scatter_elements_axis1.onnx")
+        .input("tests/scatter_elements/scatter_elements_add.onnx")
+        .input("tests/scatter_elements/scatter_elements_mul.onnx")
+        .input("tests/scatter_elements/scatter_elements_max.onnx")
+        .input("tests/scatter_elements/scatter_elements_min.onnx")
         // ScatterND operator tests
         .input("tests/scatter_nd/scatter_nd.onnx")
         .input("tests/scatter_nd/scatter_nd_2d.onnx")

@@ -166,7 +166,7 @@ functionality.
 | [Round][147]                     | ✅             | ✅           |
 | [Scan][148]                      | ✅             | ✅           |
 | [Scatter][149]                   | ❌             | ✅           |
-| [ScatterElements][150]           | ❌             | ❌           |
+| [ScatterElements][150]           | ✅             | ✅           |
 | [ScatterND][151]                 | ✅             | ✅           |
 | [Selu][152]                      | ✅             | ✅           |
 | [SequenceAt][153]                | ❌             | ❌           |
