@@ -133,36 +133,50 @@ fn eval_binary(node: &RawNode, op: BinaryOp) -> Option<(TensorData, ArgType)> {
 
     let dtype = lhs_data.dtype;
 
+    let shape = output_shape(&output_ty);
+
     match dtype {
-        DType::I64 | DType::I32 => {
+        DType::I64 => {
             let lhs = lhs_data.to_i64_vec().ok()?;
             let rhs = rhs_data.to_i64_vec().ok()?;
             let result = apply_binary_i64(&lhs, &rhs, &op)?;
-            let shape = result_shape(&lhs, &rhs);
             Some((TensorData::new(result, shape), output_ty))
         }
-        DType::F32 | DType::F64 | DType::F16 => {
+        DType::I32 => {
+            let lhs = lhs_data.to_i64_vec().ok()?;
+            let rhs = rhs_data.to_i64_vec().ok()?;
+            let result_i64 = apply_binary_i64(&lhs, &rhs, &op)?;
+            let result: Vec<i32> = result_i64.iter().map(|&v| v as i32).collect();
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        DType::F32 => {
             let lhs = lhs_data.to_f64_vec().ok()?;
             let rhs = rhs_data.to_f64_vec().ok()?;
             let result_f64 = apply_binary_f64(&lhs, &rhs, &op)?;
-            let shape = result_shape(&lhs, &rhs);
-            // Convert back to original dtype
-            match dtype {
-                DType::F32 => {
-                    let vals: Vec<f32> = result_f64.iter().map(|&v| v as f32).collect();
-                    Some((TensorData::new(vals, shape), output_ty))
-                }
-                DType::F64 => Some((TensorData::new(result_f64, shape), output_ty)),
-                _ => None,
-            }
+            let result: Vec<f32> = result_f64.iter().map(|&v| v as f32).collect();
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        DType::F64 => {
+            let lhs = lhs_data.to_f64_vec().ok()?;
+            let rhs = rhs_data.to_f64_vec().ok()?;
+            let result = apply_binary_f64(&lhs, &rhs, &op)?;
+            Some((TensorData::new(result, shape), output_ty))
         }
         _ => None,
     }
 }
 
-fn result_shape<T>(lhs: &[T], rhs: &[T]) -> Vec<usize> {
-    let len = lhs.len().max(rhs.len());
-    if len <= 1 { vec![] } else { vec![len] }
+/// Derive the output shape from the already-inferred output type.
+fn output_shape(output_ty: &ArgType) -> Vec<usize> {
+    match output_ty {
+        ArgType::Scalar(_) => vec![],
+        ArgType::Shape(len) => vec![*len],
+        ArgType::Tensor(t) => t
+            .static_shape
+            .as_ref()
+            .and_then(|ss| ss.iter().copied().collect::<Option<Vec<_>>>())
+            .unwrap_or_default(),
+    }
 }
 
 fn broadcast_get<T: Copy>(slice: &[T], i: usize) -> T {
@@ -224,25 +238,27 @@ fn apply_binary_f64(lhs: &[f64], rhs: &[f64], op: &BinaryOp) -> Option<Vec<f64>>
 fn eval_neg(node: &RawNode) -> Option<(TensorData, ArgType)> {
     let data = node.inputs[0].value()?;
     let output_ty = node.outputs[0].ty.clone();
-    let dtype = data.dtype;
+    let shape = output_shape(&output_ty);
 
-    match dtype {
-        DType::I64 | DType::I32 => {
+    match data.dtype {
+        DType::I64 => {
             let vals = data.to_i64_vec().ok()?;
             let result: Vec<i64> = vals.iter().map(|v| -v).collect();
-            let shape = data.shape.clone();
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        DType::I32 => {
+            let vals = data.to_i64_vec().ok()?;
+            let result: Vec<i32> = vals.iter().map(|&v| (-v) as i32).collect();
             Some((TensorData::new(result, shape), output_ty))
         }
         DType::F32 => {
             let vals = data.to_f64_vec().ok()?;
             let result: Vec<f32> = vals.iter().map(|&v| (-v) as f32).collect();
-            let shape = data.shape.clone();
             Some((TensorData::new(result, shape), output_ty))
         }
         DType::F64 => {
             let vals = data.to_f64_vec().ok()?;
             let result: Vec<f64> = vals.iter().map(|v| -v).collect();
-            let shape = data.shape.clone();
             Some((TensorData::new(result, shape), output_ty))
         }
         _ => None,
@@ -253,7 +269,7 @@ fn eval_neg(node: &RawNode) -> Option<(TensorData, ArgType)> {
 fn eval_sqrt(node: &RawNode) -> Option<(TensorData, ArgType)> {
     let data = node.inputs[0].value()?;
     let output_ty = node.outputs[0].ty.clone();
-    let shape = data.shape.clone();
+    let shape = output_shape(&output_ty);
 
     match data.dtype {
         DType::F32 => {
@@ -274,7 +290,7 @@ fn eval_sqrt(node: &RawNode) -> Option<(TensorData, ArgType)> {
 fn eval_cast(node: &RawNode) -> Option<(TensorData, ArgType)> {
     let data = node.inputs[0].value()?;
     let output_ty = node.outputs[0].ty.clone();
-    let shape = data.shape.clone();
+    let shape = output_shape(&output_ty);
 
     let target_dtype = match &output_ty {
         ArgType::Scalar(d) => *d,
@@ -338,43 +354,39 @@ fn eval_concat(node: &RawNode) -> Option<(TensorData, ArgType)> {
     let output_ty = node.outputs[0].ty.clone();
     let first_data = node.inputs[0].value()?;
     let dtype = first_data.dtype;
+    let shape = output_shape(&output_ty);
+
+    let non_optional = || node.inputs.iter().filter(|arg| !arg.is_optional());
 
     match dtype {
-        DType::I64 | DType::I32 => {
+        DType::I64 => {
             let mut result: Vec<i64> = Vec::new();
-            for input in &node.inputs {
-                if input.is_optional() {
-                    continue;
-                }
-                let data = input.value()?;
-                result.extend(data.to_i64_vec().ok()?);
+            for input in non_optional() {
+                result.extend(input.value()?.to_i64_vec().ok()?);
             }
-            let shape = vec![result.len()];
+            Some((TensorData::new(result, shape), output_ty))
+        }
+        DType::I32 => {
+            let mut result: Vec<i32> = Vec::new();
+            for input in non_optional() {
+                let vals = input.value()?.to_i64_vec().ok()?;
+                result.extend(vals.iter().map(|&v| v as i32));
+            }
             Some((TensorData::new(result, shape), output_ty))
         }
         DType::F32 => {
             let mut result: Vec<f32> = Vec::new();
-            for input in &node.inputs {
-                if input.is_optional() {
-                    continue;
-                }
-                let data = input.value()?;
-                let vals: Vec<f32> = data.to_f64_vec().ok()?.iter().map(|&v| v as f32).collect();
-                result.extend(vals);
+            for input in non_optional() {
+                let vals = input.value()?.to_f64_vec().ok()?;
+                result.extend(vals.iter().map(|&v| v as f32));
             }
-            let shape = vec![result.len()];
             Some((TensorData::new(result, shape), output_ty))
         }
         DType::F64 => {
             let mut result: Vec<f64> = Vec::new();
-            for input in &node.inputs {
-                if input.is_optional() {
-                    continue;
-                }
-                let data = input.value()?;
-                result.extend(data.to_f64_vec().ok()?);
+            for input in non_optional() {
+                result.extend(input.value()?.to_f64_vec().ok()?);
             }
-            let shape = vec![result.len()];
             Some((TensorData::new(result, shape), output_ty))
         }
         _ => None,
