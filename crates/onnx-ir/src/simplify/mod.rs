@@ -8,20 +8,16 @@
 //! 1. **Attention coalescing** - decomposed SDPA pattern -> single Attention node
 //! 2. **Permute-reshape detection** - Shape+Gather+Unsqueeze+Concat+Reshape -> Transpose
 //! 3. **Constant shape propagation** - Shape->Gather and Shape->Slice elimination
-//! 4. **Idempotent op elimination** - f(f(x)) -> f(x) for Relu, Ceil, Floor, etc.
-//! 5. **Identity element elimination** - x+0, x*1, x/1, x**1 -> x
-//! 6. **Common subexpression elimination** - merge duplicate nodes
-//! 7. **Dead node elimination** - remove unreferenced nodes (cascading)
+//! 4. **Constant folding** - evaluate nodes with all-constant inputs at compile time
+//! 5. **Idempotent op elimination** - f(f(x)) -> f(x) for Relu, Ceil, Floor, etc.
+//! 6. **Identity element elimination** - x+0, x*1, x/1, x**1 -> x
+//! 7. **Common subexpression elimination** - merge duplicate nodes
+//! 8. **Dead node elimination** - remove unreferenced nodes (cascading)
 //!
 //! All passes run in a fixed-point loop until the graph stabilizes.
-//!
-//! ## Future work: Constant folding
-//!
-//! TODO(#70): Add constant folding pass that evaluates nodes with all-constant inputs at compile
-//! time. This would replace arbitrary constant expressions (e.g., Const(2) + Const(3) -> Const(5))
-//! beyond the shape-specific patterns already handled.
 
 mod coalesce_attention;
+mod constant_fold;
 mod constant_shape;
 mod dead_nodes;
 mod idempotent;
@@ -37,6 +33,7 @@ use crate::{
 };
 
 use coalesce_attention::coalesce_attention;
+use constant_fold::fold_constants;
 use constant_shape::simplify_constant_shape;
 use dead_nodes::eliminate_dead_nodes;
 use idempotent::eliminate_idempotent_ops;
@@ -72,6 +69,9 @@ pub(crate) fn simplify_graph(
         // Constant propagation (may eliminate Shape->Gather chains)
         nodes = simplify_constant_shape(nodes, &mut outputs, _state);
 
+        // Constant folding (evaluate nodes with all-constant inputs)
+        nodes = fold_constants(nodes, &mut outputs, _state);
+
         // Idempotent op elimination: f(f(x)) -> f(x)
         nodes = eliminate_idempotent_ops(nodes);
 
@@ -101,6 +101,53 @@ pub(crate) fn simplify_graph(
     }
 
     (nodes, inputs, outputs)
+}
+
+/// Update downstream inputs that reference newly-created constant outputs.
+///
+/// After a pass replaces nodes with Constants, downstream consumers still have
+/// `ValueSource::Dynamic` on their inputs. This updates them to `ValueSource::Constant`
+/// with the correct `value_store` so that `arg.value()` works for cascading passes.
+pub(super) fn update_constant_references(
+    nodes: &mut [RawNode],
+    graph_outputs: &mut [Argument],
+    constant_outputs: &[String],
+) {
+    use crate::ir::ValueSource;
+
+    // Build map: constant output name -> value_store from the producing node
+    let mut store_map: std::collections::HashMap<String, crate::tensor_store::ValueStore> =
+        std::collections::HashMap::new();
+    for node in nodes.iter() {
+        for output in &node.outputs {
+            if output.value_source == ValueSource::Constant
+                && let Some(ref store) = output.value_store
+            {
+                store_map.insert(output.name.clone(), store.clone());
+            }
+        }
+    }
+
+    let constant_set: std::collections::HashSet<&str> =
+        constant_outputs.iter().map(|s| s.as_str()).collect();
+    for node in nodes.iter_mut() {
+        for input in &mut node.inputs {
+            if input.value_source == ValueSource::Dynamic
+                && constant_set.contains(input.name.as_str())
+            {
+                input.value_source = ValueSource::Constant;
+                input.value_store = store_map.get(input.name.as_str()).cloned();
+            }
+        }
+    }
+    for output in graph_outputs.iter_mut() {
+        if output.value_source == ValueSource::Dynamic
+            && constant_set.contains(output.name.as_str())
+        {
+            output.value_source = ValueSource::Constant;
+            output.value_store = store_map.get(output.name.as_str()).cloned();
+        }
+    }
 }
 
 #[cfg(test)]

@@ -473,5 +473,6 @@ fn add_simplify_inputs(model_gen: &mut ModelGen) {
         .input("tests/simplify/simplify_constant_of_shape_opt.onnx")
         .input("tests/simplify/simplify_gather_shape_chain.onnx")
         .input("tests/simplify/simplify_permute_via_shape_gather.onnx")
-        .input("tests/simplify/simplify_sdpa_coalesce.onnx");
+        .input("tests/simplify/simplify_sdpa_coalesce.onnx")
+        .input("tests/simplify/simplify_constant_fold.onnx");
 }

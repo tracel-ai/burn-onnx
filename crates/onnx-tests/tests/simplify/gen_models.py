@@ -559,6 +559,54 @@ def sdpa_coalesce():
     )
 
 
+def constant_fold():
+    """Mul(Shape->Gather(dim1), Shape->Gather(dim2)) -> constant product.
+
+    x: [2, 3, 4]
+    dim1 = Shape(x) -> Gather(idx=1) -> 3   (folded by constant_shape)
+    dim2 = Shape(x) -> Gather(idx=2) -> 4   (folded by constant_shape)
+    product = Mul(dim1, dim2) -> 12          (folded by constant_fold)
+    """
+    graph = helper.make_graph(
+        name="main_graph",
+        nodes=[
+            helper.make_node("Shape", ["x"], ["shape1"]),
+            helper.make_node("Shape", ["x"], ["shape2"]),
+            helper.make_node(
+                "Constant",
+                [],
+                ["idx1"],
+                value=helper.make_tensor("idx1_val", TensorProto.INT64, [], [1]),
+            ),
+            helper.make_node(
+                "Constant",
+                [],
+                ["idx2"],
+                value=helper.make_tensor("idx2_val", TensorProto.INT64, [], [2]),
+            ),
+            helper.make_node("Gather", ["shape1", "idx1"], ["dim1"], axis=0),
+            helper.make_node("Gather", ["shape2", "idx2"], ["dim2"], axis=0),
+            helper.make_node("Mul", ["dim1", "dim2"], ["product"]),
+        ],
+        inputs=[
+            helper.make_value_info(
+                "x",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 3, 4]),
+            ),
+        ],
+        outputs=[
+            helper.make_value_info(
+                "product",
+                helper.make_tensor_type_proto(TensorProto.INT64, shape=[]),
+            ),
+        ],
+    )
+    save(
+        helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET)]),
+        "simplify_constant_fold.onnx",
+    )
+
+
 if __name__ == "__main__":
     print("Generating simplify test models:")
     shape_folding()
@@ -574,4 +622,5 @@ if __name__ == "__main__":
     gather_shape_chain()
     permute_via_shape_gather()
     sdpa_coalesce()
+    constant_fold()
     print("Done.")
