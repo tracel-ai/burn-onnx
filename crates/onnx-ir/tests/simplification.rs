@@ -58,3 +58,155 @@ fn test_prescaled_sdpa_not_coalesced_without_simplify() {
         "Softmax should remain without simplification"
     );
 }
+
+// --- Constant folding tests ---
+
+/// Cascading fold: Shape->Gather produces constants, then Mul(const, const) folds.
+///
+/// x: [2, 3, 4]
+/// Shape(x)[1]=3, Shape(x)[2]=4 => constant_shape folds the Gathers
+/// Mul(3, 4)=12 => constant_fold folds the Mul
+///
+/// With simplification: only Constant nodes should remain (no Mul, no Shape, no Gather).
+#[test]
+fn test_constant_fold_cascade() {
+    let graph = load_onnx_simplified("constant_fold_cascade.onnx");
+
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Mul { .. })),
+        "Mul should be folded into a constant"
+    );
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Gather { .. })),
+        "Gather should be folded into a constant"
+    );
+    assert_eq!(
+        count_operation_nodes(&graph),
+        0,
+        "only constants should remain"
+    );
+}
+
+/// Without simplification, the Mul and Gathers remain as operations.
+#[test]
+fn test_constant_fold_cascade_without_simplify() {
+    let graph = load_onnx("constant_fold_cascade.onnx");
+
+    assert!(
+        has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Mul { .. })),
+        "Mul should remain without simplification"
+    );
+    assert!(
+        has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Gather { .. })),
+        "Gather should remain without simplification"
+    );
+}
+
+/// Chained arithmetic on initializer constants: Add(2,3)=5, Sub(5,1)=4.
+///
+/// The first iteration folds Add into const 5, then the Sub sees two constants
+/// and folds in the next iteration.
+#[test]
+fn test_constant_fold_chain() {
+    let graph = load_onnx_simplified("constant_fold_chain.onnx");
+
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Add { .. })),
+        "Add should be folded"
+    );
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Sub { .. })),
+        "Sub should be folded"
+    );
+    assert_eq!(
+        count_operation_nodes(&graph),
+        0,
+        "only constants should remain"
+    );
+}
+
+/// Dynamic input blocks folding: Neg(const) folds, but Add(dynamic, const) does not.
+#[test]
+fn test_constant_fold_blocked_by_dynamic() {
+    let graph = load_onnx_simplified("constant_fold_blocked.onnx");
+
+    // Neg(-5) -> 5 should be folded (all inputs constant)
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Neg { .. })),
+        "Neg on constant should be folded"
+    );
+
+    // Add(x, 5) must remain because x is dynamic
+    assert!(
+        has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Add { .. })),
+        "Add with dynamic input should NOT be folded"
+    );
+}
+
+/// Concat of constant shape slices folds into a single constant array.
+///
+/// Shape(x)[0:2]=[2,3], Shape(y)[0:1]=[5] => constant_shape folds the Slices
+/// Concat([2,3], [5])=[2,3,5] => constant_fold folds the Concat
+#[test]
+fn test_constant_fold_concat() {
+    let graph = load_onnx_simplified("constant_fold_concat.onnx");
+
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Concat { .. })),
+        "Concat of constants should be folded"
+    );
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Slice { .. })),
+        "Slice on Shape should be folded by constant_shape"
+    );
+    assert_eq!(
+        count_operation_nodes(&graph),
+        0,
+        "only constants should remain"
+    );
+}
+
+/// Cast on a folded Shape->Gather constant: Shape(x)[1]=3 -> Cast(to=FLOAT) -> 3.0
+#[test]
+fn test_constant_fold_cast() {
+    let graph = load_onnx_simplified("constant_fold_cast.onnx");
+
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Cast { .. })),
+        "Cast on constant should be folded"
+    );
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Gather { .. })),
+        "Gather should be folded by constant_shape"
+    );
+    assert_eq!(
+        count_operation_nodes(&graph),
+        0,
+        "only constants should remain"
+    );
+}
+
+/// Full SDPA scale cascade: Shape(x)[2]=64 -> Cast -> Sqrt -> 8.0
+///
+/// Tests three passes cascading across fixed-point iterations:
+/// 1. constant_shape folds Gather to i64 constant 64
+/// 2. constant_fold folds Cast(64) to f32 constant 64.0
+/// 3. constant_fold folds Sqrt(64.0) to f32 constant 8.0
+#[test]
+fn test_constant_fold_sqrt() {
+    let graph = load_onnx_simplified("constant_fold_sqrt.onnx");
+
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Sqrt { .. })),
+        "Sqrt on constant should be folded"
+    );
+    assert!(
+        !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Cast { .. })),
+        "Cast on constant should be folded"
+    );
+    assert_eq!(
+        count_operation_nodes(&graph),
+        0,
+        "only constants should remain"
+    );
+}

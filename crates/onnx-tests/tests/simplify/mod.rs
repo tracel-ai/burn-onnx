@@ -21,7 +21,8 @@ include_simplified_models!(
     simplify_constant_of_shape_opt,
     simplify_gather_shape_chain,
     simplify_permute_via_shape_gather,
-    simplify_sdpa_coalesce
+    simplify_sdpa_coalesce,
+    simplify_constant_fold
 );
 
 /// Extract the `forward` method body from generated source code.
@@ -458,6 +459,66 @@ mod tests {
         pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
                 let reshape1_out1 = input.permute([0, 1, 3, 2]);
                 reshape1_out1
+            }
+        }
+        ");
+    }
+
+    #[test]
+    fn constant_fold() {
+        let device = Default::default();
+        let s = simplified::simplify_constant_fold::Model::<TestBackend>::new(&device);
+        let u = unsimplified::simplify_constant_fold::Model::<TestBackend>::new(&device);
+        let input = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
+        assert_eq!(s.forward(input.clone()), u.forward(input));
+    }
+
+    #[test]
+    fn codegen_constant_fold() {
+        let s = simplified_source::simplify_constant_fold();
+        let u = unsimplified_source::simplify_constant_fold();
+        assert_codegen_differs(s, u, "constant_fold");
+        insta::assert_snapshot!(extract_forward(u), @r"
+        pub fn forward(&self, x: Tensor<B, 3>) -> i64 {
+                let shape1_out1: [i64; 3] = {
+                    let axes = &x.clone().dims()[0..3];
+                    let mut output = [0i64; 3];
+                    for i in 0..3 {
+                        output[i] = axes[i] as i64;
+                    }
+                    output
+                };
+                let shape2_out1: [i64; 3] = {
+                    let axes = &x.dims()[0..3];
+                    let mut output = [0i64; 3];
+                    for i in 0..3 {
+                        output[i] = axes[i] as i64;
+                    }
+                    output
+                };
+                let constant1_out1 = 1i64;
+                let constant2_out1 = 2i64;
+                let actual_idx = if constant1_out1 < 0 {
+                    (shape1_out1.len() as i64 + constant1_out1) as usize
+                } else {
+                    constant1_out1 as usize
+                };
+                let gather1_out1 = shape1_out1[actual_idx] as i64;
+                let actual_idx = if constant2_out1 < 0 {
+                    (shape2_out1.len() as i64 + constant2_out1) as usize
+                } else {
+                    constant2_out1 as usize
+                };
+                let gather2_out1 = shape2_out1[actual_idx] as i64;
+                let mul1_out1 = gather1_out1 * gather2_out1;
+                mul1_out1
+            }
+        }
+        ");
+        insta::assert_snapshot!(extract_forward(s), @r"
+        pub fn forward(&self, x: Tensor<B, 3>) -> i64 {
+                let mul1_out1 = 12i64;
+                mul1_out1
             }
         }
         ");
