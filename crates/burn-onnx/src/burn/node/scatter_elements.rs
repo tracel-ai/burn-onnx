@@ -33,91 +33,103 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
             );
         }
 
-        // For Add reduction, use Burn's native scatter which is more efficient
-        if matches!(self.config.reduction, ScatterElementsReduction::Add) {
-            return quote! {
+        match self.config.reduction {
+            // Native scatter for Add reduction
+            ScatterElementsReduction::Add => quote! {
                 let #output = #data.scatter(#dim, #indices, #updates, burn::tensor::IndexingUpdateOp::Add);
-            };
-        }
-
-        // For other reductions, generate a manual element-by-element loop
-        let reduction_body = match self.config.reduction {
-            ScatterElementsReduction::None => quote! {
-                output_flat = output_flat.slice_assign(
-                    [target_offset..target_offset + 1],
-                    update_val,
-                );
             },
-            ScatterElementsReduction::Mul => quote! {
-                let existing = output_flat.clone().narrow(0, target_offset, 1);
-                output_flat = output_flat.slice_assign(
-                    [target_offset..target_offset + 1],
-                    existing.mul(update_val),
-                );
+
+            // For None with numeric types: gather current values, scatter-add the diff
+            // At targets: data[p] + (updates[p] - data[p]) = updates[p]
+            // Elsewhere: unchanged
+            ScatterElementsReduction::None if !matches!(data_kind, TensorKind::Bool) => quote! {
+                let #output = {
+                    let gathered = #data.clone().gather(#dim, #indices.clone());
+                    #data.scatter(#dim, #indices, #updates - gathered, burn::tensor::IndexingUpdateOp::Add)
+                };
             },
-            ScatterElementsReduction::Max => quote! {
-                let existing = output_flat.clone().narrow(0, target_offset, 1);
-                let mask = update_val.clone().greater_equal(existing.clone());
-                let result = existing.mask_where(mask, update_val);
-                output_flat = output_flat.slice_assign(
-                    [target_offset..target_offset + 1],
-                    result,
-                );
-            },
-            ScatterElementsReduction::Min => quote! {
-                let existing = output_flat.clone().narrow(0, target_offset, 1);
-                let mask = update_val.clone().lower_equal(existing.clone());
-                let result = existing.mask_where(mask, update_val);
-                output_flat = output_flat.slice_assign(
-                    [target_offset..target_offset + 1],
-                    result,
-                );
-            },
-            ScatterElementsReduction::Add => unreachable!(),
-        };
 
-        quote! {
-            let #output = {
-                let data_dims = #data.dims();
-                let updates_dims = #updates.dims();
-                let indices_data = #indices.to_data().convert::<i64>();
-                let indices_values: alloc::vec::Vec<i64> = indices_data.into_vec::<i64>().unwrap();
-                let r = data_dims.len();
-                let dim: usize = #dim;
+            // Bool None and Mul/Max/Min need element-by-element loop
+            _ => {
+                let reduction_body = match self.config.reduction {
+                    ScatterElementsReduction::None => quote! {
+                        output_flat = output_flat.slice_assign(
+                            [target_offset..target_offset + 1],
+                            update_val,
+                        );
+                    },
+                    ScatterElementsReduction::Mul => quote! {
+                        let existing = output_flat.clone().narrow(0, target_offset, 1);
+                        output_flat = output_flat.slice_assign(
+                            [target_offset..target_offset + 1],
+                            existing.mul(update_val),
+                        );
+                    },
+                    ScatterElementsReduction::Max => quote! {
+                        let existing = output_flat.clone().narrow(0, target_offset, 1);
+                        let mask = update_val.clone().greater_equal(existing.clone());
+                        let result = existing.mask_where(mask, update_val);
+                        output_flat = output_flat.slice_assign(
+                            [target_offset..target_offset + 1],
+                            result,
+                        );
+                    },
+                    ScatterElementsReduction::Min => quote! {
+                        let existing = output_flat.clone().narrow(0, target_offset, 1);
+                        let mask = update_val.clone().lower_equal(existing.clone());
+                        let result = existing.mask_where(mask, update_val);
+                        output_flat = output_flat.slice_assign(
+                            [target_offset..target_offset + 1],
+                            result,
+                        );
+                    },
+                    ScatterElementsReduction::Add => unreachable!(),
+                };
 
-                let mut data_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
-                }
-                let mut idx_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    idx_strides[i] = idx_strides[i + 1] * updates_dims[i + 1];
-                }
+                quote! {
+                    let #output = {
+                        let data_dims = #data.dims();
+                        let updates_dims = #updates.dims();
+                        let indices_data = #indices.to_data().convert::<i64>();
+                        let indices_values: alloc::vec::Vec<i64> = indices_data.into_vec::<i64>().unwrap();
+                        let r = data_dims.len();
+                        let dim: usize = #dim;
 
-                let total_data: usize = data_dims.iter().product();
-                let total_updates: usize = updates_dims.iter().product();
-                let mut output_flat = #data.reshape([total_data]);
-                let updates_flat = #updates.reshape([total_updates]);
-
-                for flat_idx in 0..total_updates {
-                    let mut remaining = flat_idx;
-                    let mut target_offset = 0usize;
-                    for d in 0..r {
-                        let coord = remaining / idx_strides[d];
-                        remaining %= idx_strides[d];
-                        if d == dim {
-                            let mut idx = indices_values[flat_idx];
-                            if idx < 0 { idx += data_dims[d] as i64; }
-                            target_offset += idx as usize * data_strides[d];
-                        } else {
-                            target_offset += coord * data_strides[d];
+                        let mut data_strides = alloc::vec![1usize; r];
+                        for i in (0..r.saturating_sub(1)).rev() {
+                            data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
                         }
-                    }
-                    let update_val = updates_flat.clone().narrow(0, flat_idx, 1);
-                    #reduction_body
+                        let mut idx_strides = alloc::vec![1usize; r];
+                        for i in (0..r.saturating_sub(1)).rev() {
+                            idx_strides[i] = idx_strides[i + 1] * updates_dims[i + 1];
+                        }
+
+                        let total_data: usize = data_dims.iter().product();
+                        let total_updates: usize = updates_dims.iter().product();
+                        let mut output_flat = #data.reshape([total_data]);
+                        let updates_flat = #updates.reshape([total_updates]);
+
+                        for flat_idx in 0..total_updates {
+                            let mut remaining = flat_idx;
+                            let mut target_offset = 0usize;
+                            for d in 0..r {
+                                let coord = remaining / idx_strides[d];
+                                remaining %= idx_strides[d];
+                                if d == dim {
+                                    let mut idx = indices_values[flat_idx];
+                                    if idx < 0 { idx += data_dims[d] as i64; }
+                                    target_offset += idx as usize * data_strides[d];
+                                } else {
+                                    target_offset += coord * data_strides[d];
+                                }
+                            }
+                            let update_val = updates_flat.clone().narrow(0, flat_idx, 1);
+                            #reduction_body
+                        }
+                        output_flat.reshape(data_dims)
+                    };
                 }
-                output_flat.reshape(data_dims)
-            };
+            }
         }
     }
 }
@@ -150,47 +162,8 @@ mod tests {
             updates: Tensor<B, 2>,
         ) -> Tensor<B, 2> {
             let output = {
-                let data_dims = data.dims();
-                let updates_dims = updates.dims();
-                let indices_data = indices.to_data().convert::<i64>();
-                let indices_values: alloc::vec::Vec<i64> = indices_data
-                    .into_vec::<i64>()
-                    .unwrap();
-                let r = data_dims.len();
-                let dim: usize = 0;
-                let mut data_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
-                }
-                let mut idx_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    idx_strides[i] = idx_strides[i + 1] * updates_dims[i + 1];
-                }
-                let total_data: usize = data_dims.iter().product();
-                let total_updates: usize = updates_dims.iter().product();
-                let mut output_flat = data.reshape([total_data]);
-                let updates_flat = updates.reshape([total_updates]);
-                for flat_idx in 0..total_updates {
-                    let mut remaining = flat_idx;
-                    let mut target_offset = 0usize;
-                    for d in 0..r {
-                        let coord = remaining / idx_strides[d];
-                        remaining %= idx_strides[d];
-                        if d == dim {
-                            let mut idx = indices_values[flat_idx];
-                            if idx < 0 {
-                                idx += data_dims[d] as i64;
-                            }
-                            target_offset += idx as usize * data_strides[d];
-                        } else {
-                            target_offset += coord * data_strides[d];
-                        }
-                    }
-                    let update_val = updates_flat.clone().narrow(0, flat_idx, 1);
-                    output_flat = output_flat
-                        .slice_assign([target_offset..target_offset + 1], update_val);
-                }
-                output_flat.reshape(data_dims)
+                let gathered = data.clone().gather(0, indices.clone());
+                data.scatter(0, indices, updates - gathered, burn::tensor::IndexingUpdateOp::Add)
             };
             output
         }
@@ -448,47 +421,8 @@ mod tests {
             updates: Tensor<B, 2, Int>,
         ) -> Tensor<B, 2, Int> {
             let output = {
-                let data_dims = data.dims();
-                let updates_dims = updates.dims();
-                let indices_data = indices.to_data().convert::<i64>();
-                let indices_values: alloc::vec::Vec<i64> = indices_data
-                    .into_vec::<i64>()
-                    .unwrap();
-                let r = data_dims.len();
-                let dim: usize = 0;
-                let mut data_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
-                }
-                let mut idx_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    idx_strides[i] = idx_strides[i + 1] * updates_dims[i + 1];
-                }
-                let total_data: usize = data_dims.iter().product();
-                let total_updates: usize = updates_dims.iter().product();
-                let mut output_flat = data.reshape([total_data]);
-                let updates_flat = updates.reshape([total_updates]);
-                for flat_idx in 0..total_updates {
-                    let mut remaining = flat_idx;
-                    let mut target_offset = 0usize;
-                    for d in 0..r {
-                        let coord = remaining / idx_strides[d];
-                        remaining %= idx_strides[d];
-                        if d == dim {
-                            let mut idx = indices_values[flat_idx];
-                            if idx < 0 {
-                                idx += data_dims[d] as i64;
-                            }
-                            target_offset += idx as usize * data_strides[d];
-                        } else {
-                            target_offset += coord * data_strides[d];
-                        }
-                    }
-                    let update_val = updates_flat.clone().narrow(0, flat_idx, 1);
-                    output_flat = output_flat
-                        .slice_assign([target_offset..target_offset + 1], update_val);
-                }
-                output_flat.reshape(data_dims)
+                let gathered = data.clone().gather(0, indices.clone());
+                data.scatter(0, indices, updates - gathered, burn::tensor::IndexingUpdateOp::Add)
             };
             output
         }
