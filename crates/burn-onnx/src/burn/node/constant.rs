@@ -124,11 +124,11 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                 let value = match elem_type {
                     onnx_ir::ir::DType::F32 => {
                         let val = tensor_data.as_slice::<f32>().unwrap()[0];
-                        quote! { #val }
+                        super::super::codegen::f32_to_tokens(val)
                     }
                     onnx_ir::ir::DType::F64 => {
                         let val = tensor_data.as_slice::<f64>().unwrap()[0];
-                        quote! { #val }
+                        super::super::codegen::f64_to_tokens(val)
                     }
                     onnx_ir::ir::DType::I32 => {
                         let val = tensor_data.as_slice::<i32>().unwrap()[0];

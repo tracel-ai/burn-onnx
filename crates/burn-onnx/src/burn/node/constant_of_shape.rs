@@ -19,11 +19,11 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
             match tensor_data.dtype {
                 onnx_ir::ir::DType::F32 => {
                     let val = tensor_data.as_slice::<f32>().unwrap()[0];
-                    quote! { #val }
+                    super::super::codegen::f32_to_tokens(val)
                 }
                 onnx_ir::ir::DType::F64 => {
                     let val = tensor_data.as_slice::<f64>().unwrap()[0];
-                    quote! { #val }
+                    super::super::codegen::f64_to_tokens(val)
                 }
                 onnx_ir::ir::DType::I32 => {
                     let val = tensor_data.as_slice::<i32>().unwrap()[0];
@@ -599,6 +599,88 @@ mod tests {
                 .reshape([1, 1, 1])
                 .expand(runtime_shape);
             zeros
+        }
+        ");
+    }
+
+    // ==================== Non-finite Float Tests ====================
+
+    #[test]
+    fn test_constant_of_shape_scalar_f32_infinity() {
+        let config = ConstantOfShapeConfig {
+            shape: ConstantOfShapeShape::Static(vec![]),
+            value: Some(TensorData::new(vec![f32::INFINITY], vec![])),
+        };
+        let node = ConstantOfShapeNodeBuilder::new("const1")
+            .input_shape("dims", 1)
+            .output_scalar("result", DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, dims: [i64; 1]) -> f32 {
+            let result = f32::INFINITY;
+            result
+        }
+        ");
+    }
+
+    #[test]
+    fn test_constant_of_shape_scalar_f32_neg_infinity() {
+        let config = ConstantOfShapeConfig {
+            shape: ConstantOfShapeShape::Static(vec![]),
+            value: Some(TensorData::new(vec![f32::NEG_INFINITY], vec![])),
+        };
+        let node = ConstantOfShapeNodeBuilder::new("const1")
+            .input_shape("dims", 1)
+            .output_scalar("result", DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, dims: [i64; 1]) -> f32 {
+            let result = f32::NEG_INFINITY;
+            result
+        }
+        ");
+    }
+
+    #[test]
+    fn test_constant_of_shape_scalar_f32_nan() {
+        let config = ConstantOfShapeConfig {
+            shape: ConstantOfShapeShape::Static(vec![]),
+            value: Some(TensorData::new(vec![f32::NAN], vec![])),
+        };
+        let node = ConstantOfShapeNodeBuilder::new("const1")
+            .input_shape("dims", 1)
+            .output_scalar("result", DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, dims: [i64; 1]) -> f32 {
+            let result = f32::NAN;
+            result
+        }
+        ");
+    }
+
+    #[test]
+    fn test_constant_of_shape_scalar_f64_infinity() {
+        let config = ConstantOfShapeConfig {
+            shape: ConstantOfShapeShape::Static(vec![]),
+            value: Some(TensorData::new(vec![f64::INFINITY], vec![])),
+        };
+        let node = ConstantOfShapeNodeBuilder::new("const1")
+            .input_shape("dims", 1)
+            .output_scalar("result", DType::F64)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, dims: [i64; 1]) -> f64 {
+            let result = f64::INFINITY;
+            result
         }
         ");
     }
