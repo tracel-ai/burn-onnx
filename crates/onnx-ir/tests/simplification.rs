@@ -80,7 +80,11 @@ fn test_constant_fold_cascade() {
         !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Gather { .. })),
         "Gather should be folded into a constant"
     );
-    assert_eq!(count_operation_nodes(&graph), 0, "only constants should remain");
+    assert_eq!(
+        count_operation_nodes(&graph),
+        0,
+        "only constants should remain"
+    );
 }
 
 /// Without simplification, the Mul and Gathers remain as operations.
@@ -114,7 +118,11 @@ fn test_constant_fold_chain() {
         !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Sub { .. })),
         "Sub should be folded"
     );
-    assert_eq!(count_operation_nodes(&graph), 0, "only constants should remain");
+    assert_eq!(
+        count_operation_nodes(&graph),
+        0,
+        "only constants should remain"
+    );
 }
 
 /// Dynamic input blocks folding: Neg(const) folds, but Add(dynamic, const) does not.
@@ -151,5 +159,9 @@ fn test_constant_fold_concat() {
         !has_node_type(&graph, |n| matches!(n, onnx_ir::ir::Node::Slice { .. })),
         "Slice on Shape should be folded by constant_shape"
     );
-    assert_eq!(count_operation_nodes(&graph), 0, "only constants should remain");
+    assert_eq!(
+        count_operation_nodes(&graph),
+        0,
+        "only constants should remain"
+    );
 }
