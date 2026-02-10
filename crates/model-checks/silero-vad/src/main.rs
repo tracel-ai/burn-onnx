@@ -3,7 +3,7 @@ extern crate alloc;
 use burn::prelude::*;
 use serde::Deserialize;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[cfg(feature = "wgpu")]
 pub type MyBackend = burn::backend::Wgpu;
