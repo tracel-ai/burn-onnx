@@ -21,7 +21,7 @@ onnx = []
 mmap = ["burn-onnx/mmap"]
 
 [dependencies]
-burn-onnx = { path = "../burn-onnx", version = "=0.21.0", default-features = false }
+burn-onnx = { path = "../burn-onnx", version = "=0.21.0-pre.1", default-features = false }
 
 [package.metadata.docs.rs]
 features = ["default"]
