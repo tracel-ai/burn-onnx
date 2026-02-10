@@ -22,7 +22,7 @@ default = ["mmap"]
 mmap = ["onnx-ir/mmap"]
 
 [dependencies]
-onnx-ir = { path = "../onnx-ir", version = "=0.21.0", default-features = false }
+onnx-ir = { path = "../onnx-ir", version = "=0.21.0-pre.1", default-features = false }
 
 burn = { workspace = true, features = ["std"] }
 burn-ndarray = { workspace = true }
