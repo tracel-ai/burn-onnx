@@ -1,22 +1,7 @@
 use burn_onnx::ModelGen;
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
-
-fn artifacts_dir() -> PathBuf {
-    let base = match env::var("BURN_CACHE_DIR") {
-        Ok(dir) => PathBuf::from(dir),
-        Err(_) => dirs::cache_dir()
-            .expect("could not determine cache directory")
-            .join("burn-onnx"),
-    };
-    let dir = base.join("model-checks").join("albert");
-    println!(
-        "cargo:warning=model-checks: artifacts dir = {}",
-        dir.display()
-    );
-    dir
-}
+use std::path::Path;
 
 fn main() {
     // Supported models
@@ -41,7 +26,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    let artifacts = artifacts_dir();
+    let artifacts = model_checks_common::artifacts_dir_build("albert");
     let onnx_path = artifacts.join(format!("{}_opset16.onnx", model_name));
     let test_data_path = artifacts.join(format!("{}_test_data.pt", model_name));
 

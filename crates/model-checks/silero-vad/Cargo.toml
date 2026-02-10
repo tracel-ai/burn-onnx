@@ -20,10 +20,10 @@ metal = ["burn/metal"]
 [dependencies]
 burn = { workspace = true }
 burn-store = { workspace = true, features = ["std", "burnpack"] }
-dirs = "6"
+model-checks-common = { path = "../common" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [build-dependencies]
 burn-onnx = { path = "../../burn-onnx" }
-dirs = "6"
+model-checks-common = { path = "../common" }

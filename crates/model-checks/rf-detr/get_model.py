@@ -25,7 +25,6 @@ Related issue: https://github.com/tracel-ai/burn/issues/4052
 """
 
 import json
-import os
 import shutil
 import sys
 from collections import defaultdict
@@ -34,21 +33,8 @@ from pathlib import Path
 import numpy as np
 import onnx
 
-
-def get_artifacts_dir():
-    """Get platform-specific cache directory for model artifacts."""
-    env_dir = os.environ.get("BURN_CACHE_DIR")
-    if env_dir:
-        base = Path(env_dir)
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Caches" / "burn-onnx"
-    else:
-        xdg = os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
-        base = Path(xdg) / "burn-onnx"
-    d = base / "model-checks" / "rf-detr"
-    d.mkdir(parents=True, exist_ok=True)
-    print(f"Artifacts directory: {d}")
-    return d
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from common import get_artifacts_dir
 
 
 def get_input_shape(model):
@@ -213,7 +199,7 @@ def download_and_export_model():
     from rfdetr import RFDETRSmall
 
     # Setup paths
-    artifacts_dir = get_artifacts_dir()
+    artifacts_dir = get_artifacts_dir("rf-detr")
 
     model_path = artifacts_dir / "rf_detr_small.onnx"
     test_data_path = artifacts_dir / "rf_detr_small_test_data.pt"

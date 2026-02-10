@@ -20,8 +20,8 @@ metal = ["burn/metal"]
 [dependencies]
 burn = { workspace = true }
 burn-store = { workspace = true, features = ["std", "burnpack", "pytorch"] }
-dirs = "6"
+model-checks-common = { path = "../common" }
 
 [build-dependencies]
 burn-onnx = { path = "../../burn-onnx" }
-dirs = "6"
+model-checks-common = { path = "../common" }

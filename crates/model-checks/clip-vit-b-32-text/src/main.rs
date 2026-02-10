@@ -4,20 +4,9 @@ use burn::module::{Initializer, Param};
 use burn::prelude::*;
 
 use burn_store::{ModuleSnapshot, PytorchStore};
-use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-#[cfg(feature = "wgpu")]
-pub type MyBackend = burn::backend::Wgpu;
-
-#[cfg(feature = "ndarray")]
-pub type MyBackend = burn::backend::NdArray<f32>;
-
-#[cfg(feature = "tch")]
-pub type MyBackend = burn::backend::LibTorch<f32>;
-
-#[cfg(feature = "metal")]
-pub type MyBackend = burn::backend::Metal;
+model_checks_common::backend_type!();
 
 // Import the generated model code as a module
 pub mod clip_vit_b_32_text {
@@ -49,22 +38,12 @@ impl<B: Backend> TestData<B> {
     }
 }
 
-fn artifacts_dir() -> PathBuf {
-    let base = match std::env::var("BURN_CACHE_DIR") {
-        Ok(dir) => PathBuf::from(dir),
-        Err(_) => dirs::cache_dir()
-            .expect("could not determine cache directory")
-            .join("burn-onnx"),
-    };
-    base.join("model-checks").join("clip-vit-b-32-text")
-}
-
 fn main() {
     println!("========================================");
     println!("CLIP ViT-B-32-text Burn Model Test");
     println!("========================================\n");
 
-    let artifacts_dir = artifacts_dir();
+    let artifacts_dir = model_checks_common::artifacts_dir("clip-vit-b-32-text");
     println!("Artifacts directory: {}", artifacts_dir.display());
 
     // Check if artifacts exist

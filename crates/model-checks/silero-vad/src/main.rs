@@ -3,19 +3,8 @@ extern crate alloc;
 use burn::prelude::*;
 use serde::Deserialize;
 use std::fs;
-use std::path::PathBuf;
 
-#[cfg(feature = "wgpu")]
-pub type MyBackend = burn::backend::Wgpu;
-
-#[cfg(feature = "ndarray")]
-pub type MyBackend = burn::backend::NdArray<f32>;
-
-#[cfg(feature = "tch")]
-pub type MyBackend = burn::backend::LibTorch<f32>;
-
-#[cfg(feature = "metal")]
-pub type MyBackend = burn::backend::Metal;
+model_checks_common::backend_type!();
 
 // Include the generated model
 include!(concat!(env!("OUT_DIR"), "/model/silero_vad.rs"));
@@ -74,22 +63,12 @@ fn run_test_case(
     (passed, actual_output, expected_output)
 }
 
-fn artifacts_dir() -> PathBuf {
-    let base = match std::env::var("BURN_CACHE_DIR") {
-        Ok(dir) => PathBuf::from(dir),
-        Err(_) => dirs::cache_dir()
-            .expect("could not determine cache directory")
-            .join("burn-onnx"),
-    };
-    base.join("model-checks").join("silero-vad")
-}
-
 fn main() {
     println!("========================================");
     println!("Silero VAD Model Test Suite");
     println!("========================================\n");
 
-    let artifacts_dir = artifacts_dir();
+    let artifacts_dir = model_checks_common::artifacts_dir("silero-vad");
     println!("Artifacts directory: {}", artifacts_dir.display());
 
     // Check if artifacts exist

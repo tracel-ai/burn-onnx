@@ -10,29 +10,14 @@
 # ]
 # ///
 
-import os
 import sys
 import onnx
-from onnx import shape_inference, version_converter
 import numpy as np
 from pathlib import Path
 from huggingface_hub import hf_hub_download
 
-
-def get_artifacts_dir():
-    """Get platform-specific cache directory for model artifacts."""
-    env_dir = os.environ.get("BURN_CACHE_DIR")
-    if env_dir:
-        base = Path(env_dir)
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Caches" / "burn-onnx"
-    else:
-        xdg = os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
-        base = Path(xdg) / "burn-onnx"
-    d = base / "model-checks" / "all-minilm-l6-v2"
-    d.mkdir(parents=True, exist_ok=True)
-    print(f"Artifacts directory: {d}")
-    return d
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from common import get_artifacts_dir, process_model
 
 
 def download_minilm_model(output_path):
@@ -43,7 +28,7 @@ def download_minilm_model(output_path):
     model_path = hf_hub_download(
         repo_id="Xenova/all-MiniLM-L6-v2",
         filename="onnx/model.onnx",
-        cache_dir=str(get_artifacts_dir() / "hf_cache"),
+        cache_dir=str(get_artifacts_dir("all-minilm-l6-v2") / "hf_cache"),
     )
 
     # Copy to artifacts
@@ -55,28 +40,6 @@ def download_minilm_model(output_path):
         raise FileNotFoundError(f"Failed to download ONNX file to {output_path}")
 
     print(f"✓ Model downloaded to: {output_path}")
-
-
-def process_model(input_path, output_path, target_opset=16):
-    """Load, upgrade opset, and apply shape inference to model."""
-    print(f"Loading model from {input_path}...")
-    model = onnx.load(input_path)
-
-    # Check and upgrade opset if needed
-    current_opset = model.opset_import[0].version
-    if current_opset < target_opset:
-        print(f"Upgrading opset from {current_opset} to {target_opset}...")
-        model = version_converter.convert_version(model, target_opset)
-
-    # Apply shape inference
-    print("Applying shape inference...")
-    model = shape_inference.infer_shapes(model)
-
-    # Save processed model
-    onnx.save(model, output_path)
-    print(f"✓ Processed model saved to: {output_path}")
-
-    return model
 
 
 def get_input_info(model):
@@ -269,7 +232,7 @@ def main():
     print("=" * 60)
 
     # Setup paths
-    artifacts_dir = get_artifacts_dir()
+    artifacts_dir = get_artifacts_dir("all-minilm-l6-v2")
 
     original_path = artifacts_dir / "all-minilm-l6-v2.onnx"
     processed_path = artifacts_dir / "all-minilm-l6-v2_opset16.onnx"

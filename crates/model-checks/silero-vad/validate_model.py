@@ -16,7 +16,6 @@ This script:
 2. Runs inference using ONNX Runtime to verify it works
 """
 
-import os
 import sys
 
 import numpy as np
@@ -26,27 +25,14 @@ import onnx
 from onnx import checker
 import onnxruntime as ort
 
-
-def get_artifacts_dir():
-    """Get platform-specific cache directory for model artifacts."""
-    env_dir = os.environ.get("BURN_CACHE_DIR")
-    if env_dir:
-        base = Path(env_dir)
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Caches" / "burn-onnx"
-    else:
-        xdg = os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
-        base = Path(xdg) / "burn-onnx"
-    d = base / "model-checks" / "silero-vad"
-    d.mkdir(parents=True, exist_ok=True)
-    print(f"Artifacts directory: {d}")
-    return d
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from common import get_artifacts_dir
 
 
 def validate_model():
     """Validate the Silero VAD ONNX model."""
 
-    model_path = get_artifacts_dir() / "silero_vad.onnx"
+    model_path = get_artifacts_dir("silero-vad") / "silero_vad.onnx"
 
     if not model_path.exists():
         print(f"Error: Model not found at {model_path}")
