@@ -73,7 +73,7 @@ fn main() {
 
     // Generate the model code from the ONNX file
     ModelGen::new()
-        .input(&onnx_path)
+        .input(onnx_path.to_str().unwrap())
         .out_dir("model/")
         .run_from_script();
 
