@@ -203,10 +203,7 @@ pub fn handle_command(args: ModelCheckArgs) -> anyhow::Result<()> {
     // Summary
     let passed = models.len() - failed.len();
     if failed.is_empty() {
-        info!(
-            "\x1B[32;1mAll {} model(s) passed\x1B[0m",
-            models.len()
-        );
+        info!("\x1B[32;1mAll {} model(s) passed\x1B[0m", models.len());
     } else {
         error!(
             "\x1B[31;1m{}/{} passed, {} failed: {}\x1B[0m",
