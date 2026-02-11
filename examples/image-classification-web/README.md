@@ -1,8 +1,5 @@
 # Image Classification Web Demo Using Burn and WebAssembly
 
-[![Live Demo](https://img.shields.io/badge/live-demo-brightgreen)](https://antimora.github.io/image-classification/)
-
-
 ## Overview
 
 This demo showcases how to execute an image classification task in a web browser using a model
@@ -66,12 +63,3 @@ This demo was inspired by the ONNX Runtime web demo featuring the
 [SqueezeNet model trained on ImageNet](https://microsoft.github.io/onnxruntime-web-demo/#/squeezenet).
 
 The complete list of credits/attribution can be found in the [NOTICES](NOTICES.md) file.
-
-## Future Enhancements
-
-- [ ] Fall back to WebGL if WebGPU is not supported by the browser. See
-      [wgpu's WebGL support ](https://github.com/gfx-rs/wgpu/wiki/Running-on-the-Web-with-WebGPU-and-WebGL)
-
-- [ ] Enable SIMD support for Safari browsers after Release 179.
-
-- [ ] Add image paste functionality to allow users to paste an image from the clipboard.
