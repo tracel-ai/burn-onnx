@@ -37,6 +37,40 @@ fn and_op(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn arg_max(graph: &OnnxGraph) {
+    let node = find_node(graph, "argmax");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ArgMax "argmax1"
+      Inputs:
+        argmax_input: F32[2, 3, 4]
+      Outputs:
+        argmax1_out1: I64[?, ?, ?]
+      Config:
+        ArgMaxConfig {
+            axis: 1,
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn arg_min(graph: &OnnxGraph) {
+    let node = find_node(graph, "argmin");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ArgMin "argmin1"
+      Inputs:
+        argmin_input: F32[2, 3, 4]
+      Outputs:
+        argmin1_out1: I64[?, ?, ?]
+      Config:
+        ArgMinConfig {
+            axis: 1,
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
 fn cast(graph: &OnnxGraph) {
     let node = find_node(graph, "cast");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -85,6 +119,23 @@ fn clip(graph: &OnnxGraph) {
                     6.0,
                 ),
             ),
+        }
+    "#);
+}
+
+#[rstest]
+fn concat(graph: &OnnxGraph) {
+    let node = find_node(graph, "concat");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Concat "concat1"
+      Inputs:
+        concat_a: F32[2, 3]
+        concat_b: F32[2, 3]
+      Outputs:
+        concat1_out1: F32[?, ?]
+      Config:
+        ConcatConfig {
+            axis: 0,
         }
     "#);
 }
@@ -842,6 +893,196 @@ fn reciprocal(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn reduce_l1(graph: &OnnxGraph) {
+    let node = find_node(graph, "reducel1");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceL1 "reducel11"
+      Inputs:
+        reducel1_input: F32[2, 3, 4]
+      Outputs:
+        reducel11_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
+            ],
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn reduce_l2(graph: &OnnxGraph) {
+    let node = find_node(graph, "reducel2");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceL2 "reducel21"
+      Inputs:
+        reducel2_input: F32[2, 3, 4]
+      Outputs:
+        reducel21_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
+            ],
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn reduce_log_sum(graph: &OnnxGraph) {
+    let node = find_node(graph, "reducelogsum");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceLogSum "reducelogsum1"
+      Inputs:
+        reducelogsum_input: F32[2, 3, 4]
+      Outputs:
+        reducelogsum1_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
+            ],
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn reduce_log_sum_exp(graph: &OnnxGraph) {
+    let node = find_node(graph, "reducelogsumexp");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceLogSumExp "reducelogsumexp1"
+      Inputs:
+        reducelogsumexp_input: F32[2, 3, 4]
+      Outputs:
+        reducelogsumexp1_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
+            ],
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn reduce_max(graph: &OnnxGraph) {
+    let node = find_node(graph, "reducemax");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceMax "reducemax1"
+      Inputs:
+        reducemax_input: F32[2, 3, 4]
+      Outputs:
+        reducemax1_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
+            ],
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn reduce_mean(graph: &OnnxGraph) {
+    let node = find_node(graph, "reducemean");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceMean "reducemean1"
+      Inputs:
+        reducemean_input: F32[2, 3, 4]
+      Outputs:
+        reducemean1_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
+            ],
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn reduce_min(graph: &OnnxGraph) {
+    let node = find_node(graph, "reducemin");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceMin "reducemin1"
+      Inputs:
+        reducemin_input: F32[2, 3, 4]
+      Outputs:
+        reducemin1_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
+            ],
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn reduce_prod(graph: &OnnxGraph) {
+    let node = find_node(graph, "reduceprod");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceProd "reduceprod1"
+      Inputs:
+        reduceprod_input: F32[2, 3, 4]
+      Outputs:
+        reduceprod1_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
+            ],
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn reduce_sum(graph: &OnnxGraph) {
+    let node = find_node(graph, "reducesum");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceSum "reducesum1"
+      Inputs:
+        reducesum_input: F32[2, 3, 4]
+      Outputs:
+        reducesum1_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
+            ],
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn reduce_sum_square(graph: &OnnxGraph) {
+    let node = find_node(graph, "reducesumsquare");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceSumSquare "reducesumsquare1"
+      Inputs:
+        reducesumsquare_input: F32[2, 3, 4]
+      Outputs:
+        reducesumsquare1_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
+            ],
+            keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
 fn relu(graph: &OnnxGraph) {
     let node = find_node(graph, "relu");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -850,6 +1091,27 @@ fn relu(graph: &OnnxGraph) {
         relu_input: F32[2, 3, 4]
       Outputs:
         relu1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
+fn reshape(graph: &OnnxGraph) {
+    let node = find_node(graph, "reshape");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Reshape "reshape1"
+      Inputs:
+        reshape_input: F32[2, 3, 4]
+      Outputs:
+        reshape1_out1: F32[6, 4]
+      Config:
+        ReshapeConfig {
+            shape: Static(
+                [
+                    6,
+                    4,
+                ],
+            ),
+        }
     "#);
 }
 
@@ -964,6 +1226,29 @@ fn sqrt(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn squeeze(graph: &OnnxGraph) {
+    let node = find_node(graph, "squeeze");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Squeeze "squeeze1"
+      Inputs:
+        squeeze_input: F32[1, 3, 1, 4]
+      Outputs:
+        squeeze1_out1: F32[3, 4]
+      Config:
+        SqueezeConfig {
+            axes: Some(
+                Static(
+                    [
+                        0,
+                        2,
+                    ],
+                ),
+            ),
+        }
+    "#);
+}
+
+#[rstest]
 fn tanh(graph: &OnnxGraph) {
     let node = find_node(graph, "tanh");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -972,6 +1257,26 @@ fn tanh(graph: &OnnxGraph) {
         tanh_input: F32[2, 3, 4]
       Outputs:
         tanh1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
+fn top_k(graph: &OnnxGraph) {
+    let node = find_node(graph, "topk");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    TopK "topk1"
+      Inputs:
+        topk_input: F32[3, 4]
+      Outputs:
+        topk1_out1: F32[?, ?]
+        topk1_out2: I64[?, ?]
+      Config:
+        TopKConfig {
+            axis: 1,
+            k: Static(
+                2,
+            ),
+        }
     "#);
 }
 
@@ -996,6 +1301,25 @@ fn transpose(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn unsqueeze(graph: &OnnxGraph) {
+    let node = find_node(graph, "unsqueeze");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Unsqueeze "unsqueeze1"
+      Inputs:
+        unsqueeze_input: F32[3, 4]
+      Outputs:
+        unsqueeze1_out1: F32[1, 3, 4, 1]
+      Config:
+        Static(
+            [
+                0,
+                3,
+            ],
+        )
+    "#);
+}
+
+#[rstest]
 fn xor_op(graph: &OnnxGraph) {
     let node = find_node(graph, "xor");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -1008,7 +1332,7 @@ fn xor_op(graph: &OnnxGraph) {
     "#);
 }
 
-/// Ops that require min_opset > 1: Add, ArgMax, ArgMin, AveragePool, BatchNormalization, Concat, Div, Equal, Gemm, Greater, Hardmax, Less, LogSoftmax, Mean, Mul, Pad, ReduceL1, ReduceL2, ReduceLogSum, ReduceLogSumExp, ReduceMax, ReduceMean, ReduceMin, ReduceProd, ReduceSum, ReduceSumSquare, Reshape, Slice, Softmax, Split, Squeeze, Sub, Sum, Tile, TopK, Unsqueeze
+/// Ops that require min_opset > 1: Add, AveragePool, BatchNormalization, Div, Equal, Gemm, Greater, Hardmax, Less, LogSoftmax, Mean, Mul, Pad, Slice, Softmax, Split, Sub, Sum, Tile
 #[test]
 fn unsupported_ops_fail() {
     let result = load_model_result("opset_01_unsupported.onnx");

@@ -42,7 +42,7 @@ impl NodeProcessor for ConcatProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 4,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::AtLeast(1),
             outputs: OutputSpec::Exact(1),

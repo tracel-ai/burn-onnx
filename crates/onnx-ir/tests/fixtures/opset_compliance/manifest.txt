@@ -1,5 +1,5 @@
-1:Abs,And,Cast,Ceil,Clip,Constant,Conv,ConvTranspose,DepthToSpace,Dropout,Elu,Exp,Flatten,Floor,GRU,Gather,GlobalAveragePool,HardSigmoid,Identity,If,InstanceNormalization,LSTM,LeakyRelu,Log,MatMul,Max,MaxPool,Min,Neg,Not,Or,PRelu,Pow,RandomNormal,RandomNormalLike,RandomUniform,RandomUniformLike,Reciprocal,Relu,Selu,Shape,Sigmoid,Size,Softplus,Softsign,SpaceToDepth,Sqrt,Tanh,Transpose,Xor|Add,ArgMax,ArgMin,AveragePool,BatchNormalization,Concat,Div,Equal,Gemm,Greater,Hardmax,Less,LogSoftmax,Mean,Mul,Pad,ReduceL1,ReduceL2,ReduceLogSum,ReduceLogSumExp,ReduceMax,ReduceMean,ReduceMin,ReduceProd,ReduceSum,ReduceSumSquare,Reshape,Slice,Softmax,Split,Squeeze,Sub,Sum,Tile,TopK,Unsqueeze
-2:|Pad,Split
+1:Abs,And,ArgMax,ArgMin,Cast,Ceil,Clip,Concat,Constant,Conv,ConvTranspose,DepthToSpace,Dropout,Elu,Exp,Flatten,Floor,GRU,Gather,GlobalAveragePool,HardSigmoid,Identity,If,InstanceNormalization,LSTM,LeakyRelu,Log,MatMul,Max,MaxPool,Min,Neg,Not,Or,PRelu,Pow,RandomNormal,RandomNormalLike,RandomUniform,RandomUniformLike,Reciprocal,ReduceL1,ReduceL2,ReduceLogSum,ReduceLogSumExp,ReduceMax,ReduceMean,ReduceMin,ReduceProd,ReduceSum,ReduceSumSquare,Relu,Reshape,Selu,Shape,Sigmoid,Size,Softplus,Softsign,SpaceToDepth,Sqrt,Squeeze,Tanh,TopK,Transpose,Unsqueeze,Xor|Add,AveragePool,BatchNormalization,Div,Equal,Gemm,Greater,Hardmax,Less,LogSoftmax,Mean,Mul,Pad,Slice,Softmax,Split,Sub,Sum,Tile
+2:Pad|Split
 3:GRU|
 4:Concat|
 5:Reshape|
@@ -8,7 +8,7 @@
 8:Expand,Max,MaxPool,Mean,Min,Sum|
 9:Acosh,Asinh,Atanh,BatchNormalization,Cast,Constant,ConstantOfShape,Cosh,Erf,EyeLike,Flatten,Greater,IsNaN,Less,MatMul,NonZero,OneHot,PRelu,Sign,Sinh,Where|Gemm
 10:Dropout,IsInf,MatMulInteger,MaxPool,Mod,Slice,ThresholdedRelu,TopK|AveragePool,Resize
-11:ArgMax,ArgMin,AveragePool,BitShift,Clip,Concat,Constant,Conv,ConvTranspose,CumSum,DepthToSpace,Equal,Flatten,Gather,GatherElements,GatherND,Gemm,If,MaxPool,OneHot,Pad,Range,ReduceL1,ReduceL2,ReduceLogSum,ReduceLogSumExp,ReduceMax,ReduceMean,ReduceMin,ReduceProd,ReduceSum,ReduceSumSquare,Resize,Round,ScatterElements,ScatterND,Slice,Split,TopK|Hardmax,LogSoftmax,Softmax,Squeeze,Unsqueeze
+11:ArgMax,ArgMin,AveragePool,BitShift,Clip,Concat,Constant,Conv,ConvTranspose,CumSum,DepthToSpace,Equal,Flatten,Gather,GatherElements,GatherND,Gemm,If,MaxPool,OneHot,Pad,Range,ReduceL1,ReduceL2,ReduceLogSum,ReduceLogSumExp,ReduceMax,ReduceMean,ReduceMin,ReduceProd,ReduceSum,ReduceSumSquare,Resize,Round,ScatterElements,ScatterND,Slice,Split,Squeeze,TopK,Unsqueeze|Hardmax,LogSoftmax,Softmax
 12:ArgMax,ArgMin,Celu,Clip,Constant,Dropout,GatherND,GreaterOrEqual,LessOrEqual,Max,MaxPool,Min,Pow,ReduceMax,ReduceMin|
 13:Abs,Add,ArgMax,ArgMin,Cast,Ceil,Clip,Concat,Constant,DepthToSpace,Div,Dropout,Equal,Erf,Exp,Expand,Flatten,Floor,Gather,GatherElements,GatherND,Gemm,Greater,Hardmax,Identity,If,IsNaN,Less,Log,LogSoftmax,MatMul,Max,Mean,Min,Mod,Mul,Neg,NonZero,Pad,Pow,Reciprocal,ReduceL1,ReduceL2,ReduceLogSum,ReduceLogSumExp,ReduceMax,ReduceMean,ReduceMin,ReduceProd,ReduceSum,ReduceSumSquare,Relu,Reshape,Resize,ScatterElements,ScatterND,Shape,Sigmoid,Sign,Size,Slice,Softmax,SpaceToDepth,Split,Sqrt,Squeeze,Sub,Sum,Tanh,Tile,Transpose,Unsqueeze|
 14:Add,BatchNormalization,CumSum,Div,GRU,HardSwish,Identity,LSTM,Mul,Relu,Reshape,Sub,Trilu|

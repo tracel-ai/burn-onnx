@@ -1036,6 +1036,29 @@ fn split(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn squeeze(graph: &OnnxGraph) {
+    let node = find_node(graph, "squeeze");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Squeeze "squeeze1"
+      Inputs:
+        squeeze_input: F32[1, 3, 1, 4]
+      Outputs:
+        squeeze1_out1: F32[3, 4]
+      Config:
+        SqueezeConfig {
+            axes: Some(
+                Static(
+                    [
+                        0,
+                        2,
+                    ],
+                ),
+            ),
+        }
+    "#);
+}
+
+#[rstest]
 fn top_k(graph: &OnnxGraph) {
     let node = find_node(graph, "topk");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -1056,7 +1079,26 @@ fn top_k(graph: &OnnxGraph) {
     "#);
 }
 
-/// Ops that require min_opset > 11: Hardmax, LogSoftmax, Softmax, Squeeze, Unsqueeze
+#[rstest]
+fn unsqueeze(graph: &OnnxGraph) {
+    let node = find_node(graph, "unsqueeze");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Unsqueeze "unsqueeze1"
+      Inputs:
+        unsqueeze_input: F32[3, 4]
+      Outputs:
+        unsqueeze1_out1: F32[1, 3, 4, 1]
+      Config:
+        Static(
+            [
+                0,
+                3,
+            ],
+        )
+    "#);
+}
+
+/// Ops that require min_opset > 11: Hardmax, LogSoftmax, Softmax
 #[test]
 fn unsupported_ops_fail() {
     let result = load_model_result("opset_11_unsupported.onnx");

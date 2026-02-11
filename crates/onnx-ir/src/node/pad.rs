@@ -137,7 +137,7 @@ impl NodeProcessor for PadProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 11,
+            min_opset: 2,
             max_opset: None,
             inputs: InputSpec::Range(1, 4),
             outputs: OutputSpec::Exact(1),
