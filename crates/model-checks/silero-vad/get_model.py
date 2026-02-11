@@ -19,7 +19,7 @@ See: https://github.com/snakers4/silero-vad/issues/728 for compatibility discuss
 """
 
 import json
-import struct
+import sys
 import urllib.request
 import wave
 from pathlib import Path
@@ -28,6 +28,9 @@ from collections import defaultdict
 import numpy as np
 import onnx
 import onnxruntime as ort
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from common import get_artifacts_dir
 
 
 def extract_node_info(model_path, artifacts_dir):
@@ -136,8 +139,7 @@ def extract_node_info(model_path, artifacts_dir):
 def download_test_data():
     """Download test audio file from silero-vad repository."""
 
-    artifacts_dir = Path("artifacts")
-    artifacts_dir.mkdir(exist_ok=True)
+    artifacts_dir = get_artifacts_dir("silero-vad")
 
     test_wav_path = artifacts_dir / "test.wav"
 
@@ -311,9 +313,7 @@ def generate_reference_outputs(model_path, test_wav_path, artifacts_dir):
 def download_model():
     """Download the Silero VAD ONNX model (opset 18, if-less version)."""
 
-    # Create artifacts directory if it doesn't exist
-    artifacts_dir = Path("artifacts")
-    artifacts_dir.mkdir(exist_ok=True)
+    artifacts_dir = get_artifacts_dir("silero-vad")
 
     model_path = artifacts_dir / "silero_vad.onnx"
 

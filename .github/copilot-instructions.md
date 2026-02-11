@@ -78,11 +78,21 @@ examples/
   node-specific behavior is declared in `NodeProcessor` implementations. If a general module needs
   to handle a particular node type differently, that logic belongs in the node's processor, not in
   the framework code
+- **Optional input handling**: ONNX uses empty string `""` for "optional input not provided". Use
+  `node.get_input(index)` which returns `None` for out-of-bounds or optional inputs. In
+  `lift_constants()` (which needs `&mut`), guard with `!node.inputs[N].is_optional()`. Never check
+  `name.is_empty()` to detect optional inputs; use `is_optional()` instead
 
 ### burn-onnx Patterns
 
 - Implement `NodeCodegen<PS>` directly on onnx-ir node types
-- Use `scope.arg()` for automatic tensor/scalar/shape handling
+- Use `scope.arg()` for automatic tensor/scalar/shape handling. Note: `scope.arg()` may add
+  `.clone()` when the tensor is used by multiple downstream nodes. If you also need the tensor twice
+  within the same `forward()`, using `#input.clone()` in `quote!` may produce a double-clone in that
+  case, which is acceptable
+- **Scope temporary variables in generated code**: When a node's codegen introduces temporary
+  variables (e.g., `indices`, intermediate tensors), wrap them in a block expression to avoid name
+  collisions with other nodes: `let #output = { let tmp = ...; tmp.op() };`
 - Use `quote!` macro for code generation
 - Add `insta` snapshot tests for ALL code generation branches - each config option, each input type
   variant, optional vs required inputs should have test coverage
@@ -149,6 +159,37 @@ print("Expected output:", outputs[0])
 
 This ensures test scripts are self-contained and use the ONNX reference implementation for ground
 truth.
+
+For newer ONNX ops (opset 21+), `torch.onnx.export` often can't emit the op directly. Use
+`onnx.helper.make_node` / `onnx.helper.make_model` to construct the ONNX model manually instead.
+
+## Adding a New ONNX Operator
+
+1. **onnx-ir**: Create node processor in `crates/onnx-ir/src/node/<op>.rs`
+   - Read `onnx-spec/ops/<OpName>.md` for the full operator spec
+   - Define config struct with ALL ONNX attributes
+   - Implement `NodeProcessor` trait
+   - Register in these files:
+     - `crates/onnx-ir/src/node/mod.rs` - add `pub mod <op>;`
+     - `crates/onnx-ir/src/ir/node.rs` - move from `unsupported::<Op>Node` to `<op>::<Op>Node`
+     - `crates/onnx-ir/src/registry.rs` - register the processor
+
+2. **burn-onnx**: Create codegen in `crates/burn-onnx/src/burn/node/<op>.rs`
+   - Implement `NodeCodegen<PS>` for the onnx-ir node type
+   - Add `insta` snapshot tests for all code generation branches
+   - Register in these files:
+     - `crates/burn-onnx/src/burn/node/mod.rs` - add `pub(crate) mod <op>;`
+     - `crates/burn-onnx/src/burn/node_codegen.rs` - add `<Op>` to dispatch macro
+
+3. **onnx-tests**: Create integration test in `crates/onnx-tests/tests/<op>/`
+   - Python script to generate ONNX model (use uv script format)
+   - Use `ReferenceEvaluator` for expected outputs
+   - Rust test in `mod.rs`
+   - Register in these files:
+     - `crates/onnx-tests/build.rs` - add `.input("tests/<op>/<op>.onnx")`
+     - `crates/onnx-tests/tests/test_mod.rs` - add `pub mod <op>;`
+
+4. **Documentation**: Update `SUPPORTED-ONNX-OPS.md`
 
 ## Code Review Guidelines
 

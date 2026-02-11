@@ -29,8 +29,8 @@ panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 portable-atomic = { version = "1.7", features = ["critical-section"] }
 embedded-alloc = "0.6.0"
 
-burn = { git = "https://github.com/tracel-ai/burn", rev = "44bbbe8c2cf10784fe3275f9a9c9933732b600e4", default-features = false, features = ["ndarray"] }
-burn-store = { git = "https://github.com/tracel-ai/burn", rev = "44bbbe8c2cf10784fe3275f9a9c9933732b600e4", default-features = false, features = ["burnpack"] }
+burn = { git = "https://github.com/tracel-ai/burn", rev = "bd991fe52c94faef0cb52dcc92816323a053ad1c", default-features = false, features = ["ndarray"] }
+burn-store = { git = "https://github.com/tracel-ai/burn", rev = "bd991fe52c94faef0cb52dcc92816323a053ad1c", default-features = false, features = ["burnpack"] }
 
 [build-dependencies]
 burn-onnx = { path = "../../crates/burn-onnx" }

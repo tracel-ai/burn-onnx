@@ -20,7 +20,9 @@ include_simplified_models!(
     simplify_expand_from_shape,
     simplify_constant_of_shape_opt,
     simplify_gather_shape_chain,
-    simplify_permute_via_shape_gather
+    simplify_permute_via_shape_gather,
+    simplify_sdpa_coalesce,
+    simplify_constant_fold
 );
 
 /// Extract the `forward` method body from generated source code.
@@ -175,6 +177,66 @@ mod tests {
             s.forward(input.clone()).to_data(),
             u.forward(input).to_data()
         );
+    }
+
+    #[test]
+    fn sdpa_coalesce() {
+        use burn::tensor::{Tolerance, ops::FloatElem};
+        type FT = FloatElem<TestBackend>;
+        let device = Default::default();
+        let s = simplified::simplify_sdpa_coalesce::Model::<TestBackend>::new(&device);
+        let u = unsimplified::simplify_sdpa_coalesce::Model::<TestBackend>::new(&device);
+        // Use distinct tensors to catch Q/K/V ordering bugs
+        let q = Tensor::<TestBackend, 4>::from_floats(
+            [[
+                [
+                    [1.0, 2.0, 3.0, 4.0],
+                    [5.0, 6.0, 7.0, 8.0],
+                    [9.0, 10.0, 11.0, 12.0],
+                ],
+                [
+                    [0.1, 0.2, 0.3, 0.4],
+                    [0.5, 0.6, 0.7, 0.8],
+                    [0.9, 1.0, 1.1, 1.2],
+                ],
+            ]],
+            &device,
+        );
+        let k = Tensor::<TestBackend, 4>::from_floats(
+            [[
+                [
+                    [0.1, 0.3, 0.5, 0.7],
+                    [0.2, 0.4, 0.6, 0.8],
+                    [0.9, 1.1, 1.3, 1.5],
+                ],
+                [
+                    [1.0, 1.2, 1.4, 1.6],
+                    [1.1, 1.3, 1.5, 1.7],
+                    [1.8, 2.0, 2.2, 2.4],
+                ],
+            ]],
+            &device,
+        );
+        let v = Tensor::<TestBackend, 4>::from_floats(
+            [[
+                [
+                    [2.0, 0.5, 1.0, 3.0],
+                    [1.5, 2.5, 0.5, 1.0],
+                    [0.5, 1.5, 2.5, 0.5],
+                ],
+                [
+                    [3.0, 1.0, 2.0, 0.5],
+                    [2.5, 0.5, 1.5, 2.0],
+                    [1.0, 3.0, 0.5, 1.5],
+                ],
+            ]],
+            &device,
+        );
+        let s_out = s.forward(q.clone(), k.clone(), v.clone());
+        let u_out = u.forward(q, k, v);
+        s_out
+            .to_data()
+            .assert_approx_eq::<FT>(&u_out.to_data(), Tolerance::default());
     }
 
     // -- Codegen snapshot tests --
@@ -397,6 +459,110 @@ mod tests {
         pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
                 let reshape1_out1 = input.permute([0, 1, 3, 2]);
                 reshape1_out1
+            }
+        }
+        ");
+    }
+
+    #[test]
+    fn constant_fold() {
+        let device = Default::default();
+        let s = simplified::simplify_constant_fold::Model::<TestBackend>::new(&device);
+        let u = unsimplified::simplify_constant_fold::Model::<TestBackend>::new(&device);
+        let input = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
+        assert_eq!(s.forward(input.clone()), u.forward(input));
+    }
+
+    #[test]
+    fn codegen_constant_fold() {
+        let s = simplified_source::simplify_constant_fold();
+        let u = unsimplified_source::simplify_constant_fold();
+        assert_codegen_differs(s, u, "constant_fold");
+        insta::assert_snapshot!(extract_forward(u), @r"
+        pub fn forward(&self, x: Tensor<B, 3>) -> i64 {
+                let shape1_out1: [i64; 3] = {
+                    let axes = &x.clone().dims()[0..3];
+                    let mut output = [0i64; 3];
+                    for i in 0..3 {
+                        output[i] = axes[i] as i64;
+                    }
+                    output
+                };
+                let shape2_out1: [i64; 3] = {
+                    let axes = &x.dims()[0..3];
+                    let mut output = [0i64; 3];
+                    for i in 0..3 {
+                        output[i] = axes[i] as i64;
+                    }
+                    output
+                };
+                let constant1_out1 = 1i64;
+                let constant2_out1 = 2i64;
+                let actual_idx = if constant1_out1 < 0 {
+                    (shape1_out1.len() as i64 + constant1_out1) as usize
+                } else {
+                    constant1_out1 as usize
+                };
+                let gather1_out1 = shape1_out1[actual_idx] as i64;
+                let actual_idx = if constant2_out1 < 0 {
+                    (shape2_out1.len() as i64 + constant2_out1) as usize
+                } else {
+                    constant2_out1 as usize
+                };
+                let gather2_out1 = shape2_out1[actual_idx] as i64;
+                let mul1_out1 = gather1_out1 * gather2_out1;
+                mul1_out1
+            }
+        }
+        ");
+        insta::assert_snapshot!(extract_forward(s), @r"
+        pub fn forward(&self, x: Tensor<B, 3>) -> i64 {
+                let mul1_out1 = 12i64;
+                mul1_out1
+            }
+        }
+        ");
+    }
+
+    #[test]
+    fn codegen_sdpa_coalesce() {
+        let s = simplified_source::simplify_sdpa_coalesce();
+        let u = unsimplified_source::simplify_sdpa_coalesce();
+        assert_codegen_differs(s, u, "sdpa_coalesce");
+        insta::assert_snapshot!(extract_forward(u), @r"
+        pub fn forward(
+                &self,
+                q: Tensor<B, 4>,
+                k: Tensor<B, 4>,
+                v: Tensor<B, 4>,
+            ) -> Tensor<B, 4> {
+                let transpose1_out1 = k.permute([0, 1, 3, 2]);
+                let matmul1_out1 = q.matmul(transpose1_out1);
+                let constant1_out1 = 2f32;
+                let div1_out1 = matmul1_out1.div_scalar(constant1_out1);
+                let softmax1_out1 = burn::tensor::activation::softmax(div1_out1, 3);
+                let matmul2_out1 = softmax1_out1.matmul(v);
+                matmul2_out1
+            }
+        }
+        ");
+        insta::assert_snapshot!(extract_forward(s), @r"
+        pub fn forward(
+                &self,
+                q: Tensor<B, 4>,
+                k: Tensor<B, 4>,
+                v: Tensor<B, 4>,
+            ) -> Tensor<B, 4> {
+                let (matmul2_out1,) = {
+                    let q = q;
+                    let k = k;
+                    let v = v;
+                    let head_dim = q.dims()[3] as f64;
+                    let q = q * (0.5f64 * head_dim.sqrt());
+                    let matmul2_out1 = burn::tensor::module::attention(q, k, v, None);
+                    (matmul2_out1,)
+                };
+                matmul2_out1
             }
         }
         ");

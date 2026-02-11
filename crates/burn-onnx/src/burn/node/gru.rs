@@ -2,15 +2,12 @@
 //!
 //! ## Supported ONNX Features
 //!
-//! - Forward and reverse directions
+//! - Forward, reverse, and bidirectional directions
 //! - Batch-first and sequence-first layouts (`layout` attribute)
 //! - Initial hidden state
 //! - `linear_before_reset` attribute (maps to Burn's `reset_after`)
 //!
 //! ## Unsupported ONNX Features
-//!
-//! - **Bidirectional**: Burn does not have a BiGru module. Bidirectional GRU models will cause
-//!   a panic during code generation.
 //!
 //! - **Variable sequence lengths**: ONNX input `sequence_lens` with shape `[batch_size]` specifies
 //!   the actual length of each sequence in a batch. Currently, all sequences in a batch must have
@@ -202,6 +199,202 @@ fn create_snapshot_from_data(
     )
 }
 
+/// Generate forward code for unidirectional (forward/reverse) GRU.
+fn forward_unidirectional(
+    node: &onnx_ir::gru::GruNode,
+    scope: &mut ScopeAtPosition<'_>,
+    input: TokenStream,
+    field: Ident,
+    output_y: Option<Ident>,
+    output_y_h: Option<Ident>,
+) -> TokenStream {
+    let has_initial_h = node.config.has_initial_h;
+    let is_reverse = matches!(node.config.direction, GruDirection::Reverse);
+    let batch_first = node.config.batch_first;
+
+    // Build the initial state expression
+    // ONNX initial_h: [num_directions, batch_size, hidden_size]
+    // Burn expects: [batch_size, hidden_size] (2D)
+    let initial_state_expr = if has_initial_h {
+        let h_input = scope.arg(&node.inputs[5]);
+        quote! { Some(#h_input.squeeze_dim(0)) }
+    } else {
+        quote! { None }
+    };
+
+    // Burn GRU expects [batch_size, seq_length, input_size] (always batch-first)
+    let input_transform = if batch_first {
+        quote! { #input }
+    } else {
+        quote! { #input.swap_dims(0, 1) }
+    };
+
+    // For reverse: flip the sequence dimension (dim 1 in batch-first layout)
+    let input_with_direction = if is_reverse {
+        quote! {
+            {
+                let batch_first_input = #input_transform;
+                batch_first_input.flip([1])
+            }
+        }
+    } else {
+        quote! { #input_transform }
+    };
+
+    let forward_call = quote! {
+        let gru_output = self.#field.forward(#input_with_direction, #initial_state_expr);
+    };
+
+    // For reverse: flip output back
+    let output_with_direction = if is_reverse {
+        quote! { gru_output.flip([1]) }
+    } else {
+        quote! { gru_output }
+    };
+
+    // Extract Y_h (final hidden state) from the sequence output.
+    let y_h_step = if is_reverse {
+        quote! { 0..1 }
+    } else {
+        quote! { (seq_len - 1)..seq_len }
+    };
+    let y_h_expr = quote! {
+        {
+            let [_batch, seq_len, _hidden] = batch_first_output.dims();
+            let step = batch_first_output.clone().slice([0.._batch, #y_h_step, 0.._hidden]);
+            step.squeeze_dim::<2>(1).unsqueeze_dims::<3>(&[0])
+        }
+    };
+
+    let y_output_expr = if batch_first {
+        quote! { batch_first_output.clone().unsqueeze_dims::<4>(&[2]) }
+    } else {
+        quote! { batch_first_output.clone().swap_dims(0, 1).unsqueeze_dims::<4>(&[1]) }
+    };
+
+    match (output_y, output_y_h) {
+        (Some(y), Some(y_h)) => {
+            quote! {
+                let (#y, #y_h) = {
+                    #forward_call
+                    let batch_first_output = #output_with_direction;
+                    (
+                        #y_output_expr,
+                        #y_h_expr
+                    )
+                };
+            }
+        }
+        (Some(y), None) => {
+            quote! {
+                let #y = {
+                    #forward_call
+                    let batch_first_output = #output_with_direction;
+                    #y_output_expr
+                };
+            }
+        }
+        (None, Some(y_h)) => {
+            quote! {
+                let #y_h = {
+                    #forward_call
+                    let batch_first_output = #output_with_direction;
+                    #y_h_expr
+                };
+            }
+        }
+        (None, None) => {
+            quote! {
+                {
+                    #forward_call
+                }
+            }
+        }
+    }
+}
+
+/// Generate forward code for bidirectional GRU.
+///
+/// BiGru.forward() returns (output_seq, final_state):
+///   output_seq: [batch, seq, 2*hidden] (batch_first) or [seq, batch, 2*hidden]
+///   final_state: [2, batch, hidden] (already matches ONNX Y_h format)
+fn forward_bidirectional(
+    node: &onnx_ir::gru::GruNode,
+    scope: &mut ScopeAtPosition<'_>,
+    input: TokenStream,
+    field: Ident,
+    output_y: Option<Ident>,
+    output_y_h: Option<Ident>,
+) -> TokenStream {
+    let has_initial_h = node.config.has_initial_h;
+    let hidden_size = node.config.hidden_size;
+
+    // ONNX initial_h: [2, batch_size, hidden_size]
+    // BiGru expects: Option<Tensor<B, 3>> with shape [2, batch, hidden] - no transform needed
+    let initial_state_expr = if has_initial_h {
+        let h_input = scope.arg(&node.inputs[5]);
+        quote! { Some(#h_input) }
+    } else {
+        quote! { None }
+    };
+
+    // Y output transformation: split concatenated hidden states
+    let y_output_expr = if node.config.batch_first {
+        // Burn: [batch, seq, 2*hidden] -> reshape [batch, seq, 2, hidden] (ONNX layout=1)
+        quote! {
+            {
+                let [batch_size, seq_len, _] = output_seq.dims();
+                output_seq.reshape([batch_size, seq_len, 2, #hidden_size])
+            }
+        }
+    } else {
+        // Burn: [seq, batch, 2*hidden] -> reshape [seq, batch, 2, hidden]
+        // -> swap_dims(1, 2) -> [seq, 2, batch, hidden] (ONNX layout=0)
+        quote! {
+            {
+                let [seq_len, batch_size, _] = output_seq.dims();
+                let reshaped = output_seq.reshape([seq_len, batch_size, 2, #hidden_size]);
+                reshaped.swap_dims(1, 2)
+            }
+        }
+    };
+
+    // Vary the destructuring to avoid unused-variable warnings in generated code
+    match (output_y, output_y_h) {
+        (Some(y), Some(y_h)) => {
+            quote! {
+                let (#y, #y_h) = {
+                    let (output_seq, final_state) = self.#field.forward(#input, #initial_state_expr);
+                    (#y_output_expr, final_state)
+                };
+            }
+        }
+        (Some(y), None) => {
+            quote! {
+                let #y = {
+                    let (output_seq, _final_state) = self.#field.forward(#input, #initial_state_expr);
+                    #y_output_expr
+                };
+            }
+        }
+        (None, Some(y_h)) => {
+            quote! {
+                let #y_h = {
+                    let (_output_seq, final_state) = self.#field.forward(#input, #initial_state_expr);
+                    final_state
+                };
+            }
+        }
+        (None, None) => {
+            quote! {
+                {
+                    let _ = self.#field.forward(#input, #initial_state_expr);
+                }
+            }
+        }
+    }
+}
+
 impl NodeCodegen for onnx_ir::gru::GruNode {
     fn inputs(&self) -> &[Argument] {
         &self.inputs
@@ -244,7 +437,17 @@ impl NodeCodegen for onnx_ir::gru::GruNode {
                 },
             )),
             GruDirection::Bidirectional => {
-                panic!("Bidirectional GRU is not supported. Burn does not have a BiGru module.");
+                let batch_first = self.config.batch_first;
+                Some(Field::new(
+                    self.name.clone(),
+                    quote! { burn::nn::gru::BiGru<B> },
+                    quote! {
+                        let #name = burn::nn::gru::BiGruConfig::new(#d_input, #d_hidden, #bias)
+                            .with_reset_after(#reset_after)
+                            .with_batch_first(#batch_first)
+                            .init(device);
+                    },
+                ))
             }
         }
     }
@@ -268,129 +471,10 @@ impl NodeCodegen for onnx_ir::gru::GruNode {
             .filter(|a| !a.name.is_empty())
             .map(arg_to_ident);
 
-        let has_initial_h = self.config.has_initial_h;
-        let is_reverse = matches!(self.config.direction, GruDirection::Reverse);
-        let batch_first = self.config.batch_first;
-
-        // Build the initial state expression
-        // Input indices: 0=X, 1=W, 2=R, 3=B, 4=sequence_lens, 5=initial_h
-        // ONNX initial_h: [num_directions, batch_size, hidden_size]
-        // Burn expects: [batch_size, hidden_size] (2D)
-        let initial_state_expr = if has_initial_h {
-            let h_input = scope.arg(&self.inputs[5]);
-            // Squeeze out the direction dimension (index 0)
-            quote! { Some(#h_input.squeeze_dim(0)) }
+        if matches!(self.config.direction, GruDirection::Bidirectional) {
+            forward_bidirectional(self, scope, input, field, output_y, output_y_h)
         } else {
-            quote! { None }
-        };
-
-        // Burn GRU expects [batch_size, seq_length, input_size] (always batch-first)
-        // ONNX default (layout=0): [seq_length, batch_size, input_size]
-        // ONNX layout=1: [batch_size, seq_length, input_size]
-        let input_transform = if batch_first {
-            // Already batch-first, no transform needed
-            quote! { #input }
-        } else {
-            // seq-first -> batch-first: swap dims 0 and 1
-            quote! { #input.swap_dims(0, 1) }
-        };
-
-        // For reverse: flip the sequence dimension (dim 1 in batch-first layout)
-        let input_with_direction = if is_reverse {
-            quote! {
-                {
-                    let batch_first_input = #input_transform;
-                    batch_first_input.flip([1])
-                }
-            }
-        } else {
-            quote! { #input_transform }
-        };
-
-        // Forward call: Burn GRU returns [batch_size, seq_length, hidden_size]
-        let forward_call = quote! {
-            let gru_output = self.#field.forward(#input_with_direction, #initial_state_expr);
-        };
-
-        // For reverse: flip output back
-        let output_with_direction = if is_reverse {
-            quote! { gru_output.flip([1]) }
-        } else {
-            quote! { gru_output }
-        };
-
-        // Transform output from Burn format to ONNX format
-        // Burn: [batch_size, seq_length, hidden_size]
-        // ONNX Y (layout=0): [seq_length, num_directions, batch_size, hidden_size]
-        // ONNX Y (layout=1): [batch_size, seq_length, num_directions, hidden_size]
-        // ONNX Y_h: [num_directions, batch_size, hidden_size]
-
-        // Extract Y_h (final hidden state) from the sequence output.
-        // For forward: the last timestep is the final state.
-        // For reverse: the final state is the Burn GRU's last output BEFORE flipping,
-        // which becomes the first timestep after flipping.
-        let y_h_step = if is_reverse {
-            // After flip: first timestep = final state from reverse processing
-            quote! { 0..1 }
-        } else {
-            quote! { (seq_len - 1)..seq_len }
-        };
-        let y_h_expr = quote! {
-            {
-                let [_batch, seq_len, _hidden] = batch_first_output.dims();
-                let step = batch_first_output.clone().slice([0.._batch, #y_h_step, 0.._hidden]);
-                // [batch, 1, hidden] -> squeeze seq dim -> [batch, hidden] -> unsqueeze dir dim -> [1, batch, hidden]
-                step.squeeze_dim::<2>(1).unsqueeze_dims::<3>(&[0])
-            }
-        };
-
-        let y_output_expr = if batch_first {
-            // Burn: [batch, seq, hidden] -> ONNX layout=1: [batch, seq, 1, hidden]
-            quote! { batch_first_output.clone().unsqueeze_dims::<4>(&[2]) }
-        } else {
-            // Burn: [batch, seq, hidden] -> swap to [seq, batch, hidden] -> [seq, 1, batch, hidden]
-            quote! { batch_first_output.clone().swap_dims(0, 1).unsqueeze_dims::<4>(&[1]) }
-        };
-
-        // Build output assignments
-        match (output_y, output_y_h) {
-            (Some(y), Some(y_h)) => {
-                quote! {
-                    let (#y, #y_h) = {
-                        #forward_call
-                        let batch_first_output = #output_with_direction;
-                        (
-                            #y_output_expr,
-                            #y_h_expr
-                        )
-                    };
-                }
-            }
-            (Some(y), None) => {
-                quote! {
-                    let #y = {
-                        #forward_call
-                        let batch_first_output = #output_with_direction;
-                        #y_output_expr
-                    };
-                }
-            }
-            (None, Some(y_h)) => {
-                quote! {
-                    let #y_h = {
-                        #forward_call
-                        let batch_first_output = #output_with_direction;
-                        #y_h_expr
-                    };
-                }
-            }
-            (None, None) => {
-                quote! {
-                    {
-                        #forward_call
-                    }
-                }
-            }
+            forward_unidirectional(self, scope, input, field, output_y, output_y_h)
         }
     }
 
@@ -653,5 +737,127 @@ mod tests {
             (Y, Y_h)
         }
         "#);
+    }
+
+    #[test]
+    fn test_gru_forward_bidirectional() {
+        let node = create_gru_node("gru1", GruDirection::Bidirectional, false, false, 2);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<B, 3>,
+            W: Tensor<B, 3>,
+            R: Tensor<B, 3>,
+            B: Tensor<B, 2>,
+        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            let (Y, Y_h) = {
+                let (output_seq, final_state) = self.gru1.forward(input, None);
+                (
+                    {
+                        let [seq_len, batch_size, _] = output_seq.dims();
+                        let reshaped = output_seq.reshape([seq_len, batch_size, 2, 8usize]);
+                        reshaped.swap_dims(1, 2)
+                    },
+                    final_state,
+                )
+            };
+            (Y, Y_h)
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gru_forward_bidirectional_batch_first() {
+        let node = create_gru_node("gru1", GruDirection::Bidirectional, true, false, 2);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<B, 3>,
+            W: Tensor<B, 3>,
+            R: Tensor<B, 3>,
+            B: Tensor<B, 2>,
+        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            let (Y, Y_h) = {
+                let (output_seq, final_state) = self.gru1.forward(input, None);
+                (
+                    {
+                        let [batch_size, seq_len, _] = output_seq.dims();
+                        output_seq.reshape([batch_size, seq_len, 2, 8usize])
+                    },
+                    final_state,
+                )
+            };
+            (Y, Y_h)
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gru_forward_bidirectional_y_only() {
+        let node = create_gru_node("gru1", GruDirection::Bidirectional, false, false, 1);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<B, 3>,
+            W: Tensor<B, 3>,
+            R: Tensor<B, 3>,
+            B: Tensor<B, 2>,
+        ) -> Tensor<B, 4> {
+            let Y = {
+                let (output_seq, _final_state) = self.gru1.forward(input, None);
+                {
+                    let [seq_len, batch_size, _] = output_seq.dims();
+                    let reshaped = output_seq.reshape([seq_len, batch_size, 2, 8usize]);
+                    reshaped.swap_dims(1, 2)
+                }
+            };
+            Y
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gru_forward_bidirectional_with_initial_h() {
+        let node = create_gru_node("gru1", GruDirection::Bidirectional, false, true, 2);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<B, 3>,
+            W: Tensor<B, 3>,
+            R: Tensor<B, 3>,
+            B: Tensor<B, 2>,
+            sequence_lens: i64,
+            initial_h: Tensor<B, 3>,
+        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            let (Y, Y_h) = {
+                let (output_seq, final_state) = self.gru1.forward(input, Some(initial_h));
+                (
+                    {
+                        let [seq_len, batch_size, _] = output_seq.dims();
+                        let reshaped = output_seq.reshape([seq_len, batch_size, 2, 8usize]);
+                        reshaped.swap_dims(1, 2)
+                    },
+                    final_state,
+                )
+            };
+            (Y, Y_h)
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gru_field_bidirectional() {
+        let node = create_gru_node("gru1", GruDirection::Bidirectional, false, false, 2);
+        let code = codegen_field_init(&node);
+        assert_snapshot!(code, @r"
+        let gru1 = burn::nn::gru::BiGruConfig::new(4, 8, true)
+            .with_reset_after(false)
+            .with_batch_first(false)
+            .init(device);
+        ");
     }
 }

@@ -118,7 +118,14 @@ impl_node_codegen_dispatch! {
     Softmax,
     LogSoftmax,
     PRelu,
+    Celu,
+    Elu,
+    Selu,
     Softplus,
+    Softsign,
+    ThresholdedRelu,
+    Swish,
+    Hardmax,
 
     // Shape ops
     Reshape,
@@ -136,6 +143,7 @@ impl_node_codegen_dispatch! {
     Gather,
     GatherElements,
     GatherND,
+    ScatterElements,
     ScatterND,
     Tile,
     Expand,
@@ -148,6 +156,7 @@ impl_node_codegen_dispatch! {
     ConvTranspose1d,
     ConvTranspose2d,
     ConvTranspose3d,
+    DeformConv,
 
     // Pooling ops
     AveragePool1d,

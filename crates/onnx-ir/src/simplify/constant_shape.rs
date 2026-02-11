@@ -97,38 +97,7 @@ pub(crate) fn simplify_constant_shape(
     // ValueSource::Constant so the dead constant elimination pass in
     // convert_to_graph recognizes them as live references.
     if !constant_outputs.is_empty() {
-        // Build map: constant output name -> value_store from the producing node
-        let mut store_map: HashMap<String, crate::tensor_store::ValueStore> = HashMap::new();
-        for node in &nodes {
-            for output in &node.outputs {
-                if output.value_source == ValueSource::Constant
-                    && let Some(ref store) = output.value_store
-                {
-                    store_map.insert(output.name.clone(), store.clone());
-                }
-            }
-        }
-
-        let constant_set: std::collections::HashSet<&str> =
-            constant_outputs.iter().map(|s| s.as_str()).collect();
-        for node in &mut nodes {
-            for input in &mut node.inputs {
-                if input.value_source == ValueSource::Dynamic
-                    && constant_set.contains(input.name.as_str())
-                {
-                    input.value_source = ValueSource::Constant;
-                    input.value_store = store_map.get(input.name.as_str()).cloned();
-                }
-            }
-        }
-        for output in graph_outputs.iter_mut() {
-            if output.value_source == ValueSource::Dynamic
-                && constant_set.contains(output.name.as_str())
-            {
-                output.value_source = ValueSource::Constant;
-                output.value_store = store_map.get(output.name.as_str()).cloned();
-            }
-        }
+        super::update_constant_references(&mut nodes, graph_outputs, &constant_outputs);
     }
 
     nodes

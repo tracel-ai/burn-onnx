@@ -13,6 +13,9 @@ target
 # Generated IR and Burn Graph from ONNX
 out
 
+# Model-checks are standalone workspaces; lock files are not tracked
+crates/model-checks/*/Cargo.lock
+
 # Virtual Environment of Python
 .venv
 uv.lock

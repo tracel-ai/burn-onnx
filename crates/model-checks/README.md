@@ -21,7 +21,13 @@ Each model directory typically contains:
 - `build.rs` - Build script that uses burn-onnx to generate Rust code
 - `src/main.rs` - Test code that runs the generated model
 - `Cargo.toml` - Package configuration
-- `artifacts/` - Directory for downloaded ONNX models (created by the script)
+
+Model artifacts (ONNX files, test data) are stored in the platform cache directory:
+
+- macOS: `~/Library/Caches/burn-onnx/model-checks/<model-name>/`
+- Linux: `~/.cache/burn-onnx/model-checks/<model-name>/`
+
+Set `BURN_CACHE_DIR` to override the base cache path (useful for CI).
 
 Generated files (not tracked in git):
 
@@ -45,7 +51,7 @@ The model preparation script typically:
 - Downloads the model (if not already present)
 - Converts it to ONNX format with the appropriate opset version
 - Validates the model structure
-- Saves the prepared model to `artifacts/`
+- Saves the prepared model to the cache directory
 
 Scripts are designed to skip downloading if the ONNX model already exists, saving time and
 bandwidth.

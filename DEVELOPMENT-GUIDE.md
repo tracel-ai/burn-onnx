@@ -335,6 +335,39 @@ method. See the [Configuration Extraction example](#example-configuration-extrac
 specific inputs before `extract_config()` is called. The pipeline handles this automatically during
 post-processing.
 
+### Handling Optional ONNX Inputs
+
+ONNX uses an empty string `""` for "optional input not provided". The pipeline sets
+`ValueSource::Optional` on these inputs during parsing. Use `RawNode::get_input(index)` to access
+inputs safely: it returns `None` for both out-of-bounds and optional inputs.
+
+```rust
+// Good: returns None for absent or optional inputs
+if let Some(input) = node.get_input(2) {
+    // input is guaranteed to be a real, non-optional input
+    let value = input.value();
+}
+
+// Good: explicit is_optional() check when you need the index for mutation
+if node.inputs.len() > 1 && !node.inputs[1].is_optional() && node.inputs[1].is_constant() {
+    node.inputs[1].to_static()?;
+}
+
+// Bad: creates RuntimeInputRef with empty name, panics during codegen
+if let Some(input) = node.inputs.get(2) {
+    return Ok(SomeConfig::Runtime(RuntimeInputRef::new(input.name.clone(), 2)));
+}
+
+// Bad: unreliable after to_static() clears names
+if !node.inputs[0].name.is_empty() { ... }
+```
+
+**Key rules:**
+
+- Use `node.get_input(index)` in `extract_config()`, `is_noop()`, and read-only access
+- Use `!node.inputs[N].is_optional()` guards in `lift_constants()` (which needs `&mut` access)
+- Never check `name.is_empty()` to detect optional inputs; use `is_optional()` instead
+
 ## Architecture Overview
 
 ### ONNX-IR Pipeline
@@ -415,6 +448,28 @@ handling ONNX operations. Each processor implements:
 - `type Config` - Associated type for configuration (use `()` if no config needed)
 - `infer_types()` - Infer output types from inputs and configuration
 - `build_node()` - Construct the final `Node` enum variant
+
+**Static Shape Inference:**
+
+The `infer_types()` method should always produce a `static_shape` (`Some(vec![...])`) on tensor
+outputs, even when the input has no static shape info. Use `None` for unknown individual dimensions
+and `Some(value)` for known ones. This enables downstream merging via `merge_static_shape()`.
+
+- **Always produce `Some(vec![...])`**, never leave `static_shape` as `None` when you know the
+  output rank. Start with `vec![None; rank]` and fill in whatever dimensions you can determine.
+- **Extract dimension info from all available sources**: input `static_shape`, weight tensor data
+  (via `node.inputs[N].value().map(|d| d.shape)`), weight `static_shape`, and operator config.
+- **Use `unwrap_or_else`** instead of `.map()` on input static shape to avoid short-circuiting:
+  ```rust
+  // Good: always produces partial shape
+  let mut shape = tensor.static_shape.clone()
+      .unwrap_or_else(|| vec![None; tensor.rank]);
+  shape[1] = Some(out_channels); // fill in what we know
+  Some(shape)
+
+  // Bad: returns None entirely when input has no static_shape
+  tensor.static_shape.as_ref().map(|s| { ... })
+  ```
 
 **Optional (have defaults):**
 
@@ -680,6 +735,68 @@ This design provides:
 - **Trait implementations**: Operations can implement specific traits on their node structs
 - **Single source of truth**: Both enums are guaranteed to stay in sync
 - **Pattern matching**: Easy to match on specific operations and access their configuration
+
+## Model Checks
+
+The `crates/model-checks/` directory contains real-world model validation tests. Each subdirectory is
+a standalone crate that downloads a model, generates Burn code from it, and runs inference to verify
+correctness.
+
+### Running Model Checks
+
+Use the `model-check` xtask command:
+
+```sh
+# Run all models (download + build + run, ndarray backend, release mode)
+cargo xtask model-check
+
+# Single model
+cargo xtask model-check --model silero-vad
+
+# Subcommands: download, build, run, all (default)
+cargo xtask model-check --model silero-vad build
+
+# Select backend
+cargo xtask model-check --features tch
+
+# Debug build
+cargo xtask model-check --model silero-vad --debug
+
+# Stop on first failure (default: continue and report summary)
+cargo xtask model-check --fail-fast
+```
+
+### Available Models
+
+| Model | Directory | Notes |
+|---|---|---|
+| Silero VAD | `silero-vad` | Voice activity detection |
+| all-MiniLM-L6-v2 | `all-minilm-l6-v2` | Sentence embeddings |
+| CLIP ViT-B-32 text | `clip-vit-b-32-text` | Text encoder |
+| CLIP ViT-B-32 vision | `clip-vit-b-32-vision` | Vision encoder |
+| ModernBERT-base | `modernbert-base` | Language model |
+| RF-DETR Small | `rf-detr` | Object detection |
+| ALBERT | `albert` | Language model (requires Python 3.11) |
+| YOLO v8n | `yolo` | Object detection |
+
+### Model Artifacts
+
+Model artifacts (ONNX files, test data) are stored in the platform cache directory:
+
+- macOS: `~/Library/Caches/burn-onnx/model-checks/<model-name>/`
+- Linux: `~/.cache/burn-onnx/model-checks/<model-name>/`
+
+Set `BURN_CACHE_DIR` to override the base cache path (useful for CI).
+
+### Adding a New Model Check
+
+1. Create a new directory under `crates/model-checks/<model-name>/`
+2. Add `Cargo.toml` with `[workspace]` (standalone), `burn` and `burn-store` dependencies, and
+   backend feature flags forwarding to `burn/<backend>`
+3. Add `get_model.py` (uv script format) to download and prepare the ONNX model
+4. Add `build.rs` to generate Burn code from the ONNX model via `ModelGen`
+5. Add `src/main.rs` to load the model, run inference, and compare against reference outputs
+6. Register the model in `xtask/src/model_check.rs` in the `MODELS` array
 
 ## Resources
 

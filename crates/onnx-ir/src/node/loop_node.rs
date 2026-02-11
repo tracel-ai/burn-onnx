@@ -91,8 +91,8 @@ impl NodeProcessor for LoopProcessor {
             )));
         }
 
-        // Validate M input (max trip count) - should be scalar int64 or empty
-        if !node.inputs[0].name.is_empty() {
+        // Validate M input (max trip count) - should be scalar int64 or optional
+        if !node.inputs[0].is_optional() {
             let m_type = &node.inputs[0].ty;
             if !m_type.is_scalar() {
                 return Err(ProcessError::TypeMismatch {
@@ -113,8 +113,8 @@ impl NodeProcessor for LoopProcessor {
             }
         }
 
-        // Validate cond input - should be scalar bool or empty
-        if !node.inputs[1].name.is_empty() {
+        // Validate cond input - should be scalar bool or optional
+        if !node.inputs[1].is_optional() {
             let cond_type = &node.inputs[1].ty;
             if !cond_type.is_scalar() {
                 return Err(ProcessError::TypeMismatch {

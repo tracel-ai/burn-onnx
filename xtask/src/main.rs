@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate log;
 
+mod model_check;
+
 use std::time::Instant;
 use tracel_xtask::prelude::*;
 
@@ -26,6 +28,8 @@ pub enum Command {
     Build(BuildCmdArgs),
     /// Test Burn ONNX.
     Test(TestCmdArgs),
+    /// Download, build, and run model checks.
+    ModelCheck(model_check::ModelCheckArgs),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -46,6 +50,7 @@ fn main() -> anyhow::Result<()> {
         Command::Test(cmd_args) => {
             base_commands::test::handle_command(cmd_args, environment, args.context)
         }
+        Command::ModelCheck(cmd_args) => model_check::handle_command(cmd_args),
         _ => dispatch_base_commands(args, environment),
     }?;
 

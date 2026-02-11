@@ -202,6 +202,17 @@ impl ProcessorRegistry {
             NodeType::Softplus,
             Box::new(crate::node::softplus::SoftplusProcessor),
         );
+        registry.register(
+            NodeType::Softsign,
+            Box::new(crate::node::softsign::SoftsignProcessor),
+        );
+        registry.register(NodeType::Celu, Box::new(crate::node::celu::CeluProcessor));
+        registry.register(NodeType::Elu, Box::new(crate::node::elu::EluProcessor));
+        registry.register(NodeType::Selu, Box::new(crate::node::selu::SeluProcessor));
+        registry.register(
+            NodeType::Swish,
+            Box::new(crate::node::swish::SwishProcessor),
+        );
 
         // Logical operations
         registry.register(NodeType::Not, Box::new(crate::node::not::NotProcessor));
@@ -251,7 +262,7 @@ impl ProcessorRegistry {
         );
         registry.register(
             NodeType::ScatterElements,
-            Box::new(crate::node::unsupported::UnsupportedProcessor),
+            Box::new(crate::node::scatter_elements::ScatterElementsProcessor),
         );
         registry.register(
             NodeType::ScatterND,
@@ -290,6 +301,10 @@ impl ProcessorRegistry {
         registry.register(
             NodeType::ConvTranspose3d,
             Box::new(crate::node::conv_transpose3d::Convtranspose3dProcessor),
+        );
+        registry.register(
+            NodeType::DeformConv,
+            Box::new(crate::node::deform_conv::DeformConvProcessor),
         );
 
         // Normalization operations
@@ -587,6 +602,10 @@ impl ProcessorRegistry {
             Box::new(crate::node::hard_swish::HardSwishProcessor),
         );
         registry.register(
+            NodeType::Hardmax,
+            Box::new(crate::node::hardmax::HardmaxProcessor),
+        );
+        registry.register(
             NodeType::Softmax,
             Box::new(crate::node::softmax::SoftmaxProcessor),
         );
@@ -597,6 +616,10 @@ impl ProcessorRegistry {
         registry.register(
             NodeType::PRelu,
             Box::new(crate::node::prelu::PReluProcessor),
+        );
+        registry.register(
+            NodeType::ThresholdedRelu,
+            Box::new(crate::node::thresholded_relu::ThresholdedReluProcessor),
         );
 
         // Control flow operations

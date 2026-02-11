@@ -116,11 +116,34 @@ impl NodeProcessor for BatchNormProcessor {
             }
         };
 
-        // BatchNorm preserves rank (same as input)
+        // BatchNorm preserves rank and shape (same as input).
+        // When input has no static_shape, we can still infer channels from scale/bias.
+        let static_shape = {
+            let mut shape = tensor
+                .static_shape
+                .clone()
+                .unwrap_or_else(|| vec![None; tensor.rank]);
+            // Channels dim (index 1) can be inferred from scale tensor (input[1])
+            if shape.len() > 1 && shape[1].is_none() {
+                let channels = node.inputs[1]
+                    .value()
+                    .and_then(|data| data.shape.first().copied())
+                    .or_else(|| match &node.inputs[1].ty {
+                        ArgType::Tensor(t) => t
+                            .static_shape
+                            .as_ref()
+                            .and_then(|s| s.first().copied().flatten()),
+                        _ => None,
+                    });
+                shape[1] = channels;
+            }
+            Some(shape)
+        };
+
         node.outputs[0].ty = ArgType::Tensor(TensorType {
             dtype: tensor.dtype,
             rank: tensor.rank,
-            static_shape: None,
+            static_shape,
         });
 
         Ok(())
@@ -249,6 +272,67 @@ mod tests {
                 assert!(f64::abs(c.momentum - 0.9) < 1e-6);
             }
             _ => panic!("Expected Runtime config"),
+        }
+    }
+
+    #[test]
+    fn test_batch_norm_propagates_static_shape() {
+        let mut node = TestNodeBuilder::new(NodeType::BatchNormalization, "test")
+            .input_tensor_f32("X", 4, Some(vec![1, 64, 32, 32]))
+            .input_tensor_f32_data("scale", vec![1.0; 64], vec![64])
+            .input_tensor_f32_data("bias", vec![0.0; 64], vec![64])
+            .input_tensor_f32_data("mean", vec![0.0; 64], vec![64])
+            .input_tensor_f32_data("var", vec![1.0; 64], vec![64])
+            .output_tensor_f32("output", 4, None)
+            .attr_float("epsilon", 1e-5)
+            .attr_float("momentum", 0.9)
+            .build_with_graph_data(16);
+
+        let processor = BatchNormProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(
+                    t.static_shape,
+                    Some(vec![Some(1), Some(64), Some(32), Some(32)])
+                );
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_batch_norm_no_input_static_shape_infers_channels() {
+        // Input has no static_shape but scale tensor has 64 channels
+        let mut node = create_test_node(1e-5, 0.9, 64).build_with_graph_data(16);
+        let processor = BatchNormProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                // Channels (dim 1) inferred from scale tensor, others unknown
+                assert_eq!(t.static_shape, Some(vec![None, Some(64), None, None]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_batch_norm_runtime_no_static_shape() {
+        // Runtime weights have no tensor data, so no channels info available
+        let mut node = create_runtime_test_node(1e-5, 0.9).build_with_graph_data(16);
+        let processor = BatchNormProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.static_shape, Some(vec![None, None, None, None]));
+            }
+            _ => panic!("Expected tensor output"),
         }
     }
 }

@@ -10,6 +10,10 @@
 //! **This crate is deprecated.** ONNX import functionality has been moved to
 //! [`burn-onnx`](https://crates.io/crates/burn-onnx).
 //!
+//! PyTorch and Safetensors model weights import has been replaced by
+//! [`burn-store`](https://crates.io/crates/burn-store).
+//! Check out the [migration guide](https://github.com/tracel-ai/burn/blob/main/crates/burn-store/MIGRATION.md).
+//!
 //! ## Migration Guide
 //!
 //! Replace your dependency:

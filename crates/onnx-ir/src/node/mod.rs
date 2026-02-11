@@ -12,6 +12,7 @@
 pub mod test_utils;
 
 pub mod elementwise;
+pub mod elu;
 
 // Unary element-wise operations
 pub mod abs;
@@ -23,6 +24,7 @@ pub mod atan;
 pub mod atanh;
 pub mod bitwisenot;
 pub mod ceil;
+pub mod celu;
 pub mod cos;
 pub mod cosh;
 pub mod erf;
@@ -39,9 +41,12 @@ pub mod sign;
 pub mod sin;
 pub mod sinh;
 pub mod softplus;
+pub mod softsign;
 pub mod sqrt;
+pub mod swish;
 pub mod tan;
 pub mod tanh;
+pub mod thresholded_relu;
 
 // Binary element-wise operations
 pub mod and;
@@ -70,6 +75,7 @@ pub mod conv_transpose1d;
 pub mod conv_transpose2d;
 pub mod conv_transpose3d;
 pub mod cumsum;
+pub mod deform_conv;
 pub mod depth_to_space;
 pub mod dropout;
 pub mod expand;
@@ -85,6 +91,7 @@ pub mod group_norm;
 pub mod gru;
 pub mod hard_sigmoid;
 pub mod hard_swish;
+pub mod hardmax;
 pub mod identity;
 pub mod if_node;
 pub mod instance_norm;
@@ -121,7 +128,9 @@ pub mod reshape;
 pub mod resize;
 pub mod rnn;
 pub mod scan_node;
+pub mod scatter_elements;
 pub mod scatter_nd;
+pub mod selu;
 pub mod shape;
 pub mod size;
 pub mod slice;

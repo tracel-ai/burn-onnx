@@ -3,19 +3,8 @@ extern crate alloc;
 use burn::prelude::*;
 use serde::Deserialize;
 use std::fs;
-use std::path::Path;
 
-#[cfg(feature = "wgpu")]
-pub type MyBackend = burn::backend::Wgpu;
-
-#[cfg(feature = "ndarray")]
-pub type MyBackend = burn::backend::NdArray<f32>;
-
-#[cfg(feature = "tch")]
-pub type MyBackend = burn::backend::LibTorch<f32>;
-
-#[cfg(feature = "metal")]
-pub type MyBackend = burn::backend::Metal;
+model_checks_common::backend_type!();
 
 // Include the generated model
 include!(concat!(env!("OUT_DIR"), "/model/silero_vad.rs"));
@@ -79,10 +68,12 @@ fn main() {
     println!("Silero VAD Model Test Suite");
     println!("========================================\n");
 
+    let artifacts_dir = model_checks_common::artifacts_dir("silero-vad");
+    println!("Artifacts directory: {}", artifacts_dir.display());
+
     // Check if artifacts exist
-    let artifacts_dir = Path::new("artifacts");
     if !artifacts_dir.exists() {
-        eprintln!("Error: artifacts directory not found!");
+        eprintln!("Error: artifacts directory not found at '{}'!", artifacts_dir.display());
         eprintln!("Please run get_model.py first to download the model.");
         eprintln!("Example: uv run get_model.py");
         std::process::exit(1);

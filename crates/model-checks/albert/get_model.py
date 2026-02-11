@@ -12,13 +12,13 @@
 # ]
 # ///
 
-import os
 import sys
-import onnx
-from onnx import shape_inference, version_converter
 import numpy as np
 from pathlib import Path
 import argparse
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from common import get_artifacts_dir, process_model
 
 
 # Supported ALBERT models configuration
@@ -83,28 +83,6 @@ def download_and_convert_model(model_name, output_path):
 
     if not output_path.exists():
         raise FileNotFoundError(f"Failed to create ONNX file at {output_path}")
-
-
-def process_model(input_path, output_path, target_opset=16):
-    """Load, upgrade opset, and apply shape inference to model."""
-    print(f"Loading model from {input_path}...")
-    model = onnx.load(input_path)
-
-    # Check and upgrade opset if needed
-    current_opset = model.opset_import[0].version
-    if current_opset < target_opset:
-        print(f"Upgrading opset from {current_opset} to {target_opset}...")
-        model = version_converter.convert_version(model, target_opset)
-
-    # Apply shape inference
-    print("Applying shape inference...")
-    model = shape_inference.infer_shapes(model)
-
-    # Save processed model
-    onnx.save(model, output_path)
-    print(f"✓ Processed model saved to: {output_path}")
-
-    return model
 
 
 def generate_test_data(model_path, output_path, model_name):
@@ -182,8 +160,7 @@ def main():
     print("=" * 60)
 
     # Setup paths
-    artifacts_dir = Path("artifacts")
-    artifacts_dir.mkdir(exist_ok=True)
+    artifacts_dir = get_artifacts_dir("albert")
 
     original_path = artifacts_dir / f"{model_name}.onnx"
     processed_path = artifacts_dir / f"{model_name}_opset16.onnx"

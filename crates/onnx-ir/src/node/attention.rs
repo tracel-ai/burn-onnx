@@ -114,9 +114,11 @@ impl NodeProcessor for AttentionProcessor {
             ));
         }
 
-        if (node.inputs.len() >= 6) != (node.outputs.len() >= 3)
-            || node.inputs.len() == 5
-            || node.outputs.len() == 2
+        let has_past_key = node.get_input(4).is_some();
+        let has_past_value = node.get_input(5).is_some();
+        let has_present = node.outputs.len() >= 3;
+
+        if has_past_key != has_past_value || has_past_key != has_present || node.outputs.len() == 2
         {
             return Err(ProcessError::Custom(
                 "Attention: past_key, past_value, present_key, present_value can only be used together".to_string(),
@@ -152,17 +154,24 @@ impl NodeProcessor for AttentionProcessor {
             static_shape: None,
         });
 
-        if let Some(present_key) = node.outputs.get_mut(1) {
+        let past_key_dtype = node.get_input(4).map(|i| i.ty.elem_type());
+        let past_value_dtype = node.get_input(5).map(|i| i.ty.elem_type());
+
+        if let Some(present_key) = node.outputs.get_mut(1)
+            && let Some(dtype) = past_key_dtype
+        {
             present_key.ty = ArgType::Tensor(TensorType {
-                dtype: node.inputs[4].ty.elem_type(),
+                dtype,
                 rank: 4,
                 static_shape: None,
             });
         }
 
-        if let Some(present_value) = node.outputs.get_mut(2) {
+        if let Some(present_value) = node.outputs.get_mut(2)
+            && let Some(dtype) = past_value_dtype
+        {
             present_value.ty = ArgType::Tensor(TensorType {
-                dtype: node.inputs[5].ty.elem_type(),
+                dtype,
                 rank: 4,
                 static_shape: None,
             });

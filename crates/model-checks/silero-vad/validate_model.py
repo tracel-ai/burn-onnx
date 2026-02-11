@@ -16,6 +16,8 @@ This script:
 2. Runs inference using ONNX Runtime to verify it works
 """
 
+import sys
+
 import numpy as np
 from pathlib import Path
 
@@ -23,11 +25,14 @@ import onnx
 from onnx import checker
 import onnxruntime as ort
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from common import get_artifacts_dir
+
 
 def validate_model():
     """Validate the Silero VAD ONNX model."""
 
-    model_path = Path("artifacts/silero_vad.onnx")
+    model_path = get_artifacts_dir("silero-vad") / "silero_vad.onnx"
 
     if not model_path.exists():
         print(f"Error: Model not found at {model_path}")

@@ -4,20 +4,9 @@ use burn::module::{Initializer, Param};
 use burn::prelude::*;
 
 use burn_store::PytorchStore;
-use std::path::Path;
 use std::time::Instant;
 
-#[cfg(feature = "wgpu")]
-pub type MyBackend = burn::backend::Wgpu;
-
-#[cfg(feature = "ndarray")]
-pub type MyBackend = burn::backend::NdArray<f32>;
-
-#[cfg(feature = "tch")]
-pub type MyBackend = burn::backend::LibTorch<f32>;
-
-#[cfg(feature = "metal")]
-pub type MyBackend = burn::backend::Metal;
+model_checks_common::backend_type!();
 
 // Include the generated model
 include!(concat!(env!("OUT_DIR"), "/model/rf_detr_small.rs"));
@@ -47,10 +36,12 @@ fn main() {
     println!("RF-DETR Small Model Test");
     println!("========================================\n");
 
+    let artifacts_dir = model_checks_common::artifacts_dir("rf-detr");
+    println!("Artifacts directory: {}", artifacts_dir.display());
+
     // Check if artifacts exist
-    let artifacts_dir = Path::new("artifacts");
     if !artifacts_dir.exists() {
-        eprintln!("Error: artifacts directory not found!");
+        eprintln!("Error: artifacts directory not found at '{}'!", artifacts_dir.display());
         eprintln!("Please run get_model.py first to download the model.");
         eprintln!("Example: uv run --python 3.11 get_model.py");
         std::process::exit(1);

@@ -59,11 +59,8 @@ impl NodeProcessor for TriluProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // Lift diagonal input (input[1]) if present
-        // FIXME: This should check if the input is constant before attempting to lift,
-        // similar to other processors. Currently it lifts unconditionally if present.
-        // Should use: if node.inputs[1].is_constant() { node.inputs[1].to_static()?; }
-        if node.inputs.len() > 1 {
+        // Lift diagonal input (input[1]) if present, not optional, and constant
+        if node.inputs.len() > 1 && !node.inputs[1].is_optional() && node.inputs[1].is_constant() {
             node.inputs[1].to_static()?;
         }
 

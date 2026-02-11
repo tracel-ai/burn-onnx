@@ -36,7 +36,6 @@ define_placeholder_node! {
     ConvIntegerNode,
     ConvTransposeNode,
     DftNode,
-    DeformConvNode,
     DequantizeLinearNode,
     DetNode,
     DynamicQuantizeLinearNode,
@@ -70,7 +69,6 @@ define_placeholder_node! {
     RoiAlignNode,
     RotaryEmbeddingNode,
     ScatterNode,
-    ScatterElementsNode,
     SequenceAtNode,
     SequenceConstructNode,
     SequenceEmptyNode,
@@ -135,11 +133,6 @@ impl NodeProcessor for UnsupportedProcessor {
                 outputs: builder.outputs,
             }),
             NodeType::Scatter => Node::Scatter(ScatterNode {
-                name: builder.name,
-                inputs: builder.inputs,
-                outputs: builder.outputs,
-            }),
-            NodeType::ScatterElements => Node::ScatterElements(ScatterElementsNode {
                 name: builder.name,
                 inputs: builder.inputs,
                 outputs: builder.outputs,

@@ -28,6 +28,16 @@ impl RuntimeInputRef {
     }
 }
 
+impl RawNode {
+    /// Get a non-optional input by index.
+    ///
+    /// Returns `None` if the index is out of bounds or the input is optional
+    /// (not provided in the ONNX model).
+    pub(crate) fn get_input(&self, index: usize) -> Option<&Argument> {
+        self.inputs.get(index).filter(|arg| !arg.is_optional())
+    }
+}
+
 /// Nodes produced by the ONNX parser
 #[derive(Clone, Debug)]
 pub(crate) struct RawNode {
@@ -178,14 +188,14 @@ define_node_enum! {
     LogSoftmax => log_softmax::LogSoftmaxNode,
     LeakyRelu => leaky_relu::LeakyReluNode,
     HardSigmoid => hard_sigmoid::HardSigmoidNode,
-    Elu => elementwise::ElementwiseUnaryNode,
-    Selu => elementwise::ElementwiseUnaryNode,
-    Celu => elementwise::ElementwiseUnaryNode,
+    Elu => elu::EluNode,
+    Selu => selu::SeluNode,
+    Celu => celu::CeluNode,
     Gelu => gelu::GeluNode,
     Mish => mish::MishNode,
     Softplus => softplus::SoftplusNode,
-    Softsign => elementwise::ElementwiseUnaryNode,
-    ThresholdedRelu => elementwise::ElementwiseUnaryNode,
+    Softsign => softsign::SoftsignNode,
+    ThresholdedRelu => thresholded_relu::ThresholdedReluNode,
     HardSwish => hard_swish::HardSwishNode,
     PRelu => prelu::PReluNode,
 
@@ -241,7 +251,7 @@ define_node_enum! {
     Reshape => reshape::ReshapeNode,
     Resize => resize::ResizeNode,
     Scatter => unsupported::ScatterNode,
-    ScatterElements => unsupported::ScatterElementsNode,
+    ScatterElements => scatter_elements::ScatterElementsNode,
     ScatterND => scatter_nd::ScatterNDNode,
     Shape => shape::ShapeNode,
     Size => size::SizeNode,
@@ -331,7 +341,7 @@ define_node_enum! {
     ConvInteger => unsupported::ConvIntegerNode,
     ConvTranspose => unsupported::ConvTransposeNode,
     Dft => unsupported::DftNode,
-    DeformConv => unsupported::DeformConvNode,
+    DeformConv => deform_conv::DeformConvNode,
     DequantizeLinear => unsupported::DequantizeLinearNode,
     Det => unsupported::DetNode,
     DynamicQuantizeLinear => unsupported::DynamicQuantizeLinearNode,
@@ -340,7 +350,7 @@ define_node_enum! {
     Gru => gru::GruNode,
     HammingWindow => unsupported::HammingWindowNode,
     HannWindow => unsupported::HannWindowNode,
-    Hardmax => unsupported::HardmaxNode,
+    Hardmax => hardmax::HardmaxNode,
     Im => unsupported::ImNode,
     ImageDecoder => unsupported::ImageDecoderNode,
     LpNormalization => unsupported::LpNormalizationNode,
@@ -381,8 +391,60 @@ define_node_enum! {
     StringConcat => unsupported::StringConcatNode,
     StringNormalizer => unsupported::StringNormalizerNode,
     StringSplit => unsupported::StringSplitNode,
-    Swish => unsupported::SwishNode,
+    Swish => swish::SwishNode,
     TensorScatter => unsupported::TensorScatterNode,
     TfIdfVectorizer => unsupported::TfIdfVectorizerNode,
     Upsample => unsupported::UpsampleNode,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::{ArgType, DType, TensorType, ValueSource};
+
+    fn make_arg(name: &str, source: ValueSource) -> Argument {
+        Argument {
+            name: name.to_string(),
+            ty: ArgType::Tensor(TensorType {
+                dtype: DType::F32,
+                rank: 2,
+                static_shape: None,
+            }),
+            value_source: source,
+            value_store: None,
+        }
+    }
+
+    fn make_raw_node(inputs: Vec<Argument>) -> RawNode {
+        RawNode {
+            node_type: NodeType::Pad,
+            name: "test".to_string(),
+            inputs,
+            outputs: vec![],
+            attrs: Default::default(),
+        }
+    }
+
+    #[test]
+    fn get_input_returns_normal_input() {
+        let node = make_raw_node(vec![make_arg("data", ValueSource::Dynamic)]);
+        assert!(node.get_input(0).is_some());
+        assert_eq!(node.get_input(0).unwrap().name, "data");
+    }
+
+    #[test]
+    fn get_input_returns_none_for_optional() {
+        let node = make_raw_node(vec![
+            make_arg("data", ValueSource::Dynamic),
+            make_arg("", ValueSource::Optional),
+        ]);
+        assert!(node.get_input(0).is_some());
+        assert!(node.get_input(1).is_none());
+    }
+
+    #[test]
+    fn get_input_returns_none_for_out_of_bounds() {
+        let node = make_raw_node(vec![make_arg("data", ValueSource::Dynamic)]);
+        assert!(node.get_input(5).is_none());
+    }
 }

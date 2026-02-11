@@ -35,7 +35,7 @@ functionality.
 | [Cast][22]                       | ✅             | ✅           |
 | [CastLike][23]                   | ❌             | ❌           |
 | [Ceil][24]                       | ✅             | ✅           |
-| [Celu][25]                       | ❌             | ❌           |
+| [Celu][25]                       | ✅             | ✅           |
 | [CenterCropPad][26]              | ❌             | ❌           |
 | [Clip][27]                       | ✅             | ✅           |
 | [Col2Im][28]                     | ❌             | ❌           |
@@ -54,7 +54,7 @@ functionality.
 | [Cos][39]                        | ✅             | ✅           |
 | [Cosh][40]                       | ✅             | ✅           |
 | [CumSum][41]                     | ✅             | ✅           |
-| [DeformConv][196]                | ❌             | ❌           |
+| [DeformConv][196]                | ✅             | ✅           |
 | [DepthToSpace][42]               | ✅             | ✅           |
 | [DequantizeLinear][43]           | ❌             | ❌           |
 | [Det][44]                        | ❌             | ❌           |
@@ -63,7 +63,7 @@ functionality.
 | [Dropout][47]                    | ✅             | ✅           |
 | [DynamicQuantizeLinear][48]      | ❌             | ❌           |
 | [Einsum][49]                     | ❌             | ❌           |
-| [Elu][50]                        | ❌             | ❌           |
+| [Elu][50]                        | ✅             | ✅           |
 | [Equal][51]                      | ✅             | ✅           |
 | [Erf][52]                        | ✅             | ✅           |
 | [Exp][53]                        | ✅             | ✅           |
@@ -86,7 +86,7 @@ functionality.
 | [GRU][70]                        | ✅             | ✅           |
 | [HammingWindow][71]              | ❌             | ❌           |
 | [HannWindow][72]                 | ❌             | ❌           |
-| [Hardmax][73]                    | ❌             | ❌           |
+| [Hardmax][73]                    | ✅             | ✅           |
 | [HardSigmoid][74]                | ✅             | ✅           |
 | [HardSwish][75]                  | ✅             | ✅           |
 | [Identity][76]                   | ✅             | ✅           |
@@ -166,9 +166,9 @@ functionality.
 | [Round][147]                     | ✅             | ✅           |
 | [Scan][148]                      | ✅             | ✅           |
 | [Scatter][149]                   | ❌             | ✅           |
-| [ScatterElements][150]           | ❌             | ❌           |
+| [ScatterElements][150]           | ✅             | ✅           |
 | [ScatterND][151]                 | ✅             | ✅           |
-| [Selu][152]                      | ❌             | ❌           |
+| [Selu][152]                      | ✅             | ✅           |
 | [SequenceAt][153]                | ❌             | ❌           |
 | [SequenceConstruct][154]         | ❌             | ❌           |
 | [SequenceEmpty][155]             | ❌             | ❌           |
@@ -187,7 +187,7 @@ functionality.
 | [Softmax][168]                   | ✅             | ✅           |
 | [SoftmaxCrossEntropyLoss][169]   | ❌             | ❌           |
 | [Softplus][170]                  | ✅             | ✅           |
-| [Softsign][171]                  | ❌             | ❌           |
+| [Softsign][171]                  | ✅             | ✅           |
 | [SpaceToDepth][172]              | ✅             | ✅           |
 | [Split][173]                     | ✅             | ✅           |
 | [SplitToSequence][174]           | ❌             | ❌           |
@@ -199,12 +199,12 @@ functionality.
 | [StringSplit][202]               | ❌             | ❌           |
 | [Sub][179]                       | ✅             | ✅           |
 | [Sum][180]                       | ✅             | ✅           |
-| [Swish][203]                     | ❌             | ❌           |
+| [Swish][203]                     | ✅             | ✅           |
 | [Tan][181]                       | ✅             | ✅           |
 | [Tanh][182]                      | ✅             | ✅           |
 | [TensorScatter][204]             | ❌             | ❌           |
 | [TfIdfVectorizer][183]           | ❌             | ❌           |
-| [ThresholdedRelu][184]           | ❌             | ❌           |
+| [ThresholdedRelu][184]           | ✅             | ✅           |
 | [Tile][185]                      | ✅             | ✅           |
 | [TopK][186]                      | ✅             | ✅           |
 | [Transpose][187]                 | ✅             | ✅           |
@@ -414,3 +414,13 @@ functionality.
 [202]: https://onnx.ai/onnx/operators/onnx__StringSplit.html "ONNX StringSplit"
 [203]: https://onnx.ai/onnx/operators/onnx__Swish.html "ONNX Swish"
 [204]: https://onnx.ai/onnx/operators/onnx__TensorScatter.html "ONNX TensorScatter"
+
+## Pattern Coalescing
+
+The simplification pass automatically detects and coalesces multi-node patterns
+into single optimized operations:
+
+- **Scaled Dot-Product Attention (SDPA)**: Decomposed attention patterns
+  (Transpose + MatMul + Div/Mul + Softmax + MatMul) exported by PyTorch's ONNX
+  exporter are coalesced into a single Attention node, enabling Burn's optimized
+  attention primitives.

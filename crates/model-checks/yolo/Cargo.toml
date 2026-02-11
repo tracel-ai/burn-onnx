@@ -7,24 +7,21 @@ publish = false
 [workspace]
 
 [workspace.dependencies]
-burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "44bbbe8c2cf10784fe3275f9a9c9933732b600e4" }
-burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "44bbbe8c2cf10784fe3275f9a9c9933732b600e4" }
+burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "bd991fe52c94faef0cb52dcc92816323a053ad1c" }
+burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "bd991fe52c94faef0cb52dcc92816323a053ad1c" }
 
 [features]
-default = ["tch"]
-ndarray = []
-tch = []
-wgpu = []
-metal = []
+default = ["ndarray"]
+ndarray = ["burn/ndarray"]
+tch = ["burn/tch"]
+wgpu = ["burn/wgpu"]
+metal = ["burn/metal"]
 
 [dependencies]
-burn = { workspace = true, features = [
-    "ndarray",
-    "tch",
-    "wgpu",
-    "metal",
-] }
+burn = { workspace = true }
 burn-store = { workspace = true, features = ["std", "burnpack", "pytorch"] }
+model-checks-common = { path = "../common" }
 
 [build-dependencies]
 burn-onnx = { path = "../../burn-onnx" }
+model-checks-common = { path = "../common" }

@@ -10,13 +10,14 @@
 # ]
 # ///
 
-import os
 import sys
 import onnx
-from onnx import shape_inference, version_converter
 import numpy as np
 from pathlib import Path
 from huggingface_hub import hf_hub_download
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from common import get_artifacts_dir, process_model
 
 
 def download_clip_model(output_path):
@@ -27,7 +28,7 @@ def download_clip_model(output_path):
     model_path = hf_hub_download(
         repo_id="Qdrant/clip-ViT-B-32-vision",
         filename="model.onnx",
-        cache_dir="./artifacts/cache",
+        cache_dir=str(get_artifacts_dir("clip-vit-b-32-vision") / "hf_cache"),
     )
 
     # Copy to artifacts
@@ -39,28 +40,6 @@ def download_clip_model(output_path):
         raise FileNotFoundError(f"Failed to download ONNX file to {output_path}")
 
     print(f"✓ Model downloaded to: {output_path}")
-
-
-def process_model(input_path, output_path, target_opset=16):
-    """Load, upgrade opset, and apply shape inference to model."""
-    print(f"Loading model from {input_path}...")
-    model = onnx.load(input_path)
-
-    # Check and upgrade opset if needed
-    current_opset = model.opset_import[0].version
-    if current_opset < target_opset:
-        print(f"Upgrading opset from {current_opset} to {target_opset}...")
-        model = version_converter.convert_version(model, target_opset)
-
-    # Apply shape inference
-    print("Applying shape inference...")
-    model = shape_inference.infer_shapes(model)
-
-    # Save processed model
-    onnx.save(model, output_path)
-    print(f"✓ Processed model saved to: {output_path}")
-
-    return model
 
 
 def get_input_info(model):
@@ -216,8 +195,7 @@ def main():
     print("=" * 60)
 
     # Setup paths
-    artifacts_dir = Path("artifacts")
-    artifacts_dir.mkdir(exist_ok=True)
+    artifacts_dir = get_artifacts_dir("clip-vit-b-32-vision")
 
     original_path = artifacts_dir / "clip-vit-b-32-vision.onnx"
     processed_path = artifacts_dir / "clip-vit-b-32-vision_opset16.onnx"

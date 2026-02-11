@@ -75,6 +75,38 @@ impl ToTokens for f32 {
     }
 }
 
+/// Convert an f32 value to tokens, handling non-finite values (inf, NaN)
+/// that `proc_macro2::Literal` cannot represent as literals.
+pub fn f32_to_tokens(val: f32) -> TokenStream {
+    if val.is_nan() {
+        quote! { f32::NAN }
+    } else if val == f32::INFINITY {
+        quote! { f32::INFINITY }
+    } else if val == f32::NEG_INFINITY {
+        quote! { f32::NEG_INFINITY }
+    } else {
+        // Use proc_macro2 Literal directly to get a suffixed float (e.g. 3.14f32)
+        let lit = proc_macro2::Literal::f32_suffixed(val);
+        quote! { #lit }
+    }
+}
+
+/// Convert an f64 value to tokens, handling non-finite values (inf, NaN)
+/// that `proc_macro2::Literal` cannot represent as literals.
+pub fn f64_to_tokens(val: f64) -> TokenStream {
+    if val.is_nan() {
+        quote! { f64::NAN }
+    } else if val == f64::INFINITY {
+        quote! { f64::INFINITY }
+    } else if val == f64::NEG_INFINITY {
+        quote! { f64::NEG_INFINITY }
+    } else {
+        // Use proc_macro2 Literal directly to get a suffixed float (e.g. 2.718f64)
+        let lit = proc_macro2::Literal::f64_suffixed(val);
+        quote! { #lit }
+    }
+}
+
 /// Padding configuration for 1D operations.
 ///
 /// Converts PaddingConfig1d to Rust code tokens.
@@ -323,6 +355,54 @@ mod tests {
             &[1, 1],
         );
         assert_eq!(result, PaddingConfig2d::Explicit(1, 1, 1, 1));
+    }
+
+    #[test]
+    fn test_f32_to_tokens_finite() {
+        let tokens = f32_to_tokens(3.14f32);
+        assert_eq!(tokens.to_string(), "3.14f32");
+    }
+
+    #[test]
+    fn test_f32_to_tokens_infinity() {
+        let tokens = f32_to_tokens(f32::INFINITY);
+        assert_eq!(tokens.to_string(), "f32 :: INFINITY");
+    }
+
+    #[test]
+    fn test_f32_to_tokens_neg_infinity() {
+        let tokens = f32_to_tokens(f32::NEG_INFINITY);
+        assert_eq!(tokens.to_string(), "f32 :: NEG_INFINITY");
+    }
+
+    #[test]
+    fn test_f32_to_tokens_nan() {
+        let tokens = f32_to_tokens(f32::NAN);
+        assert_eq!(tokens.to_string(), "f32 :: NAN");
+    }
+
+    #[test]
+    fn test_f64_to_tokens_finite() {
+        let tokens = f64_to_tokens(2.718f64);
+        assert_eq!(tokens.to_string(), "2.718f64");
+    }
+
+    #[test]
+    fn test_f64_to_tokens_infinity() {
+        let tokens = f64_to_tokens(f64::INFINITY);
+        assert_eq!(tokens.to_string(), "f64 :: INFINITY");
+    }
+
+    #[test]
+    fn test_f64_to_tokens_neg_infinity() {
+        let tokens = f64_to_tokens(f64::NEG_INFINITY);
+        assert_eq!(tokens.to_string(), "f64 :: NEG_INFINITY");
+    }
+
+    #[test]
+    fn test_f64_to_tokens_nan() {
+        let tokens = f64_to_tokens(f64::NAN);
+        assert_eq!(tokens.to_string(), "f64 :: NAN");
     }
 
     #[test]

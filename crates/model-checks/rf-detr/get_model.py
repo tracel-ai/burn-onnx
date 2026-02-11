@@ -26,11 +26,15 @@ Related issue: https://github.com/tracel-ai/burn/issues/4052
 
 import json
 import shutil
+import sys
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 import onnx
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from common import get_artifacts_dir
 
 
 def get_input_shape(model):
@@ -194,9 +198,8 @@ def download_and_export_model():
     """Download RF-DETR model and export to ONNX format."""
     from rfdetr import RFDETRSmall
 
-    # Create artifacts directory
-    artifacts_dir = Path("artifacts")
-    artifacts_dir.mkdir(exist_ok=True)
+    # Setup paths
+    artifacts_dir = get_artifacts_dir("rf-detr")
 
     model_path = artifacts_dir / "rf_detr_small.onnx"
     test_data_path = artifacts_dir / "rf_detr_small_test_data.pt"
