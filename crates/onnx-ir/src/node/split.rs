@@ -66,7 +66,7 @@ impl NodeProcessor for SplitProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 2,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::AtLeast(1),
             outputs: OutputSpec::Range(1, 2147483647),

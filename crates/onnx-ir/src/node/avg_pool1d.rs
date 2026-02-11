@@ -57,7 +57,7 @@ impl NodeProcessor for AvgPool1dProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 11,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::Exact(1),
             outputs: OutputSpec::Exact(1),
@@ -299,13 +299,12 @@ mod tests {
 
     #[test]
     fn test_avg_pool1d_dilation_opset_validation() {
-        // Test that opset < 11 is rejected entirely (due to count_include_pad requirement)
-        let node = create_test_node(vec![4], vec![1], vec![0, 0], 0, 0, Some(vec![2]));
+        // Test that non-default dilations at opset < 10 are rejected in infer_types
+        let mut node = create_test_node(vec![4], vec![1], vec![0, 0], 0, 0, Some(vec![2]));
         let processor = AvgPool1dProcessor;
-        let spec = processor.spec();
-        let result = crate::processor::validate_node_spec(&node, 10, &spec);
-        // Should fail because minimum opset is 11
-        assert!(matches!(result, Err(ProcessError::UnsupportedOpset { .. })));
+        let prefs = OutputPreferences::new();
+        let result = processor.infer_types(&mut node, 9, &prefs);
+        assert!(matches!(result, Err(ProcessError::Custom(_))));
     }
 
     #[test]

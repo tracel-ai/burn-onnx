@@ -13,15 +13,15 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 # Used by gen_opset_compliance.py to split ops into passing/failing per opset.
 MIN_OPSET = {
     # Arithmetic
-    "Add": 7,
-    "Sub": 7,
-    "Mul": 7,
-    "Div": 7,
+    "Add": 1,
+    "Sub": 1,
+    "Mul": 1,
+    "Div": 1,
     "Pow": 1,
     "Max": 1,
     "Min": 1,
-    "Sum": 8,
-    "Mean": 8,
+    "Sum": 1,
+    "Mean": 1,
     "Mod": 10,
     # Unary math
     "Abs": 1,
@@ -68,9 +68,9 @@ MIN_OPSET = {
     "ThresholdedRelu": 10,
     "Swish": 24,
     # Comparison
-    "Equal": 7,
-    "Greater": 7,
-    "Less": 7,
+    "Equal": 1,
+    "Greater": 1,
+    "Less": 1,
     "GreaterOrEqual": 12,
     "LessOrEqual": 12,
     # Logical
@@ -104,7 +104,7 @@ MIN_OPSET = {
     "Squeeze": 1,
     "Unsqueeze": 1,
     "Concat": 1,
-    "Split": 2,
+    "Split": 1,
     "Gather": 1,
     "GatherElements": 11,
     "GatherND": 11,
@@ -121,13 +121,13 @@ MIN_OPSET = {
     "ScatterND": 11,
     # Matrix
     "MatMul": 1,
-    "Gemm": 11,
+    "Gemm": 1,
     "MatMulInteger": 10,
     # Conv
     "Conv": 1,
     "ConvTranspose": 1,
     # Pooling
-    "AveragePool": 11,
+    "AveragePool": 1,
     "MaxPool": 1,
     "GlobalAveragePool": 1,
     # Normalization

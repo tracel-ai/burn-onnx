@@ -90,11 +90,11 @@ fn cast(graph: &OnnxGraph) {
 fn constant(graph: &OnnxGraph) {
     let node = find_node(graph, "constant");
     insta::assert_snapshot!(format!("{node}"), @r#"
-    Constant "constant9"
+    Constant "constant6"
       Inputs:
-        _: F32[2, 3] [static(8)]
+        _: F32[3, 4] [static(5)]
       Outputs:
-        constant9_out1: F32[2, 3] [constant]
+        constant6_out1: F32[3, 4] [constant]
     "#);
 }
 
@@ -194,6 +194,27 @@ fn flatten(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn gemm(graph: &OnnxGraph) {
+    let node = find_node(graph, "gemm");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Gemm "gemm1"
+      Inputs:
+        gemm_a: F32[2, 3]
+        constant6_out1: F32[3, 4] [constant]
+        constant7_out1: F32[4] [constant]
+      Outputs:
+        gemm1_out1: F32[?, ?]
+      Config:
+        GemmConfig {
+            alpha: 1.0,
+            beta: 1.0,
+            trans_a: 0,
+            trans_b: 0,
+        }
+    "#);
+}
+
+#[rstest]
 fn greater(graph: &OnnxGraph) {
     let node = find_node(graph, "greater");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -263,8 +284,8 @@ fn one_hot(graph: &OnnxGraph) {
     OneHot "onehot1"
       Inputs:
         onehot_indices: I64[3]
-        _: Scalar(I64) [static(5)]
-        _: F32[2] [static(6)]
+        _: Scalar(I64) [static(7)]
+        _: F32[2] [static(8)]
       Outputs:
         onehot1_out1: F32[?, ?]
       Config:
@@ -290,7 +311,7 @@ fn p_relu(graph: &OnnxGraph) {
     PRelu "prelu1"
       Inputs:
         prelu_input: F32[2, 3, 4]
-        _: F32[1] [static(7)]
+        _: F32[1] [static(9)]
       Outputs:
         prelu1_out1: F32[2, 3, 4]
     "#);
@@ -332,12 +353,5 @@ fn where_op(graph: &OnnxGraph) {
       Outputs:
         where1_out1: F32[2, 3]
     "#);
-}
-
-/// Ops that require min_opset > 9: Gemm
-#[test]
-fn unsupported_ops_fail() {
-    let result = load_model_result("opset_09_unsupported.onnx");
-    assert!(result.is_err(), "expected parse failure for unsupported ops at opset 9");
 }
 

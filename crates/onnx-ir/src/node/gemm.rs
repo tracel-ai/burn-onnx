@@ -65,7 +65,7 @@ impl NodeProcessor for GemmProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 11,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::AtLeast(2),
             outputs: OutputSpec::Exact(1),

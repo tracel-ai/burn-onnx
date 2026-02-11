@@ -24,6 +24,19 @@ fn abs(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn add(graph: &OnnxGraph) {
+    let node = find_node(graph, "add");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Add "add1"
+      Inputs:
+        add_a: F32[2, 3, 4]
+        add_b: F32[2, 3, 4]
+      Outputs:
+        add1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
 fn and_op(graph: &OnnxGraph) {
     let node = find_node(graph, "and");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -66,6 +79,37 @@ fn arg_min(graph: &OnnxGraph) {
         ArgMinConfig {
             axis: 1,
             keepdims: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn average_pool(graph: &OnnxGraph) {
+    let node = find_node(graph, "averagepool2d");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    AveragePool2d "averagepool2d1"
+      Inputs:
+        averagepool_input: F32[1, 3, 8, 8]
+      Outputs:
+        averagepool2d1_out1: F32[?, ?, ?, ?]
+      Config:
+        AvgPool2dConfig {
+            kernel_size: [
+                2,
+                2,
+            ],
+            strides: [
+                2,
+                2,
+            ],
+            padding: Valid,
+            count_include_pad: false,
+            dilation: [
+                1,
+                1,
+            ],
+            ceil_mode: false,
+            auto_pad: NotSet,
         }
     "#);
 }
@@ -237,6 +281,19 @@ fn depth_to_space(graph: &OnnxGraph) {
     "#);
 }
 
+#[rstest]
+fn div(graph: &OnnxGraph) {
+    let node = find_node(graph, "div");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Div "div1"
+      Inputs:
+        div_a: F32[2, 3, 4]
+        div_b: F32[2, 3, 4]
+      Outputs:
+        div1_out1: F32[2, 3, 4]
+    "#);
+}
+
 /// Dropout is eliminated during post-processing (no-op).
 /// Verify the model parses without error.
 #[test]
@@ -257,6 +314,19 @@ fn elu(graph: &OnnxGraph) {
         EluConfig {
             alpha: 1.0,
         }
+    "#);
+}
+
+#[rstest]
+fn equal(graph: &OnnxGraph) {
+    let node = find_node(graph, "equal");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Equal "equal1"
+      Inputs:
+        equal_a: F32[2, 3, 4]
+        equal_b: F32[2, 3, 4]
+      Outputs:
+        equal1_out1: Bool[?, ?, ?]
     "#);
 }
 
@@ -347,6 +417,27 @@ fn gather(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn gemm(graph: &OnnxGraph) {
+    let node = find_node(graph, "gemm");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Gemm "gemm1"
+      Inputs:
+        gemm_a: F32[2, 3]
+        constant6_out1: F32[3, 4] [constant]
+        constant7_out1: F32[4] [constant]
+      Outputs:
+        gemm1_out1: F32[?, ?]
+      Config:
+        GemmConfig {
+            alpha: 1.0,
+            beta: 1.0,
+            trans_a: 0,
+            trans_b: 0,
+        }
+    "#);
+}
+
+#[rstest]
 fn global_average_pool(graph: &OnnxGraph) {
     let node = find_node(graph, "globalaveragepool");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -355,6 +446,19 @@ fn global_average_pool(graph: &OnnxGraph) {
         globalaveragepool_input: F32[1, 3, 8, 8]
       Outputs:
         globalaveragepool1_out1: F32[1, 3, 8, 8]
+    "#);
+}
+
+#[rstest]
+fn greater(graph: &OnnxGraph) {
+    let node = find_node(graph, "greater");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Greater "greater1"
+      Inputs:
+        greater_a: F32[2, 3, 4]
+        greater_b: F32[2, 3, 4]
+      Outputs:
+        greater1_out1: Bool[?, ?, ?]
     "#);
 }
 
@@ -397,7 +501,7 @@ fn if_op(graph: &OnnxGraph) {
                 nodes: [
                     Constant(
                         ConstantNode {
-                            name: "constant15",
+                            name: "constant17",
                             inputs: [
                                 Argument {
                                     name: "",
@@ -424,7 +528,7 @@ fn if_op(graph: &OnnxGraph) {
                             ],
                             outputs: [
                                 Argument {
-                                    name: "constant15_out1",
+                                    name: "constant17_out1",
                                     ty: Tensor(
                                         TensorType {
                                             dtype: F32,
@@ -450,7 +554,7 @@ fn if_op(graph: &OnnxGraph) {
                 inputs: [],
                 outputs: [
                     Argument {
-                        name: "constant15_out1",
+                        name: "constant17_out1",
                         ty: Tensor(
                             TensorType {
                                 dtype: F32,
@@ -488,7 +592,7 @@ fn if_op(graph: &OnnxGraph) {
                             next_id: 1,
                         },
                         constant_map: {
-                            "constant15_out1": 0,
+                            "constant17_out1": 0,
                         },
                     },
                 ),
@@ -497,7 +601,7 @@ fn if_op(graph: &OnnxGraph) {
                 nodes: [
                     Constant(
                         ConstantNode {
-                            name: "constant16",
+                            name: "constant18",
                             inputs: [
                                 Argument {
                                     name: "",
@@ -524,7 +628,7 @@ fn if_op(graph: &OnnxGraph) {
                             ],
                             outputs: [
                                 Argument {
-                                    name: "constant16_out1",
+                                    name: "constant18_out1",
                                     ty: Tensor(
                                         TensorType {
                                             dtype: F32,
@@ -550,7 +654,7 @@ fn if_op(graph: &OnnxGraph) {
                 inputs: [],
                 outputs: [
                     Argument {
-                        name: "constant16_out1",
+                        name: "constant18_out1",
                         ty: Tensor(
                             TensorType {
                                 dtype: F32,
@@ -588,7 +692,7 @@ fn if_op(graph: &OnnxGraph) {
                             next_id: 1,
                         },
                         constant_map: {
-                            "constant16_out1": 0,
+                            "constant18_out1": 0,
                         },
                     },
                 ),
@@ -605,8 +709,8 @@ fn instance_normalization(graph: &OnnxGraph) {
     InstanceNormalization "instancenormalization1"
       Inputs:
         instancenormalization_input: F32[1, 3, 4, 4]
-        _: F32[3] [static(5)]
-        _: F32[3] [static(6)]
+        _: F32[3] [static(7)]
+        _: F32[3] [static(8)]
       Outputs:
         instancenormalization1_out1: F32[1, 3, 4, 4]
       Config:
@@ -623,8 +727,8 @@ fn lstm(graph: &OnnxGraph) {
     Lstm "lstm1"
       Inputs:
         lstm_input: F32[1, 2, 3]
-        _: F32[1, 16, 3] [static(7)]
-        _: F32[1, 16, 4] [static(8)]
+        _: F32[1, 16, 3] [static(9)]
+        _: F32[1, 16, 4] [static(10)]
       Outputs:
         lstm1_out1: F32[?, ?, ?, ?]
       Config:
@@ -659,6 +763,19 @@ fn leaky_relu(graph: &OnnxGraph) {
         LeakyReluConfig {
             alpha: 0.009999999776482582,
         }
+    "#);
+}
+
+#[rstest]
+fn less(graph: &OnnxGraph) {
+    let node = find_node(graph, "less");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Less "less1"
+      Inputs:
+        less_a: F32[2, 3, 4]
+        less_b: F32[2, 3, 4]
+      Outputs:
+        less1_out1: Bool[?, ?, ?]
     "#);
 }
 
@@ -731,6 +848,19 @@ fn max_pool(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn mean(graph: &OnnxGraph) {
+    let node = find_node(graph, "mean");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Mean "mean1"
+      Inputs:
+        mean_a: F32[2, 3, 4]
+        mean_b: F32[2, 3, 4]
+      Outputs:
+        mean1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
 fn min(graph: &OnnxGraph) {
     let node = find_node(graph, "min");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -740,6 +870,19 @@ fn min(graph: &OnnxGraph) {
         min_b: F32[2, 3, 4]
       Outputs:
         min1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
+fn mul(graph: &OnnxGraph) {
+    let node = find_node(graph, "mul");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Mul "mul1"
+      Inputs:
+        mul_a: F32[2, 3, 4]
+        mul_b: F32[2, 3, 4]
+      Outputs:
+        mul1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -787,7 +930,7 @@ fn p_relu(graph: &OnnxGraph) {
     PRelu "prelu1"
       Inputs:
         prelu_input: F32[2, 3, 4]
-        _: F32[1] [static(9)]
+        _: F32[1] [static(11)]
       Outputs:
         prelu1_out1: F32[2, 3, 4]
     "#);
@@ -1257,6 +1400,33 @@ fn space_to_depth(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn split(graph: &OnnxGraph) {
+    let node = find_node(graph, "split");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Split "split1"
+      Inputs:
+        split_input: F32[2, 6]
+      Outputs:
+        split1_out1: F32[2, 3]
+        split1_out2: F32[2, 3]
+      Config:
+        SplitConfig {
+            axis: 1,
+            split_size: None,
+            split_sizes: Some(
+                Static(
+                    [
+                        3,
+                        3,
+                    ],
+                ),
+            ),
+            num_outputs: None,
+        }
+    "#);
+}
+
+#[rstest]
 fn sqrt(graph: &OnnxGraph) {
     let node = find_node(graph, "sqrt");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -1288,6 +1458,32 @@ fn squeeze(graph: &OnnxGraph) {
                 ),
             ),
         }
+    "#);
+}
+
+#[rstest]
+fn sub(graph: &OnnxGraph) {
+    let node = find_node(graph, "sub");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Sub "sub1"
+      Inputs:
+        sub_a: F32[2, 3, 4]
+        sub_b: F32[2, 3, 4]
+      Outputs:
+        sub1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
+fn sum(graph: &OnnxGraph) {
+    let node = find_node(graph, "sum");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Sum "sum1"
+      Inputs:
+        sum_a: F32[2, 3, 4]
+        sum_b: F32[2, 3, 4]
+      Outputs:
+        sum1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -1375,7 +1571,7 @@ fn xor_op(graph: &OnnxGraph) {
     "#);
 }
 
-/// Ops that require min_opset > 1: Add, AveragePool, BatchNormalization, Div, Equal, Gemm, Greater, Hardmax, Less, LogSoftmax, Mean, Mul, Pad, Softmax, Split, Sub, Sum, Tile
+/// Ops that require min_opset > 1: BatchNormalization, Hardmax, LogSoftmax, Pad, Softmax, Tile
 #[test]
 fn unsupported_ops_fail() {
     let result = load_model_result("opset_01_unsupported.onnx");

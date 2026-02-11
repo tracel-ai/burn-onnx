@@ -36,7 +36,7 @@ impl NodeProcessor for MeanProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 8,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::AtLeast(1),
             outputs: OutputSpec::Exact(1),
