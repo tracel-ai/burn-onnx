@@ -8,85 +8,22 @@ use super::helpers::*;
 fn reshape() {
     let graph = load_model("opset_05.onnx");
     let node = find_node(&graph, "reshape");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Reshape(
-        ReshapeNode {
-            name: "reshape1",
-            inputs: [
-                Argument {
-                    name: "reshape_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: I64,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        0,
-                    ),
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "reshape1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        6,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: ReshapeConfig {
-                shape: Static(
-                    [
-                        6,
-                        4,
-                    ],
-                ),
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Reshape "reshape1"
+      Inputs:
+        reshape_input: F32[2, 3, 4]
+        _: I64[2] [static(0)]
+      Outputs:
+        reshape1_out1: F32[6, 4]
+      Config:
+        ReshapeConfig {
+            shape: Static(
+                [
+                    6,
+                    4,
+                ],
+            ),
+        }
     "#);
 }
+

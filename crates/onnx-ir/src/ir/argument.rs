@@ -58,6 +58,69 @@ impl fmt::Debug for Argument {
     }
 }
 
+impl fmt::Display for TensorType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}[", self.dtype)?;
+        match &self.static_shape {
+            Some(dims) => {
+                for (i, dim) in dims.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    match dim {
+                        Some(val) => write!(f, "{val}")?,
+                        None => write!(f, "?")?,
+                    }
+                }
+            }
+            None => {
+                for i in 0..self.rank {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "?")?;
+                }
+            }
+        }
+        write!(f, "]")
+    }
+}
+
+impl fmt::Display for ArgType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            ArgType::Scalar(dtype) => write!(f, "Scalar({dtype:?})"),
+            ArgType::Shape(rank) => write!(f, "Shape({rank})"),
+            ArgType::Tensor(t) => write!(f, "{t}"),
+        }
+    }
+}
+
+impl fmt::Display for ValueSource {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            ValueSource::Dynamic => Ok(()),
+            ValueSource::Static(id) => write!(f, " [static({id})]"),
+            ValueSource::Constant => write!(f, " [constant]"),
+            ValueSource::Optional => write!(f, "<optional>"),
+        }
+    }
+}
+
+impl fmt::Display for Argument {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.is_optional() {
+            return write!(f, "<optional>");
+        }
+        let name = if self.name.is_empty() {
+            "_"
+        } else {
+            &self.name
+        };
+        write!(f, "{name}: {}{}", self.ty, self.value_source)
+    }
+}
+
 impl Argument {
     /// Copy everything except the name from the other argument
     pub fn copy_value(&mut self, other_arg: &Argument) {
@@ -510,5 +573,70 @@ mod tests {
         let changed = inferred.merge_static_shape(&value_info);
 
         assert!(!changed);
+    }
+
+    #[test]
+    fn test_display_tensor_type_known_shape() {
+        let t = TensorType::new(DType::F32, 3, Some(vec![Some(2), Some(3), Some(4)]));
+        assert_eq!(format!("{t}"), "F32[2, 3, 4]");
+    }
+
+    #[test]
+    fn test_display_tensor_type_partial_shape() {
+        let t = TensorType::new(DType::I64, 3, Some(vec![None, Some(3), None]));
+        assert_eq!(format!("{t}"), "I64[?, 3, ?]");
+    }
+
+    #[test]
+    fn test_display_tensor_type_no_shape() {
+        let t = TensorType::new(DType::F32, 2, None);
+        assert_eq!(format!("{t}"), "F32[?, ?]");
+    }
+
+    #[test]
+    fn test_display_argtype_scalar() {
+        let a = ArgType::Scalar(DType::F32);
+        assert_eq!(format!("{a}"), "Scalar(F32)");
+    }
+
+    #[test]
+    fn test_display_argtype_shape() {
+        let a = ArgType::Shape(3);
+        assert_eq!(format!("{a}"), "Shape(3)");
+    }
+
+    #[test]
+    fn test_display_argument_dynamic() {
+        let arg = Argument::new(
+            "input",
+            ArgType::Tensor(TensorType::new(DType::F32, 2, Some(vec![Some(2), Some(3)]))),
+        );
+        assert_eq!(format!("{arg}"), "input: F32[2, 3]");
+    }
+
+    #[test]
+    fn test_display_argument_static() {
+        let mut arg = Argument::new(
+            "",
+            ArgType::Tensor(TensorType::new_known(DType::F32, vec![16])),
+        );
+        arg.value_source = ValueSource::Static(0);
+        assert_eq!(format!("{arg}"), "_: F32[16] [static(0)]");
+    }
+
+    #[test]
+    fn test_display_argument_constant() {
+        let mut arg = Argument::new(
+            "bias",
+            ArgType::Tensor(TensorType::new_known(DType::F32, vec![16])),
+        );
+        arg.value_source = ValueSource::Constant;
+        assert_eq!(format!("{arg}"), "bias: F32[16] [constant]");
+    }
+
+    #[test]
+    fn test_display_argument_optional() {
+        let arg = Argument::new("", ArgType::default());
+        assert_eq!(format!("{arg}"), "<optional>");
     }
 }

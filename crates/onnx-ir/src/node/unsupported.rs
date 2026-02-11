@@ -19,6 +19,23 @@ macro_rules! define_placeholder_node {
                 pub inputs: Vec<Argument>,
                 pub outputs: Vec<Argument>,
             }
+
+            impl ::core::fmt::Display for $name {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let type_name = stringify!($name);
+                    let op_name = type_name.strip_suffix("Node").unwrap_or(type_name);
+                    write!(f, "{} {:?}\n", op_name, self.name)?;
+                    write!(f, "  Inputs:\n")?;
+                    for arg in &self.inputs {
+                        write!(f, "    {arg}\n")?;
+                    }
+                    write!(f, "  Outputs:\n")?;
+                    for arg in &self.outputs {
+                        write!(f, "    {arg}\n")?;
+                    }
+                    Ok(())
+                }
+            }
         )*
     };
 }

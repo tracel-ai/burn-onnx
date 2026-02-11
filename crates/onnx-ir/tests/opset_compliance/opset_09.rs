@@ -8,62 +8,12 @@ use super::helpers::*;
 fn acosh() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "acosh");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Acosh(
-        AcoshNode {
-            name: "acosh1",
-            inputs: [
-                Argument {
-                    name: "acosh_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "acosh1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Acosh "acosh1"
+      Inputs:
+        acosh_input: F32[2, 3, 4]
+      Outputs:
+        acosh1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -71,62 +21,12 @@ fn acosh() {
 fn asinh() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "asinh");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Asinh(
-        AsinhNode {
-            name: "asinh1",
-            inputs: [
-                Argument {
-                    name: "asinh_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "asinh1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Asinh "asinh1"
+      Inputs:
+        asinh_input: F32[2, 3, 4]
+      Outputs:
+        asinh1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -134,62 +34,12 @@ fn asinh() {
 fn atanh() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "atanh");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Atanh(
-        AtanhNode {
-            name: "atanh1",
-            inputs: [
-                Argument {
-                    name: "atanh_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "atanh1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Atanh "atanh1"
+      Inputs:
+        atanh_input: F32[2, 3, 4]
+      Outputs:
+        atanh1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -197,150 +47,23 @@ fn atanh() {
 fn batch_normalization() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "batchnormalization");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    BatchNormalization(
-        BatchNormalizationNode {
-            name: "batchnormalization1",
-            inputs: [
-                Argument {
-                    name: "batchnormalization_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 4,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        0,
-                    ),
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        1,
-                    ),
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        2,
-                    ),
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        3,
-                    ),
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "batchnormalization1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 4,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: Static(
-                BatchNormStaticConfig {
-                    epsilon: 0.0,
-                    momentum: 0.0,
-                },
-            ),
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    BatchNormalization "batchnormalization1"
+      Inputs:
+        batchnormalization_input: F32[1, 3, 4, 4]
+        _: F32[3] [static(0)]
+        _: F32[3] [static(1)]
+        _: F32[3] [static(2)]
+        _: F32[3] [static(3)]
+      Outputs:
+        batchnormalization1_out1: F32[1, 3, 4, 4]
+      Config:
+        Static(
+            BatchNormStaticConfig {
+                epsilon: 0.0,
+                momentum: 0.0,
+            },
+        )
     "#);
 }
 
@@ -348,59 +71,16 @@ fn batch_normalization() {
 fn cast() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "cast");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Cast(
-        CastNode {
-            name: "cast1",
-            inputs: [
-                Argument {
-                    name: "cast_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "cast1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: I32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: CastConfig {
-                to: I32,
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Cast "cast1"
+      Inputs:
+        cast_input: F32[2, 3]
+      Outputs:
+        cast1_out1: I32[2, 3]
+      Config:
+        CastConfig {
+            to: I32,
+        }
     "#);
 }
 
@@ -408,58 +88,12 @@ fn cast() {
 fn constant() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "constant");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Constant(
-        ConstantNode {
-            name: "constant9",
-            inputs: [
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        8,
-                    ),
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "constant9_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Constant,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Constant "constant9"
+      Inputs:
+        _: F32[2, 3] [static(8)]
+      Outputs:
+        constant9_out1: F32[2, 3] [constant]
     "#);
 }
 
@@ -467,61 +101,38 @@ fn constant() {
 fn constant_of_shape() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "constantofshape");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    ConstantOfShape(
-        ConstantOfShapeNode {
-            name: "constantofshape1",
-            inputs: [
-                Argument {
-                    name: "",
-                    ty: Shape(
-                        2,
-                    ),
-                    value_source: Static(
-                        4,
-                    ),
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "constantofshape1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: ConstantOfShapeConfig {
-                shape: Static(
-                    [
-                        2,
-                        3,
-                    ],
-                ),
-                value: Some(
-                    TensorData {
-                        bytes: Bytes {
-                            data: [
-                                0,
-                                0,
-                                128,
-                                "...",
-                            ],
-                            len: 4,
-                        },
-                        shape: [
-                            1,
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ConstantOfShape "constantofshape1"
+      Inputs:
+        _: Shape(2) [static(4)]
+      Outputs:
+        constantofshape1_out1: F32[?, ?]
+      Config:
+        ConstantOfShapeConfig {
+            shape: Static(
+                [
+                    2,
+                    3,
+                ],
+            ),
+            value: Some(
+                TensorData {
+                    bytes: Bytes {
+                        data: [
+                            0,
+                            0,
+                            128,
+                            "...",
                         ],
-                        dtype: F32,
+                        len: 4,
                     },
-                ),
-            },
-        },
-    )
+                    shape: [
+                        1,
+                    ],
+                    dtype: F32,
+                },
+            ),
+        }
     "#);
 }
 
@@ -529,62 +140,12 @@ fn constant_of_shape() {
 fn cosh() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "cosh");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Cosh(
-        CoshNode {
-            name: "cosh1",
-            inputs: [
-                Argument {
-                    name: "cosh_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "cosh1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Cosh "cosh1"
+      Inputs:
+        cosh_input: F32[2, 3, 4]
+      Outputs:
+        cosh1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -592,62 +153,12 @@ fn cosh() {
 fn erf() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "erf");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Erf(
-        ErfNode {
-            name: "erf1",
-            inputs: [
-                Argument {
-                    name: "erf_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "erf1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Erf "erf1"
+      Inputs:
+        erf_input: F32[2, 3, 4]
+      Outputs:
+        erf1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -655,60 +166,17 @@ fn erf() {
 fn eye_like() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "eyelike");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    EyeLike(
-        EyeLikeNode {
-            name: "eyelike1",
-            inputs: [
-                Argument {
-                    name: "eyelike_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "eyelike1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: EyeLikeConfig {
-                dtype: None,
-                k: 0,
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    EyeLike "eyelike1"
+      Inputs:
+        eyelike_input: F32[3, 3]
+      Outputs:
+        eyelike1_out1: F32[3, 3]
+      Config:
+        EyeLikeConfig {
+            dtype: None,
+            k: 0,
+        }
     "#);
 }
 
@@ -716,62 +184,16 @@ fn eye_like() {
 fn flatten() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "flatten");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Flatten(
-        FlattenNode {
-            name: "flatten1",
-            inputs: [
-                Argument {
-                    name: "flatten_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "flatten1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        12,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: FlattenConfig {
-                axis: 1,
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Flatten "flatten1"
+      Inputs:
+        flatten_input: F32[2, 3, 4]
+      Outputs:
+        flatten1_out1: F32[2, 12]
+      Config:
+        FlattenConfig {
+            axis: 1,
+        }
     "#);
 }
 
@@ -779,73 +201,13 @@ fn flatten() {
 fn greater() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "greater");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Greater(
-        GreaterNode {
-            name: "greater1",
-            inputs: [
-                Argument {
-                    name: "greater_a",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "greater_b",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "greater1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: Bool,
-                            rank: 3,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Greater "greater1"
+      Inputs:
+        greater_a: F32[2, 3, 4]
+        greater_b: F32[2, 3, 4]
+      Outputs:
+        greater1_out1: Bool[?, ?, ?]
     "#);
 }
 
@@ -853,47 +215,12 @@ fn greater() {
 fn is_na_n() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "isnan");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    IsNaN(
-        IsNaNNode {
-            name: "isnan1",
-            inputs: [
-                Argument {
-                    name: "isnan_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "isnan1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: Bool,
-                            rank: 2,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    IsNaN "isnan1"
+      Inputs:
+        isnan_input: F32[2, 3]
+      Outputs:
+        isnan1_out1: Bool[?, ?]
     "#);
 }
 
@@ -901,73 +228,13 @@ fn is_na_n() {
 fn less() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "less");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Less(
-        LessNode {
-            name: "less1",
-            inputs: [
-                Argument {
-                    name: "less_a",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "less_b",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "less1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: Bool,
-                            rank: 3,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Less "less1"
+      Inputs:
+        less_a: F32[2, 3, 4]
+        less_b: F32[2, 3, 4]
+      Outputs:
+        less1_out1: Bool[?, ?, ?]
     "#);
 }
 
@@ -975,67 +242,13 @@ fn less() {
 fn mat_mul() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "matmul");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    MatMul(
-        MatMulNode {
-            name: "matmul1",
-            inputs: [
-                Argument {
-                    name: "matmul_a",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "matmul_b",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "matmul1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    MatMul "matmul1"
+      Inputs:
+        matmul_a: F32[2, 3]
+        matmul_b: F32[3, 4]
+      Outputs:
+        matmul1_out1: F32[?, ?]
     "#);
 }
 
@@ -1043,54 +256,12 @@ fn mat_mul() {
 fn non_zero() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "nonzero");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    NonZero(
-        NonZeroNode {
-            name: "nonzero1",
-            inputs: [
-                Argument {
-                    name: "nonzero_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "nonzero1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: I64,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    None,
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    NonZero "nonzero1"
+      Inputs:
+        nonzero_input: F32[2, 3]
+      Outputs:
+        nonzero1_out1: I64[2, ?]
     "#);
 }
 
@@ -1098,84 +269,27 @@ fn non_zero() {
 fn one_hot() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "onehot");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    OneHot(
-        OneHotNode {
-            name: "onehot1",
-            inputs: [
-                Argument {
-                    name: "onehot_indices",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: I64,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "",
-                    ty: Scalar(
-                        I64,
-                    ),
-                    value_source: Static(
-                        5,
-                    ),
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        6,
-                    ),
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "onehot1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: OneHotConfig {
-                depth: Static(
-                    5,
-                ),
-                values: Static(
-                    [
-                        0.0,
-                        1.0,
-                    ],
-                ),
-                axis: -1,
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    OneHot "onehot1"
+      Inputs:
+        onehot_indices: I64[3]
+        _: Scalar(I64) [static(5)]
+        _: F32[2] [static(6)]
+      Outputs:
+        onehot1_out1: F32[?, ?]
+      Config:
+        OneHotConfig {
+            depth: Static(
+                5,
+            ),
+            values: Static(
+                [
+                    0.0,
+                    1.0,
+                ],
+            ),
+            axis: -1,
+        }
     "#);
 }
 
@@ -1183,81 +297,13 @@ fn one_hot() {
 fn p_relu() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "prelu");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    PRelu(
-        PReluNode {
-            name: "prelu1",
-            inputs: [
-                Argument {
-                    name: "prelu_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        7,
-                    ),
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "prelu1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    PRelu "prelu1"
+      Inputs:
+        prelu_input: F32[2, 3, 4]
+        _: F32[1] [static(7)]
+      Outputs:
+        prelu1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -1265,62 +311,12 @@ fn p_relu() {
 fn sign() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "sign");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Sign(
-        SignNode {
-            name: "sign1",
-            inputs: [
-                Argument {
-                    name: "sign_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "sign1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Sign "sign1"
+      Inputs:
+        sign_input: F32[2, 3, 4]
+      Outputs:
+        sign1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -1328,62 +324,12 @@ fn sign() {
 fn sinh() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "sinh");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Sinh(
-        SinhNode {
-            name: "sinh1",
-            inputs: [
-                Argument {
-                    name: "sinh_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "sinh1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Sinh "sinh1"
+      Inputs:
+        sinh_input: F32[2, 3, 4]
+      Outputs:
+        sinh1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -1391,96 +337,14 @@ fn sinh() {
 fn where_op() {
     let graph = load_model("opset_09.onnx");
     let node = find_node(&graph, "where");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Where(
-        WhereNode {
-            name: "where1",
-            inputs: [
-                Argument {
-                    name: "where_condition",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: Bool,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "where_x",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "where_y",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "where1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Where "where1"
+      Inputs:
+        where_condition: Bool[2, 3]
+        where_x: F32[2, 3]
+        where_y: F32[2, 3]
+      Outputs:
+        where1_out1: F32[2, 3]
     "#);
 }
 
@@ -1488,8 +352,6 @@ fn where_op() {
 #[test]
 fn unsupported_ops_fail() {
     let result = load_model_result("opset_09_unsupported.onnx");
-    assert!(
-        result.is_err(),
-        "expected parse failure for unsupported ops at opset 9"
-    );
+    assert!(result.is_err(), "expected parse failure for unsupported ops at opset 9");
 }
+

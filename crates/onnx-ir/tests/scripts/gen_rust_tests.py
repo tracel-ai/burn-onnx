@@ -249,7 +249,7 @@ def generate_opset_file(opset: int, passing: list[str], failing: list[str]) -> s
             lines.append(f"fn {fn_name}() {{")
             lines.append(f'    let graph = load_model("opset_{opset:02d}.onnx");')
             lines.append(f'    let node = find_node(&graph, "{prefix}");')
-            lines.append(f'    insta::assert_snapshot!(format!("{{node:#?}}"), @r"");')
+            lines.append(f'    insta::assert_snapshot!(format!("{{node}}"), @r"");')
             lines.append(f"}}")
             lines.append("")
 

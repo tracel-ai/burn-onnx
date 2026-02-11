@@ -101,7 +101,41 @@ pub fn node_builder_derive(input: TokenStream) -> TokenStream {
         quote! {}
     };
 
+    // Derive the op name by stripping "Node" suffix (e.g. "AcosNode" -> "Acos")
+    let node_name_str = node_name.to_string();
+    let op_name = node_name_str
+        .strip_suffix("Node")
+        .unwrap_or(&node_name_str);
+    let op_name_lit = syn::LitStr::new(op_name, node_name.span());
+
+    let display_config = if has_config {
+        quote! {
+            write!(f, "  Config:\n")?;
+            for line in format!("{:#?}", self.config).lines() {
+                write!(f, "    {line}\n")?;
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     let expanded = quote! {
+        impl ::core::fmt::Display for #node_name {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                write!(f, "{} {:?}\n", #op_name_lit, self.name)?;
+                write!(f, "  Inputs:\n")?;
+                for arg in &self.inputs {
+                    write!(f, "    {arg}\n")?;
+                }
+                write!(f, "  Outputs:\n")?;
+                for arg in &self.outputs {
+                    write!(f, "    {arg}\n")?;
+                }
+                #display_config
+                Ok(())
+            }
+        }
+
         pub struct #builder_name {
             name: String,
             inputs: Vec<crate::ir::Argument>,

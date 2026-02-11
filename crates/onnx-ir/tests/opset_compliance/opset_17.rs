@@ -8,103 +8,19 @@ use super::helpers::*;
 fn layer_normalization() {
     let graph = load_model("opset_17.onnx");
     let node = find_node(&graph, "layernormalization");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    LayerNormalization(
-        LayerNormalizationNode {
-            name: "layernormalization1",
-            inputs: [
-                Argument {
-                    name: "layernormalization_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        0,
-                    ),
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        1,
-                    ),
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "layernormalization1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: LayerNormConfig {
-                epsilon: 9.999999747378752e-6,
-                full_precision: true,
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    LayerNormalization "layernormalization1"
+      Inputs:
+        layernormalization_input: F32[2, 3, 4]
+        _: F32[4] [static(0)]
+        _: F32[4] [static(1)]
+      Outputs:
+        layernormalization1_out1: F32[2, 3, 4]
+      Config:
+        LayerNormConfig {
+            epsilon: 9.999999747378752e-6,
+            full_precision: true,
+        }
     "#);
 }
+

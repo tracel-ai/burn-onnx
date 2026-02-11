@@ -8,113 +8,29 @@ use super::helpers::*;
 fn gru() {
     let graph = load_model("opset_03.onnx");
     let node = find_node(&graph, "gru");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Gru(
-        GruNode {
-            name: "gru1",
-            inputs: [
-                Argument {
-                    name: "gru_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        12,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        0,
-                    ),
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        12,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        1,
-                    ),
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "gru1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 4,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: GruConfig {
-                input_size: 3,
-                hidden_size: 4,
-                direction: Forward,
-                has_bias: false,
-                has_initial_h: false,
-                batch_first: false,
-                clip: None,
-                linear_before_reset: false,
-                gate_activation: Sigmoid,
-                hidden_activation: Tanh,
-                activation_alpha: None,
-                activation_beta: None,
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Gru "gru1"
+      Inputs:
+        gru_input: F32[1, 2, 3]
+        _: F32[1, 12, 3] [static(0)]
+        _: F32[1, 12, 4] [static(1)]
+      Outputs:
+        gru1_out1: F32[?, ?, ?, ?]
+      Config:
+        GruConfig {
+            input_size: 3,
+            hidden_size: 4,
+            direction: Forward,
+            has_bias: false,
+            has_initial_h: false,
+            batch_first: false,
+            clip: None,
+            linear_before_reset: false,
+            gate_activation: Sigmoid,
+            hidden_activation: Tanh,
+            activation_alpha: None,
+            activation_beta: None,
+        }
     "#);
 }
+

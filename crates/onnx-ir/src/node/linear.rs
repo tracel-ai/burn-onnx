@@ -52,6 +52,25 @@ pub struct LinearNode {
     pub config: LinearConfig,
 }
 
+impl core::fmt::Display for LinearNode {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Linear {:?}\n", self.name)?;
+        write!(f, "  Inputs:\n")?;
+        for arg in &self.inputs {
+            write!(f, "    {arg}\n")?;
+        }
+        write!(f, "  Outputs:\n")?;
+        for arg in &self.outputs {
+            write!(f, "    {arg}\n")?;
+        }
+        write!(f, "  Config:\n")?;
+        for line in format!("{:#?}", self.config).lines() {
+            write!(f, "    {line}\n")?;
+        }
+        Ok(())
+    }
+}
+
 pub(crate) struct LinearProcessor;
 
 impl NodeProcessor for LinearProcessor {

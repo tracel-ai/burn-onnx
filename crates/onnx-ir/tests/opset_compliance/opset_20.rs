@@ -8,61 +8,38 @@ use super::helpers::*;
 fn constant_of_shape() {
     let graph = load_model("opset_20.onnx");
     let node = find_node(&graph, "constantofshape");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    ConstantOfShape(
-        ConstantOfShapeNode {
-            name: "constantofshape1",
-            inputs: [
-                Argument {
-                    name: "",
-                    ty: Shape(
-                        2,
-                    ),
-                    value_source: Static(
-                        0,
-                    ),
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "constantofshape1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: ConstantOfShapeConfig {
-                shape: Static(
-                    [
-                        2,
-                        3,
-                    ],
-                ),
-                value: Some(
-                    TensorData {
-                        bytes: Bytes {
-                            data: [
-                                0,
-                                0,
-                                128,
-                                "...",
-                            ],
-                            len: 4,
-                        },
-                        shape: [
-                            1,
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ConstantOfShape "constantofshape1"
+      Inputs:
+        _: Shape(2) [static(0)]
+      Outputs:
+        constantofshape1_out1: F32[?, ?]
+      Config:
+        ConstantOfShapeConfig {
+            shape: Static(
+                [
+                    2,
+                    3,
+                ],
+            ),
+            value: Some(
+                TensorData {
+                    bytes: Bytes {
+                        data: [
+                            0,
+                            0,
+                            128,
+                            "...",
                         ],
-                        dtype: F32,
+                        len: 4,
                     },
-                ),
-            },
-        },
-    )
+                    shape: [
+                        1,
+                    ],
+                    dtype: F32,
+                },
+            ),
+        }
     "#);
 }
 
@@ -70,62 +47,12 @@ fn constant_of_shape() {
 fn gelu() {
     let graph = load_model("opset_20.onnx");
     let node = find_node(&graph, "gelu");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Gelu(
-        GeluNode {
-            name: "gelu1",
-            inputs: [
-                Argument {
-                    name: "gelu_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "gelu1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Gelu "gelu1"
+      Inputs:
+        gelu_input: F32[2, 3, 4]
+      Outputs:
+        gelu1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -133,84 +60,19 @@ fn gelu() {
 fn grid_sample() {
     let graph = load_model("opset_20.onnx");
     let node = find_node(&graph, "gridsample");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    GridSample(
-        GridSampleNode {
-            name: "gridsample1",
-            inputs: [
-                Argument {
-                    name: "gridsample_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 4,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "gridsample_grid",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 4,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        2,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "gridsample1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 4,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: GridSampleConfig {
-                mode: Bilinear,
-                padding_mode: Zeros,
-                align_corners: false,
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    GridSample "gridsample1"
+      Inputs:
+        gridsample_input: F32[1, 1, 3, 3]
+        gridsample_grid: F32[1, 2, 2, 2]
+      Outputs:
+        gridsample1_out1: F32[?, ?, ?, ?]
+      Config:
+        GridSampleConfig {
+            mode: Bilinear,
+            padding_mode: Zeros,
+            align_corners: false,
+        }
     "#);
 }
 
@@ -218,51 +80,17 @@ fn grid_sample() {
 fn is_inf() {
     let graph = load_model("opset_20.onnx");
     let node = find_node(&graph, "isinf");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    IsInf(
-        IsInfNode {
-            name: "isinf1",
-            inputs: [
-                Argument {
-                    name: "isinf_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "isinf1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: Bool,
-                            rank: 2,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: IsInfConfig {
-                detect_negative: true,
-                detect_positive: true,
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    IsInf "isinf1"
+      Inputs:
+        isinf_input: F32[2, 3]
+      Outputs:
+        isinf1_out1: Bool[?, ?]
+      Config:
+        IsInfConfig {
+            detect_negative: true,
+            detect_positive: true,
+        }
     "#);
 }
 
@@ -270,47 +98,12 @@ fn is_inf() {
 fn is_na_n() {
     let graph = load_model("opset_20.onnx");
     let node = find_node(&graph, "isnan");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    IsNaN(
-        IsNaNNode {
-            name: "isnan1",
-            inputs: [
-                Argument {
-                    name: "isnan_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "isnan1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: Bool,
-                            rank: 2,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    IsNaN "isnan1"
+      Inputs:
+        isnan_input: F32[2, 3]
+      Outputs:
+        isnan1_out1: Bool[?, ?]
     "#);
 }
 
@@ -318,87 +111,20 @@ fn is_na_n() {
 fn reduce_max() {
     let graph = load_model("opset_20.onnx");
     let node = find_node(&graph, "reducemax");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    ReduceMax(
-        ReduceMaxNode {
-            name: "reducemax1",
-            inputs: [
-                Argument {
-                    name: "reducemax_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: I64,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        1,
-                    ),
-                },
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceMax "reducemax1"
+      Inputs:
+        reducemax_input: F32[2, 3, 4]
+        _: I64[1] [static(1)]
+      Outputs:
+        reducemax1_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
             ],
-            outputs: [
-                Argument {
-                    name: "reducemax1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: ReduceConfig {
-                dims: [
-                    1,
-                ],
-                keepdims: true,
-            },
-        },
-    )
+            keepdims: true,
+        }
     "#);
 }
 
@@ -406,86 +132,20 @@ fn reduce_max() {
 fn reduce_min() {
     let graph = load_model("opset_20.onnx");
     let node = find_node(&graph, "reducemin");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    ReduceMin(
-        ReduceMinNode {
-            name: "reducemin1",
-            inputs: [
-                Argument {
-                    name: "reducemin_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: I64,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        2,
-                    ),
-                },
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ReduceMin "reducemin1"
+      Inputs:
+        reducemin_input: F32[2, 3, 4]
+        _: I64[1] [static(2)]
+      Outputs:
+        reducemin1_out1: F32[2, 1, 4]
+      Config:
+        ReduceConfig {
+            dims: [
+                1,
             ],
-            outputs: [
-                Argument {
-                    name: "reducemin1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: ReduceConfig {
-                dims: [
-                    1,
-                ],
-                keepdims: true,
-            },
-        },
-    )
+            keepdims: true,
+        }
     "#);
 }
+

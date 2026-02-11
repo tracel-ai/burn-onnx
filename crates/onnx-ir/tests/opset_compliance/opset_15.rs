@@ -8,150 +8,23 @@ use super::helpers::*;
 fn batch_normalization() {
     let graph = load_model("opset_15.onnx");
     let node = find_node(&graph, "batchnormalization");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    BatchNormalization(
-        BatchNormalizationNode {
-            name: "batchnormalization1",
-            inputs: [
-                Argument {
-                    name: "batchnormalization_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 4,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        0,
-                    ),
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        1,
-                    ),
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        2,
-                    ),
-                },
-                Argument {
-                    name: "",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 1,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Static(
-                        3,
-                    ),
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "batchnormalization1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 4,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        1,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: Static(
-                BatchNormStaticConfig {
-                    epsilon: 0.0,
-                    momentum: 0.0,
-                },
-            ),
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    BatchNormalization "batchnormalization1"
+      Inputs:
+        batchnormalization_input: F32[1, 3, 4, 4]
+        _: F32[3] [static(0)]
+        _: F32[3] [static(1)]
+        _: F32[3] [static(2)]
+        _: F32[3] [static(3)]
+      Outputs:
+        batchnormalization1_out1: F32[1, 3, 4, 4]
+      Config:
+        Static(
+            BatchNormStaticConfig {
+                epsilon: 0.0,
+                momentum: 0.0,
+            },
+        )
     "#);
 }
 
@@ -159,56 +32,12 @@ fn batch_normalization() {
 fn bernoulli() {
     let graph = load_model("opset_15.onnx");
     let node = find_node(&graph, "bernoulli");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Bernoulli(
-        BernoulliNode {
-            name: "bernoulli1",
-            inputs: [
-                Argument {
-                    name: "bernoulli_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "bernoulli1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Bernoulli "bernoulli1"
+      Inputs:
+        bernoulli_input: F32[2, 3]
+      Outputs:
+        bernoulli1_out1: F32[2, 3]
     "#);
 }
 
@@ -216,85 +45,13 @@ fn bernoulli() {
 fn pow() {
     let graph = load_model("opset_15.onnx");
     let node = find_node(&graph, "pow");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Pow(
-        PowNode {
-            name: "pow1",
-            inputs: [
-                Argument {
-                    name: "pow_a",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "pow_b",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "pow1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Pow "pow1"
+      Inputs:
+        pow_a: F32[2, 3, 4]
+        pow_b: F32[2, 3, 4]
+      Outputs:
+        pow1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -302,49 +59,17 @@ fn pow() {
 fn shape() {
     let graph = load_model("opset_15.onnx");
     let node = find_node(&graph, "shape");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Shape(
-        ShapeNode {
-            name: "shape1",
-            inputs: [
-                Argument {
-                    name: "shape_input",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 3,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                    Some(
-                                        4,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "shape1_out1",
-                    ty: Shape(
-                        3,
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: ShapeConfig {
-                start: 0,
-                end: 3,
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Shape "shape1"
+      Inputs:
+        shape_input: F32[2, 3, 4]
+      Outputs:
+        shape1_out1: Shape(3)
+      Config:
+        ShapeConfig {
+            start: 0,
+            end: 3,
+        }
     "#);
 }
+

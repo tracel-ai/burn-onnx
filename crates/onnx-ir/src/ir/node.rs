@@ -145,6 +145,16 @@ macro_rules! define_node_enum {
                 }
             }
         }
+
+        impl ::core::fmt::Display for Node {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                match self {
+                    $(
+                        Node::$variant(inner) => write!(f, "{inner}"),
+                    )*
+                }
+            }
+        }
     };
 }
 

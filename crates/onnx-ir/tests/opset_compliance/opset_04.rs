@@ -8,69 +8,17 @@ use super::helpers::*;
 fn concat() {
     let graph = load_model("opset_04.onnx");
     let node = find_node(&graph, "concat");
-    insta::assert_snapshot!(format!("{node:#?}"), @r#"
-    Concat(
-        ConcatNode {
-            name: "concat1",
-            inputs: [
-                Argument {
-                    name: "concat_a",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-                Argument {
-                    name: "concat_b",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: Some(
-                                [
-                                    Some(
-                                        2,
-                                    ),
-                                    Some(
-                                        3,
-                                    ),
-                                ],
-                            ),
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            outputs: [
-                Argument {
-                    name: "concat1_out1",
-                    ty: Tensor(
-                        TensorType {
-                            dtype: F32,
-                            rank: 2,
-                            static_shape: None,
-                        },
-                    ),
-                    value_source: Dynamic,
-                },
-            ],
-            config: ConcatConfig {
-                axis: 0,
-            },
-        },
-    )
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Concat "concat1"
+      Inputs:
+        concat_a: F32[2, 3]
+        concat_b: F32[2, 3]
+      Outputs:
+        concat1_out1: F32[?, ?]
+      Config:
+        ConcatConfig {
+            axis: 0,
+        }
     "#);
 }
+
