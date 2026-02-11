@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use burn_tensor::DType;
 
@@ -272,15 +272,15 @@ impl Default for TensorStore {
 #[derive(Debug, Clone)]
 pub struct ValueStore {
     /// Immutable tensor data storage
-    tensor_store: Rc<TensorStore>,
+    tensor_store: Arc<TensorStore>,
     /// Maps constant node output names to their data IDs
     /// e.g., "constant1_out1" -> 0
-    constant_map: Rc<HashMap<String, DataId>>,
+    constant_map: Arc<HashMap<String, DataId>>,
 }
 
 impl ValueStore {
     /// Create a new ValueStore from tensor store and constant map
-    pub fn new(tensor_store: Rc<TensorStore>, constant_map: Rc<HashMap<String, DataId>>) -> Self {
+    pub fn new(tensor_store: Arc<TensorStore>, constant_map: Arc<HashMap<String, DataId>>) -> Self {
         Self {
             tensor_store,
             constant_map,

@@ -11,6 +11,7 @@ use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     rc::Rc,
+    sync::Arc,
 };
 
 use crate::ir::{ArgType, Argument, DataId, NodeType, RawNode, TensorData};
@@ -89,11 +90,11 @@ pub(crate) struct GraphState {
     graph_input_map: HashMap<String, usize>,
     /// Maps ONNX names to node outputs (node_index, output_index)
     node_output_map: HashMap<String, (usize, usize)>,
-    /// Central tensor data store (shared via Rc for Arguments to reference)
-    pub(super) tensor_store: Rc<TensorStore>,
-    /// Maps constant output names to their data IDs (shared via Rc)
+    /// Central tensor data store (shared via Arc for Arguments to reference)
+    pub(super) tensor_store: Arc<TensorStore>,
+    /// Maps constant output names to their data IDs (shared via Arc)
     /// Updated whenever a Constant node is created
-    constant_map: Rc<HashMap<String, DataId>>,
+    constant_map: Arc<HashMap<String, DataId>>,
     /// Maps ONNX value names to their type info (from value_info)
     value_info_map: HashMap<String, ArgType>,
     /// Optional shared name registry for ensuring unique names across subgraphs
@@ -276,8 +277,8 @@ impl GraphState {
             processed_nodes,
             graph_input_map,
             node_output_map,
-            tensor_store: Rc::new(tensor_store),
-            constant_map: Rc::new(constant_map),
+            tensor_store: Arc::new(tensor_store),
+            constant_map: Arc::new(constant_map),
             value_info_map,
             name_registry,
             outer_scope_types,
@@ -377,7 +378,7 @@ impl GraphState {
 
             // Register constant output name → data_id for fast lookup
             if let Some(data_id) = constant_data_id {
-                Rc::make_mut(&mut self.constant_map).insert(output.name.clone(), data_id);
+                Arc::make_mut(&mut self.constant_map).insert(output.name.clone(), data_id);
             }
 
             out_count += 1;
@@ -442,17 +443,17 @@ impl GraphState {
         let (constant_node, data_id) = create_test_constant(
             name.clone(),
             tensor_data,
-            Rc::make_mut(&mut self.tensor_store),
+            Arc::make_mut(&mut self.tensor_store),
         );
         // Register in constant_map (output name is the same as input name for test constants)
-        Rc::make_mut(&mut self.constant_map).insert(name, data_id);
+        Arc::make_mut(&mut self.constant_map).insert(name, data_id);
         self.processed_nodes.push(constant_node);
     }
 
     /// Allocate a new tensor ID and store data in central store
     /// Returns the allocated ID
     pub(crate) fn store_tensor_data(&mut self, data: TensorDataRef) -> DataId {
-        Rc::make_mut(&mut self.tensor_store).store(data)
+        Arc::make_mut(&mut self.tensor_store).store(data)
     }
 
     /// Register a constant created by the simplifier.
@@ -461,7 +462,7 @@ impl GraphState {
     /// codegen can find it when generating Constant node code.
     pub(crate) fn register_constant(&mut self, output_name: String, data: TensorDataRef) -> DataId {
         let data_id = self.store_tensor_data(data);
-        Rc::make_mut(&mut self.constant_map).insert(output_name, data_id);
+        Arc::make_mut(&mut self.constant_map).insert(output_name, data_id);
         data_id
     }
 
@@ -493,17 +494,17 @@ impl GraphState {
         self.get_constant_data_id_by_output(name)
     }
 
-    /// Get Rc reference to the constant_map (for cheap preservation across state reset)
-    pub(crate) fn constant_map_rc(&self) -> Rc<HashMap<String, DataId>> {
+    /// Get Arc reference to the constant_map (for cheap preservation across state reset)
+    pub(crate) fn constant_map_rc(&self) -> Arc<HashMap<String, DataId>> {
         self.constant_map.clone()
     }
 
-    /// Restore tensor_store and constant_map from Rc references (no data copying)
+    /// Restore tensor_store and constant_map from Arc references (no data copying)
     /// Used in post-processing to preserve stores across GraphState reset
     pub(crate) fn restore_stores(
         &mut self,
-        tensor_store: Rc<TensorStore>,
-        constant_map: Rc<HashMap<String, DataId>>,
+        tensor_store: Arc<TensorStore>,
+        constant_map: Arc<HashMap<String, DataId>>,
     ) {
         self.tensor_store = tensor_store;
         self.constant_map = constant_map;

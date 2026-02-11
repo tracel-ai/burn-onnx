@@ -449,7 +449,7 @@ impl Argument {
     fn from_const_i64s(name: impl Into<String>, values: &[i64], ty: ArgType) -> Self {
         use crate::tensor_store::{TensorDataRef, TensorStore, ValueStore};
         use std::collections::HashMap;
-        use std::rc::Rc;
+        use std::sync::Arc;
 
         let bytes: Vec<u8> = values.iter().flat_map(|v| v.to_ne_bytes()).collect();
         let shape = if values.len() == 1 && matches!(ty, ArgType::Scalar(_)) {
@@ -462,7 +462,7 @@ impl Argument {
         let mut tensor_store = TensorStore::new();
         let data_id = tensor_store.store(data_ref);
 
-        let value_store = ValueStore::new(Rc::new(tensor_store), Rc::new(HashMap::new()));
+        let value_store = ValueStore::new(Arc::new(tensor_store), Arc::new(HashMap::new()));
 
         Self {
             name: name.into(),

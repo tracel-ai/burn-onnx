@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use onnx_ir::ir::{Node, OnnxGraph};
+pub use onnx_ir::ir::{Node, OnnxGraph};
 
 pub fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

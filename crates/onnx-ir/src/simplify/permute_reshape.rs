@@ -165,7 +165,7 @@ mod tests {
             let id = store.store(data_ref);
             constant_map.insert(name.to_string(), id);
         }
-        ValueStore::new(std::rc::Rc::new(store), std::rc::Rc::new(constant_map))
+        ValueStore::new(std::sync::Arc::new(store), std::sync::Arc::new(constant_map))
     }
 
     fn const_scalar_arg(name: &str, store: &ValueStore) -> Argument {

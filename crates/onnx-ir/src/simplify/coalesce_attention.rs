@@ -598,7 +598,7 @@ mod tests {
         let id = store.store(data_ref);
         let mut constant_map = std::collections::HashMap::new();
         constant_map.insert(name.to_string(), id);
-        let value_store = ValueStore::new(std::rc::Rc::new(store), std::rc::Rc::new(constant_map));
+        let value_store = ValueStore::new(std::sync::Arc::new(store), std::sync::Arc::new(constant_map));
         Argument {
             name: name.to_string(),
             ty: ArgType::Tensor(TensorType {
