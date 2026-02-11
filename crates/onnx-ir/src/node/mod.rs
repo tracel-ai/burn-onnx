@@ -126,6 +126,7 @@ pub mod reduce;
 pub mod relu;
 pub mod reshape;
 pub mod resize;
+pub mod rnn;
 pub mod scan_node;
 pub mod scatter_elements;
 pub mod scatter_nd;
