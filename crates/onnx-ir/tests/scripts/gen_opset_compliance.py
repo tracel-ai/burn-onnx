@@ -494,15 +494,7 @@ def make_clip(op_name: str, opset: int):
         node = helper.make_node(op_name, [_p(op_name, "input"), _p(op_name, "min"), _p(op_name, "max")], [_p(op_name, "output")], name=_p(op_name, "node"))
         return [node], [inp], [out], [min_val, max_val]
     else:
-        node = helper.make_node(op_name, [_p(op_name, "input")], [_p(op_name, "output")], name=_p(op_name, "node"))
-        kwargs = {}
-        if opset >= 6:
-            kwargs["min"] = 0.0
-            kwargs["max"] = 6.0
-        else:
-            kwargs["min"] = 0.0
-            kwargs["max"] = 6.0
-        node = helper.make_node(op_name, [_p(op_name, "input")], [_p(op_name, "output")], name=_p(op_name, "node"), **kwargs)
+        node = helper.make_node(op_name, [_p(op_name, "input")], [_p(op_name, "output")], name=_p(op_name, "node"), **{"min": 0.0, "max": 6.0})
         return [node], [inp], [out], []
 
 
