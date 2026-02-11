@@ -1060,8 +1060,6 @@ fn top_k(graph: &OnnxGraph) {
 #[test]
 fn unsupported_ops_fail() {
     let result = load_model_result("opset_11_unsupported.onnx");
-    assert!(
-        result.is_err(),
-        "expected parse failure for unsupported ops at opset 11"
-    );
+    assert!(result.is_err(), "expected parse failure for unsupported ops at opset 11");
 }
+

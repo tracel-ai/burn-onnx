@@ -309,8 +309,6 @@ fn xor_op(graph: &OnnxGraph) {
 #[test]
 fn unsupported_ops_fail() {
     let result = load_model_result("opset_07_unsupported.onnx");
-    assert!(
-        result.is_err(),
-        "expected parse failure for unsupported ops at opset 7"
-    );
+    assert!(result.is_err(), "expected parse failure for unsupported ops at opset 7");
 }
+

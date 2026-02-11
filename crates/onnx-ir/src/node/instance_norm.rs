@@ -51,7 +51,7 @@ impl NodeProcessor for InstanceNormProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 6,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::Exact(3),
             outputs: OutputSpec::Exact(1),

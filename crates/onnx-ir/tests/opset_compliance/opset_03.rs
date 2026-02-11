@@ -39,3 +39,4 @@ fn gru(graph: &OnnxGraph) {
         }
     "#);
 }
+
