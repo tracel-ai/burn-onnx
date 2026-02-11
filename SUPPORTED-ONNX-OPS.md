@@ -86,7 +86,7 @@ functionality.
 | [GRU][70]                        | ✅             | ✅           |
 | [HammingWindow][71]              | ❌             | ❌           |
 | [HannWindow][72]                 | ❌             | ❌           |
-| [Hardmax][73]                    | ❌             | ❌           |
+| [Hardmax][73]                    | ✅             | ✅           |
 | [HardSigmoid][74]                | ✅             | ✅           |
 | [HardSwish][75]                  | ✅             | ✅           |
 | [Identity][76]                   | ✅             | ✅           |

@@ -350,7 +350,7 @@ define_node_enum! {
     Gru => gru::GruNode,
     HammingWindow => unsupported::HammingWindowNode,
     HannWindow => unsupported::HannWindowNode,
-    Hardmax => unsupported::HardmaxNode,
+    Hardmax => hardmax::HardmaxNode,
     Im => unsupported::ImNode,
     ImageDecoder => unsupported::ImageDecoderNode,
     LpNormalization => unsupported::LpNormalizationNode,

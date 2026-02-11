@@ -125,6 +125,7 @@ impl_node_codegen_dispatch! {
     Softsign,
     ThresholdedRelu,
     Swish,
+    Hardmax,
 
     // Shape ops
     Reshape,

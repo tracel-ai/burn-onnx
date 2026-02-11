@@ -71,6 +71,7 @@ pub mod group_norm;
 pub mod gru;
 pub mod hard_sigmoid;
 pub mod hard_swish;
+pub mod hardmax;
 pub mod identity;
 pub mod if_op;
 pub mod initializer_to_const;

@@ -235,6 +235,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/group_norm/group_norm.onnx")
         .input("tests/hard_sigmoid/hard_sigmoid.onnx")
         .input("tests/hard_swish/hard_swish.onnx")
+        .input("tests/hardmax/hardmax.onnx")
         .input("tests/identity/identity_constant.onnx")
         .input("tests/identity/identity_passthrough.onnx")
         .input("tests/identity/identity_chain.onnx")
