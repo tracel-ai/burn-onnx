@@ -137,6 +137,7 @@ pub(crate) mod sqrt;
 pub(crate) mod squeeze;
 pub(crate) mod sub;
 pub(crate) mod sum;
+pub(crate) mod swish;
 pub(crate) mod tan;
 pub(crate) mod tanh;
 pub(crate) mod thresholded_relu;

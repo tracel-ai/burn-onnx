@@ -43,6 +43,7 @@ pub mod sinh;
 pub mod softplus;
 pub mod softsign;
 pub mod sqrt;
+pub mod swish;
 pub mod tan;
 pub mod tanh;
 pub mod thresholded_relu;

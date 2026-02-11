@@ -199,7 +199,7 @@ functionality.
 | [StringSplit][202]               | ❌             | ❌           |
 | [Sub][179]                       | ✅             | ✅           |
 | [Sum][180]                       | ✅             | ✅           |
-| [Swish][203]                     | ❌             | ❌           |
+| [Swish][203]                     | ✅             | ✅           |
 | [Tan][181]                       | ✅             | ✅           |
 | [Tanh][182]                      | ✅             | ✅           |
 | [TensorScatter][204]             | ❌             | ❌           |

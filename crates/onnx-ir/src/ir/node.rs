@@ -391,7 +391,7 @@ define_node_enum! {
     StringConcat => unsupported::StringConcatNode,
     StringNormalizer => unsupported::StringNormalizerNode,
     StringSplit => unsupported::StringSplitNode,
-    Swish => unsupported::SwishNode,
+    Swish => swish::SwishNode,
     TensorScatter => unsupported::TensorScatterNode,
     TfIdfVectorizer => unsupported::TfIdfVectorizerNode,
     Upsample => unsupported::UpsampleNode,

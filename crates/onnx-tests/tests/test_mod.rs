@@ -135,6 +135,7 @@ pub mod squeeze;
 pub mod sub;
 pub mod subgraph;
 pub mod sum;
+pub mod swish;
 pub mod tan;
 pub mod tanh;
 pub mod thresholded_relu;
