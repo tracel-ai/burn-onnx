@@ -99,6 +99,26 @@ mod tests {
     }
 
     #[test]
+    fn test_and_tensor_scalar_forward() {
+        let node = AndNodeBuilder::new("and1")
+            .input_tensor("lhs", 4, DType::Bool)
+            .input_scalar("rhs", DType::Bool)
+            .output_tensor("output", 4, DType::Bool)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, lhs: Tensor<B, 4, Bool>, rhs: bool) -> Tensor<B, 4, Bool> {
+            let output = if rhs {
+                lhs
+            } else {
+                Tensor::<B, 4usize, Int>::zeros(lhs.shape(), &*self.device).bool()
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
     fn test_and_shape_forward() {
         let node = AndNodeBuilder::new("and1")
             .input_shape("lhs", 3)

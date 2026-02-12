@@ -87,6 +87,22 @@ mod tests {
     }
 
     #[test]
+    fn test_xor_tensor_scalar_forward() {
+        let node = XorNodeBuilder::new("xor1")
+            .input_tensor("lhs", 4, DType::Bool)
+            .input_scalar("rhs", DType::Bool)
+            .output_tensor("output", 4, DType::Bool)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, lhs: Tensor<B, 4, Bool>, rhs: bool) -> Tensor<B, 4, Bool> {
+            let output = if rhs { lhs.bool_not() } else { lhs };
+            output
+        }
+        ");
+    }
+
+    #[test]
     fn test_xor_shape_forward() {
         let node = XorNodeBuilder::new("xor1")
             .input_shape("lhs", 3)

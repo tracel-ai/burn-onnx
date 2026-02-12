@@ -12,7 +12,7 @@
 
 import numpy as np
 import onnx
-from onnx import helper, TensorProto, numpy_helper
+from onnx import helper, TensorProto
 from onnx.reference import ReferenceEvaluator
 
 OPSET_VERSION = 16

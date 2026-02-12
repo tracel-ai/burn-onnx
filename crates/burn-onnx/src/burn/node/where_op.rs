@@ -30,11 +30,20 @@ impl NodeCodegen for onnx_ir::where_op::WhereNode {
                 // Check if x is a scalar - if so, use mask_fill
                 if let ArgType::Scalar(_) = &x_arg.ty {
                     let x_name = arg_to_ident(x_arg);
-                    quote! {
-                        let #output = {
-                            let cond = #cond;
-                            #y_tensor.expand(cond.dims()).mask_fill(cond, #x_name)
-                        };
+                    // When y is also scalar, it becomes a [1,1,...,1] tensor that may be
+                    // smaller than the condition. Expand y to match condition shape so
+                    // mask_fill can broadcast the mask correctly.
+                    if matches!(&y_arg.ty, ArgType::Scalar(_)) {
+                        quote! {
+                            let #output = {
+                                let cond = #cond;
+                                #y_tensor.expand(cond.dims()).mask_fill(cond, #x_name)
+                            };
+                        }
+                    } else {
+                        quote! {
+                            let #output = #y_tensor.mask_fill(#cond, #x_name);
+                        }
                     }
                 } else {
                     // x is tensor or shape - use mask_where
@@ -249,9 +258,36 @@ mod tests {
             x: f32,
             y: Tensor<B, 2>,
         ) -> Tensor<B, 2> {
+            let output = y.mask_fill(condition, x);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_where_tensor_scalar_scalar() {
+        let node = WhereNodeBuilder::new("where1")
+            .input_tensor("condition", 2, DType::Bool)
+            .input_scalar("x", DType::F32)
+            .input_scalar("y", DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, condition: Tensor<B, 2, Bool>, x: f32, y: f32) -> Tensor<B, 2> {
             let output = {
                 let cond = condition;
-                y.expand(cond.dims()).mask_fill(cond, x)
+                Tensor::<
+                    B,
+                    1,
+                >::from_data_dtype(
+                        burn::tensor::TensorData::from([y as f64]),
+                        &*self.device,
+                        burn::tensor::DType::F32,
+                    )
+                    .reshape([1, 1])
+                    .expand(cond.dims())
+                    .mask_fill(cond, x)
             };
             output
         }
