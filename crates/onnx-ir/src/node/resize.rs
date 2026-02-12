@@ -127,8 +127,8 @@ pub struct ResizeNode {
 }
 
 /// Extract scales input as either static or runtime
-fn extract_scales_input(node: &RawNode, input_rank: usize) -> Option<ResizeScales> {
-    match node.inputs.get(2) {
+fn extract_scales_input(node: &RawNode, input_rank: usize, idx: usize) -> Option<ResizeScales> {
+    match node.inputs.get(idx) {
         Some(input) => {
             // Skip optional inputs (those that were never provided)
             if input.is_optional() {
@@ -154,7 +154,7 @@ fn extract_scales_input(node: &RawNode, input_rank: usize) -> Option<ResizeScale
                             // Runtime input - store reference instead of cloning the argument
                             Some(ResizeScales::Runtime(RuntimeInputRef::new(
                                 input.name.clone(),
-                                2,
+                                idx,
                             )))
                         }
                     }
@@ -163,7 +163,7 @@ fn extract_scales_input(node: &RawNode, input_rank: usize) -> Option<ResizeScale
                     // Shape input for scales - store reference instead of cloning the argument
                     Some(ResizeScales::Runtime(RuntimeInputRef::new(
                         input.name.clone(),
-                        2,
+                        idx,
                     )))
                 }
                 _ => None,
@@ -174,8 +174,8 @@ fn extract_scales_input(node: &RawNode, input_rank: usize) -> Option<ResizeScale
 }
 
 /// Extract sizes input as either static or runtime
-fn extract_sizes_input(node: &RawNode, input_rank: usize) -> Option<ResizeSizes> {
-    match node.inputs.get(3) {
+fn extract_sizes_input(node: &RawNode, input_rank: usize, idx: usize) -> Option<ResizeSizes> {
+    match node.inputs.get(idx) {
         Some(input) => {
             // Skip optional inputs (those that were never provided)
             if input.is_optional() {
@@ -203,7 +203,7 @@ fn extract_sizes_input(node: &RawNode, input_rank: usize) -> Option<ResizeSizes>
                             // Runtime input - store reference instead of cloning the argument
                             Some(ResizeSizes::Runtime(RuntimeInputRef::new(
                                 input.name.clone(),
-                                3,
+                                idx,
                             )))
                         }
                     }
@@ -213,7 +213,7 @@ fn extract_sizes_input(node: &RawNode, input_rank: usize) -> Option<ResizeSizes>
                     // The Shape type represents the shape of a tensor, which is exactly what we need
                     Some(ResizeSizes::Runtime(RuntimeInputRef::new(
                         input.name.clone(),
-                        3,
+                        idx,
                     )))
                 }
                 _ => None,
@@ -230,7 +230,7 @@ impl NodeProcessor for ResizeProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 11,
+            min_opset: 10,
             max_opset: None,
             inputs: InputSpec::Range(1, 4),
             outputs: OutputSpec::Exact(1),
@@ -380,22 +380,26 @@ impl NodeProcessor for ResizeProcessor {
             }
         }
 
-        let roi: Vec<f32> = node
-            .inputs
-            .get(1)
-            .map(|input| {
-                if let Some(tensor_data) = input.value() {
-                    tensor_data.to_vec().unwrap()
-                } else {
-                    vec![]
-                }
-            })
-            .unwrap_or_default();
+        // Opset 10: inputs are [X, scales] (no roi input)
+        // Opset 11+: inputs are [X, roi, scales, sizes]
+        if opset >= 11 {
+            let roi: Vec<f32> = node
+                .inputs
+                .get(1)
+                .map(|input| {
+                    if let Some(tensor_data) = input.value() {
+                        tensor_data.to_vec().unwrap()
+                    } else {
+                        vec![]
+                    }
+                })
+                .unwrap_or_default();
 
-        if !roi.is_empty() {
-            return Err(ProcessError::Custom(
-                "Resize: roi input is not supported".to_string(),
-            ));
+            if !roi.is_empty() {
+                return Err(ProcessError::Custom(
+                    "Resize: roi input is not supported".to_string(),
+                ));
+            }
         }
 
         // Get reference to config for validation
@@ -416,9 +420,14 @@ impl NodeProcessor for ResizeProcessor {
         Ok(())
     }
 
-    fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+    fn extract_config(&self, node: &RawNode, opset: usize) -> Result<Self::Config, ProcessError> {
         let mut mode: Option<ResizeMode> = None;
-        let mut coordinate_transformation_mode = "half_pixel".to_string();
+        // Opset 10 had no coordinate_transformation_mode (implicit asymmetric)
+        let mut coordinate_transformation_mode = if opset < 11 {
+            "asymmetric".to_string()
+        } else {
+            "half_pixel".to_string()
+        };
         let mut cubic_coeff_a = -0.75f32;
         let mut nearest_mode = "round_prefer_floor".to_string();
         let mut exclude_outside = 0i32;
@@ -475,11 +484,12 @@ impl NodeProcessor for ResizeProcessor {
             }
         }
 
-        // Extract scales input (3rd input)
-        let scales = extract_scales_input(node, input.rank);
+        // Opset 10: inputs are [X, scales] (no roi, no sizes)
+        // Opset 11+: inputs are [X, roi, scales, sizes]
+        let (scales_idx, sizes_idx) = if opset < 11 { (1, usize::MAX) } else { (2, 3) };
 
-        // Extract sizes input (4th input)
-        let sizes = extract_sizes_input(node, input.rank);
+        let scales = extract_scales_input(node, input.rank, scales_idx);
+        let sizes = extract_sizes_input(node, input.rank, sizes_idx);
 
         let mode = mode.ok_or_else(|| ProcessError::MissingAttribute("mode".to_string()))?;
 

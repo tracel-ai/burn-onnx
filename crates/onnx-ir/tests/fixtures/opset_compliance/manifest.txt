@@ -7,7 +7,7 @@
 7:Acos,Add,And,Asin,Atan,AveragePool,BatchNormalization,Cos,Div,Dropout,Equal,GRU,Gemm,Greater,LSTM,Less,Mul,Or,PRelu,Pow,Sin,Sub,Tan,Xor|
 8:Expand,Max,MaxPool,Mean,Min,Sum|
 9:Acosh,Asinh,Atanh,BatchNormalization,Cast,Constant,ConstantOfShape,Cosh,Erf,EyeLike,Flatten,Gemm,Greater,IsNaN,Less,MatMul,NonZero,OneHot,PRelu,Sign,Sinh,Where|
-10:AveragePool,Dropout,IsInf,MatMulInteger,MaxPool,Mod,Slice,ThresholdedRelu,TopK|Resize
+10:AveragePool,Dropout,IsInf,MatMulInteger,MaxPool,Mod,Resize,Slice,ThresholdedRelu,TopK|
 11:ArgMax,ArgMin,AveragePool,BitShift,Clip,Concat,Constant,Conv,ConvTranspose,CumSum,DepthToSpace,Equal,Flatten,Gather,GatherElements,GatherND,Gemm,Hardmax,If,LogSoftmax,MaxPool,OneHot,Pad,Range,ReduceL1,ReduceL2,ReduceLogSum,ReduceLogSumExp,ReduceMax,ReduceMean,ReduceMin,ReduceProd,ReduceSum,ReduceSumSquare,Resize,Round,ScatterElements,ScatterND,Slice,Softmax,Split,Squeeze,TopK,Unsqueeze|
 12:ArgMax,ArgMin,Celu,Clip,Constant,Dropout,GatherND,GreaterOrEqual,LessOrEqual,Max,MaxPool,Min,Pow,ReduceMax,ReduceMin|
 13:Abs,Add,ArgMax,ArgMin,Cast,Ceil,Clip,Concat,Constant,DepthToSpace,Div,Dropout,Equal,Erf,Exp,Expand,Flatten,Floor,Gather,GatherElements,GatherND,Gemm,Greater,Hardmax,Identity,If,IsNaN,Less,Log,LogSoftmax,MatMul,Max,Mean,Min,Mod,Mul,Neg,NonZero,Pad,Pow,Reciprocal,ReduceL1,ReduceL2,ReduceLogSum,ReduceLogSumExp,ReduceMax,ReduceMean,ReduceMin,ReduceProd,ReduceSum,ReduceSumSquare,Relu,Reshape,Resize,ScatterElements,ScatterND,Shape,Sigmoid,Sign,Size,Slice,Softmax,SpaceToDepth,Split,Sqrt,Squeeze,Sub,Sum,Tanh,Tile,Transpose,Unsqueeze|

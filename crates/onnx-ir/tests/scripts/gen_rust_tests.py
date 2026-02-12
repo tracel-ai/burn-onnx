@@ -151,7 +151,7 @@ MIN_OPSET = {
     "CumSum": 11,
     "EyeLike": 9,
     "Range": 11,
-    "Resize": 11,
+    "Resize": 10,
     "GridSample": 16,
     # Random
     "RandomNormal": 1,
