@@ -110,9 +110,9 @@ impl NodeProcessor for SliceProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 10,
+            min_opset: 1,
             max_opset: None,
-            inputs: InputSpec::AtLeast(3),
+            inputs: InputSpec::AtLeast(1),
             outputs: OutputSpec::Exact(1),
         }
     }
@@ -220,7 +220,53 @@ impl NodeProcessor for SliceProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
-        // Extract config - helper function to get slice inputs
+        // For opset < 10, starts/ends/axes are attributes
+        if node.inputs.len() < 2 {
+            let starts = node
+                .attrs
+                .get("starts")
+                .map(|v| SliceInput::Static(v.clone().into_i64s()))
+                .ok_or_else(|| ProcessError::MissingAttribute("starts".to_string()))?;
+            let ends = node
+                .attrs
+                .get("ends")
+                .map(|v| SliceInput::Static(v.clone().into_i64s()))
+                .ok_or_else(|| ProcessError::MissingAttribute("ends".to_string()))?;
+            let mut axes = node
+                .attrs
+                .get("axes")
+                .map(|v| SliceInput::Static(v.clone().into_i64s()));
+
+            // Apply default axes if not provided
+            if axes.is_none()
+                && let SliceInput::Static(ref starts_vec) = starts
+            {
+                axes = Some(SliceInput::Static((0..starts_vec.len() as i64).collect()));
+            }
+
+            // Normalize negative axes
+            if let Some(SliceInput::Static(ref mut axes_values)) = axes
+                && let ArgType::Tensor(ref tensor_type) = node.inputs[0].ty
+            {
+                normalize_axes(axes_values, tensor_type.rank, &node.name);
+            }
+
+            // No steps in opset < 10
+            let steps = if let SliceInput::Static(ref starts_vec) = starts {
+                Some(SliceInput::Static(vec![1; starts_vec.len()]))
+            } else {
+                None
+            };
+
+            return Ok(SliceConfig {
+                starts,
+                ends,
+                axes,
+                steps,
+            });
+        }
+
+        // Extract config - helper function to get slice inputs (opset 10+)
         fn get_slice_input(
             node: &RawNode,
             index: usize,

@@ -131,7 +131,7 @@ impl NodeProcessor for ComparisonProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 7,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::Exact(2),
             outputs: OutputSpec::Exact(1),
@@ -146,8 +146,8 @@ impl NodeProcessor for ComparisonProcessor {
     ) -> Result<(), ProcessError> {
         // Validate opset based on operation type (individual validation for specific ops)
         let min_opset = match node.node_type {
-            crate::ir::NodeType::Equal => 7,
-            crate::ir::NodeType::Greater | crate::ir::NodeType::Less => 7,
+            crate::ir::NodeType::Equal => 1,
+            crate::ir::NodeType::Greater | crate::ir::NodeType::Less => 1,
             crate::ir::NodeType::GreaterOrEqual | crate::ir::NodeType::LessOrEqual => 12,
             _ => unreachable!(
                 "ComparisonProcessor should only be called for comparison operations, got: {:?}",
@@ -336,13 +336,13 @@ mod tests {
         // Should work with opset 7
         assert!(processor.infer_types(&mut node, 7, &prefs).is_ok());
 
-        // Should fail with opset 6
+        // Should also work with opset 1
         let mut node = TestNodeBuilder::new(NodeType::Equal, "test_equal")
             .input_tensor_f32("A", 2, None)
             .input_tensor_f32("B", 2, None)
             .output_tensor_bool("result", 0, None)
             .build();
-        assert!(processor.infer_types(&mut node, 6, &prefs).is_err());
+        assert!(processor.infer_types(&mut node, 1, &prefs).is_ok());
     }
 
     #[test]
@@ -366,13 +366,13 @@ mod tests {
             .build();
         assert!(processor.infer_types(&mut node, 7, &prefs).is_ok());
 
-        // Should fail with opset 6
+        // Should also work with opset 1
         let mut node = TestNodeBuilder::new(NodeType::Greater, "test_greater")
             .input_tensor_f32("A", 2, None)
             .input_tensor_f32("B", 2, None)
             .output_tensor_bool("result", 0, None)
             .build();
-        assert!(processor.infer_types(&mut node, 6, &prefs).is_err());
+        assert!(processor.infer_types(&mut node, 1, &prefs).is_ok());
     }
 
     #[test]

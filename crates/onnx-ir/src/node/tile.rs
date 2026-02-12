@@ -67,7 +67,7 @@ impl NodeProcessor for TileProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 6,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::AtLeast(1),
             outputs: OutputSpec::Exact(1),
@@ -105,7 +105,7 @@ impl NodeProcessor for TileProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
-        // Extract repeats config
+        // Extract repeats config (always an input, all opset versions)
         fn get_repeats(node: &RawNode) -> TileInput {
             if let Some(input) = node.inputs.get(1) {
                 match input.value() {

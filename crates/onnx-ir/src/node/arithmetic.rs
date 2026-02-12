@@ -81,7 +81,7 @@ impl NodeProcessor for ArithmeticBinaryProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 7,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::Exact(2),
             outputs: OutputSpec::Exact(1),
@@ -245,14 +245,8 @@ mod tests {
 
         let processor = ArithmeticBinaryProcessor;
         let spec = processor.spec();
-        let result = crate::processor::validate_node_spec(&node, 6, &spec);
-        assert!(matches!(
-            result,
-            Err(ProcessError::UnsupportedOpset {
-                required: 7,
-                actual: 6
-            })
-        ));
+        let result = crate::processor::validate_node_spec(&node, 1, &spec);
+        assert!(result.is_ok(), "Add should be supported at opset 1");
     }
 
     #[test]

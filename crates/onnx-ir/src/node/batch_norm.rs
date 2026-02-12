@@ -68,10 +68,13 @@ impl NodeProcessor for BatchNormProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 9,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::Exact(5),
-            outputs: OutputSpec::Exact(1),
+            // Opset <9 required up to 5 outputs (Y, mean, var, saved_mean, saved_var)
+            // Opset 9-13: 1 output (Y) in inference, 3 in training
+            // Opset 14+: 1-3 outputs (training_mode attribute)
+            outputs: OutputSpec::Range(1, 5),
         }
     }
 
@@ -157,6 +160,8 @@ impl NodeProcessor for BatchNormProcessor {
             match key.as_str() {
                 "momentum" => momentum = value.clone().into_f32(),
                 "epsilon" => epsilon = value.clone().into_f32(),
+                // Deprecated attributes from older opsets (safe to ignore)
+                "spatial" | "consumed_inputs" | "is_test" | "training_mode" => {}
                 _ => {}
             }
         }

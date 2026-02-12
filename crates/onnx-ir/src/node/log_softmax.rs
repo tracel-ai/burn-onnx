@@ -50,7 +50,7 @@ impl NodeProcessor for LogSoftmaxProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 13,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::Exact(1),
             outputs: OutputSpec::Exact(1),
@@ -85,7 +85,7 @@ impl NodeProcessor for LogSoftmaxProcessor {
         Ok(())
     }
 
-    fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+    fn extract_config(&self, node: &RawNode, opset: usize) -> Result<Self::Config, ProcessError> {
         // Extract the shape of the input tensor
         let tensor = match &node.inputs.first().unwrap().ty {
             ArgType::Tensor(tensor) => tensor.clone(),
@@ -97,8 +97,10 @@ impl NodeProcessor for LogSoftmaxProcessor {
             }
         };
 
-        // Extract the axis attribute (default: -1 per ONNX spec)
-        let mut axis: i64 = -1;
+        // Axis default changed between opset versions:
+        // opset 1-12: default axis = 1 (with 2D coercion semantics)
+        // opset 13+: default axis = -1 (direct axis operation)
+        let mut axis: i64 = if opset < 13 { 1 } else { -1 };
 
         for (key, value) in node.attrs.iter() {
             if key.as_str() == "axis" {

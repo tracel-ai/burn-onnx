@@ -45,7 +45,7 @@ impl NodeProcessor for HardmaxProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 13,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::Exact(1),
             outputs: OutputSpec::Exact(1),
@@ -62,7 +62,7 @@ impl NodeProcessor for HardmaxProcessor {
         Ok(())
     }
 
-    fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+    fn extract_config(&self, node: &RawNode, opset: usize) -> Result<Self::Config, ProcessError> {
         let tensor = match &node.inputs.first().unwrap().ty {
             ArgType::Tensor(tensor) => tensor.clone(),
             _ => {
@@ -73,7 +73,8 @@ impl NodeProcessor for HardmaxProcessor {
             }
         };
 
-        let mut axis: i64 = -1;
+        // Axis default: 1 for opset < 13, -1 for opset 13+
+        let mut axis: i64 = if opset < 13 { 1 } else { -1 };
         for (key, value) in node.attrs.iter() {
             if key.as_str() == "axis" {
                 axis = value.clone().into_i64();

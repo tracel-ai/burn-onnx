@@ -74,6 +74,64 @@ fn atan(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn average_pool(graph: &OnnxGraph) {
+    let node = find_node(graph, "averagepool2d");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    AveragePool2d "averagepool2d1"
+      Inputs:
+        averagepool_input: F32[1, 3, 8, 8]
+      Outputs:
+        averagepool2d1_out1: F32[?, ?, ?, ?]
+      Config:
+        AvgPool2dConfig {
+            kernel_size: [
+                2,
+                2,
+            ],
+            strides: [
+                2,
+                2,
+            ],
+            padding: Valid,
+            count_include_pad: false,
+            dilation: [
+                1,
+                1,
+            ],
+            ceil_mode: false,
+            auto_pad: NotSet,
+        }
+    "#);
+}
+
+#[rstest]
+fn batch_normalization(graph: &OnnxGraph) {
+    let node = find_node(graph, "batchnormalization");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    BatchNormalization "batchnormalization1"
+      Inputs:
+        batchnormalization_input: F32[1, 3, 4, 4]
+        _: F32[3] [static(0)]
+        _: F32[3] [static(1)]
+        _: F32[3] [static(2)]
+        _: F32[3] [static(3)]
+      Outputs:
+        batchnormalization1_out1: F32[1, 3, 4, 4]
+        batchnormalization1_out2: Scalar(F32)
+        batchnormalization1_out3: Scalar(F32)
+        batchnormalization1_out4: Scalar(F32)
+        batchnormalization1_out5: Scalar(F32)
+      Config:
+        Static(
+            BatchNormStaticConfig {
+                epsilon: 0.0,
+                momentum: 0.0,
+            },
+        )
+    "#);
+}
+
+#[rstest]
 fn cos(graph: &OnnxGraph) {
     let node = find_node(graph, "cos");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -125,8 +183,8 @@ fn gru(graph: &OnnxGraph) {
     Gru "gru1"
       Inputs:
         gru_input: F32[1, 2, 3]
-        _: F32[1, 12, 3] [static(0)]
-        _: F32[1, 12, 4] [static(1)]
+        _: F32[1, 12, 3] [static(4)]
+        _: F32[1, 12, 4] [static(5)]
       Outputs:
         gru1_out1: F32[?, ?, ?, ?]
       Config:
@@ -143,6 +201,27 @@ fn gru(graph: &OnnxGraph) {
             hidden_activation: Tanh,
             activation_alpha: None,
             activation_beta: None,
+        }
+    "#);
+}
+
+#[rstest]
+fn gemm(graph: &OnnxGraph) {
+    let node = find_node(graph, "gemm");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Gemm "gemm1"
+      Inputs:
+        gemm_a: F32[2, 3]
+        constant7_out1: F32[3, 4] [constant]
+        constant8_out1: F32[4] [constant]
+      Outputs:
+        gemm1_out1: F32[?, ?]
+      Config:
+        GemmConfig {
+            alpha: 1.0,
+            beta: 1.0,
+            trans_a: 0,
+            trans_b: 0,
         }
     "#);
 }
@@ -167,8 +246,8 @@ fn lstm(graph: &OnnxGraph) {
     Lstm "lstm1"
       Inputs:
         lstm_input: F32[1, 2, 3]
-        _: F32[1, 16, 3] [static(2)]
-        _: F32[1, 16, 4] [static(3)]
+        _: F32[1, 16, 3] [static(8)]
+        _: F32[1, 16, 4] [static(9)]
       Outputs:
         lstm1_out1: F32[?, ?, ?, ?]
       Config:
@@ -236,7 +315,7 @@ fn p_relu(graph: &OnnxGraph) {
     PRelu "prelu1"
       Inputs:
         prelu_input: F32[2, 3, 4]
-        _: F32[1] [static(4)]
+        _: F32[1] [static(10)]
       Outputs:
         prelu1_out1: F32[2, 3, 4]
     "#);
@@ -303,14 +382,4 @@ fn xor_op(graph: &OnnxGraph) {
       Outputs:
         xor1_out1: Bool[2, 3, 4]
     "#);
-}
-
-/// Ops that require min_opset > 7: AveragePool, BatchNormalization, Gemm
-#[test]
-fn unsupported_ops_fail() {
-    let result = load_model_result("opset_07_unsupported.onnx");
-    assert!(
-        result.is_err(),
-        "expected parse failure for unsupported ops at opset 7"
-    );
 }

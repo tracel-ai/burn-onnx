@@ -66,7 +66,7 @@ impl NodeProcessor for SplitProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 11,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::AtLeast(1),
             outputs: OutputSpec::Range(1, 2147483647),
@@ -107,7 +107,14 @@ impl NodeProcessor for SplitProcessor {
                 .and_then(|v| v.to_vec::<i64>().ok())
                 .map(|sizes| sizes.into_iter().map(|s| s as usize).collect())
         } else {
-            None
+            // For opset < 13, split sizes are an attribute
+            node.attrs.get("split").map(|v| {
+                v.clone()
+                    .into_i64s()
+                    .into_iter()
+                    .map(|s| s as usize)
+                    .collect()
+            })
         };
 
         // Infer output types - all outputs have the same rank and element type as input
@@ -249,7 +256,7 @@ impl NodeProcessor for SplitProcessor {
         // If static shape is not available, split_size will be calculated at runtime
         // using num_outputs. We'll handle this in the code generation phase.
 
-        // Check for custom split sizes provided as a second input
+        // Check for custom split sizes provided as a second input (opset 13+)
         if node.inputs.len() > 1 {
             // Validate split input type
             match &node.inputs[1].ty {
@@ -328,6 +335,39 @@ impl NodeProcessor for SplitProcessor {
                     }
                 }
             };
+        } else if let Some(split_attr) = node.attrs.get("split") {
+            // For opset < 13, split sizes are an attribute
+            let sizes = split_attr.clone().into_i64s();
+            if !sizes.is_empty() {
+                if sizes.iter().any(|&s| s < 0) {
+                    return Err(ProcessError::Custom(
+                        "Split: split sizes must be non-negative".to_string(),
+                    ));
+                }
+                let usizes: Vec<usize> = sizes.into_iter().map(|s| s as usize).collect();
+
+                if usizes.len() != node.outputs.len() {
+                    return Err(ProcessError::Custom(format!(
+                        "Split: number of split sizes ({}) must match number of outputs ({})",
+                        usizes.len(),
+                        node.outputs.len()
+                    )));
+                }
+
+                if let Some(static_shape) = &tensor.static_shape
+                    && let Some(dim_size) = static_shape[axis as usize]
+                {
+                    let total_size: usize = usizes.iter().sum();
+                    if total_size != dim_size {
+                        return Err(ProcessError::Custom(format!(
+                            "Split: sum of split sizes ({}) must equal dimension size ({}) along axis {}",
+                            total_size, dim_size, axis
+                        )));
+                    }
+                }
+
+                split_sizes = Some(SplitSizesInput::Static(usizes));
+            }
         }
 
         // Infer split_size if neither custom split_sizes nor split_size is provided

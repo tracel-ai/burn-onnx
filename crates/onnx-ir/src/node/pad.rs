@@ -118,8 +118,12 @@ impl NodeProcessor for PadProcessor {
 
     fn is_noop(&self, node: &RawNode) -> bool {
         // Pad is a no-op when all pad values are zero (static only)
-        // Check pads attribute first
-        if let Some(pads_attr) = node.attrs.get("pads") {
+        // Check pads attribute first ("paddings" in opset 1, "pads" in opset 2+)
+        let pads_attr = node
+            .attrs
+            .get("pads")
+            .or_else(|| node.attrs.get("paddings"));
+        if let Some(pads_attr) = pads_attr {
             let pads = pads_attr.clone().into_i64s();
             return pads.iter().all(|&p| p == 0);
         }
@@ -137,7 +141,7 @@ impl NodeProcessor for PadProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 11,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::Range(1, 4),
             outputs: OutputSpec::Exact(1),
@@ -247,8 +251,9 @@ impl NodeProcessor for PadProcessor {
             };
 
             // Check for pads attribute first (takes precedence)
+            // "paddings" in opset 1, "pads" in opset 2+
             for (key, value) in node.attrs.iter() {
-                if key.as_str() == "pads" {
+                if key.as_str() == "pads" || key.as_str() == "paddings" {
                     let pads = value
                         .clone()
                         .into_i64s()

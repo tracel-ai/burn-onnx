@@ -17,14 +17,15 @@
 //! However, the actual reshape logic respecting allowzero=1 behavior needs verification in codegen.
 //!
 //! ## Opset Versions
-//! - **Opset 1-4**: Used 'shape' attribute (not supported in this implementation).
+//! - **Opset 1-4**: Used 'shape' attribute.
 //! - **Opset 5**: Changed shape from attribute to input, enabling dynamic reshaping.
 //! - **Opset 13**: Added support for more data types including bfloat16.
 //! - **Opset 14**: Added 'allowzero' attribute to control zero-dimension handling.
 //! - **Opset 19**: Clarified behavior and type constraints.
 //! - **Opset 21**: Added support for 8-bit integer types (int4, uint4).
 //!
-//! **Implementation Note**: This implementation requires opset 5+ (shape as input). The allowzero attribute is mentioned in the spec but not currently validated or used in the implementation.
+//! This implementation supports all opset versions. For opset < 5, shape is read from the
+//! `shape` attribute. For opset 5+, shape is read from the second input.
 
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
@@ -220,11 +221,16 @@ fn get_rank_from_output(node: &RawNode) -> Option<usize> {
 
 /// Extract static shape from reshape node if available
 fn get_static_shape(node: &RawNode) -> Option<Vec<i64>> {
-    // Check shape input
-    if node.inputs.len() == 2
+    // Check shape input (opset 5+)
+    if node.inputs.len() >= 2
         && let Some(value) = node.inputs[1].value()
     {
         return value.to_i64_vec().ok();
+    }
+
+    // Check shape attribute (opset 1-4)
+    if let Some(attr) = node.attrs.get("shape") {
+        return Some(attr.clone().into_i64s());
     }
 
     None
@@ -258,9 +264,9 @@ impl NodeProcessor for ReshapeProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 5,
+            min_opset: 1,
             max_opset: None,
-            inputs: InputSpec::Exact(2),
+            inputs: InputSpec::AtLeast(1),
             outputs: OutputSpec::Exact(1),
         }
     }
@@ -282,7 +288,7 @@ impl NodeProcessor for ReshapeProcessor {
     ) -> Result<Option<InputPreferences>, ProcessError> {
         use crate::processor::ArgPreference;
 
-        if node.inputs.len() != 2 {
+        if node.inputs.len() < 2 {
             return Ok(None);
         }
 
@@ -316,38 +322,38 @@ impl NodeProcessor for ReshapeProcessor {
         // When reshape shape specifies total elements != input total elements (and no -1 to infer),
         // this should fail. Add test: reshape_incompatible_size
 
-        // Validate shape input type - must be Tensor or Shape
-        match &node.inputs[1].ty {
-            ArgType::Tensor(t) => {
-                // Shape tensor must be 1D and int64 dtype
-                if t.rank != 1 {
-                    return Err(ProcessError::Custom(format!(
-                        "Reshape: shape tensor must be 1D, got rank {}",
-                        t.rank
-                    )));
+        // Validate shape input type when provided as input (opset 5+)
+        if node.inputs.len() >= 2 {
+            match &node.inputs[1].ty {
+                ArgType::Tensor(t) => {
+                    // Shape tensor must be 1D and int64 dtype
+                    if t.rank != 1 {
+                        return Err(ProcessError::Custom(format!(
+                            "Reshape: shape tensor must be 1D, got rank {}",
+                            t.rank
+                        )));
+                    }
+                    if t.dtype != crate::ir::DType::I64 {
+                        return Err(ProcessError::TypeMismatch {
+                            expected: "Shape tensor with dtype I64".to_string(),
+                            actual: format!("Shape tensor with dtype {:?}", t.dtype),
+                        });
+                    }
                 }
-                if t.dtype != crate::ir::DType::I64 {
+                ArgType::Shape(_) => {
+                    // Shape type is valid
+                }
+                _ => {
                     return Err(ProcessError::TypeMismatch {
-                        expected: "Shape tensor with dtype I64".to_string(),
-                        actual: format!("Shape tensor with dtype {:?}", t.dtype),
+                        expected: "Tensor or Shape for shape input".to_string(),
+                        actual: format!("{:?}", node.inputs[1].ty),
                     });
                 }
             }
-            ArgType::Shape(_) => {
-                // Shape type is valid
-            }
-            _ => {
-                return Err(ProcessError::TypeMismatch {
-                    expected: "Tensor or Shape for shape input".to_string(),
-                    actual: format!("{:?}", node.inputs[1].ty),
-                });
-            }
         }
 
-        // Validate static shape values if available
-        if let Some(shape_data) = node.inputs[1].value()
-            && let Ok(shape_values) = shape_data.to_i64_vec()
-        {
+        // Validate static shape values if available (from input or attribute)
+        if let Some(shape_values) = get_static_shape(node) {
             // Count how many -1 values we have (at most one is allowed)
             let neg_one_count = shape_values.iter().filter(|&&v| v == -1).count();
             if neg_one_count > 1 {
@@ -463,7 +469,20 @@ impl NodeProcessor for ReshapeProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
-        // Extract shape input as either static or runtime
+        // Check for shape attribute (opset 1-4)
+        if node.inputs.len() < 2 {
+            if let Some(attr) = node.attrs.get("shape") {
+                let shape = attr.clone().into_i64s();
+                return Ok(ReshapeConfig {
+                    shape: ReshapeInput::Static(shape),
+                });
+            }
+            return Err(ProcessError::Custom(
+                "Reshape: shape must be provided as either attribute or input".to_string(),
+            ));
+        }
+
+        // Extract shape input as either static or runtime (opset 5+)
         let shape = match &node.inputs[1].ty {
             ArgType::Tensor(_tensor) => {
                 // Extract shape from tensor input
@@ -585,15 +604,9 @@ mod tests {
         let mut node = create_test_node(0, vec![2, 3]).build_with_graph_data(16);
         node.inputs.pop(); // Remove the shape input
         let processor = ReshapeProcessor;
-        let spec = processor.spec();
-        let result = crate::processor::validate_node_spec(&node, 16, &spec);
-        assert!(matches!(
-            result,
-            Err(ProcessError::InvalidInputCount {
-                expected: 2,
-                actual: 1
-            })
-        ));
+        // With only 1 input and no shape attribute, extract_config should fail
+        let result = processor.extract_config(&node, 16);
+        assert!(matches!(result, Err(ProcessError::Custom(_))));
     }
 
     #[test]

@@ -614,13 +614,22 @@ def make_batch_norm(op_name: str, opset: int):
     mean = numpy_helper.from_array(np.zeros([3], dtype=np.float32), name=_p(op_name, "mean"))
     var = numpy_helper.from_array(np.ones([3], dtype=np.float32), name=_p(op_name, "var"))
     out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.FLOAT, None)
-    node = helper.make_node(
-        op_name,
-        [_p(op_name, "input"), _p(op_name, "scale"), _p(op_name, "bias"), _p(op_name, "mean"), _p(op_name, "var")],
-        [_p(op_name, "output")],
-        name=_p(op_name, "node"),
-    )
-    return [node], [inp], [out], [scale, bias, mean, var]
+    inputs = [_p(op_name, "input"), _p(op_name, "scale"), _p(op_name, "bias"), _p(op_name, "mean"), _p(op_name, "var")]
+    outputs = [_p(op_name, "output")]
+    extra_outputs = []
+    kwargs = {}
+    if opset < 9:
+        # Opset <9 required 5 outputs; add placeholder names for unused ones
+        for suffix in ["mean_out", "var_out", "saved_mean", "saved_var"]:
+            name = _p(op_name, suffix)
+            outputs.append(name)
+            extra_outputs.append(helper.make_tensor_value_info(name, TensorProto.FLOAT, None))
+    if opset < 6:
+        kwargs["spatial"] = 1
+    elif opset < 9:
+        kwargs["consumed_inputs"] = [0, 0, 0, 1, 1]
+    node = helper.make_node(op_name, inputs, outputs, name=_p(op_name, "node"), **kwargs)
+    return [node], [inp], [out] + extra_outputs, [scale, bias, mean, var]
 
 
 def make_instance_norm(op_name: str, opset: int):

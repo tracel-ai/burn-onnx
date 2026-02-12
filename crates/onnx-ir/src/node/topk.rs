@@ -67,7 +67,7 @@ impl NodeProcessor for TopKProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 10,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::Range(1, 2),
             outputs: OutputSpec::Exact(2),

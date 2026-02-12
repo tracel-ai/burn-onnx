@@ -9,7 +9,8 @@
 //! - **Opset 11**: Clarified semantics and behavior for negative axis values.
 //! - **Opset 13**: Changed 'axes' from attribute to optional input, enabling dynamic axes specification at runtime.
 //!
-//! **Implementation Note**: This implementation requires opset 13+ (axes as input). The change from attribute to input provides greater flexibility for dynamic shape operations.
+//! This implementation supports all opset versions. For opset < 13, axes are read from the
+//! `axes` attribute. For opset 13+, axes are read from the second input.
 
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
@@ -57,16 +58,20 @@ impl NodeProcessor for SqueezeProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 13,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::AtLeast(1),
             outputs: OutputSpec::Exact(1),
         }
     }
 
-    fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // Lift axes input (input[1]) if present, not optional, and constant
-        if node.inputs.len() > 1 && !node.inputs[1].is_optional() && node.inputs[1].is_constant() {
+    fn lift_constants(&self, node: &mut RawNode, opset: usize) -> Result<(), ProcessError> {
+        // Lift axes input (input[1]) if present (opset 13+ only; opset < 13 uses attribute)
+        if opset >= 13
+            && node.inputs.len() > 1
+            && !node.inputs[1].is_optional()
+            && node.inputs[1].is_constant()
+        {
             node.inputs[1].to_static()?;
         }
 
@@ -209,11 +214,30 @@ impl NodeProcessor for SqueezeProcessor {
         Ok(())
     }
 
-    fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+    fn extract_config(&self, node: &RawNode, opset: usize) -> Result<Self::Config, ProcessError> {
+        // Check axes attribute (valid in opset < 13)
+        for (key, value) in node.attrs.iter() {
+            if key.as_str() == "axes" {
+                if opset >= 13 {
+                    return Err(ProcessError::Custom(
+                        "Squeeze: axes must be provided as input (not attribute) in opset 13+"
+                            .to_string(),
+                    ));
+                }
+                let axes = value.clone().into_i64s();
+                if axes.is_empty() {
+                    return Ok(SqueezeConfig { axes: None });
+                }
+                return Ok(SqueezeConfig {
+                    axes: Some(SqueezeInput::Static(axes)),
+                });
+            }
+        }
+
+        // Fall through to input-based extraction (opset 13+ or opset < 13 without attribute)
         fn get_squeeze_axes(node: &RawNode) -> Option<SqueezeInput> {
-            // In ONNX opset 13+, axes are provided as a second input
             if node.inputs.len() < 2 {
-                return None; // No axes input means squeeze all dims with size 1
+                return None; // No axes means squeeze all dims with size 1
             }
 
             let input = &node.inputs[1];

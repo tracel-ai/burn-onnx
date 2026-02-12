@@ -44,7 +44,7 @@ impl NodeProcessor for ArgMaxProcessor {
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
-            min_opset: 11,
+            min_opset: 1,
             max_opset: None,
             inputs: InputSpec::Exact(1),
             outputs: OutputSpec::Exact(1),

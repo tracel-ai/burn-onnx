@@ -24,6 +24,46 @@ fn abs(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn add(graph: &OnnxGraph) {
+    let node = find_node(graph, "add");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Add "add1"
+      Inputs:
+        add_a: F32[2, 3, 4]
+        add_b: F32[2, 3, 4]
+      Outputs:
+        add1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
+fn batch_normalization(graph: &OnnxGraph) {
+    let node = find_node(graph, "batchnormalization");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    BatchNormalization "batchnormalization1"
+      Inputs:
+        batchnormalization_input: F32[1, 3, 4, 4]
+        _: F32[3] [static(0)]
+        _: F32[3] [static(1)]
+        _: F32[3] [static(2)]
+        _: F32[3] [static(3)]
+      Outputs:
+        batchnormalization1_out1: F32[1, 3, 4, 4]
+        batchnormalization1_out2: Scalar(F32)
+        batchnormalization1_out3: Scalar(F32)
+        batchnormalization1_out4: Scalar(F32)
+        batchnormalization1_out5: Scalar(F32)
+      Config:
+        Static(
+            BatchNormStaticConfig {
+                epsilon: 0.0,
+                momentum: 0.0,
+            },
+        )
+    "#);
+}
+
+#[rstest]
 fn cast(graph: &OnnxGraph) {
     let node = find_node(graph, "cast");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -76,6 +116,19 @@ fn clip(graph: &OnnxGraph) {
     "#);
 }
 
+#[rstest]
+fn div(graph: &OnnxGraph) {
+    let node = find_node(graph, "div");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Div "div1"
+      Inputs:
+        div_a: F32[2, 3, 4]
+        div_b: F32[2, 3, 4]
+      Outputs:
+        div1_out1: F32[2, 3, 4]
+    "#);
+}
+
 /// Dropout is eliminated during post-processing (no-op).
 /// Verify the model parses without error.
 #[test]
@@ -124,6 +177,27 @@ fn floor(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn gemm(graph: &OnnxGraph) {
+    let node = find_node(graph, "gemm");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Gemm "gemm1"
+      Inputs:
+        gemm_a: F32[2, 3]
+        constant5_out1: F32[3, 4] [constant]
+        constant6_out1: F32[4] [constant]
+      Outputs:
+        gemm1_out1: F32[?, ?]
+      Config:
+        GemmConfig {
+            alpha: 1.0,
+            beta: 1.0,
+            trans_a: 0,
+            trans_b: 0,
+        }
+    "#);
+}
+
+#[rstest]
 fn hard_sigmoid(graph: &OnnxGraph) {
     let node = find_node(graph, "hardsigmoid");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -147,8 +221,8 @@ fn instance_normalization(graph: &OnnxGraph) {
     InstanceNormalization "instancenormalization1"
       Inputs:
         instancenormalization_input: F32[1, 3, 4, 4]
-        _: F32[3] [static(0)]
-        _: F32[3] [static(1)]
+        _: F32[3] [static(6)]
+        _: F32[3] [static(7)]
       Outputs:
         instancenormalization1_out1: F32[1, 3, 4, 4]
       Config:
@@ -200,6 +274,19 @@ fn max(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn mean(graph: &OnnxGraph) {
+    let node = find_node(graph, "mean");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Mean "mean1"
+      Inputs:
+        mean_a: F32[2, 3, 4]
+        mean_b: F32[2, 3, 4]
+      Outputs:
+        mean1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
 fn min(graph: &OnnxGraph) {
     let node = find_node(graph, "min");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -209,6 +296,19 @@ fn min(graph: &OnnxGraph) {
         min_b: F32[2, 3, 4]
       Outputs:
         min1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
+fn mul(graph: &OnnxGraph) {
+    let node = find_node(graph, "mul");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Mul "mul1"
+      Inputs:
+        mul_a: F32[2, 3, 4]
+        mul_b: F32[2, 3, 4]
+      Outputs:
+        mul1_out1: F32[2, 3, 4]
     "#);
 }
 
@@ -231,7 +331,7 @@ fn p_relu(graph: &OnnxGraph) {
     PRelu "prelu1"
       Inputs:
         prelu_input: F32[2, 3, 4]
-        _: F32[1] [static(2)]
+        _: F32[1] [static(8)]
       Outputs:
         prelu1_out1: F32[2, 3, 4]
     "#);
@@ -303,6 +403,32 @@ fn sqrt(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn sub(graph: &OnnxGraph) {
+    let node = find_node(graph, "sub");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Sub "sub1"
+      Inputs:
+        sub_a: F32[2, 3, 4]
+        sub_b: F32[2, 3, 4]
+      Outputs:
+        sub1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
+fn sum(graph: &OnnxGraph) {
+    let node = find_node(graph, "sum");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Sum "sum1"
+      Inputs:
+        sum_a: F32[2, 3, 4]
+        sum_b: F32[2, 3, 4]
+      Outputs:
+        sum1_out1: F32[2, 3, 4]
+    "#);
+}
+
+#[rstest]
 fn tanh(graph: &OnnxGraph) {
     let node = find_node(graph, "tanh");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -321,7 +447,7 @@ fn tile(graph: &OnnxGraph) {
     Tile "tile1"
       Inputs:
         tile_input: F32[2, 3]
-        _: I64[2] [static(3)]
+        _: I64[2] [static(9)]
       Outputs:
         tile1_out1: F32[2, 3]
       Config:
@@ -334,14 +460,4 @@ fn tile(graph: &OnnxGraph) {
             ),
         }
     "#);
-}
-
-/// Ops that require min_opset > 6: Add, BatchNormalization, Div, Gemm, Mean, Mul, Sub, Sum
-#[test]
-fn unsupported_ops_fail() {
-    let result = load_model_result("opset_06_unsupported.onnx");
-    assert!(
-        result.is_err(),
-        "expected parse failure for unsupported ops at opset 6"
-    );
 }
