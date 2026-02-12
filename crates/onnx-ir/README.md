@@ -69,18 +69,9 @@ onnx-ir = { version = "...", default-features = false }
 
 ## ONNX Compatibility
 
-This library recommends ONNX models use **opset version 16 or higher** for best compatibility. If
-you encounter issues with an older model, consider upgrading it using the ONNX version converter:
-
-```python
-import onnx
-from onnx import version_converter, shape_inference
-
-model = onnx.load('model.onnx')
-upgraded_model = version_converter.convert_version(model, 16)
-inferred_model = shape_inference.infer_shapes(upgraded_model)
-onnx.save(inferred_model, 'upgraded_model.onnx')
-```
+This library supports **all ONNX opset versions** (1 through 21) for every supported operator. Each
+operator handles its full version history, including attribute-to-input migrations and
+opset-dependent defaults. The opset compliance test suite verifies 461 operator-version combinations.
 
 ## Resources
 

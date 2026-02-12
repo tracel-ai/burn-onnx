@@ -23,8 +23,9 @@ TensorFlow, and other frameworks on any Burn backend - from WebAssembly to CUDA.
 - Produces `burnpack` weight files for efficient loading
 - Works with any Burn backend (CPU, GPU, WebGPU, embedded)
 - Supports both `std` and `no_std` environments
-- Graph simplification: dead code elimination, CSE, no-op removal, constant shape propagation, and
-  pattern-based optimizations (enabled by default)
+- Full opset compliance: all supported operators work across ONNX opset versions 1 through 21
+- Graph simplification (enabled by default): attention coalescing, constant folding, constant shape
+  propagation, idempotent/identity elimination, CSE, dead code elimination, and pattern detection
 
 ## Quick Start
 
