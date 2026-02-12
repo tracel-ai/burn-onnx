@@ -430,6 +430,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/unsqueeze/unsqueeze_scalar_axes.onnx")
         .input("tests/unsqueeze/squeeze_unsqueeze_roundtrip.onnx")
         .input("tests/split/split.onnx")
+        .input("tests/split/split_uneven.onnx")
+        .input("tests/split/split_axis1.onnx")
         .input("tests/xor/xor.onnx")
         .input("tests/xor/xor_scalar.onnx")
         .input("tests/xor/xor_broadcast.onnx")

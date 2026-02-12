@@ -39,10 +39,11 @@ impl NodeCodegen for onnx_ir::split::SplitNode {
                 #unpack_outputs
             }
         } else if let Some(num_outputs) = &self.config.num_outputs {
-            // Runtime split size calculation: dim_size / num_outputs
+            // Runtime split size calculation using ceiling division so that
+            // split() produces exactly num_outputs chunks
             let num_outputs_tokens = num_outputs.to_tokens();
             quote! {
-                let split_size = #input.dims()[#axis] / #num_outputs_tokens;
+                let split_size = #input.dims()[#axis].div_ceil(#num_outputs_tokens);
                 let split_tensors = #input.split(split_size, #axis);
                 #unpack_outputs
             }
@@ -133,7 +134,7 @@ mod tests {
             &self,
             input: Tensor<B, 3>,
         ) -> (Tensor<B, 3>, Tensor<B, 3>, Tensor<B, 3>) {
-            let split_size = input.dims()[2] / 3;
+            let split_size = input.dims()[2].div_ceil(3);
             let split_tensors = input.split(split_size, 2);
             let [output0, output1, output2] = split_tensors.try_into().unwrap();
             (output0, output1, output2)

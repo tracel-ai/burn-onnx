@@ -246,11 +246,11 @@ impl NodeProcessor for SplitProcessor {
                 )));
             }
 
-            // Calculate the split size considering any remainder for non-evenly divisible dimensions
-            let calculated_split_size =
-                dim_size / (num_outputs - (dim_size % num_outputs != 0) as usize);
+            // Calculate the split size using ceiling division so that
+            // Burn's split() produces exactly num_outputs chunks (the last
+            // chunk is smaller when the dimension is not evenly divisible).
+            let calculated_split_size = dim_size.div_ceil(num_outputs);
 
-            // Assign the calculated split size
             split_size = Some(calculated_split_size);
         }
         // If static shape is not available, split_size will be calculated at runtime
@@ -379,9 +379,8 @@ impl NodeProcessor for SplitProcessor {
         {
             let inferred_num_outputs = node.outputs.len();
 
-            // Calculate inferred split size based on number of outputs
-            let calculated_split_size =
-                dim_size / (inferred_num_outputs - (dim_size % inferred_num_outputs != 0) as usize);
+            // Calculate inferred split size using ceiling division
+            let calculated_split_size = dim_size.div_ceil(inferred_num_outputs);
 
             split_size = Some(calculated_split_size);
         }
@@ -741,8 +740,8 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        // 11 / (3-1) = 5, since the dimension is not evenly divisible
-        assert_eq!(config.split_size, Some(5));
+        // ceil(11 / 3) = 4
+        assert_eq!(config.split_size, Some(4));
     }
 
     // TODO: Missing test for split with runtime split sizes (dynamic case).
