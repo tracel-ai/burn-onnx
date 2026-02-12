@@ -39,11 +39,16 @@ impl NodeCodegen for onnx_ir::split::SplitNode {
                 #unpack_outputs
             }
         } else if let Some(num_outputs) = &self.config.num_outputs {
-            // Runtime split size calculation: dim_size / num_outputs
-            let num_outputs_tokens = num_outputs.to_tokens();
+            // Runtime: compute explicit per-output sizes so split_with_sizes()
+            // always produces exactly num_outputs chunks.
+            let n = num_outputs.to_tokens();
             quote! {
-                let split_size = #input.dims()[#axis] / #num_outputs_tokens;
-                let split_tensors = #input.split(split_size, #axis);
+                let dim_size = #input.dims()[#axis];
+                let chunk = dim_size.div_ceil(#n);
+                let sizes: Vec<usize> = (0..#n)
+                    .map(|i| chunk.min(dim_size.saturating_sub(i * chunk)))
+                    .collect();
+                let split_tensors = #input.split_with_sizes(sizes, #axis);
                 #unpack_outputs
             }
         } else {
@@ -133,8 +138,12 @@ mod tests {
             &self,
             input: Tensor<B, 3>,
         ) -> (Tensor<B, 3>, Tensor<B, 3>, Tensor<B, 3>) {
-            let split_size = input.dims()[2] / 3;
-            let split_tensors = input.split(split_size, 2);
+            let dim_size = input.dims()[2];
+            let chunk = dim_size.div_ceil(3);
+            let sizes: Vec<usize> = (0..3)
+                .map(|i| chunk.min(dim_size.saturating_sub(i * chunk)))
+                .collect();
+            let split_tensors = input.split_with_sizes(sizes, 2);
             let [output0, output1, output2] = split_tensors.try_into().unwrap();
             (output0, output1, output2)
         }

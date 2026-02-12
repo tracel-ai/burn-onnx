@@ -168,7 +168,7 @@ impl NodeProcessor for SplitProcessor {
         // Initialize the axis to split along (default is 0 as per ONNX specification)
         let mut axis: i64 = 0;
         // Holds the uniform split size if calculated or provided
-        let mut split_size: Option<usize> = None;
+        let split_size: Option<usize> = None;
         // Holds the custom split sizes if provided as input (Static or Runtime)
         let mut split_sizes: Option<SplitSizesInput> = None;
 
@@ -246,12 +246,20 @@ impl NodeProcessor for SplitProcessor {
                 )));
             }
 
-            // Calculate the split size considering any remainder for non-evenly divisible dimensions
-            let calculated_split_size =
-                dim_size / (num_outputs - (dim_size % num_outputs != 0) as usize);
+            // Compute explicit per-output sizes so codegen uses
+            // split_with_sizes(), which always produces exactly num_outputs
+            // chunks (split() can give fewer when dim_size < chunk * (n-1)).
+            let chunk = dim_size.div_ceil(num_outputs);
+            let mut remaining = dim_size;
+            let sizes: Vec<usize> = (0..num_outputs)
+                .map(|_| {
+                    let s = chunk.min(remaining);
+                    remaining = remaining.saturating_sub(chunk);
+                    s
+                })
+                .collect();
 
-            // Assign the calculated split size
-            split_size = Some(calculated_split_size);
+            split_sizes = Some(SplitSizesInput::Static(sizes));
         }
         // If static shape is not available, split_size will be calculated at runtime
         // using num_outputs. We'll handle this in the code generation phase.
@@ -377,13 +385,18 @@ impl NodeProcessor for SplitProcessor {
             && let Some(static_shape) = &tensor.static_shape
             && let Some(dim_size) = static_shape[axis as usize]
         {
-            let inferred_num_outputs = node.outputs.len();
+            let n = node.outputs.len();
+            let chunk = dim_size.div_ceil(n);
+            let mut remaining = dim_size;
+            let sizes: Vec<usize> = (0..n)
+                .map(|_| {
+                    let s = chunk.min(remaining);
+                    remaining = remaining.saturating_sub(chunk);
+                    s
+                })
+                .collect();
 
-            // Calculate inferred split size based on number of outputs
-            let calculated_split_size =
-                dim_size / (inferred_num_outputs - (dim_size % inferred_num_outputs != 0) as usize);
-
-            split_size = Some(calculated_split_size);
+            split_sizes = Some(SplitSizesInput::Static(sizes));
         }
         // If static shape is not available, we need num_outputs for runtime calculation
 
@@ -533,10 +546,12 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        // Default axis should be 0, and split_size should be calculated
+        // Default axis should be 0, with explicit split sizes
         assert_eq!(config.axis, 0);
-        assert_eq!(config.split_size, Some(5)); // 10 / 2 = 5
-        assert!(config.split_sizes.is_none());
+        assert!(config.split_size.is_none());
+        assert!(
+            matches!(&config.split_sizes, Some(SplitSizesInput::Static(sizes)) if sizes == &vec![5, 5])
+        );
     }
 
     #[test]
@@ -555,8 +570,10 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         assert_eq!(config.axis, 1);
-        assert_eq!(config.split_size, Some(10)); // 20 / 2 = 10
-        assert!(config.split_sizes.is_none());
+        assert!(config.split_size.is_none());
+        assert!(
+            matches!(&config.split_sizes, Some(SplitSizesInput::Static(sizes)) if sizes == &vec![10, 10])
+        );
     }
 
     #[test]
@@ -575,8 +592,10 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         assert_eq!(config.axis, 2); // -1 should be converted to 2
-        assert_eq!(config.split_size, Some(10)); // 30 / 3 = 10
-        assert!(config.split_sizes.is_none());
+        assert!(config.split_size.is_none());
+        assert!(
+            matches!(&config.split_sizes, Some(SplitSizesInput::Static(sizes)) if sizes == &vec![10, 10, 10])
+        );
     }
 
     #[test]
@@ -595,8 +614,10 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         assert_eq!(config.axis, 0);
-        assert_eq!(config.split_size, Some(3)); // 12 / 4 = 3
-        assert!(config.split_sizes.is_none());
+        assert!(config.split_size.is_none());
+        assert!(
+            matches!(&config.split_sizes, Some(SplitSizesInput::Static(sizes)) if sizes == &vec![3, 3, 3, 3])
+        );
     }
 
     #[test]
@@ -741,8 +762,11 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        // 11 / (3-1) = 5, since the dimension is not evenly divisible
-        assert_eq!(config.split_size, Some(5));
+        // ceil(11 / 3) = 4, so sizes = [4, 4, 3]
+        assert!(config.split_size.is_none());
+        assert!(
+            matches!(&config.split_sizes, Some(SplitSizesInput::Static(sizes)) if sizes == &vec![4, 4, 3])
+        );
     }
 
     // TODO: Missing test for split with runtime split sizes (dynamic case).
