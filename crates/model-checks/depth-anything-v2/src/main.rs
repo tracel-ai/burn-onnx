@@ -109,59 +109,54 @@ fn main() {
     println!("\n  Model output shapes:");
     println!("    predicted_depth: {:?}", depth_shape.dims);
 
-    if depth_shape.dims == ref_depth_shape.dims {
-        println!("  Shape matches expected: {:?}", ref_depth_shape.dims);
-    } else {
-        println!(
-            "  Warning: Expected predicted_depth shape {:?}, got {:?}",
+    if depth_shape.dims != ref_depth_shape.dims {
+        eprintln!(
+            "FAILED: Expected predicted_depth shape {:?}, got {:?}",
             ref_depth_shape.dims, depth_shape.dims
         );
+        std::process::exit(1);
     }
+    println!("  Shape matches expected: {:?}", ref_depth_shape.dims);
 
-    // Compare outputs
+    // Compare outputs with explicit error metrics.
+    // Known mismatch: Burn lacks align_corners support in InterpolateOptions,
+    // so the 5 Resize nodes in the DPT head use half_pixel instead of
+    // align_corners, causing a systematic offset.
+    // See: https://github.com/tracel-ai/burn/issues/4510
     println!("\nComparing model outputs with reference data...");
 
-    println!("\n  Checking predicted_depth:");
-    if predicted_depth
-        .clone()
-        .all_close(reference_depth.clone(), Some(1e-4), Some(1e-4))
-    {
-        println!("    predicted_depth matches reference data within tolerance (1e-4)!");
+    let diff = predicted_depth - reference_depth;
+    let abs_diff = diff.abs();
+    let max_diff: f32 = abs_diff.clone().max().into_scalar();
+    let mean_diff: f32 = abs_diff.mean().into_scalar();
+
+    println!("  Maximum absolute difference: {:.6}", max_diff);
+    println!("  Mean absolute difference: {:.6}", mean_diff);
+
+    // Guard against regressions: if error grows beyond the expected
+    // align_corners mismatch, something else broke.
+    let max_diff_threshold = 2.0;
+    let mean_diff_threshold = 1.0;
+    let validation = if max_diff <= max_diff_threshold && mean_diff <= mean_diff_threshold {
+        println!(
+            "  Within expected error bounds (max<{}, mean<{}) [align_corners mismatch]",
+            max_diff_threshold, mean_diff_threshold
+        );
+        "Expected mismatch (align_corners not yet supported)"
     } else {
-        println!("    predicted_depth differs from reference data!");
-
-        let diff = predicted_depth.clone() - reference_depth.clone();
-        let abs_diff = diff.abs();
-        let max_diff = abs_diff.clone().max().into_scalar();
-        let mean_diff = abs_diff.mean().into_scalar();
-
-        println!("    Maximum absolute difference: {:.6}", max_diff);
-        println!("    Mean absolute difference: {:.6}", mean_diff);
-
-        println!("\n    Sample values comparison (first 5 elements):");
-        let output_flat = predicted_depth.clone().flatten::<1>(0, 2);
-        let reference_flat = reference_depth.clone().flatten::<1>(0, 2);
-
-        for i in 0..5.min(output_flat.dims()[0]) {
-            let model_val: f32 = output_flat.clone().slice(s![i..i + 1]).into_scalar();
-            let ref_val: f32 = reference_flat.clone().slice(s![i..i + 1]).into_scalar();
-            println!(
-                "      [{}] Model: {:.6}, Reference: {:.6}, Diff: {:.6}",
-                i,
-                model_val,
-                ref_val,
-                (model_val - ref_val).abs()
-            );
-        }
-    }
+        eprintln!(
+            "  EXCEEDED expected error bounds (max<{}, mean<{})",
+            max_diff_threshold, mean_diff_threshold
+        );
+        eprintln!("  This indicates a regression beyond the known align_corners issue.");
+        std::process::exit(1);
+    };
 
     println!("\n========================================");
     println!("Summary:");
     println!("  - Model initialization: {:.2?}", init_time);
     println!("  - Data loading: {:.2?}", load_time);
     println!("  - Inference time: {:.2?}", inference_time);
-    println!("  - Output validation: Passed");
-    println!("========================================");
-    println!("Model test completed successfully!");
+    println!("  - Output validation: {}", validation);
     println!("========================================");
 }
