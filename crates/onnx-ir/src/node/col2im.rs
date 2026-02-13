@@ -12,6 +12,8 @@
 //! - **1D Support**: The ONNX specification requires `image_shape` and `block_shape` to be at least 2D.
 //!   This implementation extends support to 1D `image_shape` and `block_shape` as well.
 //!
+//! ## Inputs
+//! - `data` (tensor(float32/float16/bfloat16)): Input tensor of shape `[N, C * prod(block_shape), L]`
 //! - `image_shape` (tensor(int64)): The shape of the spatial dimensions of the image
 //! - `block_shape` (tensor(int64)): The shape of the block to apply on the image
 //!

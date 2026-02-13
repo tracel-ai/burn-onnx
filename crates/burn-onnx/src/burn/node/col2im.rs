@@ -89,13 +89,48 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
                     }
                 }
             } else {
-                // General check for non-zero padding
+                // General check for non-zero padding, optimized per dimension
+                let h_lower_check = if pad_h_begin > 0 {
+                    quote! { h_idx >= #pad_h_begin && }
+                } else {
+                    quote! {}
+                };
+
+                let h_upper_check = if pad_h_end > 0 {
+                    quote! { h_idx < #img_h + #pad_h_begin }
+                } else {
+                    quote! { h_idx < #img_h }
+                };
+
+                let w_lower_check = if pad_w_begin > 0 {
+                    quote! { && w_idx >= #pad_w_begin && }
+                } else {
+                    quote! { && }
+                };
+
+                let w_upper_check = if pad_w_end > 0 {
+                    quote! { w_idx < #img_w + #pad_w_begin }
+                } else {
+                    quote! { w_idx < #img_w }
+                };
+
+                let h_out_assign = if pad_h_begin > 0 {
+                    quote! { let h_out = h_idx - #pad_h_begin; }
+                } else {
+                    quote! { let h_out = h_idx; }
+                };
+
+                let w_out_assign = if pad_w_begin > 0 {
+                    quote! { let w_out = w_idx - #pad_w_begin; }
+                } else {
+                    quote! { let w_out = w_idx; }
+                };
+
                 quote! {
-                    if h_idx >= #pad_h_begin && h_idx < #img_h + #pad_h_begin
-                        && w_idx >= #pad_w_begin && w_idx < #img_w + #pad_w_begin
+                    if #h_lower_check #h_upper_check #w_lower_check #w_upper_check
                     {
-                        let h_out = h_idx - #pad_h_begin;
-                        let w_out = w_idx - #pad_w_begin;
+                        #h_out_assign
+                        #w_out_assign
 
                         // Extract element and add to result
                         let val = col_slice
@@ -177,10 +212,29 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
                     }
                 }
             } else {
-                // General check for non-zero padding
+                // General check for non-zero padding, optimized
+                let lower_check = if pad_begin > 0 {
+                    quote! { idx >= #pad_begin && }
+                } else {
+                    quote! {}
+                };
+
+                let pad_end = pads_end[0];
+                let upper_check = if pad_end > 0 {
+                    quote! { idx < #img_len + #pad_begin }
+                } else {
+                    quote! { idx < #img_len }
+                };
+
+                let out_idx_assign = if pad_begin > 0 {
+                    quote! { let out_idx = idx - #pad_begin; }
+                } else {
+                    quote! { let out_idx = idx; }
+                };
+
                 quote! {
-                    if idx >= #pad_begin && idx < #img_len + #pad_begin {
-                        let out_idx = idx - #pad_begin;
+                    if #lower_check #upper_check {
+                        #out_idx_assign
 
                         let val = col_slice
                             .clone()
