@@ -10,17 +10,8 @@
 //! - **Opset 18**: Added optional constant_value input as alternative to attribute.
 //! - **Opset 19**: Added antialiasing support for edge mode (not supported in this implementation).
 //!
-//! **Implementation Note**: This implementation requires opset 11+ and supports constant, reflect, and edge mode padding. The axes input (opset 13+) is explicitly rejected.
-//!
-//! FIXME: Implementation only supports padding on the last 2 dimensions
-//! The validate_and_reorder_pads function (lines 286-309) enforces that only the last two dimensions
-//! can have non-zero padding values. This is a major spec deviation - ONNX allows padding any dimension.
-//! This limitation should either be:
-//! 1. Fixed to support arbitrary dimension padding per spec, OR
-//! 2. Clearly documented as a known limitation with validation moved to infer_types
-//!    Impact: HIGH - Models padding batch/channel dimensions will fail with cryptic error messages.
-//!
-//! Tracking issue: https://github.com/tracel-ai/burn/issues/4269
+//! **Implementation Note**: This implementation supports constant, reflect,
+//! and edge mode padding on arbitrary dimensions. The axes input (opset 13+) is explicitly rejected.
 //!
 //! TODO: Missing type constraint validation
 //! Spec defines type constraints for T (data/output), but implementation doesn't validate.
@@ -40,8 +31,8 @@ use crate::ir::{ArgType, AttributeValue, Node, RawNode, RuntimeInputRef, TensorD
 /// Represents either a static value or a runtime argument for pad values.
 #[derive(Debug, Clone)]
 pub enum PadInput {
-    /// Static pads known at compile time.
-    Static(Vec<usize>),
+    /// Static pads known at compile time as `(before, after)` pairs per dimension.
+    Static(Vec<(usize, usize)>),
     /// Runtime pads determined during execution - references node.inputs\[input_index\].
     Runtime(RuntimeInputRef),
 }
@@ -186,24 +177,6 @@ impl NodeProcessor for PadProcessor {
         // Should validate mode attribute early in infer_types for better error messages.
         // Location: After output count validation
 
-        // NOTE: Reflect and edge padding modes are now supported.
-        // Tests for these modes: test_pad_config_reflect_mode, test_pad_config_edge_mode
-
-        // TODO: Missing test coverage for different data types
-        // Tests only use f32 tensors. Spec supports all numeric types including int8, int16, etc.
-        // Add tests: pad_int32, pad_int64, pad_float64, pad_bool
-
-        // TODO: Missing test coverage for 1D and 4D+ tensors
-        // Tests cover 2D and 3D tensors, but implementation requires rank >= 2 (line 225-229, 268-271).
-        // This contradicts ONNX spec which allows 1D tensors. Either fix implementation or clarify.
-        // Add tests: pad_1d_tensor (should work per spec), pad_4d_tensor, pad_5d_tensor
-
-        // FIXME: Implementation restricts padding to last 2 dimensions only
-        // Lines 286-302 in validate_and_reorder_pads enforce that only the last two dimensions
-        // can have non-zero padding. This is a significant deviation from ONNX spec which allows
-        // padding any dimension. This should be documented prominently or fixed.
-        // Impact: Models using batch/channel padding will fail unexpectedly.
-
         // Output has same type as input
         if let Some(input) = node.inputs.first() {
             node.outputs[0].ty = input.ty.clone();
@@ -254,37 +227,9 @@ impl NodeProcessor for PadProcessor {
             // "paddings" in opset 1, "pads" in opset 2+
             for (key, value) in node.attrs.iter() {
                 if key.as_str() == "pads" || key.as_str() == "paddings" {
-                    let pads = value
-                        .clone()
-                        .into_i64s()
-                        .iter()
-                        .map(|&x| {
-                            if x < 0 {
-                                return Err(ProcessError::InvalidAttribute {
-                                    name: "pads".to_string(),
-                                    reason: "Negative pad is not supported".to_string(),
-                                });
-                            }
-                            Ok(x as usize)
-                        })
-                        .collect::<Result<Vec<usize>, ProcessError>>()?;
-
-                    if pads.len() != input_dim * 2 {
-                        return Err(ProcessError::InvalidAttribute {
-                            name: "pads".to_string(),
-                            reason: "pads should be a 1D tensor of shape [2 * num_axes]"
-                                .to_string(),
-                        });
-                    }
-                    if input_dim < 2 {
-                        return Err(ProcessError::Custom(
-                            "Pad: input tensor should be rank 2 or higher".to_string(),
-                        ));
-                    }
-
-                    // Validate and reorder pads
-                    let validated_pads = validate_and_reorder_pads(&pads, input_dim)?;
-                    return Ok(PadInput::Static(validated_pads));
+                    let flat = parse_i64s_as_usize(&value.clone().into_i64s(), "pads")?;
+                    validate_pads_len(&flat, input_dim, "pads")?;
+                    return Ok(PadInput::Static(onnx_pads_to_pairs(&flat)));
                 }
             }
 
@@ -292,47 +237,22 @@ impl NodeProcessor for PadProcessor {
             if let Some(input) = node.get_input(1) {
                 match input.value() {
                     None => {
-                        // Runtime input - store reference instead of cloning the argument
                         return Ok(PadInput::Runtime(RuntimeInputRef::new(
                             input.name.clone(),
                             1,
                         )));
                     }
                     Some(tensor_data) => {
-                        let pad_values =
+                        let raw =
                             tensor_data
                                 .to_i64_vec()
                                 .map_err(|e| ProcessError::TypeMismatch {
                                     expected: "i64-compatible tensor for pads".to_string(),
                                     actual: e.to_string(),
                                 })?;
-                        let pads = pad_values
-                            .iter()
-                            .map(|&x| {
-                                if x < 0 {
-                                    return Err(ProcessError::Custom(
-                                        "Pad: Negative pad is not supported".to_string(),
-                                    ));
-                                }
-                                Ok(x as usize)
-                            })
-                            .collect::<Result<Vec<usize>, ProcessError>>()?;
-
-                        if pads.len() != input_dim * 2 {
-                            return Err(ProcessError::Custom(
-                                "Pad: pads should be a 1D tensor of shape [2 * num_axes]"
-                                    .to_string(),
-                            ));
-                        }
-                        if input_dim < 2 {
-                            return Err(ProcessError::Custom(
-                                "Pad: input tensor should be rank 2 or higher".to_string(),
-                            ));
-                        }
-
-                        // Validate and reorder pads
-                        let validated_pads = validate_and_reorder_pads(&pads, input_dim)?;
-                        return Ok(PadInput::Static(validated_pads));
+                        let flat = parse_i64s_as_usize(&raw, "pads")?;
+                        validate_pads_len(&flat, input_dim, "pads")?;
+                        return Ok(PadInput::Static(onnx_pads_to_pairs(&flat)));
                     }
                 }
             }
@@ -342,29 +262,45 @@ impl NodeProcessor for PadProcessor {
             ))
         }
 
-        fn validate_and_reorder_pads(
+        /// Parse i64 values as usize, rejecting negatives.
+        fn parse_i64s_as_usize(
+            values: &[i64],
+            attr_name: &str,
+        ) -> Result<Vec<usize>, ProcessError> {
+            values
+                .iter()
+                .map(|&x| {
+                    if x < 0 {
+                        return Err(ProcessError::InvalidAttribute {
+                            name: attr_name.to_string(),
+                            reason: "Negative pad is not supported".to_string(),
+                        });
+                    }
+                    Ok(x as usize)
+                })
+                .collect()
+        }
+
+        /// Validate that pads length matches 2 * input_dim.
+        fn validate_pads_len(
             pads: &[usize],
             input_dim: usize,
-        ) -> Result<Vec<usize>, ProcessError> {
-            let left_index = input_dim - 1;
-            let top_index = input_dim - 2;
-            let right_index = pads.len() - 1;
-            let bottom_index = pads.len() - 2;
-            let index_list = [left_index, top_index, right_index, bottom_index];
-
-            for (index, &item) in pads.iter().enumerate() {
-                if !index_list.contains(&index) && item != 0 {
-                    return Err(ProcessError::Custom(
-                        "Pad: padding will only be applied to the last two dimensions but found non zero padding for other dimensions".to_string(),
-                    ));
-                }
+            attr_name: &str,
+        ) -> Result<(), ProcessError> {
+            if pads.len() != input_dim * 2 {
+                return Err(ProcessError::InvalidAttribute {
+                    name: attr_name.to_string(),
+                    reason: "pads should be a 1D tensor of shape [2 * num_axes]".to_string(),
+                });
             }
+            Ok(())
+        }
 
-            let left = pads[left_index];
-            let top = pads[top_index];
-            let right = pads[right_index];
-            let bottom = pads[bottom_index];
-            Ok(vec![left, right, top, bottom])
+        /// Convert ONNX flat pads `[begin_d0, begin_d1, ..., end_d0, end_d1, ...]`
+        /// to `(before, after)` pairs per dimension.
+        fn onnx_pads_to_pairs(flat: &[usize]) -> Vec<(usize, usize)> {
+            let n = flat.len() / 2;
+            (0..n).map(|i| (flat[i], flat[n + i])).collect()
         }
 
         fn get_constant_value(node: &RawNode) -> Result<ConstantValueInput, ProcessError> {
@@ -499,7 +435,7 @@ mod tests {
         let prefs = OutputPreferences::new();
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
-        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![0, 1, 0, 1]));
+        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![(0, 1), (0, 1)]));
         assert!(
             matches!(&config.constant_value, ConstantValueInput::Static(v) if (*v - 0.0).abs() < 1e-6)
         );
@@ -517,7 +453,7 @@ mod tests {
         let prefs = OutputPreferences::new();
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
-        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![0, 1, 0, 1]));
+        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![(0, 1), (0, 1)]));
         assert!(
             matches!(&config.constant_value, ConstantValueInput::Static(v) if (*v - 1.0).abs() < 1e-6)
         );
@@ -541,7 +477,9 @@ mod tests {
         let prefs = OutputPreferences::new();
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
-        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![0, 1, 0, 1]));
+        assert!(
+            matches!(&config.pads, PadInput::Static(pads) if pads == &vec![(0, 0), (0, 1), (0, 1)])
+        );
         assert!(
             matches!(&config.constant_value, ConstantValueInput::Static(v) if (*v - 0.5).abs() < 1e-6)
         );
@@ -566,7 +504,7 @@ mod tests {
         let prefs = OutputPreferences::new();
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
-        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![0, 2, 0, 2]));
+        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![(0, 2), (0, 2)]));
         assert!(
             matches!(&config.constant_value, ConstantValueInput::Static(v) if (*v - 0.0).abs() < 1e-6)
         );
@@ -612,7 +550,7 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![0, 1, 0, 1]));
+        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![(0, 1), (0, 1)]));
         assert!(
             matches!(&config.constant_value, ConstantValueInput::Runtime(arg) if arg.name == "constant_value")
         );
@@ -651,7 +589,7 @@ mod tests {
         let prefs = OutputPreferences::new();
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
-        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![0, 1, 0, 1]));
+        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![(0, 1), (0, 1)]));
         assert!(
             matches!(&config.constant_value, ConstantValueInput::Static(v) if (*v - 0.0).abs() < 1e-6)
         );
@@ -680,7 +618,7 @@ mod tests {
         assert!(
             matches!(&config.constant_value, ConstantValueInput::Static(v) if (*v - 0.0).abs() < 1e-6)
         );
-        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![0, 1, 0, 1]));
+        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![(0, 1), (0, 1)]));
     }
 
     #[test]
@@ -797,26 +735,43 @@ mod tests {
     }
 
     #[test]
-    fn test_pad_config_invalid_tensor_rank() {
+    fn test_pad_config_1d_tensor() {
         let node =
-            create_test_node(Some(vec![0, 1]), None, None, None, None, 1).build_with_graph_data(16);
-        let node = node;
+            create_test_node(Some(vec![1, 2]), None, None, None, None, 1).build_with_graph_data(16);
         let processor = PadProcessor;
-        let _prefs = OutputPreferences::new();
-        let result = processor.extract_config(&node, 16);
-        assert!(matches!(result, Err(ProcessError::Custom(_))));
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert!(matches!(&config.pads, PadInput::Static(pads) if pads == &vec![(1, 2)]));
     }
 
     #[test]
-    fn test_pad_config_non_zero_padding_on_other_dimensions() {
-        // For a 3D tensor, we try to set non-zero padding on first dimension
-        let node = create_test_node(Some(vec![1, 0, 0, 0, 1, 1]), None, None, None, None, 3)
+    fn test_pad_config_all_dimensions() {
+        // For a 3D tensor, pad all dimensions including the first
+        let node = create_test_node(Some(vec![1, 0, 2, 3, 0, 4]), None, None, None, None, 3)
             .build_with_graph_data(16);
-        let node = node;
         let processor = PadProcessor;
-        let _prefs = OutputPreferences::new();
-        let result = processor.extract_config(&node, 16);
-        assert!(matches!(result, Err(ProcessError::Custom(_))));
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert!(
+            matches!(&config.pads, PadInput::Static(pads) if pads == &vec![(1, 3), (0, 0), (2, 4)])
+        );
+    }
+
+    #[test]
+    fn test_pad_config_4d_tensor() {
+        // 4D tensor with padding on batch and channel dimensions
+        let node = create_test_node(
+            Some(vec![1, 0, 2, 3, 2, 0, 4, 5]),
+            None,
+            None,
+            None,
+            None,
+            4,
+        )
+        .build_with_graph_data(16);
+        let processor = PadProcessor;
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert!(
+            matches!(&config.pads, PadInput::Static(pads) if pads == &vec![(1, 2), (0, 0), (2, 4), (3, 5)])
+        );
     }
 
     #[test]

@@ -3,21 +3,11 @@ use onnx_ir::node::attention::AttentionQkMatmulOutputMode;
 
 /// Whether this attention node can use `burn::tensor::module::attention()`.
 ///
-/// Burn's attention dispatches to optimized backend implementations (e.g. flash
-/// attention on CubeCL GPU). Falls back to custom codegen for features the burn
-/// API does not support: softcap, qk_matmul intermediate outputs, float/int masks.
+/// Burn's attention natively supports scale, softcap, is_causal, bool masks,
+/// and float additive biases. The only feature requiring custom codegen is
+/// qk_matmul intermediate output.
 fn use_burn_attention(node: &onnx_ir::attention::AttentionNode) -> bool {
-    node.config.softcap == 0.0 && node.outputs.get(3).is_none() && !has_non_bool_mask(node)
-}
-
-fn has_non_bool_mask(node: &onnx_ir::attention::AttentionNode) -> bool {
-    match node.inputs.get(3) {
-        Some(mask) if !mask.is_optional() => match &mask.ty {
-            ArgType::Tensor(t) => !t.dtype.is_bool(),
-            _ => false,
-        },
-        _ => false,
-    }
+    node.outputs.get(3).is_none()
 }
 
 impl NodeCodegen for onnx_ir::attention::AttentionNode {
@@ -128,55 +118,74 @@ fn forward_burn_attention(
         });
     }
 
-    // Custom scale: pre-scale Q so that Q' K^T / sqrt(d) = scale * Q K^T
-    // Since burn computes QK^T / sqrt(d), we set Q' = scale * sqrt(d) * Q.
-    if let Some(scale) = node.config.scale {
-        body.extend(quote! {
-            let head_dim = q.dims()[3] as f64;
-            let q = q * (#scale * head_dim.sqrt());
-        });
-    }
-
-    // Mask and attention call
-    let attention_call = if node.config.is_causal {
-        quote! {
-            let mask = {
-                let seq_q = q.dims()[2];
-                let seq_k = k.dims()[2];
-                Tensor::<B, 2>::ones([seq_q, seq_k], &q.device())
-                    .tril(0).bool().bool_not()
-                    .unsqueeze::<4>()
-            };
-            let #output_y = burn::tensor::module::attention(q, k, v, Some(mask));
+    // Build AttentionOptions
+    let scale_tokens = match node.config.scale {
+        Some(scale) => quote! { Some(#scale) },
+        None => quote! { None },
+    };
+    let softcap_tokens = if node.config.softcap != 0.0 {
+        let softcap = node.config.softcap;
+        quote! { Some(#softcap) }
+    } else {
+        quote! { None }
+    };
+    let is_causal = node.config.is_causal;
+    let options = quote! {
+        burn::tensor::ops::AttentionOptions {
+            scale: #scale_tokens,
+            softcap: #softcap_tokens,
+            is_causal: #is_causal,
         }
-    } else if let Some(mask_input) = node.inputs.get(3).filter(|a| !a.is_optional()) {
-        // Bool mask: ONNX true=attend -> Burn true=masked, so invert
+    };
+
+    // Mask handling:
+    // - Bool masks -> `mask` parameter (inverted: ONNX attend=true -> Burn masked=true)
+    // - Float/int masks -> `attn_bias` parameter (additive bias)
+    // - Causal masking is handled natively by the backend via is_causal
+    let mask_input = if !node.config.is_causal {
+        node.inputs.get(3).filter(|a| !a.is_optional())
+    } else {
+        None
+    };
+
+    let (mask_tokens, bias_tokens) = if let Some(mask_input) = mask_input {
         let mask_arg = scope.arg(mask_input);
-        let mask_rank = match &mask_input.ty {
-            ArgType::Tensor(t) => t.rank,
-            _ => panic!("Attention mask must be a tensor"),
-        };
-        match mask_rank {
-            2 => quote! {
-                // [seq_q, seq_k] -> [1, 1, seq_q, seq_k]
-                let mask = #mask_arg.bool_not().unsqueeze::<4>();
-                let #output_y = burn::tensor::module::attention(q, k, v, Some(mask));
-            },
-            3 => quote! {
-                // [batch, seq_q, seq_k] -> [batch, 1, seq_q, seq_k]
-                let mask = #mask_arg.bool_not().unsqueeze_dim::<4>(1);
-                let #output_y = burn::tensor::module::attention(q, k, v, Some(mask));
-            },
-            4 => quote! {
-                let mask = #mask_arg.bool_not();
-                let #output_y = burn::tensor::module::attention(q, k, v, Some(mask));
-            },
-            _ => panic!("Attention mask must be rank 2, 3, or 4"),
+        match &mask_input.ty {
+            ArgType::Tensor(t) if t.dtype.is_bool() => {
+                let mask = match t.rank {
+                    2 => quote! { #mask_arg.bool_not().unsqueeze::<4>() },
+                    3 => quote! { #mask_arg.bool_not().unsqueeze_dim::<4>(1) },
+                    4 => quote! { #mask_arg.bool_not() },
+                    _ => panic!("Attention mask must be rank 2, 3, or 4"),
+                };
+                (quote! { Some(#mask) }, quote! { None })
+            }
+            ArgType::Tensor(t) if t.dtype.is_float() => {
+                let bias = match t.rank {
+                    2 => quote! { #mask_arg.unsqueeze::<4>() },
+                    3 => quote! { #mask_arg.unsqueeze_dim::<4>(1) },
+                    4 => mask_arg,
+                    _ => panic!("Attention bias must be rank 2, 3, or 4"),
+                };
+                (quote! { None }, quote! { Some(#bias) })
+            }
+            ArgType::Tensor(t) if t.dtype.is_int() || t.dtype.is_uint() => {
+                let bias = match t.rank {
+                    2 => quote! { #mask_arg.float().unsqueeze::<4>() },
+                    3 => quote! { #mask_arg.float().unsqueeze_dim::<4>(1) },
+                    4 => quote! { #mask_arg.float() },
+                    _ => panic!("Attention bias must be rank 2, 3, or 4"),
+                };
+                (quote! { None }, quote! { Some(#bias) })
+            }
+            _ => panic!("Unsupported attention mask type"),
         }
     } else {
-        quote! {
-            let #output_y = burn::tensor::module::attention(q, k, v, None);
-        }
+        (quote! { None }, quote! { None })
+    };
+
+    let attention_call = quote! {
+        let #output_y = burn::tensor::module::attention(q, k, v, #mask_tokens, #bias_tokens, #options);
     };
     body.extend(attention_call);
     body.extend(reshape_output);
@@ -197,8 +206,8 @@ fn forward_burn_attention(
     }
 }
 
-/// Fallback codegen for features not supported by burn's attention API:
-/// softcap, qk_matmul intermediate outputs, float/int attention masks.
+/// Fallback codegen for qk_matmul intermediate output, which is not
+/// supported by burn's attention API.
 fn forward_custom(
     node: &onnx_ir::attention::AttentionNode,
     scope: &mut ScopeAtPosition<'_>,
@@ -463,7 +472,18 @@ mod tests {
                 let q = query;
                 let k = key;
                 let v = value;
-                let output = burn::tensor::module::attention(q, k, v, None);
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    None,
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                    },
+                );
                 (output,)
             };
             output
@@ -516,7 +536,18 @@ mod tests {
                 let v = v
                     .reshape([batch_size, kv_sequence_length, 8usize, v_head_size])
                     .permute([0, 2, 1, 3]);
-                let output = burn::tensor::module::attention(q, k, v, None);
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    None,
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                    },
+                );
                 let output = output
                     .permute([0, 2, 1, 3])
                     .reshape([batch_size as i32, q_sequence_length as i32, -1]);
@@ -557,16 +588,18 @@ mod tests {
                 let q = query;
                 let k = key;
                 let v = value;
-                let mask = {
-                    let seq_q = q.dims()[2];
-                    let seq_k = k.dims()[2];
-                    Tensor::<B, 2>::ones([seq_q, seq_k], &q.device())
-                        .tril(0)
-                        .bool()
-                        .bool_not()
-                        .unsqueeze::<4>()
-                };
-                let output = burn::tensor::module::attention(q, k, v, Some(mask));
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    None,
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: true,
+                    },
+                );
                 (output,)
             };
             output
@@ -606,21 +639,18 @@ mod tests {
                 let q = query;
                 let k = key;
                 let v = value;
-                let scale = (1.0 / (q.dims()[3] as f64).sqrt()).sqrt();
-                let q_dims = q.dims();
-                let k_dims = k.dims();
-                let q_scaled = q * scale;
-                let k_scaled = k * scale;
-                let k_transpose = k_scaled.transpose();
-                let qk = q_scaled.matmul(k_transpose);
-                let shape = {
-                    let [batch_size, q_num_heads, q_sequence_length, _] = q_dims;
-                    [batch_size, q_num_heads, q_sequence_length, k_dims[2]]
-                };
-                let qk = qk + mask.expand::<4, _>(shape);
-                let capped = qk;
-                let scores = softmax(capped, 3);
-                let output = scores.matmul(v);
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    Some(mask),
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                    },
+                );
                 (output,)
             };
             output
@@ -658,18 +688,18 @@ mod tests {
                 let q = query;
                 let k = key;
                 let v = value;
-                let scale = (1.0 / (q.dims()[3] as f64).sqrt()).sqrt();
-                let q_scaled = q * scale;
-                let k_scaled = k * scale;
-                let k_transpose = k_scaled.transpose();
-                let qk = q_scaled.matmul(k_transpose);
-                let capped = {
-                    let score = qk * 0.02f64;
-                    let score = score.tanh();
-                    score * 50f64
-                };
-                let scores = softmax(capped, 3);
-                let output = scores.matmul(v);
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    None,
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: Some(50f64),
+                        is_causal: false,
+                    },
+                );
                 (output,)
             };
             output
@@ -707,9 +737,18 @@ mod tests {
                 let q = query;
                 let k = key;
                 let v = value;
-                let head_dim = q.dims()[3] as f64;
-                let q = q * (0.125f64 * head_dim.sqrt());
-                let output = burn::tensor::module::attention(q, k, v, None);
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    None,
+                    burn::tensor::ops::AttentionOptions {
+                        scale: Some(0.125f64),
+                        softcap: None,
+                        is_causal: false,
+                    },
+                );
                 (output,)
             };
             output
@@ -749,8 +788,18 @@ mod tests {
                 let q = query;
                 let k = key;
                 let v = value;
-                let mask = mask.bool_not().unsqueeze::<4>();
-                let output = burn::tensor::module::attention(q, k, v, Some(mask));
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    Some(mask.bool_not().unsqueeze::<4>()),
+                    None,
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                    },
+                );
                 (output,)
             };
             output
@@ -790,8 +839,18 @@ mod tests {
                 let q = query;
                 let k = key;
                 let v = value;
-                let mask = mask.bool_not().unsqueeze_dim::<4>(1);
-                let output = burn::tensor::module::attention(q, k, v, Some(mask));
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    Some(mask.bool_not().unsqueeze_dim::<4>(1)),
+                    None,
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                    },
+                );
                 (output,)
             };
             output
@@ -841,8 +900,18 @@ mod tests {
                 let k = present_k.clone();
                 let present_v = Tensor::cat([past_v, v].to_vec(), 2);
                 let v = present_v.clone();
-                let mask = mask.bool_not().unsqueeze::<4>();
-                let output = burn::tensor::module::attention(q, k, v, Some(mask));
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    Some(mask.bool_not().unsqueeze::<4>()),
+                    None,
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                    },
+                );
                 (output, present_k, present_v)
             };
             (output, present_k, present_v)
@@ -888,25 +957,22 @@ mod tests {
                 let q = query;
                 let k = key;
                 let v = value;
-                let scale = (1.0 / (q.dims()[3] as f64).sqrt()).sqrt();
                 let present_k = Tensor::cat([past_k, k].to_vec(), 2);
                 let k = present_k.clone();
                 let present_v = Tensor::cat([past_v, v].to_vec(), 2);
                 let v = present_v.clone();
-                let q_dims = q.dims();
-                let k_dims = k.dims();
-                let q_scaled = q * scale;
-                let k_scaled = k * scale;
-                let k_transpose = k_scaled.transpose();
-                let qk = q_scaled.matmul(k_transpose);
-                let shape = {
-                    let [batch_size, q_num_heads, q_sequence_length, _] = q_dims;
-                    [batch_size, q_num_heads, q_sequence_length, k_dims[2]]
-                };
-                let qk = qk + bias.expand::<4, _>(shape);
-                let capped = qk;
-                let scores = softmax(capped, 3);
-                let output = scores.matmul(v);
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    Some(bias),
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                    },
+                );
                 (output, present_k, present_v)
             };
             (output, present_k, present_v)
@@ -1112,6 +1178,109 @@ mod tests {
                 (output, present_k, present_v, qk_output)
             };
             (output, present_k, present_v, qk_output)
+        }
+        ");
+    }
+
+    #[test]
+    fn test_attention_with_int_mask() {
+        let config = AttentionConfig {
+            is_causal: false,
+            kv_num_heads: None,
+            q_num_heads: None,
+            qk_matmul_output_mode: AttentionQkMatmulOutputMode::Matmul,
+            scale: None,
+            softcap: 0.0,
+            softmax_precision: None,
+        };
+        let node = AttentionNodeBuilder::new("attn1")
+            .input_tensor("query", 4, DType::F32)
+            .input_tensor("key", 4, DType::F32)
+            .input_tensor("value", 4, DType::F32)
+            .input_tensor("mask", 4, DType::I64)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            query: Tensor<B, 4>,
+            key: Tensor<B, 4>,
+            value: Tensor<B, 4>,
+            mask: Tensor<B, 4, Int>,
+        ) -> Tensor<B, 4> {
+            let (output,) = {
+                let q = query;
+                let k = key;
+                let v = value;
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    Some(mask.float()),
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                    },
+                );
+                (output,)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_attention_causal_with_mask_ignores_mask() {
+        // Per ONNX spec: "is_causal masks scores above the diagonal, regardless of attn_mask"
+        let config = AttentionConfig {
+            is_causal: true,
+            kv_num_heads: None,
+            q_num_heads: None,
+            qk_matmul_output_mode: AttentionQkMatmulOutputMode::Matmul,
+            scale: None,
+            softcap: 0.0,
+            softmax_precision: None,
+        };
+        let node = AttentionNodeBuilder::new("attn1")
+            .input_tensor("query", 4, DType::F32)
+            .input_tensor("key", 4, DType::F32)
+            .input_tensor("value", 4, DType::F32)
+            .input_tensor("mask", 4, DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            query: Tensor<B, 4>,
+            key: Tensor<B, 4>,
+            value: Tensor<B, 4>,
+            mask: Tensor<B, 4>,
+        ) -> Tensor<B, 4> {
+            let (output,) = {
+                let q = query;
+                let k = key;
+                let v = value;
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    None,
+                    burn::tensor::ops::AttentionOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: true,
+                    },
+                );
+                (output,)
+            };
+            output
         }
         ");
     }

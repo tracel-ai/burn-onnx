@@ -557,9 +557,18 @@ mod tests {
                     let q = q;
                     let k = k;
                     let v = v;
-                    let head_dim = q.dims()[3] as f64;
-                    let q = q * (0.5f64 * head_dim.sqrt());
-                    let matmul2_out1 = burn::tensor::module::attention(q, k, v, None);
+                    let matmul2_out1 = burn::tensor::module::attention(
+                        q,
+                        k,
+                        v,
+                        None,
+                        None,
+                        burn::tensor::ops::AttentionOptions {
+                            scale: Some(0.5f64),
+                            softcap: None,
+                            is_causal: false,
+                        },
+                    );
                     (matmul2_out1,)
                 };
                 matmul2_out1

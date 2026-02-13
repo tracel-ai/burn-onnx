@@ -22,7 +22,10 @@ impl NodeCodegen for onnx_ir::pad::PadNode {
                 panic!("Runtime pads are not supported in burn-onnx")
             }
         };
-        let pads = pads_vec.iter().map(|p| p.to_tokens());
+        let pads: Vec<TokenStream> = pads_vec
+            .iter()
+            .map(|(before, after)| quote! { (#before, #after) })
+            .collect();
 
         // Generate PadMode based on the mode in config (using fully qualified path)
         let pad_mode = match &self.config.mode {
@@ -63,7 +66,7 @@ impl NodeCodegen for onnx_ir::pad::PadNode {
         };
 
         quote! {
-            let #output = #input.pad((#(#pads),*), #pad_mode);
+            let #output = #input.pad([#(#pads),*], #pad_mode);
         }
     }
 }
@@ -78,7 +81,7 @@ mod tests {
 
     fn create_pad_node(
         name: &str,
-        pads: Vec<usize>,
+        pads: Vec<(usize, usize)>,
         constant_value: f32,
         mode: PadMode,
     ) -> PadNode {
@@ -97,11 +100,15 @@ mod tests {
 
     #[test]
     fn test_pad_constant_simple() {
-        let node = create_pad_node("pad1", vec![1, 1, 1, 1], 0.0, PadMode::Constant);
+        let node = create_pad_node("pad1", vec![(1, 1), (1, 1)], 0.0, PadMode::Constant);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
-            let output = input.pad((1, 1, 1, 1), burn::tensor::ops::PadMode::Constant(0_f32));
+            let output = input
+                .pad(
+                    [(1usize, 1usize), (1usize, 1usize)],
+                    burn::tensor::ops::PadMode::Constant(0_f32),
+                );
             output
         }
         ");
@@ -109,11 +116,15 @@ mod tests {
 
     #[test]
     fn test_pad_constant_asymmetric() {
-        let node = create_pad_node("pad1", vec![0, 2, 1, 0], 5.5, PadMode::Constant);
+        let node = create_pad_node("pad1", vec![(0, 1), (2, 0)], 5.5, PadMode::Constant);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
-            let output = input.pad((0, 2, 1, 0), burn::tensor::ops::PadMode::Constant(5.5_f32));
+            let output = input
+                .pad(
+                    [(0usize, 1usize), (2usize, 0usize)],
+                    burn::tensor::ops::PadMode::Constant(5.5_f32),
+                );
             output
         }
         ");
@@ -121,11 +132,12 @@ mod tests {
 
     #[test]
     fn test_pad_reflect() {
-        let node = create_pad_node("pad1", vec![1, 1, 1, 1], 0.0, PadMode::Reflect);
+        let node = create_pad_node("pad1", vec![(1, 1), (1, 1)], 0.0, PadMode::Reflect);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
-            let output = input.pad((1, 1, 1, 1), burn::tensor::ops::PadMode::Reflect);
+            let output = input
+                .pad([(1usize, 1usize), (1usize, 1usize)], burn::tensor::ops::PadMode::Reflect);
             output
         }
         ");
@@ -133,11 +145,12 @@ mod tests {
 
     #[test]
     fn test_pad_edge() {
-        let node = create_pad_node("pad1", vec![1, 1, 1, 1], 0.0, PadMode::Edge);
+        let node = create_pad_node("pad1", vec![(1, 1), (1, 1)], 0.0, PadMode::Edge);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
-            let output = input.pad((1, 1, 1, 1), burn::tensor::ops::PadMode::Edge);
+            let output = input
+                .pad([(1usize, 1usize), (1usize, 1usize)], burn::tensor::ops::PadMode::Edge);
             output
         }
         ");
@@ -146,7 +159,7 @@ mod tests {
     #[test]
     fn test_pad_constant_runtime_value() {
         let config = PadConfig {
-            pads: PadInput::Static(vec![1, 1, 1, 1]),
+            pads: PadInput::Static(vec![(1, 1), (1, 1)]),
             constant_value: ConstantValueInput::Runtime(RuntimeInputRef {
                 name: "constant_value".to_string(),
                 input_index: 1,
@@ -168,7 +181,7 @@ mod tests {
         ) -> Tensor<B, 2> {
             let output = input
                 .pad(
-                    (1, 1, 1, 1),
+                    [(1usize, 1usize), (1usize, 1usize)],
                     burn::tensor::ops::PadMode::Constant(constant_value.into_scalar()),
                 );
             output
@@ -179,7 +192,7 @@ mod tests {
     #[test]
     fn test_pad_constant_runtime_scalar() {
         let config = PadConfig {
-            pads: PadInput::Static(vec![1, 1, 1, 1]),
+            pads: PadInput::Static(vec![(1, 1), (1, 1)]),
             constant_value: ConstantValueInput::Runtime(RuntimeInputRef {
                 name: "constant_value".to_string(),
                 input_index: 1,
@@ -196,7 +209,35 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2>, constant_value: f32) -> Tensor<B, 2> {
             let output = input
-                .pad((1, 1, 1, 1), burn::tensor::ops::PadMode::Constant(constant_value));
+                .pad(
+                    [(1usize, 1usize), (1usize, 1usize)],
+                    burn::tensor::ops::PadMode::Constant(constant_value),
+                );
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_pad_4d_all_dimensions() {
+        let config = PadConfig {
+            pads: PadInput::Static(vec![(1, 2), (0, 0), (3, 4), (5, 6)]),
+            constant_value: ConstantValueInput::Static(0.0),
+            mode: PadMode::Constant,
+        };
+        let node = PadNodeBuilder::new("pad1")
+            .input_tensor("input", 4, DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+            let output = input
+                .pad(
+                    [(1usize, 2usize), (0usize, 0usize), (3usize, 4usize), (5usize, 6usize)],
+                    burn::tensor::ops::PadMode::Constant(0_f32),
+                );
             output
         }
         ");
