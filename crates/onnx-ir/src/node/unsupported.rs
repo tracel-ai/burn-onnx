@@ -46,7 +46,6 @@ define_placeholder_node! {
     BlackmanWindowNode,
     CastLikeNode,
     CenterCropPadNode,
-    Col2ImNode,
     CompressNode,
     ConcatFromSequenceNode,
     ConvNode,

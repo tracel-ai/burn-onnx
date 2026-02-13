@@ -35,6 +35,7 @@ pub mod cast;
 pub mod ceil;
 pub mod celu;
 pub mod clip;
+pub mod col2im;
 pub mod concat;
 pub mod constant;
 pub mod constant_lifting_multiple;

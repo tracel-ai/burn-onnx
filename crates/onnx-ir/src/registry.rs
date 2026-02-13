@@ -350,6 +350,10 @@ impl ProcessorRegistry {
         // Utility operations
         registry.register(NodeType::Clip, Box::new(crate::node::clip::ClipProcessor));
         registry.register(
+            NodeType::Col2Im,
+            Box::new(crate::node::col2im::Col2ImProcessor),
+        );
+        registry.register(
             NodeType::Dropout,
             Box::new(crate::node::dropout::DropoutProcessor),
         );

@@ -38,6 +38,7 @@ pub(crate) mod cast;
 pub(crate) mod ceil;
 pub(crate) mod celu;
 pub(crate) mod clip;
+pub(crate) mod col2im;
 pub(crate) mod concat;
 pub(crate) mod constant;
 pub(crate) mod constant_of_shape;

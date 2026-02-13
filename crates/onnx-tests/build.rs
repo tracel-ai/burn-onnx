@@ -155,6 +155,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/deform_conv/deform_conv_mask.onnx")
         .input("tests/depth_to_space/depth_to_space_dcr.onnx")
         .input("tests/depth_to_space/depth_to_space_crd.onnx")
+        .input("tests/col2im/col2im.onnx")
         .input("tests/div/div.onnx")
         .input("tests/div/div_shape.onnx")
         .input("tests/div/div_shape_tensor.onnx")

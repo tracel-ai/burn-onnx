@@ -344,7 +344,7 @@ define_node_enum! {
     BlackmanWindow => unsupported::BlackmanWindowNode,
     CastLike => unsupported::CastLikeNode,
     CenterCropPad => unsupported::CenterCropPadNode,
-    Col2Im => unsupported::Col2ImNode,
+    Col2Im => col2im::Col2ImNode,
     Compress => unsupported::CompressNode,
     ConcatFromSequence => unsupported::ConcatFromSequenceNode,
     Conv => unsupported::ConvNode,

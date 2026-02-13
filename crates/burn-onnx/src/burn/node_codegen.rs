@@ -157,6 +157,7 @@ impl_node_codegen_dispatch! {
     ConvTranspose2d,
     ConvTranspose3d,
     DeformConv,
+    Col2Im,
 
     // Pooling ops
     AveragePool1d,
