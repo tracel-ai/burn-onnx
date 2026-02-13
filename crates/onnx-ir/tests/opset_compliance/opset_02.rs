@@ -24,10 +24,14 @@ fn pad(graph: &OnnxGraph) {
         PadConfig {
             pads: Static(
                 [
-                    1,
-                    1,
-                    0,
-                    0,
+                    (
+                        0,
+                        0,
+                    ),
+                    (
+                        1,
+                        1,
+                    ),
                 ],
             ),
             constant_value: Static(
