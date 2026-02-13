@@ -3,7 +3,7 @@
 This guide offers in-depth design insights and step-by-step procedures for developers working on the
 ONNX to Burn conversion tool. This tool allows the importation of ONNX models into the Burn deep
 learning framework written in Rust. It converts ONNX models to Rust source code and model weights to
-`.burnpack` files.
+`.bpk` files.
 
 For an introduction to ONNX import in Burn, see
 [this section of the Burn book](https://burn.dev/books/burn/import/onnx-model.html).
@@ -68,10 +68,10 @@ To extend `burn-onnx` with support for new ONNX operators, follow these steps:
 3. **Visualize ONNX Model**: Use [Netron](https://github.com/lutzroeder/netron) to verify the ONNX
    model contains the expected operators.
 
-4. **Generate IR and Burn Graph**: Navigate to [crates/burn-onnx/](crates/burn-onnx/) and run:
+4. **Generate IR and Burn Graph**: Run from the repository root:
 
    ```
-   cargo r -- ../onnx-tests/tests/<op>/<op>.onnx ./out
+   cargo run -p burn-onnx --bin onnx2burn -- crates/onnx-tests/tests/<op>/<op>.onnx ./out
    ```
 
 5. **Implement Missing Operators**: If you encounter an error stating that an operator is
@@ -79,7 +79,7 @@ To extend `burn-onnx` with support for new ONNX operators, follow these steps:
    provide relevant information.
 
 6. **Inspect Generated Files**: The `my-model.graph.txt` contains IR details, `my-model.rs` holds
-   the Burn model in Rust code, and `my-model.burnpack` contains the model weights.
+   the Burn model in Rust code, and `my-model.bpk` contains the model weights.
 
 7. **Integration Test**: Include the test in the `tests/<op_name>/mod.rs` file in the
    [crates/onnx-tests/tests/](crates/onnx-tests/tests/) directory. Further details can be found in
@@ -156,8 +156,8 @@ For example, the squeeze operation in `crates/onnx-ir/src/node/squeeze.rs` conta
 
 - A `SqueezeConfig` struct with operation parameters (axes)
 - A `SqueezeProcessor` struct (marked `pub(crate)`) that implements `NodeProcessor`
-- The `node_spec()` method defines input/output requirements
-- The `process()` method extracts config and constructs the `Node::Squeeze` variant
+- The `spec()` method defines input/output requirements
+- The `build_node()` method extracts config and constructs the `Node::Squeeze` variant
 
 ### Step 2: Code Generation in burn-onnx
 
@@ -440,8 +440,8 @@ Simplification is enabled by default. Existing operator tests explicitly use `.s
 Use `--no-simplify` to disable it:
 
 ```sh
-cargo run -p burn-onnx -- model.onnx ./out             # simplification enabled (default)
-cargo run -p burn-onnx -- model.onnx ./out --no-simplify  # simplification disabled
+cargo run -p burn-onnx --bin onnx2burn -- model.onnx ./out             # simplification enabled (default)
+cargo run -p burn-onnx --bin onnx2burn -- model.onnx ./out --no-simplify  # simplification disabled
 ```
 
 Existing operator tests use `.simplify(false)` to test unsimplified codegen. Dedicated comparison
@@ -666,15 +666,34 @@ ONNX reference implementation and serves as ground truth for verifying Burn's ou
 Create `tests/my_new_op/mod.rs`:
 
 ```rust
-use super::test_record_type::TestRecordType;
-use burn_onnx::OnnxModel;
+use crate::include_models;
+include_models!(my_new_op);
 
-#[test]
-fn test_my_new_op() {
-    let model = OnnxModel::read("tests/my_new_op/my_new_op.onnx").unwrap();
-    let record = model.into_record::<TestRecordType>();
-    // Implement test logic and assertions
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use burn::tensor::{Shape, Tensor};
+    use crate::backend::TestBackend;
+
+    #[test]
+    fn my_new_op() {
+        let device = Default::default();
+        let model = my_new_op::Model::<TestBackend>::new(&device);
+
+        let input = Tensor::ones([1, 3, 224, 224], &device);
+        let output = model.forward(input);
+
+        // Compare against expected values from ReferenceEvaluator
+        let expected_shape = Shape::from([1, 3, 224, 224]);
+        assert_eq!(expected_shape, output.shape());
+    }
 }
+```
+
+Register the test module in `tests/test_mod.rs`:
+
+```rust
+pub mod my_new_op;
 ```
 
 #### Running Tests
@@ -716,7 +735,7 @@ cargo test --test test_mod my_new_op::test_my_new_op
 
 1. **Inspect ONNX Model**: Use Netron to visualize structure
 2. **Check Values**: Add print statements in Python scripts
-3. **Generate Rust Code**: `cargo run -p burn-onnx -- tests/my_op/my_op.onnx ./out`
+3. **Generate Rust Code**: `cargo run -p burn-onnx --bin onnx2burn -- tests/my_op/my_op.onnx ./out`
 4. **Numerical Issues**: Adjust tolerance for precision problems
 
 Testing the processor implementation is particularly important as it directly affects the
@@ -800,6 +819,7 @@ cargo xtask model-check --fail-fast
 | RF-DETR Small | `rf-detr` | Object detection |
 | ALBERT | `albert` | Language model (requires Python 3.11) |
 | YOLO v8n | `yolo` | Object detection |
+| MediaPipe Face Detector | `mediapipe-face-detector` | Face detection |
 
 ### Model Artifacts
 
