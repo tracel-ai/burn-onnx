@@ -95,12 +95,11 @@ const MODELS: &[ModelInfo] = &[
         env: Some(("YOLO_MODEL", "yolov8n")),
         blocked: false,
     },
-    // Blocked: needs channel-dimension Pad support (tracel-ai/burn#4507)
     ModelInfo {
         dir: "mediapipe-face-detector",
         name: "MediaPipe Face Detector",
         env: None,
-        blocked: true,
+        blocked: false,
     },
 ];
 
