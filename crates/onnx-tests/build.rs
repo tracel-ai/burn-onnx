@@ -320,6 +320,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/pad/pad_edge.onnx")
         .input("tests/pad/pad_runtime_constant.onnx")
         .input("tests/pad/pad_optional_constant_value.onnx")
+        .input("tests/pad/pad_ndim.onnx")
         .input("tests/pow/pow.onnx")
         .input("tests/pow/pow_int.onnx")
         .input("tests/pow/pow_broadcast.onnx")
