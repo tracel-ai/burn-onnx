@@ -88,17 +88,7 @@ impl NodeProcessor for Col2ImProcessor {
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
         // Validate attributes
-        for (key, _) in node.attrs.iter() {
-            match key.as_str() {
-                "dilations" | "pads" | "strides" => {}
-                _ => {
-                    return Err(ProcessError::InvalidAttribute {
-                        name: key.clone(),
-                        reason: format!("Unexpected attribute for Col2Im: {key}"),
-                    });
-                }
-            }
-        }
+
 
         // Validate data input is a tensor
         let tensor = match &node.inputs[0].ty {
@@ -106,7 +96,7 @@ impl NodeProcessor for Col2ImProcessor {
             _ => {
                 return Err(ProcessError::TypeMismatch {
                     expected: "Tensor".to_string(),
-                    actual: format!("{:?}", node.inputs[0].ty),
+                    actual: format!("{}", node.inputs[0].ty),
                 });
             }
         };
@@ -128,18 +118,36 @@ impl NodeProcessor for Col2ImProcessor {
         let num_spatial_dims = config.image_shape.len();
         let output_rank = 2 + num_spatial_dims; // N + C + spatial dims
 
-        // Compute static shape if input has static shape
-        let static_shape = tensor.static_shape.as_ref().map(|input_shape| {
-            let n = input_shape[0]; // batch size
+        // Use partial static shape inference:
+        // Always attempt to compute static_shape if config is available, even if input is dynamic.
+        // We know (N, C, *image_shape) structure.
+        let static_shape = if let Some(input_shape) = &tensor.static_shape {
+            // Full inference if input shape is fully known
+            let n = input_shape[0]; 
             let block_product: usize = config.block_shape.iter().product();
-            let c = input_shape[1].map(|v| v / block_product); // channels
+            let c = input_shape[1].map(|v| v / block_product); 
 
             let mut shape = vec![n, c];
             for &dim in &config.image_shape {
                 shape.push(Some(dim));
             }
-            shape
-        });
+            Some(shape)
+        } else {
+             // Partial inference: N, C unknown, but spatial dims known from config
+             let mut shape = vec![None, None]; // N, C
+             for &dim in &config.image_shape {
+                 shape.push(Some(dim));
+             }
+             Some(shape)
+        };
+
+        // Validate supported dimensions (only 1D and 2D supported by current codegen)
+        if num_spatial_dims > 2 {
+             return Err(ProcessError::Custom(format!(
+                "Col2Im currently only supports 1D and 2D spatial dimensions, got {}",
+                num_spatial_dims
+            )));
+        }
 
         node.outputs[0].ty = ArgType::Tensor(TensorType {
             dtype: tensor.dtype,
@@ -360,7 +368,10 @@ mod tests {
             ArgType::Tensor(tensor) => {
                 assert_eq!(tensor.dtype, DType::F32);
                 assert_eq!(tensor.rank, 4);
-                assert_eq!(tensor.static_shape, None);
+                assert_eq!(
+                    tensor.static_shape,
+                    Some(vec![None, None, Some(5), Some(5)])
+                );
             }
             _ => panic!("Expected tensor output"),
         }
@@ -399,5 +410,29 @@ mod tests {
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 18, &prefs);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_spatial_dims() {
+        // Test with 3D spatial dims (not supported yet)
+        // Image [5, 5, 5], Block [2, 2, 2]
+        let mut node = create_test_node(
+            vec![5, 5, 5],
+            vec![2, 2, 2],
+            Some(vec![1, 20, 16]),
+            None,
+            None,
+            None,
+        );
+        let processor = Col2ImProcessor;
+        let prefs = OutputPreferences::new();
+        let result = processor.infer_types(&mut node, 18, &prefs);
+        assert!(result.is_err());
+        match result {
+            Err(ProcessError::Custom(msg)) => {
+                assert!(msg.contains("Col2Im currently only supports 1D and 2D spatial dimensions"));
+            }
+            _ => panic!("Expected Custom ProcessError, got {:?}", result),
+        }
     }
 }
