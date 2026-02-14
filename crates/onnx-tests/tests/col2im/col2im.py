@@ -171,18 +171,20 @@ def main():
 
     # Basic
     model_basic = build_model_basic()
-    save_model(model_basic, "col2im.onnx")
+    save_model(model_basic, "col2im_basic.onnx")
 
     # Complex
     model_complex = build_model_complex()
     save_model(model_complex, "col2im_complex.onnx")
 
     # Run reference on complex
-    np.random.seed(42)
-    test_input = np.ones((1, 9, 9), dtype=np.float32)
-    session = ReferenceEvaluator("col2im_complex.onnx", verbose=0) # reduced verbose
+    # Use pattern inputs to verify index mapping, not just shape/sum
+    test_input = np.arange(1, 82, dtype=np.float32).reshape(1, 9, 9)
+    session = onnx.reference.ReferenceEvaluator(model_complex)
     (test_output,) = session.run(None, {"input": test_input})
     print(f"Complex model output shape: {test_output.shape}")
+    print("Complex model reference output (flattened):")
+    print(list(test_output.flatten()))
 
 
 if __name__ == "__main__":

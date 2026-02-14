@@ -68,53 +68,74 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
         //   block_idx = i / total_windows
         //   window_idx = i % total_windows
 
-        let mut scatter_indices = vec![0i64; total_input_elements];
+        // Prepare indices computation tokens
+        let padded_size: usize = padded_dims.iter().product();
+        let mut stride_acc = 1;
+        let mut block_terms = Vec::new();
+        let mut window_terms = Vec::new();
 
-        for (i, index) in scatter_indices.iter_mut().enumerate() {
-            let block_idx = i / total_windows;
-            let window_idx = i % total_windows;
+        for i in (0..num_spatial_dims).rev() {
+            let dim_stride_acc = stride_acc;
+            stride_acc *= padded_dims[i];
 
-            // Reconstruct spatial positions from window_idx and block_idx
-            // General N-D logic
-            let mut w_rem = window_idx;
-            let mut b_rem = block_idx;
+            // Block Term for dim i
+            let b_size = block_shape[i];
+            let b_dilation_stride = (dilations[i] * dim_stride_acc) as i64;
 
-            let mut flat_output_index = 0;
-            let mut stride_accumulator = 1;
+            let mut b_shape_dims = vec![1usize; num_spatial_dims];
+            b_shape_dims[i] = b_size;
+            let b_shape_tokens = quote! { [#(#b_shape_dims),*] };
 
-            // Iterate dimensions backwards (W then H) for standard layout
-            for dim in (0..num_spatial_dims).rev() {
-                // Window position in this dimension
-                let w_pos = w_rem % output_counts[dim];
-                w_rem /= output_counts[dim];
+            block_terms.push(quote! {
+                Tensor::<B, 1, Int>::arange(0..#b_size as i64, &device)
+                    .mul_scalar(#b_dilation_stride)
+                    .reshape(#b_shape_tokens)
+            });
 
-                // Block offset in this dimension
-                let b_pos = b_rem % block_shape[dim];
-                b_rem /= block_shape[dim];
+            // Window Term for dim i
+            let w_size = output_counts[i];
+            let w_stride_stride = (strides[i] * dim_stride_acc) as i64;
 
-                // Calculate position in Padded Output
-                // pos = w_pos * stride + b_pos * dilation
-                let pad_pos = w_pos * strides[dim] + b_pos * dilations[dim];
+            let mut w_shape_dims = vec![1usize; num_spatial_dims];
+            w_shape_dims[i] = w_size;
+            let w_shape_tokens = quote! { [#(#w_shape_dims),*] };
 
-                // Add to flat index
-                flat_output_index += pad_pos * stride_accumulator;
-                stride_accumulator *= padded_dims[dim];
-            }
-
-            *index = flat_output_index as i64;
+            window_terms.push(quote! {
+                Tensor::<B, 1, Int>::arange(0..#w_size as i64, &device)
+                    .mul_scalar(#w_stride_stride)
+                    .reshape(#w_shape_tokens)
+            });
         }
 
-        // Create constant tensor from logic
-        let _indices_len = scatter_indices.len();
-        let indices_tokens = quote! {
-            TensorData::from(&[#(#scatter_indices),*] as &[i64])
+        let block_sum = if block_terms.is_empty() {
+            quote! { Tensor::<B, 1, Int>::zeros([1], &device) }
+        } else {
+            let first = &block_terms[0];
+            let rest = &block_terms[1..];
+            if rest.is_empty() {
+                quote! { #first }
+            } else {
+                quote! { #first #( + #rest)* }
+            }
         };
 
-        let padded_size: usize = padded_dims.iter().product();
+        let window_sum = if window_terms.is_empty() {
+            quote! { Tensor::<B, 1, Int>::zeros([1], &device) }
+        } else {
+            let first = &window_terms[0];
+            let rest = &window_terms[1..];
+            if rest.is_empty() {
+                quote! { #first }
+            } else {
+                quote! { #first #( + #rest)* }
+            }
+        };
 
-        // 6. Slice instructions to crop padding
-        // canvas.slice([0..N, 0..C, pad_h..pad_h+H, pad_w..pad_w+W])
-        // Since we flatten spatial dims for scatter, we need to reshape back to spatial before slicing.
+        let indices_computation_code = quote! {
+             let block_offsets = (#block_sum).reshape([#block_product, 1]);
+             let window_offsets = (#window_sum).reshape([1, #total_windows]);
+             (block_offsets + window_offsets).reshape([-1])
+        };
 
         // Padded shape for reshape
         let padded_shape_tokens = match num_spatial_dims {
@@ -127,26 +148,38 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
             _ => panic!("Unsupported dimensions"),
         };
 
-        // Crop slices
-        let slice_ranges = match num_spatial_dims {
-            1 => {
-                let p_begin = pads_begin[0];
-                let shape = image_shape[0];
-                let end = p_begin + shape;
-                quote! { [0..batch_size, 0..channels, #p_begin..#end] }
-            }
-            2 => {
-                let h_begin = pads_begin[0];
-                let h_shape = image_shape[0];
-                let h_end = h_begin + h_shape;
+        let has_padding = pads_begin.iter().any(|&p| p != 0) || pads_end.iter().any(|&p| p != 0);
 
-                let w_begin = pads_begin[1];
-                let w_shape = image_shape[1];
-                let w_end = w_begin + w_shape;
+        let slice_logic = if !has_padding {
+            // Optimization: If no padding, just return the reshaped canvas.
+            quote! { canvas.reshape(#padded_shape_tokens) }
+        } else {
+            // Calculate slice ranges
+            let slice_ranges = match num_spatial_dims {
+                1 => {
+                    let p_begin = pads_begin[0];
+                    let shape = image_shape[0];
+                    let end = p_begin + shape;
+                    quote! { [0..batch_size, 0..channels, #p_begin..#end] }
+                }
+                2 => {
+                    let h_begin = pads_begin[0];
+                    let h_shape = image_shape[0];
+                    let h_end = h_begin + h_shape;
 
-                quote! { [0..batch_size, 0..channels, #h_begin..#h_end, #w_begin..#w_end] }
+                    let w_begin = pads_begin[1];
+                    let w_shape = image_shape[1];
+                    let w_end = w_begin + w_shape;
+
+                    quote! { [0..batch_size, 0..channels, #h_begin..#h_end, #w_begin..#w_end] }
+                }
+                _ => unreachable!("Unsupported dimensions checked by infer_types"),
+            };
+
+            quote! {
+                 let canvas = canvas.reshape(#padded_shape_tokens);
+                 canvas.slice(#slice_ranges)
             }
-            _ => panic!("Unsupported dimensions"),
         };
 
         // Output image shape for result (validation/verification)
@@ -164,10 +197,15 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
 
                 // 2. Create output canvas (Padded, Flattened)
                 // Shape: [N, C, PaddedTotal]
-                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, #padded_size], &device);
+                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, #padded_size], &device);
 
                 // 3. Create Indices Tensor [BlockProd * Windows]
-                let indices = Tensor::<B, 1, Int>::from_data(#indices_tokens, &device);
+                // We compute the indices at runtime using arange and broadcasting to avoid embedding large literal arrays.
+                // Index = (window_pos * stride + block_pos * dilation) * stride_accumulator
+
+                let indices = {
+                    #indices_computation_code
+                };
 
                 // 4. Expand indices to [N, C, BlockProd * Windows]
                 let indices_expanded = indices
@@ -178,9 +216,8 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
                 let canvas = canvas.scatter(2, indices_expanded, input_flat, burn::tensor::IndexingUpdateOp::Add);
 
                 // 6. Reshape to Padded Spatial and Crop
-                let canvas = canvas.reshape(#padded_shape_tokens);
-
-                canvas.slice(#slice_ranges)
+                // If all pads are zero, we can skip the slice.
+                #slice_logic
             };
         }
     }
@@ -215,82 +252,24 @@ mod tests {
                 let channels = col_channels / 4usize;
                 let device = input.device();
                 let input_flat = input.reshape([batch_size, channels, 64usize]);
-                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, 25usize], &device);
-                let indices = Tensor::<
-                    B,
-                    1,
-                    Int,
-                >::from_data(
-                    TensorData::from(
-                        &[
-                            0i64,
-                            1i64,
-                            2i64,
-                            3i64,
-                            5i64,
-                            6i64,
-                            7i64,
-                            8i64,
-                            10i64,
-                            11i64,
-                            12i64,
-                            13i64,
-                            15i64,
-                            16i64,
-                            17i64,
-                            18i64,
-                            1i64,
-                            2i64,
-                            3i64,
-                            4i64,
-                            6i64,
-                            7i64,
-                            8i64,
-                            9i64,
-                            11i64,
-                            12i64,
-                            13i64,
-                            14i64,
-                            16i64,
-                            17i64,
-                            18i64,
-                            19i64,
-                            5i64,
-                            6i64,
-                            7i64,
-                            8i64,
-                            10i64,
-                            11i64,
-                            12i64,
-                            13i64,
-                            15i64,
-                            16i64,
-                            17i64,
-                            18i64,
-                            20i64,
-                            21i64,
-                            22i64,
-                            23i64,
-                            6i64,
-                            7i64,
-                            8i64,
-                            9i64,
-                            11i64,
-                            12i64,
-                            13i64,
-                            14i64,
-                            16i64,
-                            17i64,
-                            18i64,
-                            19i64,
-                            21i64,
-                            22i64,
-                            23i64,
-                            24i64,
-                        ] as &[i64],
-                    ),
-                    &device,
-                );
+                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, 25usize], &device);
+                let indices = {
+                    let block_offsets = (Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                        .mul_scalar(1i64)
+                        .reshape([1usize, 2usize])
+                        + Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                            .mul_scalar(5i64)
+                            .reshape([2usize, 1usize]))
+                        .reshape([4usize, 1]);
+                    let window_offsets = (Tensor::<B, 1, Int>::arange(0..4usize as i64, &device)
+                        .mul_scalar(1i64)
+                        .reshape([1usize, 4usize])
+                        + Tensor::<B, 1, Int>::arange(0..4usize as i64, &device)
+                            .mul_scalar(5i64)
+                            .reshape([4usize, 1usize]))
+                        .reshape([1, 16usize]);
+                    (block_offsets + window_offsets).reshape([-1])
+                };
                 let indices_expanded = indices
                     .reshape([1, 1, -1])
                     .expand([batch_size, channels, 64usize]);
@@ -301,8 +280,7 @@ mod tests {
                         input_flat,
                         burn::tensor::IndexingUpdateOp::Add,
                     );
-                let canvas = canvas.reshape([batch_size, channels, 5usize, 5usize]);
-                canvas.slice([0..batch_size, 0..channels, 0usize..5usize, 0usize..5usize])
+                canvas.reshape([batch_size, channels, 5usize, 5usize])
             };
             output
         }
@@ -331,162 +309,24 @@ mod tests {
                 let channels = col_channels / 4usize;
                 let device = input.device();
                 let input_flat = input.reshape([batch_size, channels, 144usize]);
-                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, 49usize], &device);
-                let indices = Tensor::<
-                    B,
-                    1,
-                    Int,
-                >::from_data(
-                    TensorData::from(
-                        &[
-                            0i64,
-                            1i64,
-                            2i64,
-                            3i64,
-                            4i64,
-                            5i64,
-                            7i64,
-                            8i64,
-                            9i64,
-                            10i64,
-                            11i64,
-                            12i64,
-                            14i64,
-                            15i64,
-                            16i64,
-                            17i64,
-                            18i64,
-                            19i64,
-                            21i64,
-                            22i64,
-                            23i64,
-                            24i64,
-                            25i64,
-                            26i64,
-                            28i64,
-                            29i64,
-                            30i64,
-                            31i64,
-                            32i64,
-                            33i64,
-                            35i64,
-                            36i64,
-                            37i64,
-                            38i64,
-                            39i64,
-                            40i64,
-                            1i64,
-                            2i64,
-                            3i64,
-                            4i64,
-                            5i64,
-                            6i64,
-                            8i64,
-                            9i64,
-                            10i64,
-                            11i64,
-                            12i64,
-                            13i64,
-                            15i64,
-                            16i64,
-                            17i64,
-                            18i64,
-                            19i64,
-                            20i64,
-                            22i64,
-                            23i64,
-                            24i64,
-                            25i64,
-                            26i64,
-                            27i64,
-                            29i64,
-                            30i64,
-                            31i64,
-                            32i64,
-                            33i64,
-                            34i64,
-                            36i64,
-                            37i64,
-                            38i64,
-                            39i64,
-                            40i64,
-                            41i64,
-                            7i64,
-                            8i64,
-                            9i64,
-                            10i64,
-                            11i64,
-                            12i64,
-                            14i64,
-                            15i64,
-                            16i64,
-                            17i64,
-                            18i64,
-                            19i64,
-                            21i64,
-                            22i64,
-                            23i64,
-                            24i64,
-                            25i64,
-                            26i64,
-                            28i64,
-                            29i64,
-                            30i64,
-                            31i64,
-                            32i64,
-                            33i64,
-                            35i64,
-                            36i64,
-                            37i64,
-                            38i64,
-                            39i64,
-                            40i64,
-                            42i64,
-                            43i64,
-                            44i64,
-                            45i64,
-                            46i64,
-                            47i64,
-                            8i64,
-                            9i64,
-                            10i64,
-                            11i64,
-                            12i64,
-                            13i64,
-                            15i64,
-                            16i64,
-                            17i64,
-                            18i64,
-                            19i64,
-                            20i64,
-                            22i64,
-                            23i64,
-                            24i64,
-                            25i64,
-                            26i64,
-                            27i64,
-                            29i64,
-                            30i64,
-                            31i64,
-                            32i64,
-                            33i64,
-                            34i64,
-                            36i64,
-                            37i64,
-                            38i64,
-                            39i64,
-                            40i64,
-                            41i64,
-                            43i64,
-                            44i64,
-                            45i64,
-                            46i64,
-                            47i64,
-                            48i64,
-                        ] as &[i64],
-                    ),
-                    &device,
-                );
+                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, 49usize], &device);
+                let indices = {
+                    let block_offsets = (Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                        .mul_scalar(1i64)
+                        .reshape([1usize, 2usize])
+                        + Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                            .mul_scalar(7i64)
+                            .reshape([2usize, 1usize]))
+                        .reshape([4usize, 1]);
+                    let window_offsets = (Tensor::<B, 1, Int>::arange(0..6usize as i64, &device)
+                        .mul_scalar(1i64)
+                        .reshape([1usize, 6usize])
+                        + Tensor::<B, 1, Int>::arange(0..6usize as i64, &device)
+                            .mul_scalar(7i64)
+                            .reshape([6usize, 1usize]))
+                        .reshape([1, 36usize]);
+                    (block_offsets + window_offsets).reshape([-1])
+                };
                 let indices_expanded = indices
                     .reshape([1, 1, -1])
                     .expand([batch_size, channels, 144usize]);
@@ -527,54 +367,24 @@ mod tests {
                 let channels = col_channels / 4usize;
                 let device = input.device();
                 let input_flat = input.reshape([batch_size, channels, 36usize]);
-                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, 36usize], &device);
-                let indices = Tensor::<
-                    B,
-                    1,
-                    Int,
-                >::from_data(
-                    TensorData::from(
-                        &[
-                            0i64,
-                            2i64,
-                            4i64,
-                            12i64,
-                            14i64,
-                            16i64,
-                            24i64,
-                            26i64,
-                            28i64,
-                            1i64,
-                            3i64,
-                            5i64,
-                            13i64,
-                            15i64,
-                            17i64,
-                            25i64,
-                            27i64,
-                            29i64,
-                            6i64,
-                            8i64,
-                            10i64,
-                            18i64,
-                            20i64,
-                            22i64,
-                            30i64,
-                            32i64,
-                            34i64,
-                            7i64,
-                            9i64,
-                            11i64,
-                            19i64,
-                            21i64,
-                            23i64,
-                            31i64,
-                            33i64,
-                            35i64,
-                        ] as &[i64],
-                    ),
-                    &device,
-                );
+                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, 36usize], &device);
+                let indices = {
+                    let block_offsets = (Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                        .mul_scalar(1i64)
+                        .reshape([1usize, 2usize])
+                        + Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                            .mul_scalar(6i64)
+                            .reshape([2usize, 1usize]))
+                        .reshape([4usize, 1]);
+                    let window_offsets = (Tensor::<B, 1, Int>::arange(0..3usize as i64, &device)
+                        .mul_scalar(2i64)
+                        .reshape([1usize, 3usize])
+                        + Tensor::<B, 1, Int>::arange(0..3usize as i64, &device)
+                            .mul_scalar(12i64)
+                            .reshape([3usize, 1usize]))
+                        .reshape([1, 9usize]);
+                    (block_offsets + window_offsets).reshape([-1])
+                };
                 let indices_expanded = indices
                     .reshape([1, 1, -1])
                     .expand([batch_size, channels, 36usize]);
@@ -585,8 +395,7 @@ mod tests {
                         input_flat,
                         burn::tensor::IndexingUpdateOp::Add,
                     );
-                let canvas = canvas.reshape([batch_size, channels, 6usize, 6usize]);
-                canvas.slice([0..batch_size, 0..channels, 0usize..6usize, 0usize..6usize])
+                canvas.reshape([batch_size, channels, 6usize, 6usize])
             };
             output
         }
@@ -615,54 +424,24 @@ mod tests {
                 let channels = col_channels / 4usize;
                 let device = input.device();
                 let input_flat = input.reshape([batch_size, channels, 36usize]);
-                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, 25usize], &device);
-                let indices = Tensor::<
-                    B,
-                    1,
-                    Int,
-                >::from_data(
-                    TensorData::from(
-                        &[
-                            0i64,
-                            1i64,
-                            2i64,
-                            5i64,
-                            6i64,
-                            7i64,
-                            10i64,
-                            11i64,
-                            12i64,
-                            2i64,
-                            3i64,
-                            4i64,
-                            7i64,
-                            8i64,
-                            9i64,
-                            12i64,
-                            13i64,
-                            14i64,
-                            10i64,
-                            11i64,
-                            12i64,
-                            15i64,
-                            16i64,
-                            17i64,
-                            20i64,
-                            21i64,
-                            22i64,
-                            12i64,
-                            13i64,
-                            14i64,
-                            17i64,
-                            18i64,
-                            19i64,
-                            22i64,
-                            23i64,
-                            24i64,
-                        ] as &[i64],
-                    ),
-                    &device,
-                );
+                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, 25usize], &device);
+                let indices = {
+                    let block_offsets = (Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                        .mul_scalar(2i64)
+                        .reshape([1usize, 2usize])
+                        + Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                            .mul_scalar(10i64)
+                            .reshape([2usize, 1usize]))
+                        .reshape([4usize, 1]);
+                    let window_offsets = (Tensor::<B, 1, Int>::arange(0..3usize as i64, &device)
+                        .mul_scalar(1i64)
+                        .reshape([1usize, 3usize])
+                        + Tensor::<B, 1, Int>::arange(0..3usize as i64, &device)
+                            .mul_scalar(5i64)
+                            .reshape([3usize, 1usize]))
+                        .reshape([1, 9usize]);
+                    (block_offsets + window_offsets).reshape([-1])
+                };
                 let indices_expanded = indices
                     .reshape([1, 1, -1])
                     .expand([batch_size, channels, 36usize]);
@@ -673,8 +452,7 @@ mod tests {
                         input_flat,
                         burn::tensor::IndexingUpdateOp::Add,
                     );
-                let canvas = canvas.reshape([batch_size, channels, 5usize, 5usize]);
-                canvas.slice([0..batch_size, 0..channels, 0usize..5usize, 0usize..5usize])
+                canvas.reshape([batch_size, channels, 5usize, 5usize])
             };
             output
         }
@@ -703,42 +481,18 @@ mod tests {
                 let channels = col_channels / 3usize;
                 let device = input.device();
                 let input_flat = input.reshape([batch_size, channels, 24usize]);
-                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, 10usize], &device);
-                let indices = Tensor::<
-                    B,
-                    1,
-                    Int,
-                >::from_data(
-                    TensorData::from(
-                        &[
-                            0i64,
-                            1i64,
-                            2i64,
-                            3i64,
-                            4i64,
-                            5i64,
-                            6i64,
-                            7i64,
-                            1i64,
-                            2i64,
-                            3i64,
-                            4i64,
-                            5i64,
-                            6i64,
-                            7i64,
-                            8i64,
-                            2i64,
-                            3i64,
-                            4i64,
-                            5i64,
-                            6i64,
-                            7i64,
-                            8i64,
-                            9i64,
-                        ] as &[i64],
-                    ),
-                    &device,
-                );
+                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, 10usize], &device);
+                let indices = {
+                    let block_offsets = (Tensor::<B, 1, Int>::arange(0..3usize as i64, &device)
+                        .mul_scalar(1i64)
+                        .reshape([3usize]))
+                        .reshape([3usize, 1]);
+                    let window_offsets = (Tensor::<B, 1, Int>::arange(0..8usize as i64, &device)
+                        .mul_scalar(1i64)
+                        .reshape([8usize]))
+                        .reshape([1, 8usize]);
+                    (block_offsets + window_offsets).reshape([-1])
+                };
                 let indices_expanded = indices
                     .reshape([1, 1, -1])
                     .expand([batch_size, channels, 24usize]);
@@ -749,8 +503,7 @@ mod tests {
                         input_flat,
                         burn::tensor::IndexingUpdateOp::Add,
                     );
-                let canvas = canvas.reshape([batch_size, channels, 10usize]);
-                canvas.slice([0..batch_size, 0..channels, 0usize..10usize])
+                canvas.reshape([batch_size, channels, 10usize])
             };
             output
         }
