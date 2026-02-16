@@ -64,6 +64,7 @@ pub mod bitwiseor;
 pub mod bitwisexor;
 pub mod cast;
 pub mod clip;
+pub mod col2im;
 pub mod comparison;
 pub mod concat;
 pub mod constant;

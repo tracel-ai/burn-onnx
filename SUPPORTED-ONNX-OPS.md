@@ -38,7 +38,7 @@ functionality.
 | [Celu][25]                       | ✅             | ✅           |
 | [CenterCropPad][26]              | ❌             | ❌           |
 | [Clip][27]                       | ✅             | ✅           |
-| [Col2Im][28]                     | ❌             | ❌           |
+| [Col2Im][28]                     | ✅             | ✅           |
 | [Compress][29]                   | ❌             | ❌           |
 | [Concat][30]                     | ✅             | ✅           |
 | [ConcatFromSequence][31]         | ❌             | ❌           |
