@@ -35,7 +35,7 @@ quote = "1.0.42"
 rust-format = "0.3.4"
 tracing-core = { version = "0.1.36", default-features = false }
 tracing-subscriber = "0.3.20"
-syn = { version = "2.0.111", features = ["full", "extra-traits"] }
+syn = { version = "2.0.116", features = ["full", "extra-traits"] }
 
 # onnx-ir
 half = { version = "2.7.1", features = [
