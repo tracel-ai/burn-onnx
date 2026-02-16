@@ -5889,9 +5889,9 @@ dependencies = [
 
 [[package]]
 name = "tracel-xtask"
-version = "4.13.1"
+version = "4.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd0f68a090f9a13fdb729ac9bf08e8d2befc3a225dc4ac8778bb7f91dc67da95"
+checksum = "334b88ee2c99f02b7502ed5e815a159ad634f841c6cba7b5e26c1590210d8741"
 dependencies = [
  "anyhow",
  "clap",
@@ -5918,9 +5918,9 @@ dependencies = [
 
 [[package]]
 name = "tracel-xtask-macros"
-version = "4.13.1"
+version = "4.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59cdb8a4a093b31b68cfbe526534d1f89387fb8044209d79ef47966fc892ab2b"
+checksum = "37b4723090451938b540207f10025aa3e18e293c994204159014aa678d9b2f2f"
 dependencies = [
  "heck",
  "proc-macro2",
