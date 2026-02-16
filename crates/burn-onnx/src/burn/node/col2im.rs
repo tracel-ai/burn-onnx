@@ -145,7 +145,7 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
                 let w_pad = padded_dims[1];
                 quote! { [batch_size, channels, #h_pad, #w_pad] }
             }
-            _ => panic!("Unsupported dimensions"),
+            _ => unreachable!("Unsupported dimensions checked by infer_types"),
         };
 
         let has_padding = pads_begin.iter().any(|&p| p != 0) || pads_end.iter().any(|&p| p != 0);
