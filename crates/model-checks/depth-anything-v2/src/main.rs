@@ -81,18 +81,15 @@ fn main() {
 
     // Get the input tensor
     let pixel_values = test_data.pixel_values.val();
-    let pixel_values_shape = pixel_values.shape();
-    println!(
-        "  Loaded pixel_values with shape: {:?}",
-        pixel_values_shape.dims
-    );
+    let pixel_values_shape: [usize; 4] = pixel_values.shape().dims();
+    println!("  Loaded pixel_values with shape: {:?}", pixel_values_shape);
 
     // Get the reference output
     let reference_depth = test_data.predicted_depth.val();
-    let ref_depth_shape = reference_depth.shape();
+    let ref_depth_shape: [usize; 3] = reference_depth.shape().dims();
     println!(
         "  Loaded reference predicted_depth with shape: {:?}",
-        ref_depth_shape.dims
+        ref_depth_shape
     );
 
     // Run inference
@@ -105,24 +102,19 @@ fn main() {
     println!("  Inference completed in {:.2?}", inference_time);
 
     // Display output shape
-    let depth_shape = predicted_depth.shape();
+    let depth_shape: [usize; 3] = predicted_depth.shape().dims();
     println!("\n  Model output shapes:");
-    println!("    predicted_depth: {:?}", depth_shape.dims);
+    println!("    predicted_depth: {:?}", depth_shape);
 
-    if depth_shape.dims != ref_depth_shape.dims {
+    if depth_shape != ref_depth_shape {
         eprintln!(
             "FAILED: Expected predicted_depth shape {:?}, got {:?}",
-            ref_depth_shape.dims, depth_shape.dims
+            ref_depth_shape, depth_shape
         );
         std::process::exit(1);
     }
-    println!("  Shape matches expected: {:?}", ref_depth_shape.dims);
+    println!("  Shape matches expected: {:?}", ref_depth_shape);
 
-    // Compare outputs with explicit error metrics.
-    // Known mismatch: Burn lacks align_corners support in InterpolateOptions,
-    // so the 5 Resize nodes in the DPT head use half_pixel instead of
-    // align_corners, causing a systematic offset.
-    // See: https://github.com/tracel-ai/burn/issues/4510
     println!("\nComparing model outputs with reference data...");
 
     let diff = predicted_depth - reference_depth;
@@ -133,22 +125,19 @@ fn main() {
     println!("  Maximum absolute difference: {:.6}", max_diff);
     println!("  Mean absolute difference: {:.6}", mean_diff);
 
-    // Guard against regressions: if error grows beyond the expected
-    // align_corners mismatch, something else broke.
-    let max_diff_threshold = 2.0;
-    let mean_diff_threshold = 1.0;
+    let max_diff_threshold = 1e-3;
+    let mean_diff_threshold = 1e-4;
     let validation = if max_diff <= max_diff_threshold && mean_diff <= mean_diff_threshold {
         println!(
-            "  Within expected error bounds (max<{}, mean<{}) [align_corners mismatch]",
+            "  Within tolerance (max<{}, mean<{})",
             max_diff_threshold, mean_diff_threshold
         );
-        "Expected mismatch (align_corners not yet supported)"
+        "Passed"
     } else {
         eprintln!(
-            "  EXCEEDED expected error bounds (max<{}, mean<{})",
+            "  EXCEEDED tolerance (max<{}, mean<{})",
             max_diff_threshold, mean_diff_threshold
         );
-        eprintln!("  This indicates a regression beyond the known align_corners issue.");
         std::process::exit(1);
     };
 

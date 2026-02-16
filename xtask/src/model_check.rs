@@ -87,6 +87,7 @@ const MODELS: &[ModelInfo] = &[
         dir: "depth-anything-v2",
         name: "Depth-Anything-v2",
         env: None,
+        blocked: false,
     },
     ModelInfo {
         dir: "albert",

@@ -7,8 +7,8 @@ publish = false
 [workspace]
 
 [workspace.dependencies]
-burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "bd991fe52c94faef0cb52dcc92816323a053ad1c" }
-burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "bd991fe52c94faef0cb52dcc92816323a053ad1c" }
+burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "8bfa8f753bcccbbe59c489c9885a19ab4dd0c8f0" }
+burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "8bfa8f753bcccbbe59c489c9885a19ab4dd0c8f0" }
 
 [features]
 default = ["ndarray"]

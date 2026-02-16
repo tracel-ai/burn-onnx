@@ -129,21 +129,31 @@ fn try_match_sdpa(
 
     // 4. Extract Q and K tensors
     // 4a. Standard: K comes through Transpose that swaps last two dims
-    let (q_arg, k_arg, extra_replacements) =
-        if let Some((q, k)) = try_standard_k_pattern(qk_matmul, nodes, producer, consumer) {
+    let (q_arg, k_arg, extra_replacements) = if let Some((q, k, q_prescale)) =
+        try_standard_k_pattern(qk_matmul, nodes, producer, consumer)
+    {
+        // Q-pre-scaled pattern (e.g. DINOv2): Mul(Q, scale) -> MatMul(Q_scaled, K^T)
+        // Only use Q pre-scale when no post-scale was already found
+        if scale_value.is_none()
+            && let Some(prescale) = q_prescale
+        {
+            scale_value = Some(prescale.scale);
+            (prescale.q_real, k, vec![])
+        } else {
             (q, k, vec![])
         }
-        // 4b. Pre-scaled: both inputs from Mul(same_scalar), K has combined transpose
-        else if let Some((q, k, prescale, extras)) =
-            try_prescaled_qk_pattern(qk_matmul, qk_matmul_idx, nodes, producer, consumer)
-        {
-            if prescale.is_some() {
-                scale_value = prescale;
-            }
-            (q, k, extras)
-        } else {
-            return None;
-        };
+    }
+    // 4b. Pre-scaled: both inputs from Mul(same_scalar), K has combined transpose
+    else if let Some((q, k, prescale, extras)) =
+        try_prescaled_qk_pattern(qk_matmul, qk_matmul_idx, nodes, producer, consumer)
+    {
+        if prescale.is_some() {
+            scale_value = prescale;
+        }
+        (q, k, extras)
+    } else {
+        return None;
+    };
 
     // Validate Q, K are rank 4
     if q_arg.ty.rank() != 4 || k_arg.ty.rank() != 4 {
@@ -354,14 +364,21 @@ fn is_last_two_dims_swap(transpose: &RawNode) -> Option<bool> {
     Some(true)
 }
 
+struct QPrescale {
+    q_real: Argument,
+    scale: f64,
+}
+
 /// Standard pattern: K comes through Transpose that swaps last two dims.
-/// Returns (Q_arg, K_arg) where K is from before the transpose.
+/// Returns (Q_arg, K_arg, q_prescale) where K is from before the transpose.
+/// Q_arg is always the direct MatMul input (possibly Q_scaled). If Q comes
+/// from Mul(Q_real, constant), QPrescale provides the unwrapped Q and scale.
 fn try_standard_k_pattern(
     qk_matmul: &RawNode,
     nodes: &[RawNode],
     producer: &HashMap<String, usize>,
     consumer: &HashMap<String, Vec<usize>>,
-) -> Option<(Argument, Argument)> {
+) -> Option<(Argument, Argument, Option<QPrescale>)> {
     let k_transpose_idx = *producer.get(&qk_matmul.inputs[1].name)?;
     let k_transpose = &nodes[k_transpose_idx];
     if k_transpose.node_type != NodeType::Transpose {
@@ -373,7 +390,29 @@ fn try_standard_k_pattern(
     if !is_single_use(&k_transpose.outputs[0].name, consumer) {
         return None;
     }
-    Some((qk_matmul.inputs[0].clone(), k_transpose.inputs[0].clone()))
+
+    let q_input = &qk_matmul.inputs[0];
+    let k_arg = k_transpose.inputs[0].clone();
+
+    // Check if Q comes from Mul(Q_real, scale_constant), i.e. Q-pre-scaled pattern.
+    // DINOv2 scales Q by 1/sqrt(head_dim) before the QK matmul.
+    let mut q_prescale = None;
+    if let Some(&q_mul_idx) = producer.get(&q_input.name) {
+        let q_mul = &nodes[q_mul_idx];
+        if q_mul.node_type == NodeType::Mul
+            && is_single_use(&q_mul.outputs[0].name, consumer)
+            && let Some((_, scale)) = try_extract_scale(q_mul, consumer)
+        {
+            let q_real = if q_mul.inputs[1].value().is_some() {
+                q_mul.inputs[0].clone()
+            } else {
+                q_mul.inputs[1].clone()
+            };
+            q_prescale = Some(QPrescale { q_real, scale });
+        }
+    }
+
+    Some((q_input.clone(), k_arg, q_prescale))
 }
 
 /// Pre-scaled pattern: both QK MatMul inputs come from Mul nodes that share
@@ -1151,5 +1190,81 @@ mod tests {
             !result.iter().any(|n| n.node_type == NodeType::Attention),
             "should not match when K transpose perm equals Q transpose perm"
         );
+    }
+
+    /// Build Q-pre-scaled SDPA (DINOv2 pattern):
+    /// Mul(Q, scale) -> MatMul(Q_scaled, K^T) -> Softmax(-1) -> MatMul(scores, V)
+    fn build_q_prescaled_sdpa(scale: f32) -> Vec<RawNode> {
+        vec![
+            transpose_node("transpose_k", "k", "k_t", vec![0, 1, 3, 2]),
+            binary_node(
+                "mul_q",
+                NodeType::Mul,
+                tensor4("q"),
+                const_f32("scale", scale),
+                "q_scaled",
+            ),
+            matmul_node("qk_matmul", "q_scaled", "k_t", "qk"),
+            softmax_node("softmax", "qk", "attn_weights", -1),
+            matmul_node("sv_matmul", "attn_weights", "v", "output"),
+        ]
+    }
+
+    #[test]
+    fn test_q_prescaled_sdpa() {
+        let nodes = build_q_prescaled_sdpa(0.125);
+        let result = coalesce_attention(nodes);
+
+        let attention = result
+            .iter()
+            .find(|n| n.node_type == NodeType::Attention)
+            .expect("should produce an Attention node");
+
+        // Q should be the original Q, not Q_scaled
+        assert_eq!(attention.inputs[0].name, "q");
+        assert_eq!(attention.inputs[1].name, "k");
+        assert_eq!(attention.inputs[2].name, "v");
+
+        // Scale should be extracted from the Mul on Q
+        let scale = attention.attrs.get("scale").unwrap().clone().into_f32();
+        assert!((scale - 0.125).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_q_prescaled_sdpa_with_post_scale_prefers_post() {
+        // If there's both Q pre-scaling and post-scaling, the post-scale takes precedence
+        let nodes = vec![
+            transpose_node("transpose_k", "k", "k_t", vec![0, 1, 3, 2]),
+            binary_node(
+                "mul_q",
+                NodeType::Mul,
+                tensor4("q"),
+                const_f32("q_scale", 0.125),
+                "q_scaled",
+            ),
+            matmul_node("qk_matmul", "q_scaled", "k_t", "qk"),
+            binary_node(
+                "div_scale",
+                NodeType::Div,
+                tensor4("qk"),
+                const_f32("post_scale", 8.0),
+                "qk_scaled",
+            ),
+            softmax_node("softmax", "qk_scaled", "attn_weights", -1),
+            matmul_node("sv_matmul", "attn_weights", "v", "output"),
+        ];
+
+        let result = coalesce_attention(nodes);
+        let attention = result
+            .iter()
+            .find(|n| n.node_type == NodeType::Attention)
+            .expect("should produce an Attention node");
+
+        // When post-scale exists, Q stays as Q_scaled (pre-scale is NOT extracted)
+        assert_eq!(attention.inputs[0].name, "q_scaled");
+
+        // Post-scale takes precedence: Div by 8.0 -> scale = 0.125
+        let scale = attention.attrs.get("scale").unwrap().clone().into_f32();
+        assert!((scale - 0.125).abs() < 1e-6);
     }
 }
