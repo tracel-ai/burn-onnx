@@ -20,7 +20,7 @@ mod tests {
         let output = model.forward();
 
         // Verify output shape is correct (3-element vector)
-        assert_eq!(output.shape().dims, [3]);
+        assert_eq!(output.dims(), [3]);
 
         // Verify the constant values [1.0, 2.0, 3.0] are preserved
         let expected = TensorData::from([1.0f32, 2.0, 3.0]);
@@ -46,7 +46,7 @@ mod tests {
         let output = model.forward(input);
 
         // Verify output shape is correct (2x3)
-        assert_eq!(output.shape().dims, [2, 3]);
+        assert_eq!(output.dims(), [2, 3]);
 
         // Verify the Identity passthrough was removed and Add operation works
         // Input [[1,2,3],[4,5,6]] + constant [[1,1,1],[1,1,1]] = [[2,3,4],[5,6,7]]
@@ -72,7 +72,7 @@ mod tests {
         let output = model.forward(input);
 
         // Verify output shape is correct (2x3)
-        assert_eq!(output.shape().dims, [2, 3]);
+        assert_eq!(output.dims(), [2, 3]);
 
         // Verify the chain of Identity nodes was removed and ReLU works
         // ReLU of [[1,-2,3],[-4,5,-6]] = [[1,0,3],[0,5,0]]
@@ -102,7 +102,7 @@ mod tests {
         let output = model.forward(input.clone());
 
         // Verify output shape is correct (3x4)
-        assert_eq!(output.shape().dims, [3, 4]);
+        assert_eq!(output.dims(), [3, 4]);
 
         // Verify the Identity operation passes through the input unchanged
         // Since Identity should be removed, this should be a direct passthrough

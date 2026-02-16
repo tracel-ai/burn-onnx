@@ -21,7 +21,7 @@ impl NodeCodegen for onnx_ir::flatten::FlattenNode {
             let axis = self.config.axis.to_tokens();
             quote! {
                 let #output = {
-                    let leading_dim = #input.shape().dims[..#axis].iter().product::<usize>() as i32;
+                    let leading_dim = #input.shape()[..#axis].iter().product::<usize>() as i32;
                     #input.reshape::<2, _>([leading_dim, -1])
                 };
             }
@@ -65,7 +65,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 2> {
             let output = {
-                let leading_dim = input.shape().dims[..1].iter().product::<usize>() as i32;
+                let leading_dim = input.shape()[..1].iter().product::<usize>() as i32;
                 input.reshape::<2, _>([leading_dim, -1])
             };
             output
@@ -80,7 +80,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 2> {
             let output = {
-                let leading_dim = input.shape().dims[..2].iter().product::<usize>() as i32;
+                let leading_dim = input.shape()[..2].iter().product::<usize>() as i32;
                 input.reshape::<2, _>([leading_dim, -1])
             };
             output

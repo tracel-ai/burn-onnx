@@ -24,7 +24,7 @@ mod tests {
         let output = model.forward(input);
 
         // Verify output shape is correct (2x3)
-        assert_eq!(output.shape().dims, [2, 3]);
+        assert_eq!(output.dims(), [2, 3]);
 
         // Verify the addition worked correctly
         // Input [[1,1,1],[1,1,1]] + initializer [[1,2,3],[4,5,6]] = [[2,3,4],[5,6,7]]

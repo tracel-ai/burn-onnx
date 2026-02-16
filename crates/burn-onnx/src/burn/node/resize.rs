@@ -41,6 +41,7 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
             ResizeMode::Linear => quote! { burn::nn::interpolate::InterpolateMode::Linear },
             ResizeMode::Cubic => quote! { burn::nn::interpolate::InterpolateMode::Cubic },
         };
+        let align_corners = self.config.coordinate_transformation_mode == "align_corners";
 
         if input_rank == 3 {
             let size = match &self.config.sizes {
@@ -67,6 +68,7 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                         .with_output_size(#size)
                         .with_scale_factor(#scale_factor)
                         .with_mode(#mode)
+                        .with_align_corners(#align_corners)
                         .init();
                 },
             ))
@@ -97,6 +99,7 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                         .with_output_size(#size)
                         .with_scale_factor(#scale_factor)
                         .with_mode(#mode)
+                        .with_align_corners(#align_corners)
                         .init();
                 },
             ))
@@ -139,6 +142,7 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                 ResizeMode::Linear => quote! { burn::tensor::ops::InterpolateMode::Bilinear },
                 ResizeMode::Cubic => quote! { burn::tensor::ops::InterpolateMode::Bicubic },
             };
+            let align_corners = self.config.coordinate_transformation_mode == "align_corners";
 
             // Handle runtime sizes or scales input
             // Per ONNX spec: either sizes or scales must be provided (mutually exclusive)
@@ -157,7 +161,7 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                                 burn::tensor::module::interpolate(
                                     #input,
                                     [target_height, target_width],
-                                    burn::tensor::ops::InterpolateOptions::new(#mode)
+                                    burn::tensor::ops::InterpolateOptions::new(#mode).with_align_corners(#align_corners)
                                 )
                             };
                         }
@@ -173,7 +177,7 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                                 burn::tensor::module::interpolate(
                                     #input,
                                     [target_height, target_width],
-                                    burn::tensor::ops::InterpolateOptions::new(#mode)
+                                    burn::tensor::ops::InterpolateOptions::new(#mode).with_align_corners(#align_corners)
                                 )
                             };
                         }
@@ -197,7 +201,7 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                                 burn::tensor::module::interpolate(
                                     #input,
                                     [target_height, target_width],
-                                    burn::tensor::ops::InterpolateOptions::new(#mode)
+                                    burn::tensor::ops::InterpolateOptions::new(#mode).with_align_corners(#align_corners)
                                 )
                             };
                         }
@@ -215,7 +219,7 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                                 burn::tensor::module::interpolate(
                                     #input,
                                     [target_height, target_width],
-                                    burn::tensor::ops::InterpolateOptions::new(#mode)
+                                    burn::tensor::ops::InterpolateOptions::new(#mode).with_align_corners(#align_corners)
                                 )
                             };
                         }
@@ -469,8 +473,9 @@ mod tests {
                     input,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Nearest,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Nearest,
+                        )
+                        .with_align_corners(false),
                 )
             };
             output
@@ -505,8 +510,9 @@ mod tests {
                     img,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Bilinear,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Bilinear,
+                        )
+                        .with_align_corners(false),
                 )
             };
             resized_img
@@ -541,11 +547,52 @@ mod tests {
                     source,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Bicubic,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Bicubic,
+                        )
+                        .with_align_corners(false),
                 )
             };
             dest
+        }
+        ");
+    }
+
+    // ==================== align_corners Test ====================
+
+    #[test]
+    fn test_resize_runtime_shape_align_corners() {
+        let config = ResizeConfig {
+            mode: ResizeMode::Linear,
+            scales: None,
+            sizes: Some(ResizeSizes::Runtime(RuntimeInputRef {
+                name: "target_size".to_string(),
+                input_index: 1,
+            })),
+            coordinate_transformation_mode: "align_corners".to_string(),
+            ..Default::default()
+        };
+        let node = ResizeNodeBuilder::new("resize_ac")
+            .input_tensor("input", 4, DType::F32)
+            .input_shape("target_size", 4)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<B, 4>, target_size: [i64; 4]) -> Tensor<B, 4> {
+            let output = {
+                let target_height = target_size[2] as usize;
+                let target_width = target_size[3] as usize;
+                burn::tensor::module::interpolate(
+                    input,
+                    [target_height, target_width],
+                    burn::tensor::ops::InterpolateOptions::new(
+                            burn::tensor::ops::InterpolateMode::Bilinear,
+                        )
+                        .with_align_corners(true),
+                )
+            };
+            output
         }
         ");
     }
@@ -581,8 +628,9 @@ mod tests {
                     x,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Nearest,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Nearest,
+                        )
+                        .with_align_corners(false),
                 )
             };
             y
@@ -623,8 +671,9 @@ mod tests {
                     frame,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Bilinear,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Bilinear,
+                        )
+                        .with_align_corners(false),
                 )
             };
             resampled_frame
@@ -665,8 +714,9 @@ mod tests {
                     input_data,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Bicubic,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Bicubic,
+                        )
+                        .with_align_corners(false),
                 )
             };
             output_data
@@ -705,8 +755,9 @@ mod tests {
                     input,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Nearest,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Nearest,
+                        )
+                        .with_align_corners(false),
                 )
             };
             output
@@ -742,8 +793,9 @@ mod tests {
                     image,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Bilinear,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Bilinear,
+                        )
+                        .with_align_corners(false),
                 )
             };
             scaled_image
@@ -779,8 +831,9 @@ mod tests {
                     features,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Bicubic,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Bicubic,
+                        )
+                        .with_align_corners(false),
                 )
             };
             upscaled
@@ -820,8 +873,9 @@ mod tests {
                     x,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Nearest,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Nearest,
+                        )
+                        .with_align_corners(false),
                 )
             };
             y
@@ -859,8 +913,9 @@ mod tests {
                     frame,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Bilinear,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Bilinear,
+                        )
+                        .with_align_corners(false),
                 )
             };
             resized_frame
@@ -902,8 +957,9 @@ mod tests {
                     data,
                     [target_height, target_width],
                     burn::tensor::ops::InterpolateOptions::new(
-                        burn::tensor::ops::InterpolateMode::Bicubic,
-                    ),
+                            burn::tensor::ops::InterpolateMode::Bicubic,
+                        )
+                        .with_align_corners(false),
                 )
             };
             result

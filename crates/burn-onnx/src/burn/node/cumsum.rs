@@ -78,7 +78,7 @@ fn generate_static_cumsum(
                 let #output = {
                     let cumsum_result = #input.cumsum(#axis);
                     let shape = cumsum_result.shape();
-                    let dim_size = shape.dims[#axis];
+                    let dim_size = shape[#axis];
                     if dim_size <= 1 {
                         // For empty or single element, exclusive cumsum is all zeros
                         cumsum_result.zeros_like()
@@ -99,7 +99,7 @@ fn generate_static_cumsum(
                     let cumsum_result = flipped.cumsum(#axis);
                     let cumsum_back = cumsum_result.flip([#axis]);
                     let shape = cumsum_back.shape();
-                    let dim_size = shape.dims[#axis];
+                    let dim_size = shape[#axis];
                     if dim_size <= 1 {
                         // For empty or single element, exclusive reverse cumsum is all zeros
                         cumsum_back.zeros_like()
@@ -151,7 +151,7 @@ fn generate_runtime_cumsum(
                     let axis = #axis_expr;
                     let cumsum_result = #input.cumsum(axis);
                     let shape = cumsum_result.shape();
-                    let dim_size = shape.dims[axis];
+                    let dim_size = shape[axis];
                     if dim_size <= 1 {
                         // For empty or single element, exclusive cumsum is all zeros
                         cumsum_result.zeros_like()
@@ -172,7 +172,7 @@ fn generate_runtime_cumsum(
                     let cumsum_result = flipped.cumsum(axis);
                     let cumsum_back = cumsum_result.flip([axis]);
                     let shape = cumsum_back.shape();
-                    let dim_size = shape.dims[axis];
+                    let dim_size = shape[axis];
                     if dim_size <= 1 {
                         // For empty or single element, exclusive reverse cumsum is all zeros
                         cumsum_back.zeros_like()
@@ -278,7 +278,7 @@ mod tests {
             let output = {
                 let cumsum_result = input.cumsum(0);
                 let shape = cumsum_result.shape();
-                let dim_size = shape.dims[0];
+                let dim_size = shape[0];
                 if dim_size <= 1 {
                     cumsum_result.zeros_like()
                 } else {
@@ -303,7 +303,7 @@ mod tests {
                 let cumsum_result = flipped.cumsum(0);
                 let cumsum_back = cumsum_result.flip([0]);
                 let shape = cumsum_back.shape();
-                let dim_size = shape.dims[0];
+                let dim_size = shape[0];
                 if dim_size <= 1 {
                     cumsum_back.zeros_like()
                 } else {
@@ -338,7 +338,7 @@ mod tests {
             let output = {
                 let cumsum_result = input.cumsum(1);
                 let shape = cumsum_result.shape();
-                let dim_size = shape.dims[1];
+                let dim_size = shape[1];
                 if dim_size <= 1 {
                     cumsum_result.zeros_like()
                 } else {
@@ -386,7 +386,7 @@ mod tests {
                 let axis = axis[0] as usize;
                 let cumsum_result = input.cumsum(axis);
                 let shape = cumsum_result.shape();
-                let dim_size = shape.dims[axis];
+                let dim_size = shape[axis];
                 if dim_size <= 1 {
                     cumsum_result.zeros_like()
                 } else {

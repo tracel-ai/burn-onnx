@@ -363,6 +363,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/resize/resize_1d_nearest_scale.onnx")
         .input("tests/resize/resize_2d_bicubic_scale.onnx")
         .input("tests/resize/resize_2d_bilinear_scale.onnx")
+        .input("tests/resize/resize_2d_bilinear_half_pixel.onnx")
         .input("tests/resize/resize_2d_nearest_scale.onnx")
         .input("tests/resize/resize_with_shape.onnx")
         .input("tests/resize/resize_with_sizes_tensor.onnx")

@@ -4,6 +4,7 @@ include_models!(
     resize_1d_nearest_scale,
     resize_2d_bicubic_scale,
     resize_2d_bilinear_scale,
+    resize_2d_bilinear_half_pixel,
     resize_2d_nearest_scale,
     resize_with_sizes,
     resize_with_shape,
@@ -175,6 +176,37 @@ mod tests {
         ]]])
         .to_data()
         .assert_approx_eq::<FT>(&output.into_data(), burn::tensor::Tolerance::default());
+    }
+
+    #[test]
+    fn resize_with_scales_2d_bilinear_half_pixel() {
+        let device = Default::default();
+        let model: resize_2d_bilinear_half_pixel::Model<TestBackend> =
+            resize_2d_bilinear_half_pixel::Model::new(&device);
+
+        let input = Tensor::<TestBackend, 4>::from_floats(
+            [[[
+                [0.0, 1.0, 2.0, 3.0],
+                [4.0, 5.0, 6.0, 7.0],
+                [8.0, 9.0, 10.0, 11.0],
+                [12.0, 13.0, 14.0, 15.0],
+            ]]],
+            &device,
+        );
+
+        // Scales [1, 1, 2, 2] with coordinate_transformation_mode="half_pixel"
+        let output = model.forward(input);
+        assert_eq!(output.dims(), [1, 1, 8, 8]);
+
+        // Reference from ONNX ReferenceEvaluator: sum = 480.0
+        let output_data = output.to_data();
+        let values: Vec<f32> = output_data.to_vec().unwrap();
+        let output_sum: f32 = values.iter().sum();
+        assert!(480.0f32.approx_eq(output_sum, (1.0e-4, 2)));
+
+        // Verify half_pixel behavior: middle values differ from align_corners
+        assert!(values[0].approx_eq(0.0, (1.0e-4, 2)));
+        assert!(values[1].approx_eq(0.25, (1.0e-2, 2)));
     }
 
     #[test]

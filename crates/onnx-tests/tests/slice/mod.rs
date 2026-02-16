@@ -79,7 +79,7 @@ mod tests {
         let output = model.forward(input, start, end);
 
         let expected_shape = [3, 3];
-        assert_eq!(output.shape().dims, expected_shape);
+        assert_eq!(output.dims(), expected_shape);
     }
 
     #[test]
@@ -126,7 +126,7 @@ mod tests {
         // So it slices axis 1 from 0:2
         // Result should be [2, 2, 6, 8] (NOT [2, 10, 6, 8])
 
-        assert_eq!(output.shape().dims, [2, 2, 6, 8]);
+        assert_eq!(output.dims(), [2, 2, 6, 8]);
 
         // Verify the slice actually took only the first 2 elements of axis 1
         // The output should match input[:, 0:2, :, :]
@@ -153,7 +153,7 @@ mod tests {
         // Slice uses starts=[0, 0], ends=[3, 4], axes=[0, 1]
         // So it slices first two dimensions: [0:3, 0:4, :]
         // Result shape should be [3, 4, 6]
-        assert_eq!(output.shape().dims, [3, 4, 6]);
+        assert_eq!(output.dims(), [3, 4, 6]);
     }
 
     #[test]
@@ -177,7 +177,7 @@ mod tests {
         // Slice uses starts=[1, 2, 3], ends=[5, 4, 7], axes=[0, 1, 2]
         // So it slices: [1:5, 2:4, 3:7, :]
         // Result shape should be [4, 2, 4, 12]
-        assert_eq!(output.shape().dims, [4, 2, 4, 12]);
+        assert_eq!(output.dims(), [4, 2, 4, 12]);
     }
 
     #[test]
@@ -232,7 +232,7 @@ mod tests {
 
         // Expected: input[1:3, 2:5, :] -> shape [2, 3, 6]
         let expected_shape = [2, 3, 6];
-        assert_eq!(output.shape().dims, expected_shape);
+        assert_eq!(output.dims(), expected_shape);
 
         // Verify the data is correctly sliced
         // Expected values: slicing [1:3, 2:5, :] from the reshaped tensor
@@ -266,7 +266,7 @@ mod tests {
         // Slice uses starts=[2, 3], ends=[5, 8], axes=[0, 1]
         // So it slices: [2:5, 3:8, :]
         // Result shape should be [3, 5, 10]
-        assert_eq!(output.shape().dims, [3, 5, 10]);
+        assert_eq!(output.dims(), [3, 5, 10]);
     }
 
     #[test]
@@ -290,7 +290,7 @@ mod tests {
         // Slice uses starts=[2, 3], ends=[6, 10], axes=[0, 1]
         // So it slices: [2:6, 3:10, :]
         // Result shape should be [4, 7, 8]
-        assert_eq!(output.shape().dims, [4, 7, 8]);
+        assert_eq!(output.dims(), [4, 7, 8]);
     }
 
     #[test]
@@ -317,7 +317,7 @@ mod tests {
         // dim0: indices 0,2,4,6,8 (step=2)
         // dim1: indices 1,4,7 (step=3)
         // dim2: all 12 elements but reversed (step=-1)
-        assert_eq!(output.shape().dims, [5, 3, 12]);
+        assert_eq!(output.dims(), [5, 3, 12]);
 
         // Verify some values
         let output_data = output.to_data();
@@ -382,7 +382,7 @@ mod tests {
         // Expected output shape: [2, 2, 6]
         // The model slices axis 1 from index 1 to 3
         // This means taking rows 1 and 2 from each batch
-        assert_eq!(output.shape().dims, [2, 2, 6], "Output shape mismatch");
+        assert_eq!(output.dims(), [2, 2, 6], "Output shape mismatch");
 
         // Expected output: input[:, 1:3, :]
         let expected = Tensor::<TestBackend, 3>::from_floats(
@@ -422,6 +422,6 @@ mod tests {
         let output = model.forward(input);
 
         // Empty slice [2:2] on dimension 0 should produce shape [0, 3]
-        assert_eq!(output.shape().dims, [0, 3]);
+        assert_eq!(output.dims(), [0, 3]);
     }
 }

@@ -78,7 +78,7 @@ impl NodeCodegen for onnx_ir::node::scan_node::ScanNode {
         let first_scan_input = scan_input_sequences[0];
         let scan_axis = self.config.scan_input_axes.first().copied().unwrap_or(0) as usize;
         let first_scan_name = arg_to_ident(first_scan_input);
-        let seq_len_expr = quote! { #first_scan_name.shape().dims[#scan_axis] };
+        let seq_len_expr = quote! { #first_scan_name.shape()[#scan_axis] };
 
         // Initialize state variables
         let mut init_stmts = quote! {};

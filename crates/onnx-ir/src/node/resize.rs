@@ -338,7 +338,7 @@ impl NodeProcessor for ResizeProcessor {
                     });
                 }
                 "coordinate_transformation_mode" => {
-                    // FIXME: Implement conversion to enum and pass CoordinateTransformationMode::HalfPixel
+                    // Stored in config, mapped to align_corners in codegen
                 }
                 "cubic_coeff_a" => {
                     // FIXME: Implement conversion to enum and pass CubicCoeffA::HalfPixel

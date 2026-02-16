@@ -34,6 +34,7 @@ def main() -> None:
         inputs=["input_tensor", "", "", "sizes"],
         outputs=["output"],
         mode="linear",
+        coordinate_transformation_mode="align_corners",
     )
 
     graph_def = helper.make_graph(

@@ -24,7 +24,7 @@ mod tests {
         let output = model.forward(input);
 
         // Verify output shape is correct (2x3)
-        assert_eq!(output.shape().dims, [2, 3]);
+        assert_eq!(output.dims(), [2, 3]);
 
         // Verify the Clip operation works with lifted constants (min=0.0, max=6.0)
         // Clip of [[1,-2,8],[-4,5,3]] with min=0.0, max=6.0 = [[1,0,6],[0,5,3]]
