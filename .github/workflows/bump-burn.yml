@@ -1,0 +1,84 @@
+name: Bump burn revision
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch: # allow manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Get latest burn commit
+        id: latest
+        run: |
+          LATEST=$(gh api repos/tracel-ai/burn/commits/main --jq .sha)
+          echo "sha=$LATEST" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Get current burn rev
+        id: current
+        run: |
+          CURRENT=$(grep -m1 'rev = "' Cargo.toml | sed 's/.*rev = "\([^"]*\)".*/\1/')
+          echo "sha=$CURRENT" >> "$GITHUB_OUTPUT"
+
+      - name: Check if update needed
+        id: check
+        run: |
+          if [ "${{ steps.latest.outputs.sha }}" = "${{ steps.current.outputs.sha }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update rev in Cargo.toml files
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          OLD="${{ steps.current.outputs.sha }}"
+          NEW="${{ steps.latest.outputs.sha }}"
+          sed -i "s/$OLD/$NEW/g" Cargo.toml
+
+      - name: Install Rust
+        if: steps.check.outputs.skip == 'false'
+        uses: tracel-ai/github-actions/install-rust@v9
+        with:
+          rust-toolchain: stable
+          cache-key: bump-burn
+
+      - name: Update lockfile
+        if: steps.check.outputs.skip == 'false'
+        run: cargo update -p burn -p burn-ndarray -p burn-store -p burn-tensor
+
+      - name: Create pull request
+        id: pr
+        if: steps.check.outputs.skip == 'false'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: bump-burn-rev
+          commit-message: "Bump burn rev to ${{ steps.latest.outputs.sha }}"
+          title: "Bump burn rev to latest main"
+          body: |
+            Updates burn git dependency from `${{ steps.current.outputs.sha }}` to [`${{ steps.latest.outputs.sha }}`](https://github.com/tracel-ai/burn/commit/${{ steps.latest.outputs.sha }}).
+
+            This PR was created automatically by the [bump-burn](${{ github.server_url }}/${{ github.repository }}/actions/workflows/bump-burn.yml) workflow.
+          labels: dependencies
+          delete-branch: true
+
+      # Close and reopen the PR to trigger CI workflows.
+      # PRs created with GITHUB_TOKEN don't trigger workflows by default.
+      - name: Trigger CI on PR
+        if: steps.pr.outputs.pull-request-number
+        run: |
+          gh pr close ${{ steps.pr.outputs.pull-request-number }} --repo ${{ github.repository }}
+          gh pr reopen ${{ steps.pr.outputs.pull-request-number }} --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}

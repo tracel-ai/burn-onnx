@@ -26,7 +26,6 @@ default-members = [
 
 exclude = [
     "crates/model-checks/__pycache__",
-    "examples/raspberry-pi-pico", # standalone no_std embedded example
 ]
 
 [workspace.package]
