@@ -1,6 +1,6 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(equal, equal_shape, equal_two_shapes);
+include_models!(equal, equal_shape, equal_two_shapes, equal_scalar);
 
 #[cfg(test)]
 mod tests {
@@ -40,6 +40,21 @@ mod tests {
         let expected = TensorData::from([true, true, true]);
 
         output.to_data().assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn equal_scalar() {
+        let device = Default::default();
+        let model: equal_scalar::Model<TestBackend> = equal_scalar::Model::new(&device);
+
+        let x = Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0, 3.0, 2.0]], &device);
+        let y = 2.0f32;
+
+        let (tensor_scalar, scalar_tensor) = model.forward(x, y);
+        let expected = TensorData::from([[false, true, false, true]]);
+
+        tensor_scalar.to_data().assert_eq(&expected, true);
+        scalar_tensor.to_data().assert_eq(&expected, true);
     }
 
     #[test]

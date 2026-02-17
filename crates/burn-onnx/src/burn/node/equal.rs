@@ -45,6 +45,12 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
                     result
                 }
             },
+            (ArgType::Tensor(_), ArgType::Scalar(_)) => {
+                quote! { #lhs_value.equal_elem(#rhs_value) }
+            }
+            (ArgType::Scalar(_), ArgType::Tensor(_)) => {
+                quote! { #rhs_value.equal_elem(#lhs_value) }
+            }
             (ArgType::Shape(_), ArgType::Tensor(tensor_type)) => {
                 let dtype_tokens = tensor_type.dtype.to_tokens();
                 quote! {
@@ -88,6 +94,38 @@ mod tests {
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::comparison::EqualNodeBuilder;
+
+    #[test]
+    fn test_equal_tensor_scalar() {
+        let node = EqualNodeBuilder::new("equal1")
+            .input_tensor("lhs", 2, DType::F32)
+            .input_scalar("rhs", DType::F32)
+            .output_tensor("output", 2, DType::Bool)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, lhs: Tensor<B, 2>, rhs: f32) -> Tensor<B, 2, Bool> {
+            let output = lhs.equal_elem(rhs);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_equal_scalar_tensor() {
+        let node = EqualNodeBuilder::new("equal1")
+            .input_scalar("lhs", DType::F32)
+            .input_tensor("rhs", 2, DType::F32)
+            .output_tensor("output", 2, DType::Bool)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, lhs: f32, rhs: Tensor<B, 2>) -> Tensor<B, 2, Bool> {
+            let output = rhs.equal_elem(lhs);
+            output
+        }
+        ");
+    }
 
     #[test]
     fn test_equal_forward() {

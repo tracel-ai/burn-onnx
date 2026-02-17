@@ -177,6 +177,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/equal/equal.onnx")
         .input("tests/equal/equal_shape.onnx")
         .input("tests/equal/equal_two_shapes.onnx")
+        .input("tests/equal/equal_scalar.onnx")
         .input("tests/erf/erf.onnx")
         .input("tests/exp/exp.onnx")
         .input("tests/expand/expand.onnx")
