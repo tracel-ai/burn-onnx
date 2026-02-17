@@ -31,6 +31,8 @@ env:
   RUST_PREVIOUS_VERSION: 1.92.0
   # Test in release mode (make it an empty string to test in debug mode)
   TEST_RELEASE_FLAG: "--release"
+  # Model-checks require externally downloaded ONNX files not available in CI
+  MODEL_CHECKS_EXCLUDE: "burn-onnx-model-checks-*,model-checks-common"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -102,10 +104,10 @@ jobs:
           cache-key: ${{ matrix.rust }}-linux
       # --------------------------------------------------------------------------------
       - name: Documentation Build
-        run: xtask doc build
+        run: cargo doc --workspace --no-deps --color=always --exclude 'burn-onnx-model-checks-*' --exclude model-checks-common
       # --------------------------------------------------------------------------------
       - name: Documentation Tests
-        run: xtask doc tests
+        run: cargo test --workspace --doc --color always --exclude 'burn-onnx-model-checks-*' --exclude model-checks-common
 
   linux-std-tests:
     runs-on: ubuntu-22.04
@@ -135,7 +137,7 @@ jobs:
           # Disable cache on linux-std (stable) runner which currently always runs out of disk space with tests + coverage
           enable-cache: ${{ matrix.rust != 'stable' }}
       - name: Tests
-        run: xtask test ${{ env.TEST_RELEASE_FLAG }}
+        run: xtask test ${{ env.TEST_RELEASE_FLAG }} -x ${{ env.MODEL_CHECKS_EXCLUDE }}
 
   linux-no-std-tests:
     runs-on: ubuntu-22.04
@@ -159,10 +161,10 @@ jobs:
           cache-key: ${{ matrix.rust }}-linux-no-std
       # --------------------------------------------------------------------------------
       - name: Crates Build
-        run: xtask --context no-std build
+        run: xtask --context no-std build -x ${{ env.MODEL_CHECKS_EXCLUDE }}
       # --------------------------------------------------------------------------------
       - name: Crates Tests
-        run: xtask --context no-std test ${{ env.TEST_RELEASE_FLAG }}
+        run: xtask --context no-std test ${{ env.TEST_RELEASE_FLAG }} -x ${{ env.MODEL_CHECKS_EXCLUDE }}
 
   windows-std-tests:
     runs-on: windows-2022
@@ -185,4 +187,4 @@ jobs:
           cache-key: ${{ matrix.rust }}-windows
       # --------------------------------------------------------------------------------
       - name: Tests
-        run: xtask test ${{ env.TEST_RELEASE_FLAG }}
+        run: xtask test ${{ env.TEST_RELEASE_FLAG }} -x ${{ env.MODEL_CHECKS_EXCLUDE }}
