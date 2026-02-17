@@ -62,6 +62,7 @@ jobs:
         if: steps.check.outputs.skip == 'false'
         uses: peter-evans/create-pull-request@v7
         with:
+          token: ${{ secrets.PAT }}
           branch: bump-burn-rev
           commit-message: "Bump burn rev to ${{ steps.latest.outputs.sha }}"
           title: "Bump burn rev to latest main"
