@@ -67,7 +67,8 @@ jobs:
         uses: tracel-ai/github-actions/install-rust@v9
         with:
           rust-toolchain: ${{ matrix.toolchain }}
-          cache-key: ${{ matrix.rust }}-linux
+          cache-key: ""
+          shared-key: ${{ matrix.rust }}-linux
       # --------------------------------------------------------------------------------
       - name: Audit
         run: xtask check audit
@@ -103,7 +104,8 @@ jobs:
         uses: tracel-ai/github-actions/install-rust@v9
         with:
           rust-toolchain: ${{ matrix.toolchain }}
-          cache-key: ${{ matrix.rust }}-linux
+          cache-key: ""
+          shared-key: ${{ matrix.rust }}-linux
       # --------------------------------------------------------------------------------
       - name: Documentation Build
         run: cargo doc --workspace --no-deps --color=always --exclude 'burn-onnx-model-checks-*' --exclude model-checks-common --exclude raspberry-pi-pico
@@ -135,7 +137,8 @@ jobs:
         uses: tracel-ai/github-actions/install-rust@v9
         with:
           rust-toolchain: ${{ matrix.toolchain }}
-          cache-key: ${{ matrix.rust }}-linux
+          cache-key: ""
+          shared-key: ${{ matrix.rust }}-linux
           # Disable cache on linux-std (stable) runner which currently always runs out of disk space with tests + coverage
           enable-cache: ${{ matrix.rust != 'stable' }}
       - name: Tests
@@ -160,7 +163,8 @@ jobs:
         uses: tracel-ai/github-actions/install-rust@v9
         with:
           rust-toolchain: ${{ matrix.toolchain }}
-          cache-key: ${{ matrix.rust }}-linux-no-std
+          cache-key: ""
+          shared-key: ${{ matrix.rust }}-linux-no-std
       # --------------------------------------------------------------------------------
       - name: Crates Build
         run: xtask --context no-std build -x ${{ env.CI_EXCLUDE }}
@@ -186,7 +190,8 @@ jobs:
         uses: tracel-ai/github-actions/install-rust@v9
         with:
           rust-toolchain: ${{ matrix.toolchain }}
-          cache-key: ${{ matrix.rust }}-windows
+          cache-key: ""
+          shared-key: ${{ matrix.rust }}-windows
       # --------------------------------------------------------------------------------
       - name: Tests
         run: xtask test ${{ env.TEST_RELEASE_FLAG }} -x ${{ env.CI_EXCLUDE }}

@@ -1,0 +1,59 @@
+name: Model Checks
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/model-checks.yml'
+      - 'crates/burn-onnx/**'
+      - 'crates/onnx-ir/**'
+      - 'crates/model-checks/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/model-checks.yml'
+      - 'crates/burn-onnx/**'
+      - 'crates/onnx-ir/**'
+      - 'crates/model-checks/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+  workflow_dispatch:
+
+env:
+  BURN_CACHE_DIR: /home/runner/.cache/burn-onnx
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  model-check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Cache model artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.BURN_CACHE_DIR }}/model-checks
+          key: model-checks-${{ hashFiles('crates/model-checks/*/get_model.py') }}
+
+      - name: Install Rust
+        uses: tracel-ai/github-actions/install-rust@v9
+        with:
+          rust-toolchain: stable
+          cache-key: ""
+          shared-key: model-checks
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-python: true
+
+      - name: Run all model checks
+        run: xtask model-check --fail-fast
