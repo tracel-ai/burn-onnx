@@ -25,16 +25,19 @@ SUPPORTED_MODELS = {
         'hf_name': 'Qwen/Qwen1.5-0.5B',
         'display_name': 'Qwen1.5 0.5B',
         'seq_length': 32,
+        'vocab_size': 151936,
     },
     'qwen2.5-0.5b': {
         'hf_name': 'Qwen/Qwen2.5-0.5B',
         'display_name': 'Qwen2.5 0.5B',
         'seq_length': 32,
+        'vocab_size': 151936,
     },
     'qwen3-0.6b': {
         'hf_name': 'Qwen/Qwen3-0.6B',
         'display_name': 'Qwen3 0.6B',
         'seq_length': 32,
+        'vocab_size': 151936,
     },
 }
 
@@ -118,8 +121,8 @@ def generate_test_data(model_path, output_path, model_name):
     np.random.seed(42)
     batch_size = 1
 
-    # Use vocab_size 151936 for random token IDs (common across Qwen models)
-    input_ids = np.random.randint(0, 151936, size=(batch_size, seq_length), dtype=np.int64)
+    vocab_size = model_config['vocab_size']
+    input_ids = np.random.randint(0, vocab_size, size=(batch_size, seq_length), dtype=np.int64)
 
     print(f"  Input shapes:")
     print(f"    input_ids: {input_ids.shape}")

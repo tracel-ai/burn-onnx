@@ -5,7 +5,7 @@ use tracel_xtask::prelude::*;
 
 #[derive(clap::Args)]
 pub struct ModelCheckArgs {
-    /// Model to operate on (default: all models).
+    /// Model id to operate on, e.g. "qwen-2.5" (default: all non-blocked models).
     #[arg(long)]
     pub model: Option<String>,
 

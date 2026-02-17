@@ -78,7 +78,7 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
                 }
             }
             _ => panic!(
-                "Comparison is supported for tensor to tensor, scalar to scalar, shape to shape, and shape to tensor only"
+                "Comparison is supported for tensor, scalar, and shape operands in any combination"
             ),
         };
 
