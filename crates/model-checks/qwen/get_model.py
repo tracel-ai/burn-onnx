@@ -17,7 +17,7 @@ from pathlib import Path
 import argparse
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from common import get_artifacts_dir, process_model
+from common import get_artifacts_dir
 
 
 SUPPORTED_MODELS = {
@@ -182,8 +182,15 @@ def main():
         download_and_convert_model(model_name, original_path)
 
     if not processed_path.exists():
-        print("\nStep 2: Processing model...")
-        process_model(original_path, processed_path, target_opset=16)
+        print("\nStep 2: Applying shape inference...")
+        # These models can exceed the 2GB protobuf limit, so use the
+        # file-based API instead of the shared process_model() which
+        # loads the entire model into memory.
+        import onnx.shape_inference
+        onnx.shape_inference.infer_shapes_path(
+            str(original_path), str(processed_path)
+        )
+        print(f"  Processed model saved to: {processed_path}")
 
         if original_path.exists():
             original_path.unlink()
