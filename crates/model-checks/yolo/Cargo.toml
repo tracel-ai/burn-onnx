@@ -4,11 +4,6 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
-[workspace]
-
-[workspace.dependencies]
-burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "502910e2a77f61b9ceb3eac36e26920ab2e38c66" }
-burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "502910e2a77f61b9ceb3eac36e26920ab2e38c66" }
 
 [features]
 default = ["ndarray"]

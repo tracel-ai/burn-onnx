@@ -4,12 +4,29 @@
 # https://doc.rust-lang.org/cargo/reference/resolver.html#feature-resolver-version-2
 resolver = "2"
 
-members = ["crates/*", "examples/*", "xtask"]
+members = [
+    "crates/burn-import",
+    "crates/burn-onnx",
+    "crates/onnx-ir",
+    "crates/onnx-ir-derive",
+    "crates/onnx-tests",
+    "crates/model-checks/*",
+    "examples/*",
+    "xtask",
+]
+
+default-members = [
+    "crates/burn-import",
+    "crates/burn-onnx",
+    "crates/onnx-ir",
+    "crates/onnx-ir-derive",
+    "crates/onnx-tests",
+    "xtask",
+]
 
 exclude = [
-    "crates/model-checks",         # exclude model-checks parent directory
-    "crates/model-checks/*",       # exclude model checking crates from workspace
-    "examples/raspberry-pi-pico",  # standalone no_std embedded example
+    "crates/model-checks/__pycache__",
+    "examples/raspberry-pi-pico", # standalone no_std embedded example
 ]
 
 [workspace.package]
