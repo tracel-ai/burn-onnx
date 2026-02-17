@@ -60,7 +60,10 @@ fn main() {
 
     // Check if artifacts exist
     if !artifacts_dir.exists() {
-        eprintln!("Error: artifacts directory not found at '{}'!", artifacts_dir.display());
+        eprintln!(
+            "Error: artifacts directory not found at '{}'!",
+            artifacts_dir.display()
+        );
         eprintln!("Please run get_model.py first to download the model and test data.");
         eprintln!("Example: uv run get_model.py --model {}", model_name);
         std::process::exit(1);
@@ -102,7 +105,9 @@ fn main() {
     let start = Instant::now();
     let mut test_data = TestData::<MyBackend>::new(&device);
     let mut store = PytorchStore::from_file(&test_data_file);
-    test_data.load_from(&mut store).expect("Failed to load test data");
+    test_data
+        .load_from(&mut store)
+        .expect("Failed to load test data");
     let load_time = start.elapsed();
     println!("  Data loaded in {:.2?}", load_time);
 
@@ -149,7 +154,10 @@ fn main() {
         "    output 0 (last_hidden_state): {:?}",
         outputs.0.shape().as_slice()
     );
-    println!("    output 1 (pooler_output): {:?}", outputs.1.shape().as_slice());
+    println!(
+        "    output 1 (pooler_output): {:?}",
+        outputs.1.shape().as_slice()
+    );
 
     // Compare outputs
     println!("\nComparing model outputs with reference data...");

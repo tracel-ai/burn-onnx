@@ -42,7 +42,10 @@ fn main() {
 
     // Check if artifacts exist
     if !artifacts_dir.exists() {
-        eprintln!("Error: artifacts directory not found at '{}'!", artifacts_dir.display());
+        eprintln!(
+            "Error: artifacts directory not found at '{}'!",
+            artifacts_dir.display()
+        );
         eprintln!("Please run get_model.py first to download the model and test data.");
         std::process::exit(1);
     }
@@ -57,10 +60,12 @@ fn main() {
 
     // Save model structure to file
     let model_txt_path = artifacts_dir.join("model.txt");
-    println!("\nSaving model structure to {}...", model_txt_path.display());
+    println!(
+        "\nSaving model structure to {}...",
+        model_txt_path.display()
+    );
     let model_str = format!("{}", model);
-    std::fs::write(&model_txt_path, &model_str)
-        .expect("Failed to write model structure to file");
+    std::fs::write(&model_txt_path, &model_str).expect("Failed to write model structure to file");
     println!("  Model structure saved");
 
     // Load test data from PyTorch file
@@ -69,7 +74,9 @@ fn main() {
     let start = Instant::now();
     let mut test_data = TestData::<MyBackend>::new(&device);
     let mut store = PytorchStore::from_file(&test_data_path);
-    test_data.load_from(&mut store).expect("Failed to load test data");
+    test_data
+        .load_from(&mut store)
+        .expect("Failed to load test data");
     let load_time = start.elapsed();
     println!("  Data loaded in {:.2?}", load_time);
 
@@ -112,7 +119,8 @@ fn main() {
     } else {
         println!(
             "  ⚠ Warning: Expected image_embeds shape {:?}, got {:?}",
-            ref_image_embeds_shape.as_slice(), image_embeds_shape.as_slice()
+            ref_image_embeds_shape.as_slice(),
+            image_embeds_shape.as_slice()
         );
     }
 
@@ -155,7 +163,6 @@ fn main() {
             );
         }
     }
-
 
     println!("\n========================================");
     println!("Summary:");

@@ -73,7 +73,10 @@ fn main() {
 
     // Check if artifacts exist
     if !artifacts_dir.exists() {
-        eprintln!("Error: artifacts directory not found at '{}'!", artifacts_dir.display());
+        eprintln!(
+            "Error: artifacts directory not found at '{}'!",
+            artifacts_dir.display()
+        );
         eprintln!("Please run get_model.py first to download the model.");
         eprintln!("Example: uv run get_model.py");
         std::process::exit(1);
@@ -89,7 +92,8 @@ fn main() {
 
     // Load reference outputs
     println!("Loading reference outputs...");
-    let reference_json = fs::read_to_string(&reference_path).expect("Failed to read reference outputs");
+    let reference_json =
+        fs::read_to_string(&reference_path).expect("Failed to read reference outputs");
     let reference: ReferenceOutputs =
         serde_json::from_str(&reference_json).expect("Failed to parse reference outputs");
     println!(
@@ -112,7 +116,8 @@ fn main() {
     let mut failed_count = 0;
 
     for test_case in &reference.test_cases {
-        let (passed, actual, expected) = run_test_case(&model, &device, test_case, reference.sample_rate);
+        let (passed, actual, expected) =
+            run_test_case(&model, &device, test_case, reference.sample_rate);
 
         if passed {
             println!(

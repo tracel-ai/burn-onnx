@@ -56,7 +56,10 @@ fn main() {
 
     // Check if artifacts exist
     if !artifacts_dir.exists() {
-        eprintln!("Error: artifacts directory not found at '{}'!", artifacts_dir.display());
+        eprintln!(
+            "Error: artifacts directory not found at '{}'!",
+            artifacts_dir.display()
+        );
         eprintln!("Please run get_model.py first to download the model and test data.");
         eprintln!("Example: uv run get_model.py --model {}", model_name);
         std::process::exit(1);
@@ -103,14 +106,19 @@ fn main() {
     let start = Instant::now();
     let mut test_data = TestData::<MyBackend>::new(&device);
     let mut store = PytorchStore::from_file(&test_data_file);
-    test_data.load_from(&mut store).expect("Failed to load test data");
+    test_data
+        .load_from(&mut store)
+        .expect("Failed to load test data");
     let load_time = start.elapsed();
     println!("  Data loaded in {:.2?}", load_time);
 
     // Get the input tensor from test data
     let input = test_data.input.val();
     let input_shape = input.shape();
-    println!("  Loaded input tensor with shape: {:?}", input_shape.as_slice());
+    println!(
+        "  Loaded input tensor with shape: {:?}",
+        input_shape.as_slice()
+    );
 
     // Get the reference output from test data
     let reference_output = test_data.output.val();
@@ -138,7 +146,8 @@ fn main() {
     } else {
         println!(
             "  ⚠ Note: Shape is {:?} (expected {:?} for most YOLO models)",
-            shape.as_slice(), expected_shape
+            shape.as_slice(),
+            expected_shape
         );
     }
 

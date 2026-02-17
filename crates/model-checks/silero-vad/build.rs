@@ -11,7 +11,10 @@ fn main() {
 
     // Check if the ONNX model file exists
     if !onnx_path.exists() {
-        eprintln!("Error: ONNX model file not found at '{}'", onnx_path.display());
+        eprintln!(
+            "Error: ONNX model file not found at '{}'",
+            onnx_path.display()
+        );
         eprintln!();
         eprintln!("Please run the following command to download the model:");
         eprintln!("  uv run get_model.py");

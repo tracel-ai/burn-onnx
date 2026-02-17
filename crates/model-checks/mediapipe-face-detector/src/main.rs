@@ -113,8 +113,14 @@ fn main() {
     println!("  Inference completed in {:.2?}", inference_time);
 
     println!("\nModel outputs:");
-    println!("  regressors shape: {:?}", out_regressors.shape().as_slice());
-    println!("  classifiers shape: {:?}", out_classifiers.shape().as_slice());
+    println!(
+        "  regressors shape: {:?}",
+        out_regressors.shape().as_slice()
+    );
+    println!(
+        "  classifiers shape: {:?}",
+        out_classifiers.shape().as_slice()
+    );
 
     // Compare outputs
     println!("\nComparing outputs with reference data...");
