@@ -15,7 +15,7 @@ on:
       - '!LICENSE-APACHE'
       - '!LICENSE-MIT'
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
     paths:
       - 'Cargo.lock'
       - '**.rs'
