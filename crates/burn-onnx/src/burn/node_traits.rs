@@ -202,12 +202,13 @@ pub fn create_lazy_snapshot(
     use onnx_ir::ir::ArgType;
 
     // Get tensor metadata without loading data
-    let (dtype, shape) = match &input.ty {
+    let (dtype, shape, is_scalar) = match &input.ty {
         ArgType::Tensor(tensor_type) => {
             let dtype = tensor_type.dtype;
             let shape = tensor_type.static_shape_known().unwrap_or_default();
-            (dtype, shape)
+            (dtype, shape, false)
         }
+        ArgType::ScalarTensor(d) | ArgType::ScalarNative(d) => (*d, vec![1], true),
         _ => return None,
     };
 
@@ -216,12 +217,17 @@ pub fn create_lazy_snapshot(
 
     // Create a lazy closure that only loads data when called
     let data_fn = Rc::new(move || -> Result<TensorData, TensorSnapshotError> {
-        input_clone.value().ok_or_else(|| {
+        let mut data = input_clone.value().ok_or_else(|| {
             TensorSnapshotError::DataError(format!(
                 "Failed to extract tensor data for '{}'",
                 input_clone.name
             ))
-        })
+        })?;
+        // Scalar data has shape [], but Param<Tensor<B, 1>> expects shape [1]
+        if is_scalar && data.shape.is_empty() {
+            data.shape = vec![1];
+        }
+        Ok(data)
     });
 
     // Parse path into path_stack

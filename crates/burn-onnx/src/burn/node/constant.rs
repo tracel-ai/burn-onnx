@@ -13,77 +13,130 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
     }
 
     fn field(&self) -> Option<Field> {
-        // Tensor constants need a field for storing the parameter on device.
-        // ScalarTensor constants are inlined in forward() instead.
         let output = self.outputs.first().unwrap();
 
-        let (rank, dtype) = match &output.ty {
-            ArgType::Tensor(t) => (t.rank, &t.dtype),
-            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) | ArgType::Shape(_) => return None,
+        let (rank, dtype, is_scalar_tensor) = match &output.ty {
+            ArgType::Tensor(t) => (t.rank, &t.dtype, false),
+            ArgType::ScalarTensor(d) => (1, d, true),
+            ArgType::ScalarNative(_) | ArgType::Shape(_) => return None,
         };
 
         let name = Ident::new(&self.name, Span::call_site());
         let rank_tok = rank.to_tokens();
 
-        // Get tensor data from the input (which holds the constant value)
         let input = self.inputs.first().unwrap();
         let tensor_data = input.value().expect("Constant node must have tensor data");
         let shape = if tensor_data.shape.is_empty() {
-            // ScalarTensor: shape [1]
             vec![1usize].to_tokens()
         } else {
             tensor_data.shape.to_tokens()
         };
 
-        let (ty, init) = match dtype {
-            d if d.is_int() || d.is_uint() => (
-                quote! { burn::module::Param<Tensor<B, #rank_tok, Int>> },
-                quote! {
-                    let #name: burn::module::Param<Tensor<B, #rank_tok, Int>> = burn::module::Param::uninitialized(
-                        burn::module::ParamId::new(),
-                        move |device, _require_grad| Tensor::<B, #rank_tok, Int>::zeros(#shape, device),
-                        device.clone(),
-                        false,
-                        #shape.into(),
-                    );
-                },
-            ),
-            d if d.is_float() => (
-                quote! { burn::module::Param<Tensor<B, #rank_tok>> },
-                quote! {
-                    let #name: burn::module::Param<Tensor<B, #rank_tok>> = burn::module::Param::uninitialized(
-                        burn::module::ParamId::new(),
-                        move |device, _require_grad| Tensor::<B, #rank_tok>::zeros(#shape, device),
-                        device.clone(),
-                        false,
-                        #shape.into(),
-                    );
-                },
-            ),
-            d if d.is_bool() => (
-                quote! { burn::module::Param<Tensor<B, #rank_tok, Bool>> },
-                quote! {
-                    let #name: burn::module::Param<Tensor<B, #rank_tok, Bool>> = burn::module::Param::uninitialized(
-                        burn::module::ParamId::new(),
-                        move |device, _require_grad| Tensor::<B, #rank_tok, Bool>::empty(#shape, device),
-                        device.clone(),
-                        false,
-                        #shape.into(),
-                    );
-                },
-            ),
-            _ => (
-                quote! { burn::module::Param<Tensor<B, #rank_tok>> },
-                quote! {
-                    let #name: burn::module::Param<Tensor<B, #rank_tok>> = burn::module::Param::uninitialized(
-                        burn::module::ParamId::new(),
-                        move |device, _require_grad| Tensor::<B, #rank_tok>::zeros(#shape, device),
-                        device.clone(),
-                        false,
-                        #shape.into(),
-                    );
-                },
-            ),
+        // For ScalarTensor, embed the actual value in the initializer so Model::new()
+        // works without burnpack loading. For regular tensors, use zeros (burnpack loads data).
+        let (ty, init) = if is_scalar_tensor {
+            // Generate initializer with the actual scalar value
+            if dtype.is_float() {
+                let val = if *dtype == onnx_ir::ir::DType::F32 {
+                    let v = tensor_data.as_slice::<f32>().unwrap()[0] as f64;
+                    super::super::codegen::f64_to_tokens(v)
+                } else {
+                    let v = tensor_data.as_slice::<f64>().unwrap()[0];
+                    super::super::codegen::f64_to_tokens(v)
+                };
+                (
+                    quote! { burn::module::Param<Tensor<B, 1>> },
+                    quote! {
+                        let #name: burn::module::Param<Tensor<B, 1>> = burn::module::Param::uninitialized(
+                            burn::module::ParamId::new(),
+                            move |device, _require_grad| Tensor::<B, 1>::from_data([#val], device),
+                            device.clone(),
+                            false,
+                            [1].into(),
+                        );
+                    },
+                )
+            } else if dtype.is_int() || dtype.is_uint() {
+                let val = tensor_data.to_i64_vec().unwrap()[0];
+                (
+                    quote! { burn::module::Param<Tensor<B, 1, Int>> },
+                    quote! {
+                        let #name: burn::module::Param<Tensor<B, 1, Int>> = burn::module::Param::uninitialized(
+                            burn::module::ParamId::new(),
+                            move |device, _require_grad| Tensor::<B, 1, Int>::from_data([#val], device),
+                            device.clone(),
+                            false,
+                            [1].into(),
+                        );
+                    },
+                )
+            } else {
+                let val = tensor_data.as_slice::<bool>().unwrap()[0];
+                (
+                    quote! { burn::module::Param<Tensor<B, 1, Bool>> },
+                    quote! {
+                        let #name: burn::module::Param<Tensor<B, 1, Bool>> = burn::module::Param::uninitialized(
+                            burn::module::ParamId::new(),
+                            move |device, _require_grad| Tensor::<B, 1, Bool>::from_data([#val], device),
+                            device.clone(),
+                            false,
+                            [1].into(),
+                        );
+                    },
+                )
+            }
+        } else {
+            // Regular tensor: initialize with zeros, burnpack loads the actual data
+            match dtype {
+                d if d.is_int() || d.is_uint() => (
+                    quote! { burn::module::Param<Tensor<B, #rank_tok, Int>> },
+                    quote! {
+                        let #name: burn::module::Param<Tensor<B, #rank_tok, Int>> = burn::module::Param::uninitialized(
+                            burn::module::ParamId::new(),
+                            move |device, _require_grad| Tensor::<B, #rank_tok, Int>::zeros(#shape, device),
+                            device.clone(),
+                            false,
+                            #shape.into(),
+                        );
+                    },
+                ),
+                d if d.is_float() => (
+                    quote! { burn::module::Param<Tensor<B, #rank_tok>> },
+                    quote! {
+                        let #name: burn::module::Param<Tensor<B, #rank_tok>> = burn::module::Param::uninitialized(
+                            burn::module::ParamId::new(),
+                            move |device, _require_grad| Tensor::<B, #rank_tok>::zeros(#shape, device),
+                            device.clone(),
+                            false,
+                            #shape.into(),
+                        );
+                    },
+                ),
+                d if d.is_bool() => (
+                    quote! { burn::module::Param<Tensor<B, #rank_tok, Bool>> },
+                    quote! {
+                        let #name: burn::module::Param<Tensor<B, #rank_tok, Bool>> = burn::module::Param::uninitialized(
+                            burn::module::ParamId::new(),
+                            move |device, _require_grad| Tensor::<B, #rank_tok, Bool>::empty(#shape, device),
+                            device.clone(),
+                            false,
+                            #shape.into(),
+                        );
+                    },
+                ),
+                _ => (
+                    quote! { burn::module::Param<Tensor<B, #rank_tok>> },
+                    quote! {
+                        let #name: burn::module::Param<Tensor<B, #rank_tok>> = burn::module::Param::uninitialized(
+                            burn::module::ParamId::new(),
+                            move |device, _require_grad| Tensor::<B, #rank_tok>::zeros(#shape, device),
+                            device.clone(),
+                            false,
+                            #shape.into(),
+                        );
+                    },
+                ),
+            }
         };
         Some(Field::new(self.name.clone(), ty, init))
     }
@@ -95,7 +148,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 
         // Collect snapshots for tensor constants (ScalarTensor is inlined, not stored)
         match &output.ty {
-            ArgType::Tensor(_) => {
+            ArgType::Tensor(_) | ArgType::ScalarTensor(_) => {
                 if let Some(input) = self.inputs.first() {
                     // Use the field name as the path since constants are stored as single params
                     if let Some(snapshot) = create_lazy_snapshot(input, field_name, "Constant") {
@@ -107,7 +160,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                     vec![]
                 }
             }
-            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) | ArgType::Shape(_) => vec![],
+            ArgType::ScalarNative(_) | ArgType::Shape(_) => vec![],
         }
     }
 
@@ -116,40 +169,11 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
         let output_ty = &self.outputs.first().unwrap().ty;
 
         match output_ty {
-            ArgType::Tensor(_) => {
-                // For tensor constants, reference the stored param
+            ArgType::Tensor(_) | ArgType::ScalarTensor(_) => {
+                // For tensor and scalar-tensor constants, reference the stored param
                 let name = Ident::new(&self.name, Span::call_site());
                 quote! {
                     let #output = self.#name.val();
-                }
-            }
-            ArgType::ScalarTensor(elem_type) => {
-                // For scalar-tensor constants, inline the value as a 1-element tensor on device.
-                // Use from_data (not from_data_dtype) so the tensor adopts the backend's default
-                // element type, matching the behavior of Param loading from burnpack.
-                let input = self.inputs.first().unwrap();
-                let tensor_data = input.value().expect("Constant node must have tensor data");
-
-                let tensor_creation = if elem_type.is_float() {
-                    let val = if *elem_type == onnx_ir::ir::DType::F32 {
-                        let v = tensor_data.as_slice::<f32>().unwrap()[0] as f64;
-                        super::super::codegen::f64_to_tokens(v)
-                    } else {
-                        let v = tensor_data.as_slice::<f64>().unwrap()[0];
-                        super::super::codegen::f64_to_tokens(v)
-                    };
-                    quote! { Tensor::<B, 1>::from_data([#val], &*self.device) }
-                } else if elem_type.is_int() || elem_type.is_uint() {
-                    let val = tensor_data.to_i64_vec().unwrap()[0];
-                    quote! { Tensor::<B, 1, Int>::from_data([#val], &*self.device) }
-                } else {
-                    // Bool
-                    let val = tensor_data.as_slice::<bool>().unwrap()[0];
-                    quote! { Tensor::<B, 1, Bool>::from_data([#val], &*self.device) }
-                };
-
-                quote! {
-                    let #output = #tensor_creation;
                 }
             }
             ArgType::ScalarNative(elem_type) => {
