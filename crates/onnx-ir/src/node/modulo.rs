@@ -77,14 +77,22 @@ impl NodeProcessor for ModuloProcessor {
         let mut prefs = InputPreferences::new();
 
         // Type propagation for Shape arithmetic (same as Add/Sub/Mul/Div)
-        // Case 1: Shape op Constant => prefer Constant as Shape
+        // Case 1: Shape op Constant => prefer Constant as Shape (or ScalarNative for scalars)
         if node.inputs[0].ty.is_shape() {
-            prefs = prefs.add(&node.inputs[1].name, ArgPreference::Shape);
+            if node.inputs[1].ty.is_scalar() {
+                prefs = prefs.add(&node.inputs[1].name, ArgPreference::ScalarNative);
+            } else {
+                prefs = prefs.add(&node.inputs[1].name, ArgPreference::Shape);
+            }
         }
 
-        // Case 2: Constant op Shape => prefer Constant as Shape
+        // Case 2: Constant op Shape => prefer Constant as Shape (or ScalarNative for scalars)
         if node.inputs[1].ty.is_shape() {
-            prefs = prefs.add(&node.inputs[0].name, ArgPreference::Shape);
+            if node.inputs[0].ty.is_scalar() {
+                prefs = prefs.add(&node.inputs[0].name, ArgPreference::ScalarNative);
+            } else {
+                prefs = prefs.add(&node.inputs[0].name, ArgPreference::Shape);
+            }
         }
 
         // Type propagation for ScalarNative arithmetic
