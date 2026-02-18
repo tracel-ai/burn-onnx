@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn test_invalid_input() {
         let mut node = create_test_node(2, 2);
-        node.inputs[0].ty = ArgType::Scalar(DType::I32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::I32);
         let processor = MatMulIntegerProcessor;
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 16, &prefs);

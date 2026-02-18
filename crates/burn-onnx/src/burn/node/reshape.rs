@@ -27,7 +27,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
 
                         // Check if output is a scalar
                         match &output_arg.ty {
-                            ArgType::Scalar(elem_type) => {
+                            ArgType::ScalarNative(elem_type) | ArgType::ScalarTensor(elem_type) => {
                                 use onnx_ir::ir::DType;
                                 let elem_cast = match elem_type {
                                     DType::F32 => quote! { .elem::<f32>() },
@@ -57,21 +57,14 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                         let input_name = arg_to_ident(input_arg);
 
                         match &output_arg.ty {
-                            ArgType::Scalar(elem_type) => {
+                            ArgType::ScalarNative(elem_type) | ArgType::ScalarTensor(elem_type) => {
                                 if *input_rank != 1 {
                                     panic!(
                                         "Shape to scalar requires Shape(1), got Shape({})",
                                         input_rank
                                     );
                                 }
-                                use onnx_ir::ir::DType;
-                                let cast_expr = match elem_type {
-                                    DType::I64 => quote! { #input_name[0] as i64 },
-                                    DType::I32 => quote! { #input_name[0] as i32 },
-                                    _ => panic!(
-                                        "Shape to Scalar only supports Int32/Int64 output types"
-                                    ),
-                                };
+                                let cast_expr = shape_to_native(quote! { #input_name }, elem_type);
                                 quote! {
                                     let #output = #cast_expr;
                                 }
@@ -109,7 +102,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                             }
                         }
                     }
-                    ArgType::Scalar(_) => {
+                    ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                         // Scalar input - convert scalar to tensor or pass through
                         let input_name = arg_to_ident(input_arg);
 
@@ -149,7 +142,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                     }
                                 }
                             }
-                            ArgType::Scalar(_) => {
+                            ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                                 // Scalar to scalar - just pass through
                                 quote! {
                                     let #output = #input_name;
@@ -195,7 +188,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                             let #output = #input.reshape([#(#array_init),*]);
                         }
                     }
-                    ArgType::Scalar(_) => {
+                    ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                         panic!("Reshape: shape argument cannot be scalar")
                     }
                 }

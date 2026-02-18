@@ -524,7 +524,7 @@ mod tests {
     #[test]
     fn test_split_invalid_input() {
         let mut node = create_test_node(3, 2, Some(vec![10, 20, 30]), None, None).build();
-        node.inputs[0].ty = ArgType::Scalar(DType::F32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
 
         let processor = SplitProcessor;
         let _prefs = OutputPreferences::new();
@@ -715,7 +715,7 @@ mod tests {
     fn test_split_config_invalid_input_type() {
         // Test with invalid input type - extract_config should fail
         let mut node = create_test_node(3, 2, Some(vec![10, 20, 30]), None, None).build();
-        node.inputs[0].ty = ArgType::Scalar(DType::F32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
 
         let node = node;
         let processor = SplitProcessor;

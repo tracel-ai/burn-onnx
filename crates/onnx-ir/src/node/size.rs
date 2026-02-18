@@ -43,7 +43,7 @@ impl NodeProcessor for SizeProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        node.outputs[0].ty = ArgType::Scalar(DType::I64);
+        node.outputs[0].ty = ArgType::ScalarNative(DType::I64);
 
         Ok(())
     }
@@ -88,6 +88,9 @@ mod tests {
         let prefs = OutputPreferences::new();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        assert!(matches!(&node.outputs[0].ty, ArgType::Scalar(DType::I64)));
+        assert!(matches!(
+            &node.outputs[0].ty,
+            ArgType::ScalarNative(DType::I64)
+        ));
     }
 }

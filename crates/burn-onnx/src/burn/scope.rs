@@ -155,8 +155,10 @@ impl<'a> ScopeAtPosition<'a> {
     /// ```
     pub fn arg(&mut self, arg: &Argument) -> TokenStream {
         match &arg.ty {
-            ArgType::Tensor(_) => self.scope.tensor_use_owned(arg, self.node_position),
-            ArgType::Scalar(_) | ArgType::Shape(_) => {
+            ArgType::Tensor(_) | ArgType::ScalarTensor(_) => {
+                self.scope.tensor_use_owned(arg, self.node_position)
+            }
+            ArgType::ScalarNative(_) | ArgType::Shape(_) => {
                 let name = arg_to_ident(arg);
                 quote! { #name }
             }

@@ -140,7 +140,7 @@ pub fn argument_from_initializer(initializer: &TensorProto) -> (Argument, Tensor
                 // rank-0 (scalar)
                 Argument {
                     name,
-                    ty: ArgType::Scalar(td.elem_type()),
+                    ty: ArgType::ScalarNative(td.elem_type()),
                     value_source: ValueSource::Constant, // Initializers are constants
                     value_store: None,
                 }
@@ -206,7 +206,7 @@ pub fn argument_from_initializer(initializer: &TensorProto) -> (Argument, Tensor
                 });
                 let arg = Argument {
                     name,
-                    ty: ArgType::Scalar(td.elem_type()),
+                    ty: ArgType::ScalarNative(td.elem_type()),
                     value_source: ValueSource::Constant, // Initializers are constants
                     value_store: None,
                 };
@@ -292,7 +292,7 @@ pub fn argument_from_initializer_lazy_with_context(
         // rank-0 (scalar)
         Argument {
             name,
-            ty: ArgType::Scalar(data_ref.dtype()),
+            ty: ArgType::ScalarNative(data_ref.dtype()),
             value_source: ValueSource::Constant,
             value_store: None,
         }
@@ -891,7 +891,7 @@ impl TryFrom<ValueInfoProto> for Argument {
             element_type_from_proto(tensor_proto.elem_type).map_err(ParseError::VariantNotFound)?;
 
         let ty = if tensor_proto.shape.dim.is_empty() {
-            ArgType::Scalar(elem_type)
+            ArgType::ScalarNative(elem_type)
         } else {
             let static_shape: Vec<Option<usize>> = tensor_proto
                 .shape

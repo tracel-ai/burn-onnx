@@ -41,19 +41,9 @@ impl NodeCodegen for onnx_ir::squeeze::SqueezeNode {
                     }
                 }
             }
-            (ArgType::Shape(_), ArgType::Scalar(elem_type)) => {
-                // Shape(1) squeezed on axis 0 produces a scalar
+            (ArgType::Shape(_), ArgType::ScalarNative(elem_type)) => {
                 let input_name = arg_to_ident(input_arg);
-
-                use onnx_ir::ir::DType;
-                let cast_expr = match elem_type {
-                    DType::I64 => quote! { #input_name[0] as i64 },
-                    DType::I32 => quote! { #input_name[0] as i32 },
-                    _ => panic!(
-                        "Squeeze from Shape to Scalar only supports Int32/Int64 output types"
-                    ),
-                };
-
+                let cast_expr = shape_to_native(quote! { #input_name }, elem_type);
                 quote! {
                     let #output = #cast_expr;
                 }
@@ -66,7 +56,8 @@ impl NodeCodegen for onnx_ir::squeeze::SqueezeNode {
                     let #output = #input_name;
                 }
             }
-            (ArgType::Scalar(_), ArgType::Scalar(_)) => {
+            (ArgType::ScalarNative(_), ArgType::ScalarNative(_))
+            | (ArgType::ScalarTensor(_), ArgType::ScalarTensor(_)) => {
                 // Scalar squeeze is a no-op
                 let input_name = arg_to_ident(input_arg);
 
@@ -74,22 +65,25 @@ impl NodeCodegen for onnx_ir::squeeze::SqueezeNode {
                     let #output = #input_name;
                 }
             }
-            (ArgType::Tensor(_), ArgType::Scalar(elem_type)) => {
-                // Single-element tensor to scalar conversion
+            (ArgType::ScalarTensor(_), ArgType::ScalarNative(elem_type)) => {
                 let input = scope.arg(input_arg);
-
-                use onnx_ir::ir::DType;
-                let elem_cast = match elem_type {
-                    DType::F32 => quote! { .elem::<f32>() },
-                    DType::F64 => quote! { .elem::<f64>() },
-                    DType::I32 => quote! { .elem::<i32>() },
-                    DType::I64 => quote! { .elem::<i64>() },
-                    DType::Bool => quote! { .elem::<bool>() },
-                    _ => panic!("Unsupported scalar type: {:?}", elem_type),
-                };
-
+                let extract = on_device_to_native(input, elem_type);
                 quote! {
-                    let #output = #input.into_scalar()#elem_cast;
+                    let #output = #extract;
+                }
+            }
+            (ArgType::Tensor(_), ArgType::ScalarTensor(_)) => {
+                // Keep as Tensor<B, 1> on device (no GPU stall)
+                let input = scope.arg(input_arg);
+                quote! {
+                    let #output = #input.reshape([1]);
+                }
+            }
+            (ArgType::Tensor(_), ArgType::ScalarNative(elem_type)) => {
+                let input = scope.arg(input_arg);
+                let extract = on_device_to_native(input, elem_type);
+                quote! {
+                    let #output = #extract;
                 }
             }
             _ => panic!(

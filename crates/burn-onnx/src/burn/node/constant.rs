@@ -13,72 +13,79 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
     }
 
     fn field(&self) -> Option<Field> {
-        // Only tensor constants need a field for storing the parameter
+        // Tensor constants need a field for storing the parameter on device.
+        // ScalarTensor constants are inlined in forward() instead.
         let output = self.outputs.first().unwrap();
-        match &output.ty {
-            ArgType::Tensor(t) => {
-                let name = Ident::new(&self.name, Span::call_site());
-                let rank = t.rank.to_tokens();
 
-                // Get tensor data from the input (which holds the constant value)
-                let input = self.inputs.first().unwrap();
-                let tensor_data = input.value().expect("Constant node must have tensor data");
-                let shape = tensor_data.shape.to_tokens();
+        let (rank, dtype) = match &output.ty {
+            ArgType::Tensor(t) => (t.rank, &t.dtype),
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) | ArgType::Shape(_) => return None,
+        };
 
-                let (ty, init) = match &t.dtype {
-                    dtype if dtype.is_int() || dtype.is_uint() => (
-                        quote! { burn::module::Param<Tensor<B, #rank, Int>> },
-                        quote! {
-                            let #name: burn::module::Param<Tensor<B, #rank, Int>> = burn::module::Param::uninitialized(
-                                burn::module::ParamId::new(),
-                                move |device, _require_grad| Tensor::<B, #rank, Int>::zeros(#shape, device),
-                                device.clone(),
-                                false,
-                                #shape.into(),
-                            );
-                        },
-                    ),
-                    dtype if dtype.is_float() => (
-                        quote! { burn::module::Param<Tensor<B, #rank>> },
-                        quote! {
-                            let #name: burn::module::Param<Tensor<B, #rank>> = burn::module::Param::uninitialized(
-                                burn::module::ParamId::new(),
-                                move |device, _require_grad| Tensor::<B, #rank>::zeros(#shape, device),
-                                device.clone(),
-                                false,
-                                #shape.into(),
-                            );
-                        },
-                    ),
-                    dtype if dtype.is_bool() => (
-                        quote! { burn::module::Param<Tensor<B, #rank, Bool>> },
-                        quote! {
-                            let #name: burn::module::Param<Tensor<B, #rank, Bool>> = burn::module::Param::uninitialized(
-                                burn::module::ParamId::new(),
-                                move |device, _require_grad| Tensor::<B, #rank, Bool>::empty(#shape, device),
-                                device.clone(),
-                                false,
-                                #shape.into(),
-                            );
-                        },
-                    ),
-                    _ => (
-                        quote! { burn::module::Param<Tensor<B, #rank>> },
-                        quote! {
-                            let #name: burn::module::Param<Tensor<B, #rank>> = burn::module::Param::uninitialized(
-                                burn::module::ParamId::new(),
-                                move |device, _require_grad| Tensor::<B, #rank>::zeros(#shape, device),
-                                device.clone(),
-                                false,
-                                #shape.into(),
-                            );
-                        },
-                    ),
-                };
-                Some(Field::new(self.name.clone(), ty, init))
-            }
-            _ => None,
-        }
+        let name = Ident::new(&self.name, Span::call_site());
+        let rank_tok = rank.to_tokens();
+
+        // Get tensor data from the input (which holds the constant value)
+        let input = self.inputs.first().unwrap();
+        let tensor_data = input.value().expect("Constant node must have tensor data");
+        let shape = if tensor_data.shape.is_empty() {
+            // ScalarTensor: shape [1]
+            vec![1usize].to_tokens()
+        } else {
+            tensor_data.shape.to_tokens()
+        };
+
+        let (ty, init) = match dtype {
+            d if d.is_int() || d.is_uint() => (
+                quote! { burn::module::Param<Tensor<B, #rank_tok, Int>> },
+                quote! {
+                    let #name: burn::module::Param<Tensor<B, #rank_tok, Int>> = burn::module::Param::uninitialized(
+                        burn::module::ParamId::new(),
+                        move |device, _require_grad| Tensor::<B, #rank_tok, Int>::zeros(#shape, device),
+                        device.clone(),
+                        false,
+                        #shape.into(),
+                    );
+                },
+            ),
+            d if d.is_float() => (
+                quote! { burn::module::Param<Tensor<B, #rank_tok>> },
+                quote! {
+                    let #name: burn::module::Param<Tensor<B, #rank_tok>> = burn::module::Param::uninitialized(
+                        burn::module::ParamId::new(),
+                        move |device, _require_grad| Tensor::<B, #rank_tok>::zeros(#shape, device),
+                        device.clone(),
+                        false,
+                        #shape.into(),
+                    );
+                },
+            ),
+            d if d.is_bool() => (
+                quote! { burn::module::Param<Tensor<B, #rank_tok, Bool>> },
+                quote! {
+                    let #name: burn::module::Param<Tensor<B, #rank_tok, Bool>> = burn::module::Param::uninitialized(
+                        burn::module::ParamId::new(),
+                        move |device, _require_grad| Tensor::<B, #rank_tok, Bool>::empty(#shape, device),
+                        device.clone(),
+                        false,
+                        #shape.into(),
+                    );
+                },
+            ),
+            _ => (
+                quote! { burn::module::Param<Tensor<B, #rank_tok>> },
+                quote! {
+                    let #name: burn::module::Param<Tensor<B, #rank_tok>> = burn::module::Param::uninitialized(
+                        burn::module::ParamId::new(),
+                        move |device, _require_grad| Tensor::<B, #rank_tok>::zeros(#shape, device),
+                        device.clone(),
+                        false,
+                        #shape.into(),
+                    );
+                },
+            ),
+        };
+        Some(Field::new(self.name.clone(), ty, init))
     }
 
     fn collect_snapshots(&self, field_name: &str) -> Vec<TensorSnapshot> {
@@ -86,7 +93,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 
         let output = self.outputs.first().unwrap();
 
-        // Only collect snapshots for tensor constants (not scalars or shapes)
+        // Collect snapshots for tensor constants (ScalarTensor is inlined, not stored)
         match &output.ty {
             ArgType::Tensor(_) => {
                 if let Some(input) = self.inputs.first() {
@@ -100,7 +107,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                     vec![]
                 }
             }
-            _ => vec![],
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) | ArgType::Shape(_) => vec![],
         }
     }
 
@@ -110,14 +117,43 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 
         match output_ty {
             ArgType::Tensor(_) => {
-                // For tensor constants, reference the field
+                // For tensor constants, reference the stored param
                 let name = Ident::new(&self.name, Span::call_site());
                 quote! {
                     let #output = self.#name.val();
                 }
             }
-            ArgType::Scalar(elem_type) => {
-                // For scalar constants, get the value from input and embed directly
+            ArgType::ScalarTensor(elem_type) => {
+                // For scalar-tensor constants, inline the value as a 1-element tensor on device.
+                // Use from_data (not from_data_dtype) so the tensor adopts the backend's default
+                // element type, matching the behavior of Param loading from burnpack.
+                let input = self.inputs.first().unwrap();
+                let tensor_data = input.value().expect("Constant node must have tensor data");
+
+                let tensor_creation = if elem_type.is_float() {
+                    let val = if *elem_type == onnx_ir::ir::DType::F32 {
+                        let v = tensor_data.as_slice::<f32>().unwrap()[0] as f64;
+                        super::super::codegen::f64_to_tokens(v)
+                    } else {
+                        let v = tensor_data.as_slice::<f64>().unwrap()[0];
+                        super::super::codegen::f64_to_tokens(v)
+                    };
+                    quote! { Tensor::<B, 1>::from_data([#val], &*self.device) }
+                } else if elem_type.is_int() || elem_type.is_uint() {
+                    let val = tensor_data.to_i64_vec().unwrap()[0];
+                    quote! { Tensor::<B, 1, Int>::from_data([#val], &*self.device) }
+                } else {
+                    // Bool
+                    let val = tensor_data.as_slice::<bool>().unwrap()[0];
+                    quote! { Tensor::<B, 1, Bool>::from_data([#val], &*self.device) }
+                };
+
+                quote! {
+                    let #output = #tensor_creation;
+                }
+            }
+            ArgType::ScalarNative(elem_type) => {
+                // For native scalar constants, embed the value directly as a Rust literal
                 let input = self.inputs.first().unwrap();
                 let tensor_data = input.value().expect("Constant node must have tensor data");
 
@@ -215,7 +251,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 //
 //         // Determine input type based on tensor data
 //         let input_ty = if tensor_data.shape.is_empty() {
-//             ArgType::Scalar(tensor_data.elem_type())
+//             ArgType::ScalarNative(tensor_data.elem_type())
 //         } else {
 //             ArgType::Tensor(TensorType {
 //                 dtype: tensor_data.elem_type(),
@@ -353,7 +389,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 //     #[test]
 //     fn test_constant_scalar_f32() {
 //         let data = TensorData::new(vec![3.14f32], vec![]);
-//         let node = create_constant_node("pi", data, ArgType::Scalar(DType::F32));
+//         let node = create_constant_node("pi", data, ArgType::ScalarNative(DType::F32));
 //         let code = codegen_forward_default(&node);
 //         assert_snapshot!(code, @r"
 //         pub fn forward(&self) -> f32 {
@@ -366,7 +402,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 //     #[test]
 //     fn test_constant_scalar_f64() {
 //         let data = TensorData::new(vec![2.718f64], vec![]);
-//         let node = create_constant_node("euler", data, ArgType::Scalar(DType::F64));
+//         let node = create_constant_node("euler", data, ArgType::ScalarNative(DType::F64));
 //         let code = codegen_forward_default(&node);
 //         assert_snapshot!(code, @r"
 //         pub fn forward(&self) -> f64 {
@@ -379,7 +415,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 //     #[test]
 //     fn test_constant_scalar_i32() {
 //         let data = TensorData::new(vec![42i32], vec![]);
-//         let node = create_constant_node("answer", data, ArgType::Scalar(DType::I32));
+//         let node = create_constant_node("answer", data, ArgType::ScalarNative(DType::I32));
 //         let code = codegen_forward_default(&node);
 //         assert_snapshot!(code, @r"
 //         pub fn forward(&self) -> i32 {
@@ -392,7 +428,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 //     #[test]
 //     fn test_constant_scalar_i64() {
 //         let data = TensorData::new(vec![1000i64], vec![]);
-//         let node = create_constant_node("count", data, ArgType::Scalar(DType::I64));
+//         let node = create_constant_node("count", data, ArgType::ScalarNative(DType::I64));
 //         let code = codegen_forward_default(&node);
 //         assert_snapshot!(code, @r"
 //         pub fn forward(&self) -> i64 {
@@ -405,7 +441,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 //     #[test]
 //     fn test_constant_scalar_bool_true() {
 //         let data = TensorData::new(vec![true], vec![]);
-//         let node = create_constant_node("flag", data, ArgType::Scalar(DType::Bool));
+//         let node = create_constant_node("flag", data, ArgType::ScalarNative(DType::Bool));
 //         let code = codegen_forward_default(&node);
 //         assert_snapshot!(code, @r"
 //         pub fn forward(&self) -> bool {
@@ -418,7 +454,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 //     #[test]
 //     fn test_constant_scalar_bool_false() {
 //         let data = TensorData::new(vec![false], vec![]);
-//         let node = create_constant_node("enabled", data, ArgType::Scalar(DType::Bool));
+//         let node = create_constant_node("enabled", data, ArgType::ScalarNative(DType::Bool));
 //         let code = codegen_forward_default(&node);
 //         assert_snapshot!(code, @r"
 //         pub fn forward(&self) -> bool {

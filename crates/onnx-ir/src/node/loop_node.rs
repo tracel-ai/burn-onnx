@@ -27,11 +27,13 @@ fn add_concat_dimension(ty: ArgType) -> ArgType {
 
     match ty {
         // Scalar (rank 0) → unsqueeze to [1] → concat → [N, 1] (rank 2)
-        ArgType::Scalar(dtype) => ArgType::Tensor(TensorType {
-            dtype,
-            rank: 2, // ONNX unsqueezes scalars before concat, resulting in rank 2
-            static_shape: None,
-        }),
+        ArgType::ScalarTensor(dtype) | ArgType::ScalarNative(dtype) => {
+            ArgType::Tensor(TensorType {
+                dtype,
+                rank: 2, // ONNX unsqueezes scalars before concat, resulting in rank 2
+                static_shape: None,
+            })
+        }
         // Tensors: concatenated along axis 0 (same rank, first dim changes)
         ArgType::Tensor(mut tensor_type) => {
             // Clear static shape since num_iterations affects first dimension
@@ -74,6 +76,24 @@ pub(crate) struct LoopProcessor;
 impl NodeProcessor for LoopProcessor {
     type Config = LoopConfig;
 
+    fn input_preferences(
+        &self,
+        node: &RawNode,
+        _opset: usize,
+    ) -> Result<Option<crate::processor::InputPreferences>, ProcessError> {
+        use crate::processor::{ArgPreference, InputPreferences};
+
+        // Loop's max_trip_count (input 0) and condition (input 1) must be native
+        let mut prefs = InputPreferences::new();
+        if !node.inputs.is_empty() {
+            prefs = prefs.add(&node.inputs[0].name, ArgPreference::ScalarNative);
+        }
+        if node.inputs.len() > 1 {
+            prefs = prefs.add(&node.inputs[1].name, ArgPreference::ScalarNative);
+        }
+        Ok(Some(prefs))
+    }
+
     fn infer_types(
         &self,
         node: &mut RawNode,
@@ -101,7 +121,9 @@ impl NodeProcessor for LoopProcessor {
                 });
             }
             match m_type {
-                ArgType::Scalar(dtype) if *dtype == DType::I64 => {
+                ArgType::ScalarNative(dtype) | ArgType::ScalarTensor(dtype)
+                    if *dtype == DType::I64 =>
+                {
                     // Valid scalar int64
                 }
                 _ => {
@@ -123,7 +145,7 @@ impl NodeProcessor for LoopProcessor {
                 });
             }
             match cond_type {
-                ArgType::Scalar(dtype) if dtype.is_bool() => {
+                ArgType::ScalarNative(dtype) | ArgType::ScalarTensor(dtype) if dtype.is_bool() => {
                     // Valid scalar bool
                 }
                 _ => {
@@ -159,7 +181,7 @@ impl NodeProcessor for LoopProcessor {
             });
         }
         match cond_in_type {
-            ArgType::Scalar(dtype) if dtype.is_bool() => {
+            ArgType::ScalarNative(dtype) | ArgType::ScalarTensor(dtype) if dtype.is_bool() => {
                 // Valid
             }
             _ => {
@@ -186,7 +208,7 @@ impl NodeProcessor for LoopProcessor {
             });
         }
         match cond_out_type {
-            ArgType::Scalar(dtype) if dtype.is_bool() => {
+            ArgType::ScalarNative(dtype) | ArgType::ScalarTensor(dtype) if dtype.is_bool() => {
                 // Valid
             }
             _ => {
@@ -330,14 +352,14 @@ mod tests {
                 // iter_num
                 Argument {
                     name: "iter".to_string(),
-                    ty: ArgType::Scalar(DType::I64),
+                    ty: ArgType::ScalarNative(DType::I64),
                     value_source: crate::ir::ValueSource::Dynamic,
                     value_store: None,
                 },
                 // cond_in
                 Argument {
                     name: "cond_in".to_string(),
-                    ty: ArgType::Scalar(DType::Bool),
+                    ty: ArgType::ScalarNative(DType::Bool),
                     value_source: crate::ir::ValueSource::Dynamic,
                     value_store: None,
                 },
@@ -357,7 +379,7 @@ mod tests {
                 // cond_out
                 Argument {
                     name: "cond_out".to_string(),
-                    ty: ArgType::Scalar(DType::Bool),
+                    ty: ArgType::ScalarNative(DType::Bool),
                     value_source: crate::ir::ValueSource::Dynamic,
                     value_store: None,
                 },

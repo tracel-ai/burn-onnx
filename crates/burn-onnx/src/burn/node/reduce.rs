@@ -125,7 +125,8 @@ macro_rules! impl_reduce_node {
                 // Get output rank
                 let output_rank = match &output_arg.ty {
                     onnx_ir::ir::ArgType::Tensor(tensor) => tensor.rank,
-                    onnx_ir::ir::ArgType::Scalar(_) => 0,
+                    onnx_ir::ir::ArgType::ScalarTensor(_) => 1,
+                    onnx_ir::ir::ArgType::ScalarNative(_) => 0,
                     _ => panic!("Reduce node output must be tensor or scalar"),
                 };
 
@@ -159,6 +160,9 @@ macro_rules! impl_reduce_node {
                         } else {
                             reduced_input
                         }
+                    } else if matches!(&output_arg.ty, onnx_ir::ir::ArgType::ScalarTensor(_)) {
+                        // Keep as Tensor<B, 1> on device
+                        quote! { #reduced_input.reshape([1]) }
                     } else if output_rank == 0 {
                         reduced_input
                     } else {
@@ -167,15 +171,18 @@ macro_rules! impl_reduce_node {
                         quote! { #reduced_input.squeeze_dims::<#output_rank>(&#dims_to_squeeze) }
                     };
 
-                    return if output_rank == 0 {
-                        quote! {
-                            let #output = {
-                                #final_output.into_scalar().elem::<bool>()
-                            };
+                    return match &output_arg.ty {
+                        onnx_ir::ir::ArgType::ScalarNative(_) => {
+                            quote! {
+                                let #output = {
+                                    #final_output.into_scalar().elem::<bool>()
+                                };
+                            }
                         }
-                    } else {
-                        quote! {
-                            let #output = #final_output;
+                        _ => {
+                            quote! {
+                                let #output = #final_output;
+                            }
                         }
                     };
                 }
@@ -334,24 +341,12 @@ macro_rules! impl_reduce_node {
 
                 // Handle scalar outputs by extracting the scalar value from the tensor result
                 let output_expr = match &output_arg.ty {
-                    onnx_ir::ir::ArgType::Scalar(dtype) => {
-                        // For scalar outputs, extract the scalar value using .into_scalar()
-                        match dtype {
-                            onnx_ir::ir::DType::F16 => quote! { #raw_output_expr.into_scalar().elem::<half::f16>() },
-                            onnx_ir::ir::DType::BF16 => quote! { #raw_output_expr.into_scalar().elem::<half::bf16>() },
-                            onnx_ir::ir::DType::F32 => quote! { #raw_output_expr.into_scalar().elem::<f32>() },
-                            onnx_ir::ir::DType::F64 => quote! { #raw_output_expr.into_scalar().elem::<f64>() },
-                            onnx_ir::ir::DType::I8 => quote! { #raw_output_expr.into_scalar().elem::<i8>() },
-                            onnx_ir::ir::DType::I16 => quote! { #raw_output_expr.into_scalar().elem::<i16>() },
-                            onnx_ir::ir::DType::I32 => quote! { #raw_output_expr.into_scalar().elem::<i32>() },
-                            onnx_ir::ir::DType::I64 => quote! { #raw_output_expr.into_scalar().elem::<i64>() },
-                            onnx_ir::ir::DType::U8 => quote! { #raw_output_expr.into_scalar().elem::<u8>() },
-                            onnx_ir::ir::DType::U16 => quote! { #raw_output_expr.into_scalar().elem::<u16>() },
-                            onnx_ir::ir::DType::U32 => quote! { #raw_output_expr.into_scalar().elem::<u32>() },
-                            onnx_ir::ir::DType::U64 => quote! { #raw_output_expr.into_scalar().elem::<u64>() },
-                            onnx_ir::ir::DType::Bool => quote! { #raw_output_expr.into_scalar().elem::<bool>() },
-                            _ => panic!("Unsupported scalar type {:?} for reduce output", dtype),
-                        }
+                    onnx_ir::ir::ArgType::ScalarTensor(_) => {
+                        // Keep as Tensor<B, 1> on device (no GPU stall)
+                        quote! { #raw_output_expr.reshape([1]) }
+                    }
+                    onnx_ir::ir::ArgType::ScalarNative(dtype) => {
+                        on_device_to_native(raw_output_expr, dtype)
                     }
                     onnx_ir::ir::ArgType::Tensor(_) => raw_output_expr,
                     _ => panic!("Reduce node output must be tensor or scalar"),

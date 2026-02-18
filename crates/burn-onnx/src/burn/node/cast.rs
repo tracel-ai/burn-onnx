@@ -19,7 +19,7 @@ impl NodeCodegen for onnx_ir::cast::CastNode {
             // -----------------------
             // Scalar -> Scalar
             // -----------------------
-            (ArgType::Scalar(input_dtype), ArgType::Scalar(_output_dtype)) => {
+            (ArgType::ScalarNative(input_dtype), ArgType::ScalarNative(_output_dtype)) => {
                 let input = arg_to_ident(input_arg);
                 let output = arg_to_ident(output_arg);
 
@@ -57,14 +57,12 @@ impl NodeCodegen for onnx_ir::cast::CastNode {
             }
 
             // -----------------------
-            // Tensor -> Tensor
+            // Tensor -> Tensor (also covers ScalarTensor -> ScalarTensor)
             // -----------------------
-            (ArgType::Tensor(input_tensor), ArgType::Tensor(_output_tensor)) => {
+            (input_ty, output_ty) if input_ty.is_on_device() && output_ty.is_on_device() => {
                 let input = scope.arg(input_arg);
                 let output = arg_to_ident(output_arg);
 
-                // Map ONNX element types to Burn TensorKind categories.
-                // Burn only distinguishes Float / Int / Bool at the Tensor level.
                 let target_kind = match &self.config.to {
                     dtype if dtype.is_float() => TensorKind::Float,
                     dtype if dtype.is_int() || dtype.is_uint() => TensorKind::Int,
@@ -72,15 +70,13 @@ impl NodeCodegen for onnx_ir::cast::CastNode {
                     _ => panic!("Unsupported DType for Cast: {:?}", self.config.to),
                 };
 
-                let input_kind: TensorKind = input_tensor.dtype.into();
+                let input_kind: TensorKind = input_ty.elem_type().into();
 
                 if input_kind == target_kind {
-                    // No-op cast if already in the correct TensorKind category.
                     quote! {
                         let #output = #input;
                     }
                 } else {
-                    // Burn exposes category-level casts: .float(), .int(), .bool()
                     let cast_fn = match target_kind {
                         TensorKind::Bool => quote! { bool() },
                         TensorKind::Int => quote! { int() },

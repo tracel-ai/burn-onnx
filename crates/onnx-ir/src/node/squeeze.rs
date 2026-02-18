@@ -177,10 +177,10 @@ impl NodeProcessor for SqueezeProcessor {
                     }
                 };
 
-                // When all dimensions are squeezed (rank=0), represent as Scalar not Tensor
-                // This maintains consistency with proto conversion which converts 0-dim tensors to Scalar
+                // When all dimensions are squeezed (rank=0), keep as ScalarTensor (on device)
+                // Downstream consumers that need native will request ScalarNative via preferences
                 node.outputs[0].ty = if output_rank == 0 {
-                    ArgType::Scalar(tensor.dtype)
+                    ArgType::ScalarTensor(tensor.dtype)
                 } else {
                     ArgType::Tensor(TensorType {
                         dtype: tensor.dtype,
@@ -201,13 +201,13 @@ impl NodeProcessor for SqueezeProcessor {
                 }
 
                 if *shape_rank == 1 {
-                    node.outputs[0].ty = ArgType::Scalar(crate::ir::DType::I64);
+                    node.outputs[0].ty = ArgType::ScalarNative(crate::ir::DType::I64);
                 } else {
                     node.outputs[0].ty = ArgType::Shape(*shape_rank);
                 }
             }
-            ArgType::Scalar(scalar_type) => {
-                node.outputs[0].ty = ArgType::Scalar(*scalar_type);
+            ArgType::ScalarTensor(scalar_type) | ArgType::ScalarNative(scalar_type) => {
+                node.outputs[0].ty = ArgType::ScalarNative(*scalar_type);
             }
         }
 
@@ -370,19 +370,12 @@ mod tests {
 
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        // Verify output is Scalar, not Tensor(rank=0)
+        // Verify output is ScalarTensor (stays on device)
         match &node.outputs[0].ty {
-            ArgType::Scalar(dtype) => {
+            ArgType::ScalarTensor(dtype) => {
                 assert_eq!(*dtype, crate::ir::DType::F32);
             }
-            ArgType::Tensor(tensor) => {
-                panic!(
-                    "Expected Scalar output, but got Tensor with rank {}. \
-                     Squeezing all dimensions should produce Scalar, not Tensor(rank=0).",
-                    tensor.rank
-                );
-            }
-            other => panic!("Unexpected output type: {:?}", other),
+            other => panic!("Expected ScalarTensor output, got {:?}", other),
         }
     }
 

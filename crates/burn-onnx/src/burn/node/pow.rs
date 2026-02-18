@@ -34,7 +34,12 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                 dtype if dtype.is_float() => PowerType::Float,
                 _ => panic!("pow function requires RHS to be int or float type"),
             },
-            ArgType::Scalar(dtype) => match dtype {
+            ArgType::ScalarTensor(dtype) => match dtype {
+                dtype if dtype.is_int() => PowerType::Int,
+                dtype if dtype.is_float() => PowerType::Float,
+                _ => panic!("pow function requires RHS to be int or float type"),
+            },
+            ArgType::ScalarNative(dtype) => match dtype {
                 dtype if dtype.is_int() => PowerType::Int,
                 dtype if dtype.is_float() => PowerType::Float,
                 _ => panic!("pow function requires RHS to be int or float type"),
@@ -43,9 +48,9 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
         };
 
         let function = match (power_type, &lhs_arg.ty, &rhs_arg.ty) {
-            (PowerType::Int, ArgType::Tensor(lhs_t), ArgType::Tensor(rhs_t)) => {
-                let lhs_rank = lhs_t.rank;
-                let rhs_rank = rhs_t.rank;
+            (PowerType::Int, lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
                 if lhs_rank == rhs_rank {
                     quote! { #lhs.powi(#rhs) }
                 } else if lhs_rank > rhs_rank {
@@ -58,9 +63,11 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                     quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).powi(#rhs) }
                 }
             }
-            (PowerType::Float, ArgType::Tensor(lhs_t), ArgType::Tensor(rhs_t)) => {
-                let lhs_rank = lhs_t.rank;
-                let rhs_rank = rhs_t.rank;
+            (PowerType::Float, lhs_ty, rhs_ty)
+                if lhs_ty.is_on_device() && rhs_ty.is_on_device() =>
+            {
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
                 if lhs_rank == rhs_rank {
                     quote! { #lhs.powf(#rhs) }
                 } else if lhs_rank > rhs_rank {
@@ -73,8 +80,8 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                     quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).powf(#rhs) }
                 }
             }
-            (PowerType::Int, _, ArgType::Scalar(_)) => quote! { #lhs.powi_scalar(#rhs) },
-            (PowerType::Float, _, ArgType::Scalar(_)) => quote! { #lhs.powf_scalar(#rhs) },
+            (PowerType::Int, _, ArgType::ScalarNative(_)) => quote! { #lhs.powi_scalar(#rhs) },
+            (PowerType::Float, _, ArgType::ScalarNative(_)) => quote! { #lhs.powf_scalar(#rhs) },
             _ => panic!("Invalid power type combination"),
         };
 

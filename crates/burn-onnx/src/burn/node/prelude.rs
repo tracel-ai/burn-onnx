@@ -12,6 +12,9 @@
 /// ```
 /// Re-export common traits and helpers from parent module
 pub(crate) use super::{NodeCodegen, arg_to_ident};
+pub(crate) use crate::burn::argument_helpers::{
+    on_device_to_native, scalar_native_to_shape, scalar_tensor_to_shape, shape_to_native,
+};
 
 // Re-export common burn-onnx types
 pub(crate) use crate::burn::scope::ScopeAtPosition;

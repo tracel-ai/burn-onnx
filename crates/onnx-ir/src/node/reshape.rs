@@ -85,7 +85,7 @@ fn extract_input_info(input: &Argument) -> InputInfo {
             is_shape: true,
             shape_size: Some(*size),
         },
-        ArgType::Scalar(dtype) => {
+        ArgType::ScalarTensor(dtype) | ArgType::ScalarNative(dtype) => {
             // Scalar can be used as input when reshaping to/from rank 0
             InputInfo {
                 dtype: *dtype,
@@ -106,18 +106,18 @@ fn determine_output_type(
 ) -> ArgType {
     // Case 1: Scalar output (rank 0)
     if output_rank == 0 {
-        return ArgType::Scalar(input_info.dtype);
+        return ArgType::ScalarNative(input_info.dtype);
     }
 
     // Case 2: Scalar input reshaped to [1] or [-1] - keep as scalar
     // This avoids unnecessary scalar -> tensor -> scalar conversions
-    if matches!(input.ty, ArgType::Scalar(_))
+    if matches!(input.ty, ArgType::ScalarNative(_))
         && output_rank == 1
         && let Some(shape_values) = get_static_shape(node)
     {
         // Shape is [-1] or [1] - effectively a single element, keep as scalar
         if shape_values.len() == 1 && (shape_values[0] == -1 || shape_values[0] == 1) {
-            return ArgType::Scalar(input_info.dtype);
+            return ArgType::ScalarNative(input_info.dtype);
         }
     }
 
@@ -214,7 +214,7 @@ fn get_rank_from_shape_input(node: &RawNode) -> Option<usize> {
 fn get_rank_from_output(node: &RawNode) -> Option<usize> {
     match &node.outputs[0].ty {
         ArgType::Tensor(tensor) => Some(tensor.rank),
-        ArgType::Scalar(_) => Some(0),
+        ArgType::ScalarNative(_) => Some(0),
         _ => None,
     }
 }
@@ -244,8 +244,8 @@ impl NodeProcessor for ReshapeProcessor {
 
     fn is_noop(&self, node: &RawNode) -> bool {
         // Reshape is a no-op when both input and output are Scalar
-        if matches!(node.inputs[0].ty, ArgType::Scalar(_))
-            && matches!(node.outputs[0].ty, ArgType::Scalar(_))
+        if matches!(node.inputs[0].ty, ArgType::ScalarNative(_))
+            && matches!(node.outputs[0].ty, ArgType::ScalarNative(_))
         {
             return true;
         }
@@ -677,7 +677,7 @@ mod tests {
         // Test that Reshape(scalar, [-1]) keeps output as Scalar
         // This optimization avoids unnecessary scalar -> tensor conversion
         let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape_scalar")
-            .add_input("data", ArgType::Scalar(DType::F32))
+            .add_input("data", ArgType::ScalarNative(DType::F32))
             .input_tensor_i64_data("shape", vec![-1], vec![1])
             .add_output(
                 "reshaped",
@@ -691,7 +691,7 @@ mod tests {
 
         // Output should remain scalar, not become a rank-1 tensor
         match &node.outputs[0].ty {
-            ArgType::Scalar(dtype) => {
+            ArgType::ScalarNative(dtype) => {
                 assert_eq!(*dtype, DType::F32);
             }
             other => panic!("Expected Scalar output, got {:?}", other),
@@ -702,7 +702,7 @@ mod tests {
     fn test_reshape_scalar_to_1_keeps_scalar() {
         // Test that Reshape(scalar, [1]) keeps output as Scalar
         let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape_scalar_1")
-            .add_input("data", ArgType::Scalar(DType::I64))
+            .add_input("data", ArgType::ScalarNative(DType::I64))
             .input_tensor_i64_data("shape", vec![1], vec![1])
             .add_output(
                 "reshaped",
@@ -716,7 +716,7 @@ mod tests {
 
         // Output should remain scalar
         match &node.outputs[0].ty {
-            ArgType::Scalar(dtype) => {
+            ArgType::ScalarNative(dtype) => {
                 assert_eq!(*dtype, DType::I64);
             }
             other => panic!("Expected Scalar output, got {:?}", other),
@@ -728,7 +728,7 @@ mod tests {
         // Test that Reshape(scalar, [2]) does NOT keep scalar (would be invalid)
         // This ensures the optimization only applies to single-element shapes
         let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape_scalar_2")
-            .add_input("data", ArgType::Scalar(DType::F32))
+            .add_input("data", ArgType::ScalarNative(DType::F32))
             .input_tensor_i64_data("shape", vec![2], vec![1])
             .add_output(
                 "reshaped",
@@ -753,7 +753,7 @@ mod tests {
     #[test]
     fn test_reshape_is_noop_scalar_to_scalar() {
         let mut node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape_noop")
-            .add_input("data", ArgType::Scalar(DType::F32))
+            .add_input("data", ArgType::ScalarNative(DType::F32))
             .input_tensor_i64_data("shape", vec![-1], vec![1])
             .add_output(
                 "reshaped",

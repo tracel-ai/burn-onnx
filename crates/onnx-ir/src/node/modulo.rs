@@ -87,15 +87,13 @@ impl NodeProcessor for ModuloProcessor {
             prefs = prefs.add(&node.inputs[0].name, ArgPreference::Shape);
         }
 
-        // Type propagation for Scalar arithmetic
-        // Case 3: Scalar op Constant => prefer Constant as Scalar
-        if node.inputs[0].ty.is_scalar() {
-            prefs = prefs.add(&node.inputs[1].name, ArgPreference::Scalar);
+        // Type propagation for ScalarNative arithmetic
+        if node.inputs[0].ty.is_scalar_native() {
+            prefs = prefs.add(&node.inputs[1].name, ArgPreference::ScalarNative);
         }
 
-        // Case 4: Constant op Scalar => prefer Constant as Scalar
-        if node.inputs[1].ty.is_scalar() {
-            prefs = prefs.add(&node.inputs[0].name, ArgPreference::Scalar);
+        if node.inputs[1].ty.is_scalar_native() {
+            prefs = prefs.add(&node.inputs[0].name, ArgPreference::ScalarNative);
         }
 
         Ok(Some(prefs))

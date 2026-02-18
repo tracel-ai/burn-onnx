@@ -159,7 +159,7 @@ impl TestNodeBuilder {
 
     /// Add a scalar input with the given name and data type
     pub fn input_scalar(self, name: &str, dtype: DType) -> Self {
-        self.add_input(name, ArgType::Scalar(dtype))
+        self.add_input(name, ArgType::ScalarNative(dtype))
     }
 
     /// Add a float32 scalar input with the given name
@@ -414,7 +414,7 @@ impl TestNodeBuilder {
 
     /// Add a scalar output with the given name and data type
     pub fn output_scalar(self, name: &str, dtype: DType) -> Self {
-        self.add_output(name, ArgType::Scalar(dtype))
+        self.add_output(name, ArgType::ScalarNative(dtype))
     }
 
     /// Add a float32 scalar output with the given name

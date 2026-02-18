@@ -135,7 +135,9 @@ impl NodeProcessor for GatherNDProcessor {
         let output_rank = q + r - k - 1 - b;
 
         if output_rank == 0 {
-            node.outputs[0].ty = ArgType::Scalar(data_tensor.dtype);
+            // Scalar tensor (stays on device)
+            // Downstream consumers that need native will request ScalarNative via preferences
+            node.outputs[0].ty = ArgType::ScalarTensor(data_tensor.dtype);
         } else {
             node.outputs[0].ty = ArgType::Tensor(TensorType {
                 dtype: data_tensor.dtype,
@@ -303,7 +305,7 @@ mod tests {
         processor.infer_types(&mut node, 12, &prefs).unwrap();
 
         match &node.outputs[0].ty {
-            ArgType::Scalar(dtype) => assert_eq!(*dtype, DType::F32),
+            ArgType::ScalarTensor(dtype) => assert_eq!(*dtype, DType::F32),
             other => panic!("Expected scalar, got {:?}", other),
         }
     }

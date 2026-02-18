@@ -437,10 +437,10 @@ mod tests {
                     constant4_out1 as usize
                 };
                 let gather4_out1 = shape4_out1[actual_idx] as i64;
-                let unsqueeze1_out1 = [gather1_out1];
-                let unsqueeze2_out1 = [gather2_out1];
-                let unsqueeze3_out1 = [gather3_out1];
-                let unsqueeze4_out1 = [gather4_out1];
+                let unsqueeze1_out1 = [gather1_out1 as i64];
+                let unsqueeze2_out1 = [gather2_out1 as i64];
+                let unsqueeze3_out1 = [gather3_out1 as i64];
+                let unsqueeze4_out1 = [gather4_out1 as i64];
                 let concat1_out1: [i64; 4usize] = [
                     &unsqueeze1_out1[..],
                     &unsqueeze2_out1[..],
@@ -538,8 +538,9 @@ mod tests {
             ) -> Tensor<B, 4> {
                 let transpose1_out1 = k.permute([0, 1, 3, 2]);
                 let matmul1_out1 = q.matmul(transpose1_out1);
-                let constant1_out1 = 2f32;
-                let div1_out1 = matmul1_out1.div_scalar(constant1_out1);
+                let constant1_out1 = Tensor::<B, 1>::from_data([2f64], &*self.device);
+                let div1_out1 = matmul1_out1
+                    .div(constant1_out1.unsqueeze_dims(&[0isize, 1isize, 2isize]));
                 let softmax1_out1 = burn::tensor::activation::softmax(div1_out1, 3);
                 let matmul2_out1 = softmax1_out1.matmul(v);
                 matmul2_out1

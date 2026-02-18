@@ -61,6 +61,7 @@ pub(super) fn iterative_type_inference_with_preferences(
         for (output_name, consumer_name, pref_type_str) in &collected_preferences {
             let pref = match pref_type_str.as_str() {
                 "Scalar" => ArgPreference::Scalar,
+                "ScalarNative" => ArgPreference::ScalarNative,
                 "Shape" => ArgPreference::Shape,
                 "Tensor" => ArgPreference::Tensor,
                 _ => continue,
@@ -197,6 +198,7 @@ pub(super) fn iterative_type_inference_with_preferences(
                             for req_type in requested_types {
                                 let pref_type_str = match req_type {
                                     ArgPreference::Scalar => "Scalar",
+                                    ArgPreference::ScalarNative => "ScalarNative",
                                     ArgPreference::Shape => "Shape",
                                     ArgPreference::Tensor => "Tensor",
                                 }

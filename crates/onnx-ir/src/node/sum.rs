@@ -60,7 +60,7 @@ impl NodeProcessor for SumProcessor {
         for input in &node.inputs {
             let current_dtype = match &input.ty {
                 ArgType::Tensor(tensor) => tensor.dtype,
-                ArgType::Scalar(dtype) => *dtype,
+                ArgType::ScalarTensor(dtype) | ArgType::ScalarNative(dtype) => *dtype,
                 ArgType::Shape(_) => DType::I64,
             };
 

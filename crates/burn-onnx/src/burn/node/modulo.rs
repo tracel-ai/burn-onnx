@@ -17,12 +17,12 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
         let rhs_arg = &self.inputs[1];
 
         match (&lhs_arg.ty, &rhs_arg.ty) {
-            (ArgType::Tensor(lhs_tensor), ArgType::Tensor(rhs_tensor)) => {
+            (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
                 let lhs = scope.arg(lhs_arg);
                 let rhs = scope.arg(rhs_arg);
 
-                let lhs_rank = lhs_tensor.rank;
-                let rhs_rank = rhs_tensor.rank;
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
 
                 // Handle broadcasting if ranks differ
                 if lhs_rank != rhs_rank {
@@ -70,7 +70,7 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                     }
                 }
             }
-            (ArgType::Tensor(_), ArgType::Scalar(_)) => {
+            (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                 let lhs = scope.arg(lhs_arg);
                 let rhs = Ident::new(&rhs_arg.name, Span::call_site());
 
@@ -84,7 +84,7 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                     let #output = #lhs.#mod_op(#rhs);
                 }
             }
-            (ArgType::Scalar(_), ArgType::Tensor(_)) => {
+            (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 panic!("Mod operation with scalar dividend and tensor divisor is not supported")
             }
             _ => panic!("Mod operation requires at least one tensor input"),

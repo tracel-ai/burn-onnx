@@ -109,12 +109,13 @@ pub(crate) fn elementwise_comparison_outputs(node: &mut RawNode) {
 
     let max_rank = node.inputs.iter().fold(0, |acc, input| match &input.ty {
         ArgType::Tensor(tensor) => acc.max(tensor.rank),
-        ArgType::Scalar(_) => acc,
-        ArgType::Shape(_) => acc.max(1), // Shape types are always rank 1
+        ArgType::ScalarTensor(_) => acc.max(1),
+        ArgType::ScalarNative(_) => acc,
+        ArgType::Shape(_) => acc.max(1),
     });
 
     if max_rank == 0 {
-        node.outputs[0].ty = ArgType::Scalar(DType::Bool);
+        node.outputs[0].ty = ArgType::ScalarNative(DType::Bool);
     } else {
         node.outputs[0].ty = ArgType::Tensor(TensorType {
             dtype: DType::Bool,
@@ -185,18 +186,29 @@ impl NodeProcessor for ComparisonProcessor {
 
         let max_rank = node.inputs.iter().fold(0, |acc, input| match &input.ty {
             ArgType::Tensor(tensor) => acc.max(tensor.rank),
-            ArgType::Scalar(_) => acc,
+            ArgType::ScalarTensor(_) => acc.max(1),
+            ArgType::ScalarNative(_) => acc,
             ArgType::Shape(_) => acc.max(1), // Shape types are always rank 1
         });
 
         if max_rank == 0 {
-            node.outputs[0].ty = ArgType::Scalar(DType::Bool);
+            node.outputs[0].ty = ArgType::ScalarNative(DType::Bool);
         } else {
-            node.outputs[0].ty = ArgType::Tensor(TensorType {
-                dtype: DType::Bool,
-                rank: max_rank,
-                static_shape: None,
-            });
+            let has_real_tensor = node
+                .inputs
+                .iter()
+                .any(|input| matches!(&input.ty, ArgType::Tensor(_)));
+
+            if !has_real_tensor && max_rank == 1 {
+                // All on-device inputs are ScalarTensor, output stays ScalarTensor
+                node.outputs[0].ty = ArgType::ScalarTensor(DType::Bool);
+            } else {
+                node.outputs[0].ty = ArgType::Tensor(TensorType {
+                    dtype: DType::Bool,
+                    rank: max_rank,
+                    static_shape: None,
+                });
+            }
         }
 
         Ok(())
@@ -270,15 +282,15 @@ mod tests {
         let mut node = create_test_node(0, 0);
 
         // Convert inputs to scalars
-        node.inputs[0].ty = ArgType::Scalar(DType::F32);
-        node.inputs[1].ty = ArgType::Scalar(DType::F32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
+        node.inputs[1].ty = ArgType::ScalarNative(DType::F32);
 
         let processor = ComparisonProcessor;
         let prefs = OutputPreferences::new();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, DType::Bool);
             }
             _ => panic!("Expected scalar output"),

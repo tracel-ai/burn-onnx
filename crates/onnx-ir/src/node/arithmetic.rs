@@ -117,18 +117,19 @@ impl NodeProcessor for ArithmeticBinaryProcessor {
             prefs = prefs.add(&node.inputs[0].name, ArgPreference::Shape);
         }
 
-        // Type propagation for Scalar arithmetic:
-        // When performing arithmetic on a Scalar with a constant, prefer the constant to be Scalar type.
-        // This preserves scalar semantics through arithmetic operations.
+        // Type propagation for ScalarNative arithmetic:
+        // When one input is ScalarNative, the other should also be ScalarNative
+        // to keep CPU-side arithmetic chains on CPU.
+        // ScalarTensor inputs don't need preferences (they're the performant default).
 
-        // Case 3: Scalar op Constant => prefer Constant as Scalar
-        if node.inputs[0].ty.is_scalar() {
-            prefs = prefs.add(&node.inputs[1].name, ArgPreference::Scalar);
+        // Case 3: ScalarNative op Constant => prefer Constant as ScalarNative
+        if node.inputs[0].ty.is_scalar_native() {
+            prefs = prefs.add(&node.inputs[1].name, ArgPreference::ScalarNative);
         }
 
-        // Case 4: Constant op Scalar => prefer Constant as Scalar
-        if node.inputs[1].ty.is_scalar() {
-            prefs = prefs.add(&node.inputs[0].name, ArgPreference::Scalar);
+        // Case 4: Constant op ScalarNative => prefer Constant as ScalarNative
+        if node.inputs[1].ty.is_scalar_native() {
+            prefs = prefs.add(&node.inputs[0].name, ArgPreference::ScalarNative);
         }
 
         Ok(Some(prefs))

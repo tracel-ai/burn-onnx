@@ -49,7 +49,10 @@ where
         }
         if !matches!(
             input.ty,
-            ArgType::Tensor(_) | ArgType::Scalar(_) | ArgType::Shape(_)
+            ArgType::Tensor(_)
+                | ArgType::ScalarTensor(_)
+                | ArgType::ScalarNative(_)
+                | ArgType::Shape(_)
         ) {
             continue;
         }
@@ -74,7 +77,10 @@ where
         .filter(|arg| {
             matches!(
                 arg.ty,
-                ArgType::Tensor(_) | ArgType::Scalar(_) | ArgType::Shape(_)
+                ArgType::Tensor(_)
+                    | ArgType::ScalarTensor(_)
+                    | ArgType::ScalarNative(_)
+                    | ArgType::Shape(_)
             )
         })
         .cloned()

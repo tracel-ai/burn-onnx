@@ -34,7 +34,7 @@ impl NodeCodegen for onnx_ir::node::argmax::ArgMaxNode {
                     }
                 }
             }
-            onnx_ir::ir::ArgType::Scalar(_) => {
+            onnx_ir::ir::ArgType::ScalarNative(_) => {
                 // 1D tensor with keepdims=false -> scalar output
                 // ArgMax always outputs Int64 indices
                 quote! {

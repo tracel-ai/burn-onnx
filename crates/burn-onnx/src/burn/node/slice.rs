@@ -23,7 +23,9 @@ impl NodeCodegen for onnx_ir::slice::SliceNode {
             ArgType::Shape(shape_rank) => {
                 generate_shape_slice(self, input_arg, *shape_rank, &output)
             }
-            _ => panic!("Unsupported input type for SliceNode"),
+            ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
+                panic!("Unsupported input type for SliceNode")
+            }
         }
     }
 }
@@ -186,7 +188,10 @@ fn generate_tensor_slice(
                 }
             } else if matches!(
                 (&start_arg.ty, &end_arg.ty),
-                (ArgType::Scalar(_), ArgType::Scalar(_))
+                (
+                    ArgType::ScalarNative(_) | ArgType::ScalarTensor(_),
+                    ArgType::ScalarNative(_) | ArgType::ScalarTensor(_)
+                )
             ) {
                 // Both scalars: use as single axis slice
                 let start_name = arg_to_ident(start_arg);
@@ -359,7 +364,7 @@ fn generate_tensor_slice(
                         let #output = #input.slice(s![#(#range_exprs),*]);
                     };
                 }
-                ArgType::Scalar(_) => {
+                ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                     // Static start, scalar end
                     let end_name = arg_to_ident(end_arg);
 
@@ -443,7 +448,9 @@ fn generate_tensor_slice(
                         let #output = #input.slice(s![#(#range_exprs),*]);
                     };
                 }
-                _ => panic!("Unsupported runtime start type for slice"),
+                ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
+                    panic!("Unsupported runtime start type for slice")
+                }
             }
         }
     }
@@ -583,7 +590,7 @@ fn get_slice_range_expressions(node: &onnx_ir::slice::SliceNode) -> (TokenStream
 
 fn get_scalar_expr(arg: &Argument) -> TokenStream {
     match &arg.ty {
-        ArgType::Scalar(_) => {
+        ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
             let name = arg_to_ident(arg);
             quote! { #name }
         }

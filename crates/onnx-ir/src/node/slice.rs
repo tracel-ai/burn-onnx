@@ -126,8 +126,11 @@ impl NodeProcessor for SliceProcessor {
 
         let mut prefs = InputPreferences::new();
         for input in node.inputs.iter().skip(1) {
-            // Prefer this constant to be Shape
+            // Prefer constants to be Shape; scalars must be native (for Slice bounds)
             prefs = prefs.add(&input.name, ArgPreference::Shape);
+            if input.ty.is_scalar() {
+                prefs = prefs.add(&input.name, ArgPreference::ScalarNative);
+            }
         }
 
         Ok(Some(prefs))

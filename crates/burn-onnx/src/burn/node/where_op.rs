@@ -28,12 +28,15 @@ impl NodeCodegen for onnx_ir::where_op::WhereNode {
                 let y_tensor = where_input_as_tensor(y_arg, broadcast_rank, target_dtype, scope);
 
                 // Check if x is a scalar - if so, use mask_fill
-                if let ArgType::Scalar(_) = &x_arg.ty {
+                if let ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) = &x_arg.ty {
                     let x_name = arg_to_ident(x_arg);
                     // When y is also scalar, it becomes a [1,1,...,1] tensor that may be
                     // smaller than the condition. Expand y to match condition shape so
                     // mask_fill can broadcast the mask correctly.
-                    if matches!(&y_arg.ty, ArgType::Scalar(_)) {
+                    if matches!(
+                        &y_arg.ty,
+                        ArgType::ScalarNative(_) | ArgType::ScalarTensor(_)
+                    ) {
                         quote! {
                             let #output = {
                                 let cond = #cond;
@@ -54,7 +57,7 @@ impl NodeCodegen for onnx_ir::where_op::WhereNode {
                     }
                 }
             }
-            ArgType::Scalar(_) => {
+            ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                 // Scalar output means all inputs are scalars
                 let cond_name = arg_to_ident(condition_arg);
                 let x_name = arg_to_ident(x_arg);
@@ -89,7 +92,11 @@ impl NodeCodegen for onnx_ir::where_op::WhereNode {
                             };
                         }
                     }
-                    (ArgType::Scalar(_), ArgType::Shape(_), ArgType::Shape(_)) => {
+                    (
+                        ArgType::ScalarNative(_) | ArgType::ScalarTensor(_),
+                        ArgType::Shape(_),
+                        ArgType::Shape(_),
+                    ) => {
                         // Scalar condition: select entire shape x or y
                         let cond_name = arg_to_ident(condition_arg);
                         let x_name = arg_to_ident(x_arg);
@@ -131,7 +138,7 @@ fn where_input_as_tensor(
                 tensor
             }
         }
-        ArgType::Scalar(_) => {
+        ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
             // Convert scalar to tensor with shape [1, 1, ...] (broadcast_rank dimensions)
             // Use from_data_dtype with reshape and expand to ensure correct dtype
             let name = arg_to_ident(arg);

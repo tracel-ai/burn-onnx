@@ -17,7 +17,7 @@ impl NodeCodegen for onnx_ir::gather::GatherNode {
         match &input_arg.ty {
             ArgType::Shape(_) => forward_shape_gather(self),
             ArgType::Tensor(_) => forward_tensor_gather(self, scope),
-            ArgType::Scalar(_) => forward_scalar_gather(self),
+            ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => forward_scalar_gather(self),
         }
     }
 }
@@ -31,11 +31,11 @@ fn forward_shape_gather(node: &onnx_ir::gather::GatherNode) -> proc_macro2::Toke
     let output = arg_to_ident(output_arg);
 
     match &output_arg.ty {
-        ArgType::Scalar(dtype) => {
+        ArgType::ScalarNative(dtype) | ArgType::ScalarTensor(dtype) => {
             // Gathering a single element from a shape produces a scalar
             let scalar_ty = scalar_type_tokens(dtype);
             match &index_arg.ty {
-                ArgType::Scalar(_) => {
+                ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                     let index = arg_to_ident(index_arg);
                     // Handle negative indices properly for runtime scalars
                     quote! {
@@ -112,7 +112,7 @@ fn forward_shape_gather(node: &onnx_ir::gather::GatherNode) -> proc_macro2::Toke
                 ),
             }
         }
-        _ => panic!(
+        ArgType::Tensor(_) => panic!(
             "Gather from Shape input can only output Shape or Scalar, got {:?}!",
             output_arg.ty
         ),
@@ -152,12 +152,42 @@ fn forward_tensor_gather(
     let output = arg_to_ident(output_arg);
 
     match &output_arg.ty {
-        ArgType::Scalar(dtype) => {
-            // Gathering a single element from a tensor produces a scalar
+        ArgType::ScalarTensor(_) => {
+            // Gathering a single element, keep as Tensor<B, 1> on device (no GPU stall)
+            match &index_arg.ty {
+                ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
+                    let index = if index_arg.ty.is_scalar_tensor() {
+                        let tensor = scope.arg(index_arg);
+                        on_device_to_native(quote! { #tensor }, &index_arg.ty.elem_type())
+                    } else {
+                        let ident = arg_to_ident(index_arg);
+                        quote! { #ident }
+                    };
+                    quote! {
+                        let #output = {
+                            let indices = Tensor::<B, 1, _>::from_data([#index], &*self.device);
+                            Tensor::select(#input, #dim, indices)
+                        };
+                    }
+                }
+                _ => panic!(
+                    "Gather from Tensor to ScalarTensor needs scalar index, got {:?}!",
+                    index_arg.ty
+                ),
+            }
+        }
+        ArgType::ScalarNative(dtype) => {
+            // Gathering a single element from a tensor produces a native scalar
             let scalar_ty = scalar_type_tokens(dtype);
             match &index_arg.ty {
-                ArgType::Scalar(_) => {
-                    let index = arg_to_ident(index_arg);
+                ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
+                    let index = if index_arg.ty.is_scalar_tensor() {
+                        let tensor = scope.arg(index_arg);
+                        on_device_to_native(quote! { #tensor }, &index_arg.ty.elem_type())
+                    } else {
+                        let ident = arg_to_ident(index_arg);
+                        quote! { #ident }
+                    };
                     quote! {
                         let #output = {
                             let indices = Tensor::<B, 1, _>::from_data([#index], &*self.device);
@@ -174,7 +204,7 @@ fn forward_tensor_gather(
         }
         ArgType::Tensor(_) => {
             match &index_arg.ty {
-                ArgType::Scalar(_) => {
+                ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                     // Use tensor.slice(...) for efficient gather operation
                     let output_rank = input_rank - 1;
                     let axis = node.config.axis;
@@ -188,8 +218,13 @@ fn forward_tensor_gather(
                             quote! { #lit }
                         })
                         .unwrap_or_else(|| {
-                            let index = arg_to_ident(index_arg);
-                            quote! { #index }
+                            if index_arg.ty.is_scalar_tensor() {
+                                let tensor = scope.arg(index_arg);
+                                on_device_to_native(quote! { #tensor }, &index_arg.ty.elem_type())
+                            } else {
+                                let index = arg_to_ident(index_arg);
+                                quote! { #index }
+                            }
                         });
 
                     let slice_args = (0..input_rank)
@@ -236,7 +271,7 @@ fn forward_tensor_gather(
                 }
             }
         }
-        _ => panic!("Gather needs Tensor output, got {:?}!", output_arg.ty),
+        ArgType::Shape(_) => panic!("Gather needs Tensor output, got {:?}!", output_arg.ty),
     }
 }
 

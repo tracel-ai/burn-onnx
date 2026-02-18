@@ -19,9 +19,9 @@ impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
         let rhs = scope.arg(rhs_arg);
 
         let function = match (&lhs_arg.ty, &rhs_arg.ty) {
-            (ArgType::Tensor(lhs_tensor), ArgType::Tensor(rhs_tensor)) => {
-                let lhs_rank = lhs_tensor.rank;
-                let rhs_rank = rhs_tensor.rank;
+            (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
 
                 if lhs_rank == rhs_rank {
                     quote! { #lhs.div(#rhs) }
@@ -35,23 +35,24 @@ impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
                     quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).div(#rhs) }
                 }
             }
-            (ArgType::Tensor(_), ArgType::Scalar(_)) => quote! { #lhs.div_scalar(#rhs) },
-            (ArgType::Scalar(dtype), ArgType::Tensor(tensor)) => {
+            (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
+                quote! { #lhs.div_scalar(#rhs) }
+            }
+            (ArgType::ScalarNative(dtype), rhs_ty) if rhs_ty.is_on_device() => {
                 // Use the built-in Div impl: f32 / Tensor -> tensor.recip().mul_scalar(f32)
                 if dtype.is_float() {
                     quote! { #lhs / #rhs }
                 } else if dtype.is_int() || dtype.is_uint() {
-                    // Cast to the tensor's float type
-                    let cast_type = match tensor.dtype {
+                    let cast_type = match rhs_ty.elem_type() {
                         DType::F64 => quote! { f64 },
-                        _ => quote! { f32 }, // F32, F16, BF16, Flex32 all use f32
+                        _ => quote! { f32 },
                     };
                     quote! { (#lhs as #cast_type) / #rhs }
                 } else {
                     panic!("Unsupported scalar type for division: {:?}", dtype)
                 }
             }
-            (ArgType::Scalar(_), ArgType::Scalar(_)) => quote! { #lhs / #rhs },
+            (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => quote! { #lhs / #rhs },
             (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
                 {
                     let mut result = #lhs;
@@ -61,26 +62,42 @@ impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
                     result
                 }
             },
-            (ArgType::Shape(_), ArgType::Scalar(_)) => quote! {
-                {
-                    let mut result = #lhs;
-                    for result_item in result.iter_mut() {
-                        *result_item = if #rhs as i64 != 0 { *result_item / (#rhs as i64) } else { *result_item };
+            (ArgType::Shape(_), rhs_ty) if rhs_ty.is_scalar() => {
+                let scalar_expr = if rhs_ty.is_scalar_tensor() {
+                    on_device_to_native(rhs.clone(), &rhs_ty.elem_type())
+                } else {
+                    quote! { #rhs as i64 }
+                };
+                quote! {
+                    {
+                        let mut result = #lhs;
+                        let __scalar = #scalar_expr;
+                        for result_item in result.iter_mut() {
+                            *result_item = if __scalar as i64 != 0 { *result_item / (__scalar as i64) } else { *result_item };
+                        }
+                        result
                     }
-                    result
                 }
-            },
-            (ArgType::Scalar(_), ArgType::Shape(_)) => quote! {
-                {
-                    let mut result = #rhs;
-                    for result_item in result.iter_mut() {
-                        *result_item = if *result_item != 0 { (#lhs as i64) / *result_item } else { (#lhs as i64) };
+            }
+            (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_scalar() => {
+                let scalar_expr = if lhs_ty.is_scalar_tensor() {
+                    on_device_to_native(lhs.clone(), &lhs_ty.elem_type())
+                } else {
+                    quote! { #lhs as i64 }
+                };
+                quote! {
+                    {
+                        let mut result = #rhs;
+                        let __scalar = #scalar_expr;
+                        for result_item in result.iter_mut() {
+                            *result_item = if *result_item != 0 { (__scalar as i64) / *result_item } else { (__scalar as i64) };
+                        }
+                        result
                     }
-                    result
                 }
-            },
-            (ArgType::Shape(_), ArgType::Tensor(tensor_type)) => {
-                let dtype_tokens = tensor_type.dtype.to_tokens();
+            }
+            (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
+                let dtype_tokens = rhs_ty.elem_type().to_tokens();
                 quote! {
                     Tensor::<B, 1, burn::tensor::Int>::from_data_dtype(
                         burn::tensor::TensorData::from(&#lhs as &[i64]),
@@ -89,8 +106,8 @@ impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
                     ).div(#rhs)
                 }
             }
-            (ArgType::Tensor(tensor_type), ArgType::Shape(_)) => {
-                let dtype_tokens = tensor_type.dtype.to_tokens();
+            (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
+                let dtype_tokens = lhs_ty.elem_type().to_tokens();
                 quote! {
                     #lhs.div(Tensor::<B, 1, burn::tensor::Int>::from_data_dtype(
                         burn::tensor::TensorData::from(&#rhs as &[i64]),
@@ -99,6 +116,10 @@ impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
                     ))
                 }
             }
+            _ => unreachable!(
+                "div: unsupported input types: {:?}, {:?}",
+                lhs_arg.ty, rhs_arg.ty
+            ),
         };
 
         quote! {

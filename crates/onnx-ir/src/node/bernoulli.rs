@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn test_bernoulli_invalid_input() {
         let mut node = create_test_node(Some(DataType::FLOAT.value()), None);
-        node.inputs[0].ty = ArgType::Scalar(DType::F32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
         let processor = BernoulliProcessor;
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 16, &prefs);

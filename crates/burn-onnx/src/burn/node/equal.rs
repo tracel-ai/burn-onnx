@@ -19,9 +19,9 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
         let rhs_value = scope.arg(rhs);
 
         let function = match (&lhs.ty, &rhs.ty) {
-            (ArgType::Tensor(lhs_tensor), ArgType::Tensor(rhs_tensor)) => {
-                let lhs_rank = lhs_tensor.rank;
-                let rhs_rank = rhs_tensor.rank;
+            (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
 
                 if lhs_rank == rhs_rank {
                     quote! { #lhs_value.equal(#rhs_value) }
@@ -35,7 +35,15 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
                     quote! { #lhs_value.unsqueeze_dims(&[#(#dims),*]).equal(#rhs_value) }
                 }
             }
-            (ArgType::Scalar(_), ArgType::Scalar(_)) => quote! { #lhs_value == #rhs_value },
+            (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
+                quote! { #lhs_value.equal_elem(#rhs_value) }
+            }
+            (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
+                quote! { #rhs_value.equal_elem(#lhs_value) }
+            }
+            (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
+                quote! { #lhs_value == #rhs_value }
+            }
             (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
                 {
                     let mut result = #lhs_value;
@@ -45,14 +53,8 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
                     result
                 }
             },
-            (ArgType::Tensor(_), ArgType::Scalar(_)) => {
-                quote! { #lhs_value.equal_elem(#rhs_value) }
-            }
-            (ArgType::Scalar(_), ArgType::Tensor(_)) => {
-                quote! { #rhs_value.equal_elem(#lhs_value) }
-            }
-            (ArgType::Shape(_), ArgType::Tensor(tensor_type)) => {
-                let dtype_tokens = tensor_type.dtype.to_tokens();
+            (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
+                let dtype_tokens = rhs_ty.elem_type().to_tokens();
                 quote! {
                     {
                         let shape_tensor = Tensor::<B, 1, Int>::from_data_dtype(
@@ -64,8 +66,8 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
                     }
                 }
             }
-            (ArgType::Tensor(tensor_type), ArgType::Shape(_)) => {
-                let dtype_tokens = tensor_type.dtype.to_tokens();
+            (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
+                let dtype_tokens = lhs_ty.elem_type().to_tokens();
                 quote! {
                     {
                         let shape_tensor = Tensor::<B, 1, Int>::from_data_dtype(

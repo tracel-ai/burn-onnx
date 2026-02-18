@@ -100,8 +100,8 @@ fn clip(graph: &OnnxGraph) {
     Clip "clip1"
       Inputs:
         clip_input: F32[2, 3, 4]
-        _: Scalar(F32) [static(0)]
-        _: Scalar(F32) [static(1)]
+        _: ScalarNative(F32) [static(0)]
+        _: ScalarNative(F32) [static(1)]
       Outputs:
         clip1_out1: F32[2, 3, 4]
       Config:
@@ -224,7 +224,7 @@ fn cum_sum(graph: &OnnxGraph) {
     CumSum "cumsum1"
       Inputs:
         cumsum_input: F32[2, 3]
-        _: Scalar(I32) [static(4)]
+        _: ScalarNative(I32) [static(4)]
       Outputs:
         cumsum1_out1: F32[2, 3]
       Config:
@@ -388,7 +388,7 @@ fn if_op(graph: &OnnxGraph) {
     insta::assert_snapshot!(format!("{node}"), @r#"
     If "if1"
       Inputs:
-        if_condition: Scalar(Bool)
+        if_condition: ScalarNative(Bool)
       Outputs:
         if1_out1: F32[2, 3]
       Config:
@@ -651,7 +651,7 @@ fn one_hot(graph: &OnnxGraph) {
     OneHot "onehot1"
       Inputs:
         onehot_indices: I64[3]
-        _: Scalar(I64) [static(10)]
+        _: ScalarNative(I64) [static(10)]
         _: F32[2] [static(11)]
       Outputs:
         onehot1_out1: F32[?, ?]
@@ -679,7 +679,7 @@ fn pad(graph: &OnnxGraph) {
       Inputs:
         pad_input: F32[2, 3]
         _: I64[4] [static(12)]
-        _: Scalar(F32) [static(13)]
+        _: ScalarNative(F32) [static(13)]
       Outputs:
         pad1_out1: F32[2, 3]
       Config:
@@ -710,9 +710,9 @@ fn range(graph: &OnnxGraph) {
     insta::assert_snapshot!(format!("{node}"), @r#"
     Range "range1"
       Inputs:
-        _: Scalar(F32) [static(14)]
-        _: Scalar(F32) [static(15)]
-        _: Scalar(F32) [static(16)]
+        _: ScalarNative(F32) [static(14)]
+        _: ScalarNative(F32) [static(15)]
+        _: ScalarNative(F32) [static(16)]
       Outputs:
         range1_out1: F32[?]
       Config:

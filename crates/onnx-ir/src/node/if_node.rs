@@ -54,6 +54,22 @@ impl NodeProcessor for IfProcessor {
         }
     }
 
+    fn input_preferences(
+        &self,
+        node: &RawNode,
+        _opset: usize,
+    ) -> Result<Option<crate::processor::InputPreferences>, ProcessError> {
+        use crate::processor::{ArgPreference, InputPreferences};
+
+        // If condition must be a native bool (Rust `if` statement)
+        if !node.inputs.is_empty() {
+            let prefs =
+                InputPreferences::new().add(&node.inputs[0].name, ArgPreference::ScalarNative);
+            return Ok(Some(prefs));
+        }
+        Ok(None)
+    }
+
     fn infer_types(
         &self,
         node: &mut RawNode,
@@ -65,7 +81,7 @@ impl NodeProcessor for IfProcessor {
         // but we allow any bool tensor/scalar as some models may not be strictly conformant
         let condition = &node.inputs[0].ty;
         let is_bool = match condition {
-            ArgType::Scalar(dtype) => dtype.is_bool(),
+            ArgType::ScalarTensor(dtype) | ArgType::ScalarNative(dtype) => dtype.is_bool(),
             ArgType::Tensor(tensor) => tensor.dtype.is_bool(),
             ArgType::Shape(_) => false,
         };

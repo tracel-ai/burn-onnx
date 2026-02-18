@@ -19,9 +19,9 @@ impl NodeCodegen for onnx_ir::node::arithmetic::MulNode {
         let rhs = scope.arg(rhs_arg);
 
         let function = match (&lhs_arg.ty, &rhs_arg.ty) {
-            (ArgType::Tensor(lhs_tensor), ArgType::Tensor(rhs_tensor)) => {
-                let lhs_rank = lhs_tensor.rank;
-                let rhs_rank = rhs_tensor.rank;
+            (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
 
                 if lhs_rank == rhs_rank {
                     quote! { #lhs.mul(#rhs) }
@@ -35,9 +35,13 @@ impl NodeCodegen for onnx_ir::node::arithmetic::MulNode {
                     quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).mul(#rhs) }
                 }
             }
-            (ArgType::Tensor(_), ArgType::Scalar(_)) => quote! { #lhs.mul_scalar(#rhs) },
-            (ArgType::Scalar(_), ArgType::Tensor(_)) => quote! { #rhs.mul_scalar(#lhs) },
-            (ArgType::Scalar(_), ArgType::Scalar(_)) => quote! { #lhs * #rhs },
+            (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
+                quote! { #lhs.mul_scalar(#rhs) }
+            }
+            (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
+                quote! { #rhs.mul_scalar(#lhs) }
+            }
+            (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => quote! { #lhs * #rhs },
             (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
                 {
                     let mut result = #lhs;
@@ -47,26 +51,42 @@ impl NodeCodegen for onnx_ir::node::arithmetic::MulNode {
                     result
                 }
             },
-            (ArgType::Shape(_), ArgType::Scalar(_)) => quote! {
-                {
-                    let mut result = #lhs;
-                    for result_item in result.iter_mut() {
-                        *result_item = result_item.saturating_mul(#rhs as i64);
+            (ArgType::Shape(_), rhs_ty) if rhs_ty.is_scalar() => {
+                let scalar_expr = if rhs_ty.is_scalar_tensor() {
+                    on_device_to_native(rhs.clone(), &rhs_ty.elem_type())
+                } else {
+                    quote! { #rhs as i64 }
+                };
+                quote! {
+                    {
+                        let mut result = #lhs;
+                        let __scalar = #scalar_expr;
+                        for result_item in result.iter_mut() {
+                            *result_item = result_item.saturating_mul(__scalar as i64);
+                        }
+                        result
                     }
-                    result
                 }
-            },
-            (ArgType::Scalar(_), ArgType::Shape(_)) => quote! {
-                {
-                    let mut result = #rhs;
-                    for result_item in result.iter_mut() {
-                        *result_item = result_item.saturating_mul(#lhs as i64);
+            }
+            (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_scalar() => {
+                let scalar_expr = if lhs_ty.is_scalar_tensor() {
+                    on_device_to_native(lhs.clone(), &lhs_ty.elem_type())
+                } else {
+                    quote! { #lhs as i64 }
+                };
+                quote! {
+                    {
+                        let mut result = #rhs;
+                        let __scalar = #scalar_expr;
+                        for result_item in result.iter_mut() {
+                            *result_item = result_item.saturating_mul(__scalar as i64);
+                        }
+                        result
                     }
-                    result
                 }
-            },
-            (ArgType::Shape(_), ArgType::Tensor(tensor_type)) => {
-                let dtype_tokens = tensor_type.dtype.to_tokens();
+            }
+            (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
+                let dtype_tokens = rhs_ty.elem_type().to_tokens();
                 quote! {
                     Tensor::<B, 1, burn::tensor::Int>::from_data_dtype(
                         burn::tensor::TensorData::from(&#lhs as &[i64]),
@@ -75,8 +95,8 @@ impl NodeCodegen for onnx_ir::node::arithmetic::MulNode {
                     ).mul(#rhs)
                 }
             }
-            (ArgType::Tensor(tensor_type), ArgType::Shape(_)) => {
-                let dtype_tokens = tensor_type.dtype.to_tokens();
+            (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
+                let dtype_tokens = lhs_ty.elem_type().to_tokens();
                 quote! {
                     #lhs.mul(Tensor::<B, 1, burn::tensor::Int>::from_data_dtype(
                         burn::tensor::TensorData::from(&#rhs as &[i64]),
@@ -85,6 +105,10 @@ impl NodeCodegen for onnx_ir::node::arithmetic::MulNode {
                     ))
                 }
             }
+            _ => unreachable!(
+                "mul: unsupported input types: {:?}, {:?}",
+                lhs_arg.ty, rhs_arg.ty
+            ),
         };
 
         quote! {

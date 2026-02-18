@@ -102,7 +102,7 @@ fn pad(graph: &OnnxGraph) {
       Inputs:
         pad_input: F32[2, 3]
         _: I64[4] [static(2)]
-        _: Scalar(F32) [static(3)]
+        _: ScalarNative(F32) [static(3)]
       Outputs:
         pad1_out1: F32[2, 3]
       Config:

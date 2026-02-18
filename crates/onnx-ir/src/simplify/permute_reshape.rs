@@ -174,7 +174,7 @@ mod tests {
     fn const_scalar_arg(name: &str, store: &ValueStore) -> Argument {
         Argument {
             name: name.to_string(),
-            ty: ArgType::Scalar(DType::I64),
+            ty: ArgType::ScalarNative(DType::I64),
             value_source: ValueSource::Constant,
             value_store: Some(store.clone()),
         }

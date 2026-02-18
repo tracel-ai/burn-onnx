@@ -63,7 +63,7 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
 
         // Generate code based on output type
         match &self.outputs[0].ty {
-            ArgType::Scalar(_) => {
+            ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                 // For scalar output, the input shape should be empty (rank 0)
                 // Just return the constant value directly
                 quote! {

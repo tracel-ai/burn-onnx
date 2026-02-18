@@ -525,7 +525,10 @@ mod tests {
 
         if has_initial_h {
             // sequence_lens (unused optional placeholder)
-            inputs.push(Argument::new("sequence_lens", ArgType::Scalar(DType::I64)));
+            inputs.push(Argument::new(
+                "sequence_lens",
+                ArgType::ScalarNative(DType::I64),
+            ));
             // initial_h
             inputs.push(Argument::new(
                 "initial_h",

@@ -68,8 +68,8 @@ fn clip(graph: &OnnxGraph) {
     Clip "clip1"
       Inputs:
         clip_input: F32[2, 3, 4]
-        _: Scalar(F32) [static(0)]
-        _: Scalar(F32) [static(1)]
+        _: ScalarNative(F32) [static(0)]
+        _: ScalarNative(F32) [static(1)]
       Outputs:
         clip1_out1: F32[2, 3, 4]
       Config:

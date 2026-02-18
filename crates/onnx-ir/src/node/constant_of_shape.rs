@@ -187,7 +187,7 @@ impl NodeProcessor for ConstantOfShapeProcessor {
                         node.outputs[0].ty = ArgType::Shape(output_size);
                     } else {
                         // Empty shape means scalar output
-                        node.outputs[0].ty = ArgType::Scalar(value_type);
+                        node.outputs[0].ty = ArgType::ScalarNative(value_type);
                     }
                 } else {
                     // Can't convert to i64 vec, output as Tensor to be safe
@@ -207,7 +207,7 @@ impl NodeProcessor for ConstantOfShapeProcessor {
             }
         } else if rank == 0 {
             // When rank is 0, output should be a scalar
-            node.outputs[0].ty = ArgType::Scalar(value_type);
+            node.outputs[0].ty = ArgType::ScalarNative(value_type);
         } else {
             // General case: output is a tensor
             node.outputs[0].ty = ArgType::Tensor(TensorType {
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_invalid_input_type() {
-        let mut node = create_test_node(ArgType::Scalar(DType::F32)).build();
+        let mut node = create_test_node(ArgType::ScalarNative(DType::F32)).build();
         let processor = ConstantOfShapeProcessor;
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 16, &prefs);
@@ -370,7 +370,7 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, DType::F32);
             }
             _ => panic!("Expected scalar output for rank 0 input"),
@@ -391,7 +391,7 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, DType::F32);
             }
             _ => panic!("Expected scalar output for rank 0 input"),
@@ -411,7 +411,7 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, DType::I64);
             }
             _ => panic!("Expected scalar output for rank 0 input"),

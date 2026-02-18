@@ -76,7 +76,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
             quote! { i64::MAX } // No limit if not provided
         } else {
             match &max_trip_count_arg.ty {
-                ArgType::Scalar(_) => {
+                ArgType::ScalarNative(_) => {
                     let name = arg_to_ident(max_trip_count_arg);
                     quote! { #name }
                 }
@@ -93,7 +93,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
             quote! { true } // Run if not provided
         } else {
             match &init_cond_arg.ty {
-                ArgType::Scalar(_) => {
+                ArgType::ScalarNative(_) => {
                     let name = arg_to_ident(init_cond_arg);
                     quote! { #name }
                 }
@@ -223,7 +223,14 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
 
         // Update condition from body output (skip if same name)
         let update_cond = if cond_in_name != cond_out_name {
-            quote! { #cond_in_name = #cond_out_name; }
+            let cond_out_ty = &self.config.body.outputs[0].ty;
+            if cond_out_ty.is_scalar_tensor() {
+                // ScalarTensor(Bool) -> native bool
+                let convert = on_device_to_native(quote! { #cond_out_name }, &DType::Bool);
+                quote! { #cond_in_name = #convert; }
+            } else {
+                quote! { #cond_in_name = #cond_out_name; }
+            }
         } else {
             quote! {}
         };
@@ -236,7 +243,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
 
             // Tensors need to be cloned before collecting, scalars can be copied
             match &scan_arg.ty {
-                ArgType::Scalar(_) => {
+                ArgType::ScalarNative(_) => {
                     collect_scans.extend(quote! {
                         #collector.push(#out_name);
                     });
@@ -272,7 +279,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
 
             // Handle scalar vs tensor scan outputs
             match &scan_arg.ty {
-                ArgType::Scalar(dtype) => {
+                ArgType::ScalarNative(dtype) => {
                     // Convert Vec<scalar> to 2D tensor with shape [N, 1]
                     // ONNX spec: scan outputs from scalars get an added dimension
                     // Use from_data_dtype with correct tensor kind to preserve dtype
@@ -388,7 +395,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
                 .collect();
 
             for scan_arg in scan_out_args {
-                if matches!(&scan_arg.ty, ArgType::Scalar(_)) {
+                if matches!(&scan_arg.ty, ArgType::ScalarNative(_)) {
                     imports.register("burn::tensor::TensorData");
                     break;
                 }

@@ -113,8 +113,8 @@ mod tests {
     #[test]
     fn test_is_nan_scalar() {
         let mut node = TestNodeBuilder::new(NodeType::IsNaN, "test_is_nan")
-            .add_input("data", ArgType::Scalar(DType::F32))
-            .add_output("output", ArgType::Scalar(DType::Bool))
+            .add_input("data", ArgType::ScalarNative(DType::F32))
+            .add_output("output", ArgType::ScalarNative(DType::Bool))
             .build();
 
         let processor = IsNaNProcessor;
@@ -123,7 +123,7 @@ mod tests {
 
         // Output should be boolean scalar
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, DType::Bool);
             }
             _ => panic!("Expected scalar output"),

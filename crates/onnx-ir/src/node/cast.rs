@@ -92,8 +92,8 @@ impl NodeProcessor for CastProcessor {
             ArgType::Tensor(tensor) => {
                 if tensor.rank == 0 {
                     // treat 0-dim tensor as scalar
-                    output.ty = ArgType::Scalar(elem_type);
-                    input.ty = ArgType::Scalar(tensor.dtype);
+                    output.ty = ArgType::ScalarNative(elem_type);
+                    input.ty = ArgType::ScalarNative(tensor.dtype);
                 } else {
                     // Cast input and output are the same shape, but possibly different types
                     output.ty = ArgType::Tensor(TensorType {
@@ -103,7 +103,8 @@ impl NodeProcessor for CastProcessor {
                     });
                 }
             }
-            ArgType::Scalar(_) => output.ty = ArgType::Scalar(elem_type),
+            ArgType::ScalarTensor(_) => output.ty = ArgType::ScalarTensor(elem_type),
+            ArgType::ScalarNative(_) => output.ty = ArgType::ScalarNative(elem_type),
             ArgType::Shape(rank) => {
                 // When casting Shape to float or bool types, convert to 1D tensor
                 // This allows Shape values to be used in tensor operations
@@ -243,14 +244,14 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, DType::Bool);
             }
             _ => panic!("Expected scalar output for 0-rank tensor"),
         }
 
         match &node.inputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, DType::F32);
             }
             _ => panic!("Input should have been converted to scalar"),
@@ -293,7 +294,7 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, DType::Bool);
             }
             _ => panic!("Expected scalar output"),

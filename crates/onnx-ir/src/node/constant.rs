@@ -65,9 +65,10 @@ impl NodeProcessor for ConstantProcessor {
             ProcessError::MissingAttribute("value (from central store)".to_string())
         })?;
 
-        // First, determine the base type from the tensor data
+        // First, determine the base type from the tensor data.
+        // Scalars default to ScalarTensor (on-device) for efficient tensor arithmetic.
         let base_type = if tensor_data.shape.is_empty() {
-            ArgType::Scalar(tensor_data.elem_type())
+            ArgType::ScalarTensor(tensor_data.elem_type())
         } else {
             ArgType::Tensor(TensorType {
                 dtype: tensor_data.elem_type(),
@@ -87,10 +88,14 @@ impl NodeProcessor for ConstantProcessor {
                 .iter()
                 .any(|(_, ty)| matches!(ty, crate::processor::ArgPreference::Shape));
 
-            // Check if any consumer wants Scalar type
-            let wants_scalar = preferences
-                .iter()
-                .any(|(_, ty)| matches!(ty, crate::processor::ArgPreference::Scalar));
+            // Check if any consumer wants ScalarNative (for shape ops, arange, conditions)
+            let wants_scalar_native = preferences.iter().any(|(_, ty)| {
+                matches!(
+                    ty,
+                    crate::processor::ArgPreference::ScalarNative
+                        | crate::processor::ArgPreference::Scalar
+                )
+            });
 
             match &base_type {
                 // Convert 1D tensor to Shape if requested and we have static shape info
@@ -99,17 +104,19 @@ impl NodeProcessor for ConstantProcessor {
                         if let Some(&Some(shape_rank)) = shape.first() {
                             ArgType::Shape(shape_rank)
                         } else {
-                            // Empty shape for rank-1 tensor is invalid, keep as Tensor
                             base_type
                         }
                     } else {
-                        // No static shape info, keep as Tensor
                         base_type
                     }
                 }
-                // Convert scalar-compatible tensor to Scalar if requested
-                ArgType::Tensor(tensor) if tensor.rank == 0 && wants_scalar => {
-                    ArgType::Scalar(tensor.dtype)
+                // Convert scalar-compatible tensor to ScalarNative if requested
+                ArgType::Tensor(tensor) if tensor.rank == 0 && wants_scalar_native => {
+                    ArgType::ScalarNative(tensor.dtype)
+                }
+                // Convert ScalarTensor to ScalarNative if consumer needs native
+                ArgType::ScalarTensor(dtype) if wants_scalar_native => {
+                    ArgType::ScalarNative(*dtype)
                 }
                 // Otherwise keep base type
                 _ => base_type,
@@ -154,7 +161,7 @@ mod tests {
 
         // Create type based on shape
         let ty = if shape.is_empty() {
-            crate::ir::ArgType::Scalar(elem_type)
+            crate::ir::ArgType::ScalarNative(elem_type)
         } else {
             crate::ir::ArgType::Tensor(crate::ir::TensorType {
                 dtype: elem_type,
@@ -205,11 +212,12 @@ mod tests {
         let prefs = OutputPreferences::new();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
+        // Default is ScalarTensor (on-device) for efficient tensor arithmetic
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarTensor(elem_type) => {
                 assert_eq!(*elem_type, DType::F32);
             }
-            _ => panic!("Expected scalar output"),
+            _ => panic!("Expected ScalarTensor output, got {:?}", node.outputs[0].ty),
         }
     }
 
@@ -291,28 +299,28 @@ mod tests {
     }
 
     #[test]
-    fn test_constant_rank0_tensor_to_scalar_with_preferences() {
+    fn test_constant_scalar_to_native_with_preferences() {
         let mut node = create_test_node_with_data(
-            crate::ir::TensorData::new(vec![42.0f32], vec![]), // rank 0 tensor
+            crate::ir::TensorData::new(vec![42.0f32], vec![]), // scalar
         );
 
-        // Create preferences requesting Scalar type
+        // Create preferences requesting ScalarNative (e.g., for shape ops)
         let mut prefs = OutputPreferences::new();
         prefs.add(
             node.outputs[0].name.clone(),
             "consumer_node",
-            crate::processor::ArgPreference::Scalar,
+            crate::processor::ArgPreference::ScalarNative,
         );
 
         let processor = ConstantProcessor;
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        // Should already be Scalar (rank 0 tensor is treated as scalar by default)
+        // Should be ScalarNative because consumer requested it
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, DType::F32);
             }
-            other => panic!("Expected Scalar output, got {:?}", other),
+            other => panic!("Expected ScalarNative output, got {:?}", other),
         }
     }
 

@@ -111,7 +111,7 @@ pub fn count_outputs_by_type(graph: &onnx_ir::ir::OnnxGraph) -> (usize, usize, u
     let scalars = graph
         .outputs
         .iter()
-        .filter(|out| matches!(out.ty, ArgType::Scalar(_)))
+        .filter(|out| matches!(out.ty, ArgType::ScalarTensor(_) | ArgType::ScalarNative(_)))
         .count();
 
     let shapes = graph

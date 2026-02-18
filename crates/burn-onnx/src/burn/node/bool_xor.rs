@@ -19,9 +19,9 @@ impl NodeCodegen for onnx_ir::node::xor::XorNode {
         let rhs_value = scope.arg(rhs);
 
         let function = match (&lhs.ty, &rhs.ty) {
-            (ArgType::Tensor(lhs_tensor), ArgType::Tensor(rhs_tensor)) => {
-                let lhs_rank = lhs_tensor.rank;
-                let rhs_rank = rhs_tensor.rank;
+            (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
 
                 // XOR is implemented as not_equal for boolean tensors
                 if lhs_rank == rhs_rank {
@@ -36,15 +36,15 @@ impl NodeCodegen for onnx_ir::node::xor::XorNode {
                     quote! { #lhs_value.unsqueeze_dims(&[#(#dims),*]).not_equal(#rhs_value) }
                 }
             }
-            (ArgType::Scalar(_), ArgType::Scalar(_)) => {
-                quote! { #lhs_value ^ #rhs_value }
-            }
-            (ArgType::Scalar(_), ArgType::Tensor(_)) => quote! {
+            (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => quote! {
                 if #lhs_value { #rhs_value.bool_not() } else { #rhs_value }
             },
-            (ArgType::Tensor(_), ArgType::Scalar(_)) => quote! {
+            (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => quote! {
                 if #rhs_value { #lhs_value.bool_not() } else { #lhs_value }
             },
+            (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
+                quote! { #lhs_value ^ #rhs_value }
+            }
             (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
                 {
                     let mut result = #lhs_value;

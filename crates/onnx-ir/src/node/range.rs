@@ -79,6 +79,21 @@ impl NodeProcessor for RangeProcessor {
         }
     }
 
+    fn input_preferences(
+        &self,
+        node: &RawNode,
+        _opset: usize,
+    ) -> Result<Option<crate::processor::InputPreferences>, ProcessError> {
+        use crate::processor::{ArgPreference, InputPreferences};
+
+        // Range needs native scalars for arange bounds (start, limit, delta)
+        let mut prefs = InputPreferences::new();
+        for input in &node.inputs {
+            prefs = prefs.add(&input.name, ArgPreference::ScalarNative);
+        }
+        Ok(Some(prefs))
+    }
+
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
         // Only lift inputs that have static values
         // Runtime inputs (no value) should remain in the graph

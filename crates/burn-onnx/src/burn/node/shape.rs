@@ -18,7 +18,9 @@ impl NodeCodegen for onnx_ir::shape::ShapeNode {
 
         let dim = match &output_arg.ty {
             ArgType::Shape(rank) => rank.to_tokens(),
-            _ => panic!("Shape operation expects Shape output"),
+            ArgType::Tensor(_) | ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
+                panic!("Shape operation expects Shape output")
+            }
         };
 
         let start_dim_tok = self.config.start.to_tokens();
@@ -46,7 +48,9 @@ impl NodeCodegen for onnx_ir::shape::ShapeNode {
                 let rank_value = *shape_rank as i64;
                 quote! { [#rank_value] }
             }
-            ArgType::Scalar(_) => panic!("Shape operation only supports Tensor or Shape inputs"),
+            ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
+                panic!("Shape operation only supports Tensor or Shape inputs")
+            }
         };
 
         quote! {

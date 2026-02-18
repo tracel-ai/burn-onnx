@@ -169,7 +169,7 @@ fn eval_binary(node: &RawNode, op: BinaryOp) -> Option<(TensorData, ArgType)> {
 /// Derive the output shape from the already-inferred output type.
 fn output_shape(output_ty: &ArgType) -> Vec<usize> {
     match output_ty {
-        ArgType::Scalar(_) => vec![],
+        ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => vec![],
         ArgType::Shape(len) => vec![*len],
         ArgType::Tensor(t) => t
             .static_shape
@@ -293,7 +293,7 @@ fn eval_cast(node: &RawNode) -> Option<(TensorData, ArgType)> {
     let shape = output_shape(&output_ty);
 
     let target_dtype = match &output_ty {
-        ArgType::Scalar(d) => *d,
+        ArgType::ScalarTensor(d) | ArgType::ScalarNative(d) => *d,
         ArgType::Tensor(t) => t.dtype,
         ArgType::Shape(_) => DType::I64,
     };
@@ -407,7 +407,7 @@ fn eval_reshape(node: &RawNode) -> Option<(TensorData, ArgType)> {
             let dims: Option<Vec<usize>> = static_shape.iter().map(|d| d.map(|v| v)).collect();
             dims?
         }
-        ArgType::Scalar(_) => vec![],
+        ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => vec![],
         ArgType::Shape(len) => vec![*len],
     };
 
@@ -463,7 +463,7 @@ mod tests {
         );
         Argument {
             name: name.to_string(),
-            ty: ArgType::Scalar(DType::F32),
+            ty: ArgType::ScalarNative(DType::F32),
             value_source: ValueSource::Constant,
             value_store: Some(value_store),
         }
@@ -503,7 +503,7 @@ mod tests {
     fn scalar_out(name: &str, dtype: DType) -> Argument {
         Argument {
             name: name.to_string(),
-            ty: ArgType::Scalar(dtype),
+            ty: ArgType::ScalarNative(dtype),
             value_source: ValueSource::Dynamic,
             value_store: None,
         }

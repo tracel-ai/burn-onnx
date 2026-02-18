@@ -37,7 +37,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
         };
 
         match (&input_arg.ty, &output_arg.ty) {
-            (ArgType::Tensor(_input_tensor), ArgType::Tensor(output_tensor)) => {
+            (input_ty, ArgType::Tensor(output_tensor)) if input_ty.is_on_device() => {
                 let input = scope.arg(input_arg);
                 let output_rank = output_tensor.rank.to_tokens();
 
@@ -59,7 +59,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                     let #output: #output_type = #input.unsqueeze_dims::<#output_rank>(&#axes);
                 }
             }
-            (ArgType::Scalar(_scalar_type), ArgType::Tensor(output_tensor)) => {
+            (ArgType::ScalarNative(_scalar_type), ArgType::Tensor(output_tensor)) => {
                 let scalar_name = arg_to_ident(input_arg);
                 let output_rank = output_tensor.rank.to_tokens();
                 let dtype_tokens = output_tensor.dtype.to_tokens();
@@ -102,22 +102,18 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                     let #output = #tensor_creation;
                 }
             }
-            (ArgType::Scalar(scalar_type), ArgType::Shape(_)) => {
-                // Scalar(Int) -> Shape[1] conversion
+            (ArgType::ScalarNative(_), ArgType::Shape(_)) => {
                 let input_name = arg_to_ident(input_arg);
-
-                use onnx_ir::ir::DType;
-                let value_expr = match scalar_type {
-                    DType::I64 => quote! { #input_name },
-                    DType::I32 => quote! { #input_name as i64 },
-                    _ => panic!(
-                        "Unsqueeze from Scalar to Shape only supports Int32/Int64 input types, but got: {:?}",
-                        scalar_type
-                    ),
-                };
-
+                let value_expr = scalar_native_to_shape(quote! { #input_name });
                 quote! {
-                    let #output = [#value_expr];
+                    let #output = #value_expr;
+                }
+            }
+            (ArgType::ScalarTensor(dtype), ArgType::Shape(_)) => {
+                let input = scope.arg(input_arg);
+                let value_expr = scalar_tensor_to_shape(input, dtype);
+                quote! {
+                    let #output = #value_expr;
                 }
             }
             _ => panic!(

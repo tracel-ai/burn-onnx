@@ -19,9 +19,9 @@ impl NodeCodegen for onnx_ir::comparison::GreaterNode {
         let rhs_value = scope.arg(rhs);
 
         let function = match (&lhs.ty, &rhs.ty) {
-            (ArgType::Tensor(lhs_tensor), ArgType::Tensor(rhs_tensor)) => {
-                let lhs_rank = lhs_tensor.rank;
-                let rhs_rank = rhs_tensor.rank;
+            (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
 
                 if lhs_rank == rhs_rank {
                     quote! { #lhs_value.greater(#rhs_value) }
@@ -35,15 +35,15 @@ impl NodeCodegen for onnx_ir::comparison::GreaterNode {
                     quote! { #lhs_value.unsqueeze_dims(&[#(#dims),*]).greater(#rhs_value) }
                 }
             }
-            (ArgType::Tensor(_), ArgType::Scalar(_)) => {
+            (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                 quote! { #lhs_value.greater_elem(#rhs_value) }
             }
-            (ArgType::Scalar(_), ArgType::Tensor(_)) => {
+            (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 // L > R == R < L
                 quote! { #rhs_value.lower_elem(#lhs_value) }
             }
-            (ArgType::Shape(_), ArgType::Tensor(tensor_type)) => {
-                let dtype_tokens = tensor_type.dtype.to_tokens();
+            (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
+                let dtype_tokens = rhs_ty.elem_type().to_tokens();
                 quote! {
                     Tensor::<B, 1, burn::tensor::Int>::from_data_dtype(
                         burn::tensor::TensorData::from(&#lhs_value as &[i64]),
@@ -52,8 +52,8 @@ impl NodeCodegen for onnx_ir::comparison::GreaterNode {
                     ).greater(#rhs_value)
                 }
             }
-            (ArgType::Tensor(tensor_type), ArgType::Shape(_)) => {
-                let dtype_tokens = tensor_type.dtype.to_tokens();
+            (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
+                let dtype_tokens = lhs_ty.elem_type().to_tokens();
                 quote! {
                     #lhs_value.greater(Tensor::<B, 1, burn::tensor::Int>::from_data_dtype(
                         burn::tensor::TensorData::from(&#rhs_value as &[i64]),

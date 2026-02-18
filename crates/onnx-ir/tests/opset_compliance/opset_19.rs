@@ -128,7 +128,7 @@ fn if_op(graph: &OnnxGraph) {
     insta::assert_snapshot!(format!("{node}"), @r#"
     If "if1"
       Inputs:
-        if_condition: Scalar(Bool)
+        if_condition: ScalarNative(Bool)
       Outputs:
         if1_out1: F32[2, 3]
       Config:
@@ -346,7 +346,7 @@ fn pad(graph: &OnnxGraph) {
       Inputs:
         pad_input: F32[2, 3]
         _: I64[4] [static(1)]
-        _: Scalar(F32) [static(2)]
+        _: ScalarNative(F32) [static(2)]
       Outputs:
         pad1_out1: F32[2, 3]
       Config:
@@ -452,6 +452,6 @@ fn size(graph: &OnnxGraph) {
       Inputs:
         size_input: F32[2, 3, 4]
       Outputs:
-        size1_out1: Scalar(I64)
+        size1_out1: ScalarNative(I64)
     "#);
 }

@@ -638,7 +638,7 @@ mod tests {
     fn test_pad_config_invalid_input_type() {
         let mut node = create_test_node(Some(vec![0, 0, 1, 1]), None, None, None, None, 2)
             .build_with_graph_data(16);
-        node.inputs[0].ty = ArgType::Scalar(DType::F32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
         let node = node;
         let processor = PadProcessor;
         let _prefs = OutputPreferences::new();

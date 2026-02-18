@@ -89,7 +89,8 @@ impl fmt::Display for TensorType {
 impl fmt::Display for ArgType {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            ArgType::Scalar(dtype) => write!(f, "Scalar({dtype:?})"),
+            ArgType::ScalarTensor(dtype) => write!(f, "ScalarTensor({dtype:?})"),
+            ArgType::ScalarNative(dtype) => write!(f, "ScalarNative({dtype:?})"),
             ArgType::Shape(rank) => write!(f, "Shape({rank})"),
             ArgType::Tensor(t) => write!(f, "{t}"),
         }
@@ -132,7 +133,12 @@ impl Argument {
 /// The type of an argument.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ArgType {
-    Scalar(DType),
+    /// A 1D tensor on device (rank 1, shape [1]). Used for scalar constants and
+    /// intermediate values that participate in tensor arithmetic via broadcasting.
+    ScalarTensor(DType),
+    /// A native Rust scalar (rank 0). Used for shape computations, indices,
+    /// control flow conditions, and graph I/O boundaries.
+    ScalarNative(DType),
     Shape(Rank),
     Tensor(TensorType),
 }
@@ -249,9 +255,24 @@ impl ArgType {
         }
     }
 
-    /// Check if this is a scalar type
+    /// Check if this is any scalar type (ScalarTensor or ScalarNative)
     pub fn is_scalar(&self) -> bool {
-        matches!(self, Self::Scalar(_))
+        matches!(self, Self::ScalarTensor(_) | Self::ScalarNative(_))
+    }
+
+    /// Check if this is a ScalarTensor (1D tensor on device)
+    pub fn is_scalar_tensor(&self) -> bool {
+        matches!(self, Self::ScalarTensor(_))
+    }
+
+    /// Check if this is a ScalarNative (native Rust type)
+    pub fn is_scalar_native(&self) -> bool {
+        matches!(self, Self::ScalarNative(_))
+    }
+
+    /// Check if this type lives on the device (Tensor or ScalarTensor)
+    pub fn is_on_device(&self) -> bool {
+        matches!(self, Self::Tensor(_) | Self::ScalarTensor(_))
     }
 
     /// Check if this is a tensor type
@@ -267,7 +288,8 @@ impl ArgType {
     /// Get the rank (number of dimensions)
     pub fn rank(&self) -> usize {
         match self {
-            ArgType::Scalar(_) => 0,
+            ArgType::ScalarTensor(_) => 1,
+            ArgType::ScalarNative(_) => 0,
             ArgType::Shape(_) => 1,
             ArgType::Tensor(t) => t.rank,
         }
@@ -278,7 +300,7 @@ impl ArgType {
     /// Get the data type
     pub fn elem_type(&self) -> DType {
         match self {
-            ArgType::Scalar(s) => *s,
+            ArgType::ScalarTensor(d) | ArgType::ScalarNative(d) => *d,
             ArgType::Shape(_) => panic!("ArgType::Shape has no DType"),
             ArgType::Tensor(t) => t.dtype,
         }
@@ -438,7 +460,7 @@ impl Argument {
 
     /// Create an argument with a constant i64 scalar value embedded.
     pub fn from_const_i64(name: impl Into<String>, value: i64) -> Self {
-        Self::from_const_i64s(name, &[value], ArgType::Scalar(DType::I64))
+        Self::from_const_i64s(name, &[value], ArgType::ScalarNative(DType::I64))
     }
 
     /// Create an argument with a constant 1D i64 tensor embedded.
@@ -452,7 +474,7 @@ impl Argument {
         use std::sync::Arc;
 
         let bytes: Vec<u8> = values.iter().flat_map(|v| v.to_ne_bytes()).collect();
-        let shape = if values.len() == 1 && matches!(ty, ArgType::Scalar(_)) {
+        let shape = if values.len() == 1 && ty.is_scalar() {
             vec![]
         } else {
             vec![values.len()]
@@ -567,8 +589,8 @@ mod tests {
 
     #[test]
     fn test_merge_argtype_non_tensor_no_op() {
-        let mut inferred = ArgType::Scalar(DType::F32);
-        let value_info = ArgType::Scalar(DType::F32);
+        let mut inferred = ArgType::ScalarNative(DType::F32);
+        let value_info = ArgType::ScalarNative(DType::F32);
 
         let changed = inferred.merge_static_shape(&value_info);
 
@@ -595,8 +617,11 @@ mod tests {
 
     #[test]
     fn test_display_argtype_scalar() {
-        let a = ArgType::Scalar(DType::F32);
-        assert_eq!(format!("{a}"), "Scalar(F32)");
+        let a = ArgType::ScalarNative(DType::F32);
+        assert_eq!(format!("{a}"), "ScalarNative(F32)");
+
+        let b = ArgType::ScalarTensor(DType::F32);
+        assert_eq!(format!("{b}"), "ScalarTensor(F32)");
     }
 
     #[test]

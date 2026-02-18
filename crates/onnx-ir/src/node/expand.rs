@@ -100,7 +100,7 @@ impl NodeProcessor for ExpandProcessor {
         // Get input element type - Expand should preserve the input's element type
         let input_elem_type = match &node.inputs[0].ty {
             ArgType::Tensor(tensor) => tensor.dtype,
-            ArgType::Scalar(dtype) => *dtype,
+            ArgType::ScalarTensor(dtype) | ArgType::ScalarNative(dtype) => *dtype,
             _ => {
                 return Err(ProcessError::TypeMismatch {
                     expected: "Tensor or Scalar".to_string(),
@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_expand_config_with_invalid_input_type() {
-        let invalid_shape_type = ArgType::Scalar(DType::I64);
+        let invalid_shape_type = ArgType::ScalarNative(DType::I64);
         let node = create_test_node(2, None, Some(invalid_shape_type)).build();
         let mut node = node;
         let processor = ExpandProcessor;

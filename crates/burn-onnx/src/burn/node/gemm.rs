@@ -50,7 +50,7 @@ impl NodeCodegen for onnx_ir::gemm::GemmNode {
                     let c_tensor = scope.arg(c_input);
                     quote! { #c_tensor.unsqueeze() }
                 }
-                onnx_ir::ir::ArgType::Scalar(_) => {
+                onnx_ir::ir::ArgType::ScalarNative(_) => {
                     let c_scalar = arg_to_ident(c_input);
                     quote! { #c_scalar }
                 }

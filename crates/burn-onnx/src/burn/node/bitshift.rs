@@ -21,15 +21,13 @@ impl NodeCodegen for onnx_ir::bitshift::BitShiftNode {
         // Determine operation based on direction
         let operation = match self.config.direction {
             onnx_ir::bitshift::Direction::Left => match (&lhs_arg.ty, &rhs_arg.ty) {
-                (ArgType::Tensor(_), ArgType::Tensor(_)) => {
+                (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
                     quote! { #lhs.bitwise_left_shift(#rhs) }
                 }
-                (ArgType::Tensor(_), ArgType::Scalar(_)) => {
+                (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                     quote! { #lhs.bitwise_left_shift_scalar(#rhs.elem()) }
                 }
-                (ArgType::Scalar(_), ArgType::Tensor(_)) => {
-                    // For scalar << tensor, broadcast scalar to tensor first
-                    // Use full_like to preserve rhs's dtype
+                (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                     quote! {
                         {
                             let _scalar_tensor = #rhs.full_like(#lhs);
@@ -37,21 +35,19 @@ impl NodeCodegen for onnx_ir::bitshift::BitShiftNode {
                         }
                     }
                 }
-                (ArgType::Scalar(_), ArgType::Scalar(_)) => {
+                (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
                     quote! { #lhs << #rhs }
                 }
                 _ => panic!("BitShift only supports tensor and scalar inputs"),
             },
             onnx_ir::bitshift::Direction::Right => match (&lhs_arg.ty, &rhs_arg.ty) {
-                (ArgType::Tensor(_), ArgType::Tensor(_)) => {
+                (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
                     quote! { #lhs.bitwise_right_shift(#rhs) }
                 }
-                (ArgType::Tensor(_), ArgType::Scalar(_)) => {
+                (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                     quote! { #lhs.bitwise_right_shift_scalar(#rhs.elem()) }
                 }
-                (ArgType::Scalar(_), ArgType::Tensor(_)) => {
-                    // For scalar >> tensor, broadcast scalar to tensor first
-                    // Use full_like to preserve rhs's dtype
+                (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                     quote! {
                         {
                             let _scalar_tensor = #rhs.full_like(#lhs);
@@ -59,7 +55,7 @@ impl NodeCodegen for onnx_ir::bitshift::BitShiftNode {
                         }
                     }
                 }
-                (ArgType::Scalar(_), ArgType::Scalar(_)) => {
+                (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
                     quote! { #lhs >> #rhs }
                 }
                 _ => panic!("BitShift only supports tensor and scalar inputs"),

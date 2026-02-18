@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn test_matmul_invalid_input() {
         let mut node = create_test_node(2, 2);
-        node.inputs[0].ty = ArgType::Scalar(DType::F32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
         let processor = MatMulProcessor;
 
         let prefs = OutputPreferences::new();

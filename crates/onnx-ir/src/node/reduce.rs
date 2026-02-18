@@ -206,8 +206,9 @@ impl NodeProcessor for ReduceProcessor {
         let should_be_scalar = keepdims == 0 && (dims.is_empty() || dims.len() == tensor_rank);
 
         if should_be_scalar {
-            // Output is a scalar
-            node.outputs[0].ty = ArgType::Scalar(tensor_elem_type);
+            // Output is a scalar tensor (stays on device)
+            // Downstream consumers that need native will request ScalarNative via preferences
+            node.outputs[0].ty = ArgType::ScalarTensor(tensor_elem_type);
         } else {
             // Output is a tensor
             let output_rank = if keepdims == 1 {
@@ -467,8 +468,8 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         match &node.outputs[0].ty {
-            ArgType::Scalar(_) => {
-                // This is the expected case - scalar output
+            ArgType::ScalarTensor(_) => {
+                // This is the expected case - scalar tensor output (stays on device)
             }
             ArgType::Tensor(_) => {
                 panic!("Expected scalar output but got tensor");
@@ -489,8 +490,8 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         match &node.outputs[0].ty {
-            ArgType::Scalar(_) => {
-                // This is the expected case - scalar output
+            ArgType::ScalarTensor(_) => {
+                // This is the expected case - scalar tensor output (stays on device)
             }
             ArgType::Tensor(_) => {
                 panic!("Expected scalar output but got tensor");
@@ -515,7 +516,7 @@ mod tests {
                 // Should be rank 2 (3 - 1 = 2)
                 assert_eq!(tensor.rank, 2);
             }
-            ArgType::Scalar(_) => {
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => {
                 panic!("Expected tensor output but got scalar");
             }
             _ => {
@@ -538,7 +539,7 @@ mod tests {
                 // Should maintain original rank when keepdims=true
                 assert_eq!(tensor.rank, 3);
             }
-            ArgType::Scalar(_) => {
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => {
                 panic!("Expected tensor output but got scalar when keepdims=true");
             }
             _ => {

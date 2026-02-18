@@ -286,7 +286,7 @@ mod tests {
     fn test_topk_invalid_input() {
         let mut node = create_test_node(3, None, None).build();
         node.attrs.insert("k".to_string(), AttributeValue::Int64(5));
-        node.inputs[0].ty = ArgType::Scalar(DType::F32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
         let processor = TopKProcessor;
         let _prefs = OutputPreferences::new();
         let result = processor.extract_config(&node, 16);
@@ -439,7 +439,7 @@ mod tests {
         // Test with invalid input type
         let mut node = create_test_node(2, None, None).build();
         node.attrs.insert("k".to_string(), AttributeValue::Int64(3));
-        node.inputs[0].ty = ArgType::Scalar(DType::F32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
 
         let node = node;
         let processor = TopKProcessor;

@@ -206,7 +206,7 @@ pub fn node_builder_derive(input: TokenStream) -> TokenStream {
             /// Add a scalar input
             pub fn input_scalar(mut self, name: &str, dtype: burn_tensor::DType) -> Self {
                 use crate::ir::{Argument, ArgType};
-                self.inputs.push(Argument::new(name, ArgType::Scalar(dtype)));
+                self.inputs.push(Argument::new(name, ArgType::ScalarNative(dtype)));
                 self
             }
 
@@ -241,7 +241,7 @@ pub fn node_builder_derive(input: TokenStream) -> TokenStream {
             /// Add a scalar output
             pub fn output_scalar(mut self, name: &str, dtype: burn_tensor::DType) -> Self {
                 use crate::ir::{Argument, ArgType};
-                self.outputs.push(Argument::new(name, ArgType::Scalar(dtype)));
+                self.outputs.push(Argument::new(name, ArgType::ScalarNative(dtype)));
                 self
             }
 

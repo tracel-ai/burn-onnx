@@ -112,7 +112,7 @@ fn make_constant_node(
     state: &Rc<RefCell<GraphState>>,
 ) -> RawNode {
     let bytes: Vec<u8> = values.iter().flat_map(|v| v.to_ne_bytes()).collect();
-    let shape = if values.len() == 1 && matches!(ty, ArgType::Scalar(_)) {
+    let shape = if values.len() == 1 && matches!(ty, ArgType::ScalarNative(_)) {
         vec![]
     } else {
         vec![values.len()]
@@ -155,7 +155,7 @@ fn extract_constant_shape_dim(
     // Gather with tensor indices produces Shape(N) outputs that can't be
     // represented as a single constant value.
     match &gather.outputs[0].ty {
-        ArgType::Scalar(_) => {}
+        ArgType::ScalarNative(_) => {}
         ArgType::Shape(1) => {}
         _ => return None,
     }
@@ -374,7 +374,7 @@ mod tests {
     fn scalar_arg(name: &str, dtype: DType) -> Argument {
         Argument {
             name: name.to_string(),
-            ty: ArgType::Scalar(dtype),
+            ty: ArgType::ScalarNative(dtype),
             value_source: ValueSource::Dynamic,
             value_store: None,
         }

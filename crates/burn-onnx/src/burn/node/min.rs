@@ -18,9 +18,9 @@ impl NodeCodegen for onnx_ir::node::min::MinNode {
         let rhs = scope.arg(rhs_arg);
 
         let function = match (&lhs_arg.ty, &rhs_arg.ty) {
-            (ArgType::Tensor(lhs_tensor), ArgType::Tensor(rhs_tensor)) => {
-                let lhs_rank = lhs_tensor.rank;
-                let rhs_rank = rhs_tensor.rank;
+            (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
 
                 if lhs_rank == rhs_rank {
                     quote! { #lhs.min_pair(#rhs) }

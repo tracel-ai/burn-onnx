@@ -70,7 +70,10 @@ pub struct InputPreferences {
 
 #[derive(Debug, Clone)]
 pub enum ArgPreference {
+    /// Either scalar variant is fine (backward compat default)
     Scalar,
+    /// Must be native scalar (for shape ops, arange bounds, conditions, indices)
+    ScalarNative,
     Shape,
     Tensor,
 }
@@ -555,7 +558,8 @@ pub fn compute_broadcast_rank(inputs: &[crate::ir::Argument]) -> usize {
 
     inputs.iter().fold(0, |acc, input| match &input.ty {
         ArgType::Tensor(tensor) => max(acc, tensor.rank),
-        ArgType::Scalar(_) => acc,
+        ArgType::ScalarTensor(_) => max(acc, 1),
+        ArgType::ScalarNative(_) => acc,
         ArgType::Shape(_) => max(acc, 1),
     })
 }
@@ -616,7 +620,7 @@ pub fn compute_broadcast_static_shape(
 pub fn same_as_input_broadcast(node: &mut RawNode) {
     use crate::ir::ArgType;
 
-    let has_tensor_input = node
+    let has_real_tensor_input = node
         .inputs
         .iter()
         .any(|input| matches!(&input.ty, ArgType::Tensor(_)));
@@ -626,7 +630,7 @@ pub fn same_as_input_broadcast(node: &mut RawNode) {
         .iter()
         .any(|input| matches!(&input.ty, ArgType::Shape(_)));
 
-    if has_shape_input && !has_tensor_input {
+    if has_shape_input && !has_real_tensor_input {
         let shape_rank = node
             .inputs
             .iter()
@@ -643,24 +647,36 @@ pub fn same_as_input_broadcast(node: &mut RawNode) {
     let max_rank = compute_broadcast_rank(&node.inputs);
 
     if max_rank == 0 {
-        node.outputs[0].ty = ArgType::Scalar(node.inputs[0].ty.elem_type());
+        // All inputs are ScalarNative (rank 0), output is ScalarNative
+        node.outputs[0].ty = ArgType::ScalarNative(node.inputs[0].ty.elem_type());
     } else {
+        let has_real_tensor = node
+            .inputs
+            .iter()
+            .any(|input| matches!(&input.ty, ArgType::Tensor(_)));
+
         let elem_type = node
             .inputs
             .iter()
             .find_map(|input| match &input.ty {
                 ArgType::Tensor(tensor) => Some(tensor.dtype),
+                ArgType::ScalarTensor(dtype) => Some(*dtype),
                 _ => None,
             })
             .unwrap_or_else(|| node.inputs[0].ty.elem_type());
 
-        let static_shape = compute_broadcast_static_shape(&node.inputs);
+        if !has_real_tensor && max_rank == 1 {
+            // All on-device inputs are ScalarTensor (rank 1), output stays ScalarTensor
+            node.outputs[0].ty = ArgType::ScalarTensor(elem_type);
+        } else {
+            let static_shape = compute_broadcast_static_shape(&node.inputs);
 
-        node.outputs[0].ty = ArgType::Tensor(crate::ir::TensorType {
-            dtype: elem_type,
-            rank: max_rank,
-            static_shape,
-        });
+            node.outputs[0].ty = ArgType::Tensor(crate::ir::TensorType {
+                dtype: elem_type,
+                rank: max_rank,
+                static_shape,
+            });
+        }
     }
 }
 

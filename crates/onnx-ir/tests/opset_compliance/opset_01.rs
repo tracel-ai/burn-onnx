@@ -127,10 +127,10 @@ fn batch_normalization(graph: &OnnxGraph) {
         _: F32[3] [static(3)]
       Outputs:
         batchnormalization1_out1: F32[1, 3, 4, 4]
-        batchnormalization1_out2: Scalar(F32)
-        batchnormalization1_out3: Scalar(F32)
-        batchnormalization1_out4: Scalar(F32)
-        batchnormalization1_out5: Scalar(F32)
+        batchnormalization1_out2: ScalarNative(F32)
+        batchnormalization1_out3: ScalarNative(F32)
+        batchnormalization1_out4: ScalarNative(F32)
+        batchnormalization1_out5: ScalarNative(F32)
       Config:
         Static(
             BatchNormStaticConfig {
@@ -535,7 +535,7 @@ fn if_op(graph: &OnnxGraph) {
     insta::assert_snapshot!(format!("{node}"), @r#"
     If "if1"
       Inputs:
-        if_condition: Scalar(Bool)
+        if_condition: ScalarNative(Bool)
       Outputs:
         if1_out1: F32[2, 3]
       Config:
@@ -1402,7 +1402,7 @@ fn size(graph: &OnnxGraph) {
       Inputs:
         size_input: F32[2, 3, 4]
       Outputs:
-        size1_out1: Scalar(I64)
+        size1_out1: ScalarNative(I64)
     "#);
 }
 

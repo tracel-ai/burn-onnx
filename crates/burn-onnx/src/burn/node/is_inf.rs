@@ -17,7 +17,7 @@ impl NodeCodegen for onnx_ir::is_inf::IsInfNode {
         let output = arg_to_ident(output_arg);
 
         let function = match &output_arg.ty {
-            ArgType::Scalar(_) => {
+            ArgType::ScalarNative(_) => {
                 match (self.config.detect_negative, self.config.detect_positive) {
                     (true, true) => quote! { #input.is_infinite() },
                     (false, true) => quote! { #input.is_infinite() && #input.is_sign_positive() },

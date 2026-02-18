@@ -1,4 +1,4 @@
-use super::{BurnImports, Scope};
+use super::{BurnImports, Scope, ToTokens};
 use crate::burn::node::NodeCodegen;
 use burn_store::{BurnpackWriter, TensorSnapshot};
 use onnx_ir::{Node, ir::ArgType};
@@ -17,6 +17,12 @@ pub struct BurnGraph {
     blank_spaces: bool,
     graph_input_args: Vec<onnx_ir::Argument>,
     graph_output_args: Vec<onnx_ir::Argument>,
+    /// Graph I/O args that were converted from ScalarTensor to ScalarNative at the
+    /// boundary. Maps arg name -> DType. Used to insert conversion code:
+    /// - Outputs: `.into_scalar().elem::<T>()` before the return
+    /// - Inputs: `Tensor::from_data([name as T], &*self.device)` after the params
+    boundary_output_conversions: HashMap<String, onnx_ir::ir::DType>,
+    boundary_input_conversions: HashMap<String, onnx_ir::ir::DType>,
 }
 
 impl BurnGraph {
@@ -229,7 +235,7 @@ impl BurnGraph {
         // Register graph tensor inputs with 0 as node position
         self.graph_input_args
             .iter()
-            .filter(|arg| matches!(arg.ty, ArgType::Tensor(_)))
+            .filter(|arg| matches!(arg.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_)))
             .for_each(|arg| {
                 self.scope.tensor_register_variable(arg, 0);
             });
@@ -241,7 +247,7 @@ impl BurnGraph {
                 // Register tensor outputs as variables
                 node.outputs()
                     .iter()
-                    .filter(|arg| matches!(arg.ty, ArgType::Tensor(_)))
+                    .filter(|arg| matches!(arg.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_)))
                     .for_each(|arg| {
                         self.scope.tensor_register_variable(arg, node_position + 1);
                     });
@@ -251,14 +257,14 @@ impl BurnGraph {
                 node.inputs()
                     .iter()
                     .filter(|arg| arg.is_dynamic() || arg.is_constant())
-                    .filter(|arg| matches!(arg.ty, ArgType::Tensor(_)))
+                    .filter(|arg| matches!(arg.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_)))
                     .for_each(|arg| self.scope.tensor_register_future_use(arg, node_position));
             });
 
         // Register graph tensor output with the last node position
         self.graph_output_args
             .iter()
-            .filter(|arg| matches!(arg.ty, ArgType::Tensor(_)))
+            .filter(|arg| matches!(arg.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_)))
             .for_each(|arg| {
                 self.scope.tensor_register_future_use(arg, self.nodes.len());
             });
@@ -496,11 +502,59 @@ impl BurnGraph {
         let output_type_def = crate::burn::codegen_return_type(&self.graph_output_args);
         let output_return_def = crate::burn::codegen_return_expr(&self.graph_output_args);
 
+        // Insert ScalarNative -> ScalarTensor conversions for graph inputs.
+        // The user passes native scalars but internal nodes expect Tensor<B, 1>.
+        let mut input_conversions = quote! {};
+        for arg in &self.graph_input_args {
+            if let Some(dtype) = self.boundary_input_conversions.get(&arg.name) {
+                let name = crate::burn::arg_ident(arg);
+                let dtype_tokens = dtype.to_tokens();
+                if dtype.is_float() {
+                    input_conversions.extend(quote! {
+                        let #name = Tensor::<B, 1>::from_data_dtype(
+                            burn::tensor::TensorData::from([#name as f64]),
+                            &*self.device,
+                            #dtype_tokens
+                        );
+                    });
+                } else if dtype.is_int() || dtype.is_uint() {
+                    input_conversions.extend(quote! {
+                        let #name = Tensor::<B, 1, Int>::from_data_dtype(
+                            burn::tensor::TensorData::from([#name as i64]),
+                            &*self.device,
+                            #dtype_tokens
+                        );
+                    });
+                } else if dtype.is_bool() {
+                    input_conversions.extend(quote! {
+                        let #name = Tensor::<B, 1, Bool>::from_data_dtype(
+                            burn::tensor::TensorData::from([#name]),
+                            &*self.device,
+                            #dtype_tokens
+                        );
+                    });
+                }
+            }
+        }
+
         let mut body = quote! {};
         for (index, node) in self.nodes.iter().enumerate() {
             let mut scope_at_pos = self.scope.at_position(index);
             let code = NodeCodegen::forward(node, &mut scope_at_pos);
             body.extend(code);
+        }
+
+        // Insert ScalarTensor -> ScalarNative conversions at graph boundary.
+        // Internal nodes produce Tensor<B, 1> but the graph signature expects native types.
+        let mut boundary_conversions = quote! {};
+        for arg in &self.graph_output_args {
+            if let Some(dtype) = self.boundary_output_conversions.get(&arg.name) {
+                let name = crate::burn::arg_ident(arg);
+                let convert = crate::burn::on_device_to_native(quote! { #name }, dtype);
+                boundary_conversions.extend(quote! {
+                    let #name = #convert;
+                });
+            }
         }
 
         // TODO Return the result without a `let` binding from a block,
@@ -509,8 +563,9 @@ impl BurnGraph {
         quote! {
             #[allow(clippy::let_and_return, clippy::approx_constant)]
             pub fn forward(&self, #input_def) -> #output_type_def {
+                #input_conversions
                 #body
-
+                #boundary_conversions
                 #output_return_def
             }
         }
@@ -538,6 +593,7 @@ impl BurnGraph {
             // For empty graphs, inputs pass through directly to outputs
             self.graph_input_args.extend_from_slice(input_args);
             self.graph_output_args.extend_from_slice(output_args);
+            self.convert_graph_boundary_scalars();
             return;
         }
 
@@ -594,6 +650,29 @@ impl BurnGraph {
                         .clone(),
                 );
             });
+        }
+
+        // Convert ScalarTensor to ScalarNative at graph boundary so user-facing
+        // forward() signatures use native types (f32, i64, etc.) not Tensor<B, 1>
+        self.convert_graph_boundary_scalars();
+    }
+
+    /// Convert ScalarTensor to ScalarNative at graph I/O boundary.
+    /// Users pass/receive native scalars; internal representation is on-device.
+    fn convert_graph_boundary_scalars(&mut self) {
+        for arg in &mut self.graph_input_args {
+            if let ArgType::ScalarTensor(dtype) = arg.ty {
+                self.boundary_input_conversions
+                    .insert(arg.name.clone(), dtype);
+                arg.ty = ArgType::ScalarNative(dtype);
+            }
+        }
+        for arg in &mut self.graph_output_args {
+            if let ArgType::ScalarTensor(dtype) = arg.ty {
+                self.boundary_output_conversions
+                    .insert(arg.name.clone(), dtype);
+                arg.ty = ArgType::ScalarNative(dtype);
+            }
         }
     }
 }

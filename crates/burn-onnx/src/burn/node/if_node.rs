@@ -70,13 +70,16 @@ impl NodeCodegen for onnx_ir::node::if_node::IfNode {
             .expect("If node requires condition input");
 
         let cond = match &cond_arg.ty {
-            ArgType::Scalar(_) => {
+            ArgType::ScalarNative(_) => {
                 let name = arg_to_ident(cond_arg);
                 quote! { #name }
             }
+            ArgType::ScalarTensor(dtype) => {
+                let cond_tensor = scope.arg(cond_arg);
+                on_device_to_native(quote! { #cond_tensor }, dtype)
+            }
             ArgType::Tensor(_) => {
                 let cond_tensor = scope.arg(cond_arg);
-                // Convert tensor to bool - assume it's a scalar tensor
                 quote! { #cond_tensor.into_scalar().elem::<bool>() }
             }
             other => panic!("If condition must be scalar or tensor, got {:?}", other),

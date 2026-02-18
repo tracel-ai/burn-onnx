@@ -71,12 +71,12 @@ pub(super) fn generate_outer_scope_bindings(
             let outer_var = scope.at_position(node_position).arg(outer_input);
 
             match &outer_input.ty {
-                ArgType::Tensor(_) => {
+                ArgType::Tensor(_) | ArgType::ScalarTensor(_) => {
                     bindings.extend(quote! {
                         let #var_name = #outer_var.clone();
                     });
                 }
-                ArgType::Scalar(_) => {
+                ArgType::ScalarNative(_) => {
                     bindings.extend(quote! {
                         let #var_name = #outer_var;
                     });
@@ -100,7 +100,7 @@ pub(super) fn register_subgraph_scope(
 ) {
     // Register subgraph inputs in scope
     for input in &subgraph.inputs {
-        if let ArgType::Tensor(_) = &input.ty {
+        if matches!(&input.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_)) {
             scope.tensor_register_variable(input, node_position);
         }
     }
@@ -111,7 +111,7 @@ pub(super) fn register_subgraph_scope(
 
         // Register node outputs
         for output in NodeCodegen::outputs(node) {
-            if let ArgType::Tensor(_) = &output.ty {
+            if matches!(&output.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_)) {
                 scope.tensor_register_variable(output, subgraph_node_pos);
             }
         }
@@ -126,7 +126,7 @@ pub(super) fn register_subgraph_scope(
             .iter()
             .filter(|arg| arg.is_dynamic() || arg.is_constant())
         {
-            if let ArgType::Tensor(_) = &input.ty {
+            if matches!(&input.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_)) {
                 scope.tensor_register_future_use(input, subgraph_node_pos - 1);
             }
         }

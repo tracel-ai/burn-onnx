@@ -186,7 +186,7 @@ fn test_type_validation_scalar_tensor() {
 
     for input in &graph.inputs {
         match &input.ty {
-            ArgType::Scalar(_) => {
+            ArgType::ScalarNative(_) => {
                 has_scalar = true;
                 println!("Found scalar input: {}", input.name);
             }

@@ -64,7 +64,7 @@ impl NodeProcessor for GatherProcessor {
 
     fn is_noop(&self, node: &RawNode) -> bool {
         // Gather is a no-op when input is Scalar (single element, nothing to gather)
-        matches!(node.inputs[0].ty, ArgType::Scalar(_))
+        matches!(node.inputs[0].ty, ArgType::ScalarNative(_))
     }
 
     fn input_preferences(
@@ -78,10 +78,16 @@ impl NodeProcessor for GatherProcessor {
             return Ok(None);
         }
 
-        // When gathering from Shape data, prefer indices to be Shape type
+        // When gathering from Shape data, prefer scalar indices as ScalarNative
+        // (array indexing uses native values) and multi-element indices as Shape
         if node.inputs[0].ty.is_shape() {
+            let pref = if node.inputs[1].ty.is_scalar() {
+                ArgPreference::ScalarNative
+            } else {
+                ArgPreference::Shape
+            };
             Ok(Some(
-                InputPreferences::new().add(&node.inputs[1].name, ArgPreference::Shape),
+                InputPreferences::new().add(&node.inputs[1].name, pref),
             ))
         } else {
             Ok(None)
@@ -101,7 +107,7 @@ impl NodeProcessor for GatherProcessor {
         let input_dim = match &node.inputs[0].ty {
             ArgType::Tensor(tensor) => tensor.rank as i64,
             ArgType::Shape(shape_rank) => *shape_rank as i64,
-            ArgType::Scalar(_) => 1, // Scalar is treated as single-element container
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => 1,
         };
 
         // Extract the axis attribute (default: 0 per ONNX spec)
@@ -132,13 +138,14 @@ impl NodeProcessor for GatherProcessor {
             });
         }
 
-        // Infer output type based on indices rank
+        // Infer output type based on indices rank.
+        // Scalar indices (both ScalarTensor and ScalarNative) are rank 0 per ONNX spec.
         let indices_rank = match &node.inputs[1].ty {
             ArgType::Tensor(tensor) => tensor.rank,
-            ArgType::Scalar(_) => 0,
+            // Scalar indices (both ScalarTensor and ScalarNative) are rank 0,
+            // reducing output rank by 1 per ONNX spec: output_rank = q + (r - 1)
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => 0,
             ArgType::Shape(_shape_rank) => {
-                // Shape is always a 1D array, but when used as indices for Gather,
-                // we treat it as rank 1 for the ONNX gather formula
                 1 // Shape indices are always treated as rank 1 for gather
             }
         };
@@ -149,8 +156,9 @@ impl NodeProcessor for GatherProcessor {
                 let output_rank = indices_rank + input_tensor.rank - 1;
 
                 if output_rank == 0 {
-                    // Output is scalar when gathering a single element
-                    node.outputs[0].ty = ArgType::Scalar(input_tensor.dtype);
+                    // Output is scalar tensor (stays on device)
+                    // Downstream consumers that need native will request ScalarNative via preferences
+                    node.outputs[0].ty = ArgType::ScalarTensor(input_tensor.dtype);
                 } else {
                     // Output is tensor
                     node.outputs[0].ty = ArgType::Tensor(TensorType {
@@ -165,7 +173,7 @@ impl NodeProcessor for GatherProcessor {
                 // - If indices are scalar (rank 0), output is a scalar (single dimension value)
                 // - Otherwise, output is a shape with same dimension as indices
                 if indices_rank == 0 {
-                    node.outputs[0].ty = ArgType::Scalar(crate::ir::DType::I64);
+                    node.outputs[0].ty = ArgType::ScalarNative(crate::ir::DType::I64);
                 } else {
                     // For Shape indices, use the actual shape rank (number of elements)
                     let output_shape_rank = match &node.inputs[1].ty {
@@ -176,10 +184,11 @@ impl NodeProcessor for GatherProcessor {
                     node.outputs[0].ty = ArgType::Shape(output_shape_rank);
                 }
             }
-            ArgType::Scalar(dtype) => {
-                // Gathering from a scalar - there's only one element, so output is always scalar
-                // This handles cases like Reshape(scalar, [-1]) -> Scalar followed by Gather
-                node.outputs[0].ty = ArgType::Scalar(*dtype);
+            ArgType::ScalarTensor(dtype) => {
+                node.outputs[0].ty = ArgType::ScalarTensor(*dtype);
+            }
+            ArgType::ScalarNative(dtype) => {
+                node.outputs[0].ty = ArgType::ScalarNative(*dtype);
             }
         }
 
@@ -192,7 +201,7 @@ impl NodeProcessor for GatherProcessor {
         let input_dim = match &node.inputs[0].ty {
             ArgType::Tensor(tensor) => tensor.rank as i64,
             ArgType::Shape(shape_rank) => *shape_rank as i64,
-            ArgType::Scalar(_) => 1, // Scalar is treated as single-element container
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => 1,
         };
 
         // Extract the axis attribute (default: 0 per ONNX spec)
@@ -307,7 +316,7 @@ mod tests {
         let mut node = TestNodeBuilder::new(NodeType::Gather, "test_scalar_gather")
             .attr_int("axis", 0)
             .input_tensor_f32("data", 1, None)
-            .add_input("indices", ArgType::Scalar(crate::ir::DType::I64))
+            .add_input("indices", ArgType::ScalarNative(crate::ir::DType::I64))
             .output_tensor_f32("output", 1, None)
             .build();
 
@@ -316,12 +325,12 @@ mod tests {
         let _config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
-        // Should output scalar, not tensor
+        // Should output ScalarTensor (stays on device)
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarTensor(elem_type) => {
                 assert_eq!(*elem_type, crate::ir::DType::F32);
             }
-            other => panic!("Expected scalar output, got {:?}", other),
+            other => panic!("Expected ScalarTensor output, got {:?}", other),
         }
     }
 
@@ -382,7 +391,7 @@ mod tests {
         let mut node = TestNodeBuilder::new(NodeType::Gather, "test_gather_shape_scalar")
             .attr_int("axis", 0)
             .input_shape("data", 2) // Shape input (represents shape of a 2D tensor)
-            .add_input("indices", ArgType::Scalar(crate::ir::DType::I64)) // Scalar indices
+            .add_input("indices", ArgType::ScalarNative(crate::ir::DType::I64)) // Scalar indices
             .output_tensor_i64("output", 0, None) // Will be updated by gather_update_outputs
             .build();
 
@@ -393,7 +402,7 @@ mod tests {
 
         // Should output scalar when gathering from shape with scalar indices
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, crate::ir::DType::I64);
             }
             other => panic!("Expected scalar output, got {:?}", other),
@@ -479,8 +488,8 @@ mod tests {
         // This tests the Reshape(scalar, [-1]) -> Scalar optimization path
         let mut node = TestNodeBuilder::new(NodeType::Gather, "test_gather_scalar")
             .attr_int("axis", 0)
-            .add_input("data", ArgType::Scalar(crate::ir::DType::I64)) // Scalar input
-            .add_input("indices", ArgType::Scalar(crate::ir::DType::I64)) // Scalar indices
+            .add_input("data", ArgType::ScalarNative(crate::ir::DType::I64)) // Scalar input
+            .add_input("indices", ArgType::ScalarNative(crate::ir::DType::I64)) // Scalar indices
             .add_output(
                 "output",
                 ArgType::Tensor(TensorType::new(crate::ir::DType::I64, 1, None)),
@@ -494,7 +503,7 @@ mod tests {
 
         // Should output scalar when input is scalar
         match &node.outputs[0].ty {
-            ArgType::Scalar(dtype) => {
+            ArgType::ScalarNative(dtype) => {
                 assert_eq!(*dtype, crate::ir::DType::I64);
             }
             other => panic!("Expected Scalar output, got {:?}", other),
@@ -505,8 +514,8 @@ mod tests {
     fn test_gather_is_noop_scalar_input() {
         let mut node = TestNodeBuilder::new(NodeType::Gather, "test_gather_noop")
             .attr_int("axis", 0)
-            .add_input("data", ArgType::Scalar(crate::ir::DType::I64))
-            .add_input("indices", ArgType::Scalar(crate::ir::DType::I64))
+            .add_input("data", ArgType::ScalarNative(crate::ir::DType::I64))
+            .add_input("indices", ArgType::ScalarNative(crate::ir::DType::I64))
             .add_output(
                 "output",
                 ArgType::Tensor(TensorType::new(crate::ir::DType::I64, 1, None)),

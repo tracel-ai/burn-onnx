@@ -29,7 +29,7 @@ impl NodeCodegen for onnx_ir::cumsum::CumSumNode {
             CumSumAxis::Runtime(_) => {
                 let axis_input = arg_to_ident(&self.inputs[1]);
                 // Check if axis is a scalar or a shape array
-                let axis_is_scalar = matches!(&self.inputs[1].ty, ArgType::Scalar(_));
+                let axis_is_scalar = matches!(&self.inputs[1].ty, ArgType::ScalarNative(_));
                 generate_runtime_cumsum(
                     &input,
                     &output,

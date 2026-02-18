@@ -284,7 +284,7 @@ fn one_hot(graph: &OnnxGraph) {
     OneHot "onehot1"
       Inputs:
         onehot_indices: I64[3]
-        _: Scalar(I64) [static(7)]
+        _: ScalarNative(I64) [static(7)]
         _: F32[2] [static(8)]
       Outputs:
         onehot1_out1: F32[?, ?]

@@ -26,7 +26,13 @@ pub fn arg_type_tokens(arg: &Argument) -> TokenStream {
                 _ => quote! { Tensor<B, #rank> },
             }
         }
-        ArgType::Scalar(dtype) => scalar_type_tokens(dtype),
+        ArgType::ScalarNative(dtype) => scalar_type_tokens(dtype),
+        ArgType::ScalarTensor(dtype) => match dtype {
+            d if d.is_float() => quote! { Tensor<B, 1> },
+            d if d.is_int() || d.is_uint() => quote! { Tensor<B, 1, Int> },
+            d if d.is_bool() => quote! { Tensor<B, 1, Bool> },
+            _ => quote! { Tensor<B, 1> },
+        },
         ArgType::Shape(rank) => {
             let rank_lit = rank.to_tokens();
             quote! { [i64; #rank_lit] }
@@ -52,6 +58,51 @@ pub fn scalar_type_tokens(dtype: &DType) -> TokenStream {
         DType::Bool => quote! { bool },
         _ => panic!("Unsupported scalar dtype: {:?}", dtype),
     }
+}
+
+/// Generate `.elem::<T>()` cast for extracting a native scalar from `into_scalar()`.
+///
+/// Used after `.into_scalar()` to cast from the backend's native element type
+/// to the desired Rust type.
+pub fn elem_cast_tokens(dtype: &DType) -> TokenStream {
+    let ty = scalar_type_tokens(dtype);
+    quote! { .elem::<#ty>() }
+}
+
+/// Generate code to extract a native scalar from a on-device tensor.
+///
+/// Produces: `<input>.into_scalar().elem::<T>()`
+pub fn on_device_to_native(input: TokenStream, dtype: &DType) -> TokenStream {
+    let cast = elem_cast_tokens(dtype);
+    quote! { #input.into_scalar()#cast }
+}
+
+/// Generate code to convert a ScalarTensor (Tensor<B,1>) to a Shape([i64; 1]).
+///
+/// Produces: `{ let __v: T = <input>.into_scalar().elem(); [__v as i64] }`
+pub fn scalar_tensor_to_shape(input: TokenStream, dtype: &DType) -> TokenStream {
+    let ty = scalar_type_tokens(dtype);
+    quote! {
+        {
+            let __v: #ty = #input.into_scalar().elem();
+            [__v as i64]
+        }
+    }
+}
+
+/// Generate code to convert a native scalar to a Shape([i64; 1]).
+///
+/// Produces: `[<input> as i64]`
+pub fn scalar_native_to_shape(input: TokenStream) -> TokenStream {
+    quote! { [#input as i64] }
+}
+
+/// Generate code to extract the first element of a Shape as a native scalar.
+///
+/// Produces: `<input>[0] as T`
+pub fn shape_to_native(input: TokenStream, dtype: &DType) -> TokenStream {
+    let ty = scalar_type_tokens(dtype);
+    quote! { #input[0] as #ty }
 }
 
 /// Get the argument identifier

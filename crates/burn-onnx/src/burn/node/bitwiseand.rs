@@ -19,9 +19,9 @@ impl NodeCodegen for onnx_ir::node::bitwiseand::BitwiseAndNode {
         let rhs_value = scope.arg(rhs);
 
         let function = match (&lhs.ty, &rhs.ty) {
-            (ArgType::Tensor(lhs_tensor), ArgType::Tensor(rhs_tensor)) => {
-                let lhs_rank = lhs_tensor.rank;
-                let rhs_rank = rhs_tensor.rank;
+            (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
 
                 if lhs_rank == rhs_rank {
                     quote! { #lhs_value.bitwise_and(#rhs_value) }
@@ -35,13 +35,13 @@ impl NodeCodegen for onnx_ir::node::bitwiseand::BitwiseAndNode {
                     quote! { #lhs_value.unsqueeze_dims(&[#(#dims),*]).bitwise_and(#rhs_value) }
                 }
             }
-            (ArgType::Tensor(_), ArgType::Scalar(_)) => {
+            (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                 quote! { #lhs_value.bitwise_and_scalar((#rhs_value as i64).elem()) }
             }
-            (ArgType::Scalar(_), ArgType::Tensor(_)) => {
+            (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 quote! { #rhs_value.bitwise_and_scalar((#lhs_value as i64).elem()) }
             }
-            (ArgType::Scalar(_), ArgType::Scalar(_)) => {
+            (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
                 quote! { #lhs_value & #rhs_value }
             }
             _ => panic!("BitwiseAnd operation requires tensor or scalar inputs"),

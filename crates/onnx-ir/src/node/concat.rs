@@ -60,19 +60,17 @@ impl NodeProcessor for ConcatProcessor {
             return Ok(None);
         }
 
-        // Check if any input is Shape type
+        let mut prefs = InputPreferences::new();
         let has_shape = node.inputs.iter().any(|input| input.ty.is_shape());
 
-        if !has_shape {
-            return Ok(None);
-        }
-
-        // When concatenating with Shape inputs, prefer constant rank-1 tensors to be Shape
-        let mut prefs = InputPreferences::new();
         for input in &node.inputs {
-            if matches!(&input.ty, ArgType::Tensor(t) if t.rank == 1) {
-                // Prefer this constant to be Shape
+            if has_shape && matches!(&input.ty, ArgType::Tensor(t) if t.rank == 1) {
+                // When concatenating with Shape inputs, prefer rank-1 tensors as Shape
                 prefs = prefs.add(&input.name, ArgPreference::Shape);
+            }
+            if input.ty.is_scalar() {
+                // Scalar concat inputs must be native (used in TensorData::from([...]))
+                prefs = prefs.add(&input.name, ArgPreference::ScalarNative);
             }
         }
 
@@ -103,10 +101,7 @@ impl NodeProcessor for ConcatProcessor {
             .inputs
             .iter()
             .any(|i| matches!(&i.ty, ArgType::Tensor(t) if t.rank == 1));
-        let has_scalar = node
-            .inputs
-            .iter()
-            .any(|i| matches!(i.ty, ArgType::Scalar(_)));
+        let has_scalar = node.inputs.iter().any(|i| i.ty.is_scalar());
 
         // Handle scalar inputs: concatenating scalars with rank-1 tensors or shapes produces a 1D output
         if has_scalar {
@@ -115,20 +110,18 @@ impl NodeProcessor for ConcatProcessor {
             let mut total_length = 0usize;
             for (i, input) in node.inputs.iter().enumerate() {
                 match &input.ty {
-                    ArgType::Scalar(_) => {
+                    ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                         total_length += 1; // Each scalar contributes 1 element
                     }
                     ArgType::Tensor(t) if t.rank == 1 => {
-                        // Get tensor length from static shape or value
                         let len = t
                             .static_shape_known()
                             .map(|s| s[0])
                             .or_else(|| input.value().as_ref().map(|v| v.shape[0]))
-                            .unwrap_or(1); // Default to 1 if unknown
+                            .unwrap_or(1);
                         total_length += len;
                     }
                     ArgType::Shape(rank) => {
-                        // Shape contributes its rank elements
                         total_length += rank;
                     }
                     _ => {
@@ -151,7 +144,7 @@ impl NodeProcessor for ConcatProcessor {
                     .inputs
                     .iter()
                     .find_map(|input| match &input.ty {
-                        ArgType::Scalar(dtype) => Some(*dtype),
+                        ArgType::ScalarNative(dtype) | ArgType::ScalarTensor(dtype) => Some(*dtype),
                         ArgType::Tensor(t) => Some(t.dtype),
                         _ => None,
                     })
@@ -159,7 +152,7 @@ impl NodeProcessor for ConcatProcessor {
 
                 for (i, input) in node.inputs.iter().enumerate() {
                     let dtype = match &input.ty {
-                        ArgType::Scalar(d) => Some(*d),
+                        ArgType::ScalarNative(d) | ArgType::ScalarTensor(d) => Some(*d),
                         ArgType::Tensor(t) => Some(t.dtype),
                         _ => None,
                     };
@@ -311,8 +304,8 @@ impl NodeProcessor for ConcatProcessor {
         // extract the rank based on input type
         let rank = match &node.inputs.first().unwrap().ty {
             ArgType::Tensor(tensor) => tensor.rank as i64,
-            ArgType::Shape(_) => 1,  // Shapes are 1D
-            ArgType::Scalar(_) => 0, // Scalars are rank-0
+            ArgType::Shape(_) => 1, // Shapes are 1D
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => 0, // Scalars are rank-0
         };
 
         // if axis is negative, it is counted from the end

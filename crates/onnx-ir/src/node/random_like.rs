@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn test_random_like_invalid_input() {
         let mut node = create_test_node(DataType::FLOAT.value(), 2, None);
-        node.inputs[0].ty = ArgType::Scalar(DType::F32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
         let processor = RandomLikeProcessor;
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 16, &prefs);

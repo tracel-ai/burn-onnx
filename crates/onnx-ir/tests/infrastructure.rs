@@ -284,7 +284,8 @@ fn test_all_data_types_conversion() {
                         dtype
                     );
                 }
-                onnx_ir::ir::ArgType::Scalar(scalar_dtype) => {
+                onnx_ir::ir::ArgType::ScalarTensor(scalar_dtype)
+                | onnx_ir::ir::ArgType::ScalarNative(scalar_dtype) => {
                     assert_eq!(
                         scalar_dtype,
                         &dtype,
@@ -571,7 +572,7 @@ fn test_value_info_initialization() {
             );
             println!("✓ Transpose input correctly initialized as Tensor with rank 3");
         }
-        onnx_ir::ir::ArgType::Scalar(_) => {
+        onnx_ir::ir::ArgType::ScalarTensor(_) | onnx_ir::ir::ArgType::ScalarNative(_) => {
             panic!(
                 "BUG: Transpose input is Scalar! This means value_info was not used. \
                  The Reshape output should have been initialized as rank 3 Tensor from value_info, \
@@ -616,7 +617,7 @@ fn test_value_info_initialization() {
                     i, tensor_type.rank
                 );
             }
-            onnx_ir::ir::ArgType::Scalar(_) => {
+            onnx_ir::ir::ArgType::ScalarTensor(_) | onnx_ir::ir::ArgType::ScalarNative(_) => {
                 panic!(
                     "BUG: Reshape {} output is Scalar! Should be Tensor with proper rank from value_info.",
                     i

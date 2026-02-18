@@ -19,9 +19,9 @@ impl NodeCodegen for onnx_ir::node::or::OrNode {
         let rhs_value = scope.arg(rhs);
 
         let function = match (&lhs.ty, &rhs.ty) {
-            (ArgType::Tensor(lhs_tensor), ArgType::Tensor(rhs_tensor)) => {
-                let lhs_rank = lhs_tensor.rank;
-                let rhs_rank = rhs_tensor.rank;
+            (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
+                let lhs_rank = lhs_ty.rank();
+                let rhs_rank = rhs_ty.rank();
 
                 if lhs_rank == rhs_rank {
                     quote! { #lhs_value.bool_or(#rhs_value) }
@@ -35,20 +35,20 @@ impl NodeCodegen for onnx_ir::node::or::OrNode {
                     quote! { #lhs_value.unsqueeze_dims(&[#(#dims),*]).bool_or(#rhs_value) }
                 }
             }
-            (ArgType::Scalar(_), ArgType::Scalar(_)) => {
-                quote! { #lhs_value || #rhs_value }
-            }
-            (ArgType::Scalar(_), ArgType::Tensor(tensor)) => {
-                let rank = tensor.rank;
+            (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
+                let rank = rhs_ty.rank();
                 quote! {
                     if #lhs_value { Tensor::<B, #rank, Int>::ones(#rhs_value.shape(), &*self.device).bool() } else { #rhs_value }
                 }
             }
-            (ArgType::Tensor(tensor), ArgType::Scalar(_)) => {
-                let rank = tensor.rank;
+            (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
+                let rank = lhs_ty.rank();
                 quote! {
                     if #rhs_value { Tensor::<B, #rank, Int>::ones(#lhs_value.shape(), &*self.device).bool() } else { #lhs_value }
                 }
+            }
+            (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
+                quote! { #lhs_value || #rhs_value }
             }
             (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
                 {

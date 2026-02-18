@@ -19,8 +19,8 @@ use onnx_ir_derive::NodeBuilder;
 
 use crate::ir::{ArgType, Argument, DType, Node, RawNode, TensorType};
 use crate::processor::{
-    InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
-    compute_broadcast_rank, compute_broadcast_static_shape,
+    InputPreferences, InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec,
+    ProcessError, compute_broadcast_rank, compute_broadcast_static_shape,
 };
 
 /// Node representation for Where operation
@@ -34,7 +34,7 @@ pub struct WhereNode {
 /// Get element type from ArgType, handling Shape types specially
 fn get_elem_type(arg_type: &ArgType) -> DType {
     match arg_type {
-        ArgType::Scalar(elem_type) => *elem_type,
+        ArgType::ScalarTensor(elem_type) | ArgType::ScalarNative(elem_type) => *elem_type,
         ArgType::Tensor(tensor) => tensor.dtype,
         ArgType::Shape(_) => DType::I64, // Shape types are always i64
     }
@@ -71,6 +71,23 @@ impl NodeProcessor for WhereProcessor {
             inputs: InputSpec::Exact(3),
             outputs: OutputSpec::Exact(1),
         }
+    }
+
+    fn input_preferences(
+        &self,
+        node: &RawNode,
+        _opset: usize,
+    ) -> Result<Option<InputPreferences>, ProcessError> {
+        use crate::processor::ArgPreference;
+
+        let mut prefs = InputPreferences::new();
+        // Scalar x/y inputs must be native (used in mask_fill and TensorData::from)
+        for input in node.inputs.iter().skip(1) {
+            if input.ty.is_scalar() {
+                prefs = prefs.add(&input.name, ArgPreference::ScalarNative);
+            }
+        }
+        Ok(Some(prefs))
     }
 
     fn infer_types(
@@ -113,7 +130,7 @@ impl NodeProcessor for WhereProcessor {
 
         // Determine output type
         if output_rank == 0 {
-            node.outputs[0].ty = ArgType::Scalar(elem_type);
+            node.outputs[0].ty = ArgType::ScalarNative(elem_type);
         } else if should_output_shape(x, y, output_rank, &elem_type) {
             // If both inputs are Shape types and output is 1D int64, preserve Shape type
             let shape_size = get_shape_size(x).max(get_shape_size(y));
@@ -182,7 +199,7 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         match &node.outputs[0].ty {
-            ArgType::Scalar(elem_type) => {
+            ArgType::ScalarNative(elem_type) => {
                 assert_eq!(*elem_type, DType::F32);
             }
             _ => panic!("Expected scalar output"),

@@ -246,7 +246,7 @@ fn extract_constant_from_attributes(node: &mut RawNode, state_rc: &Rc<RefCell<Gr
 
             // Create type from tensor data
             let ty = if tensor_data.shape.is_empty() {
-                crate::ir::ArgType::Scalar(tensor_data.elem_type())
+                crate::ir::ArgType::ScalarNative(tensor_data.elem_type())
             } else {
                 crate::ir::ArgType::Tensor(crate::ir::TensorType {
                     dtype: tensor_data.elem_type(),

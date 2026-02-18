@@ -161,7 +161,7 @@ impl NodeProcessor for UnsqueezeProcessor {
                     UnsqueezeConfig::Runtime(RuntimeInputRef::new(node.inputs[1].name.clone(), 1))
                 }
             }
-            ArgType::Scalar(dtype) => {
+            ArgType::ScalarTensor(dtype) | ArgType::ScalarNative(dtype) => {
                 // Scalar axes - treat as single axis value
                 if !dtype.is_int() {
                     return Err(ProcessError::Custom(
@@ -216,7 +216,7 @@ impl UnsqueezeProcessor {
     ) -> Result<(), ProcessError> {
         let input_rank = match &node.inputs[0].ty {
             ArgType::Tensor(tensor) => tensor.rank,
-            ArgType::Scalar(_) => 0,
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => 0,
             _ => {
                 return Err(ProcessError::TypeMismatch {
                     expected: "Tensor or Scalar".to_string(),
@@ -259,7 +259,9 @@ impl UnsqueezeProcessor {
 
         // Special case: Int scalar -> Shape[1] conversion (reverse of squeeze)
         match &node.inputs[0].ty {
-            ArgType::Scalar(elem_type) if output_rank == 1 => {
+            ArgType::ScalarTensor(elem_type) | ArgType::ScalarNative(elem_type)
+                if output_rank == 1 =>
+            {
                 if elem_type.is_int() {
                     node.outputs[0].ty = ArgType::Shape(1);
                 } else {
@@ -273,7 +275,9 @@ impl UnsqueezeProcessor {
             _ => {
                 let output_elem = match &node.outputs[0].ty {
                     ArgType::Tensor(_) => node.inputs[0].ty.elem_type(),
-                    ArgType::Scalar(elem_type) => *elem_type,
+                    ArgType::ScalarTensor(elem_type) | ArgType::ScalarNative(elem_type) => {
+                        *elem_type
+                    }
                     ArgType::Shape(_) => crate::ir::DType::I64,
                 };
 
@@ -415,7 +419,7 @@ mod tests {
     #[test]
     fn test_unsqueeze_scalar_float() {
         let mut node = create_test_node_with_attr(0, vec![0]).build();
-        node.inputs[0].ty = ArgType::Scalar(DType::F32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
         let processor = UnsqueezeProcessor;
         let prefs = OutputPreferences::new();
         // Use opset 11 for attribute-based axes (pre-opset 13)
@@ -434,7 +438,7 @@ mod tests {
     #[test]
     fn test_unsqueeze_scalar_int_to_shape() {
         let mut node = create_test_node_with_attr(0, vec![0]).build();
-        node.inputs[0].ty = ArgType::Scalar(DType::I64);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::I64);
         let processor = UnsqueezeProcessor;
         let prefs = OutputPreferences::new();
         // Use opset 11 for attribute-based axes (pre-opset 13)
@@ -452,7 +456,7 @@ mod tests {
     #[test]
     fn test_unsqueeze_scalar_int32_to_shape() {
         let mut node = create_test_node_with_attr(0, vec![0]).build();
-        node.inputs[0].ty = ArgType::Scalar(DType::I32);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::I32);
         let processor = UnsqueezeProcessor;
         let prefs = OutputPreferences::new();
         // Use opset 11 for attribute-based axes (pre-opset 13)
@@ -471,7 +475,7 @@ mod tests {
     fn test_unsqueeze_scalar_int_multiple_axes() {
         // Test that Int scalar with multiple axes produces a tensor, not shape
         let mut node = create_test_node_with_attr(0, vec![0, 1]).build();
-        node.inputs[0].ty = ArgType::Scalar(DType::I64);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::I64);
         let processor = UnsqueezeProcessor;
         let prefs = OutputPreferences::new();
         // Use opset 11 for attribute-based axes (pre-opset 13)

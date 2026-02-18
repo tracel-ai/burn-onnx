@@ -114,6 +114,6 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         // Output should have same type as input
-        assert!(matches!(node.outputs[0].ty, ArgType::Scalar(_)));
+        assert!(matches!(node.outputs[0].ty, ArgType::ScalarNative(_)));
     }
 }
