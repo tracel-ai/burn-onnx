@@ -50,7 +50,7 @@ jobs:
           shared-key: model-checks
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-python: true
