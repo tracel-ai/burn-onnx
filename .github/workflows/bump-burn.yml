@@ -59,10 +59,10 @@ jobs:
         run: cargo update -p burn -p burn-ndarray -p burn-store -p burn-tensor
 
       - name: Create pull request
-        id: pr
         if: steps.check.outputs.skip == 'false'
         uses: peter-evans/create-pull-request@v8
         with:
+          token: ${{ secrets.PAT }}
           branch: bump-burn-rev
           commit-message: "Bump burn rev to ${{ steps.latest.outputs.sha }}"
           title: "Bump burn rev to latest main"
@@ -72,13 +72,3 @@ jobs:
             This PR was created automatically by the [bump-burn](${{ github.server_url }}/${{ github.repository }}/actions/workflows/bump-burn.yml) workflow.
           labels: dependencies
           delete-branch: true
-
-      # Close and reopen the PR to trigger CI workflows.
-      # PRs created with GITHUB_TOKEN don't trigger workflows by default.
-      - name: Trigger CI on PR
-        if: steps.pr.outputs.pull-request-number
-        run: |
-          gh pr close ${{ steps.pr.outputs.pull-request-number }} --repo ${{ github.repository }}
-          gh pr reopen ${{ steps.pr.outputs.pull-request-number }} --repo ${{ github.repository }}
-        env:
-          GH_TOKEN: ${{ github.token }}
