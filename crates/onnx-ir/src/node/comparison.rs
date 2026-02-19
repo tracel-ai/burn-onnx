@@ -133,11 +133,12 @@ impl NodeProcessor for ComparisonProcessor {
             prefs = prefs.add(&node.inputs[0].name, ArgPreference::ScalarNative);
         }
 
-        // When one input is ScalarNative, prefer the other as ScalarNative too.
-        if node.inputs[0].ty.is_scalar_native() {
+        // When one input is ScalarNative and the other is also a scalar, prefer
+        // the other as ScalarNative too (avoids promoting to ScalarTensor).
+        if node.inputs[0].ty.is_scalar_native() && node.inputs[1].ty.is_scalar() {
             prefs = prefs.add(&node.inputs[1].name, ArgPreference::ScalarNative);
         }
-        if node.inputs[1].ty.is_scalar_native() {
+        if node.inputs[1].ty.is_scalar_native() && node.inputs[0].ty.is_scalar() {
             prefs = prefs.add(&node.inputs[0].name, ArgPreference::ScalarNative);
         }
 
@@ -345,6 +346,55 @@ mod tests {
             .output_tensor_bool("result", 0, None)
             .build();
         assert!(processor.infer_types(&mut node, 1, &prefs).is_ok());
+    }
+
+    #[test]
+    fn test_input_preferences_tensor_and_scalar_tensor() {
+        let mut node = create_test_node(2, 2);
+        // Make the second input a ScalarTensor (on-device scalar)
+        node.inputs[1].ty = ArgType::ScalarTensor(DType::F32);
+
+        let processor = ComparisonProcessor;
+        let prefs = processor.input_preferences(&node, 16).unwrap().unwrap();
+
+        // Tensor + ScalarTensor: scalar should get ScalarNative preference
+        let b_prefs = prefs.get("B");
+        assert_eq!(b_prefs.len(), 1);
+        assert!(matches!(b_prefs[0], ArgPreference::ScalarNative));
+
+        // Tensor input should not get any preference
+        let a_prefs = prefs.get("A");
+        assert!(a_prefs.is_empty());
+    }
+
+    #[test]
+    fn test_input_preferences_two_tensors() {
+        let node = create_test_node(2, 2);
+
+        let processor = ComparisonProcessor;
+        let prefs = processor.input_preferences(&node, 16).unwrap().unwrap();
+
+        // Two tensors: no preferences should be set
+        assert!(prefs.get("A").is_empty());
+        assert!(prefs.get("B").is_empty());
+    }
+
+    #[test]
+    fn test_input_preferences_scalar_native_and_scalar_tensor() {
+        let mut node = create_test_node(2, 2);
+        node.inputs[0].ty = ArgType::ScalarNative(DType::F32);
+        node.inputs[1].ty = ArgType::ScalarTensor(DType::F32);
+
+        let processor = ComparisonProcessor;
+        let prefs = processor.input_preferences(&node, 16).unwrap().unwrap();
+
+        // ScalarNative + ScalarTensor: the ScalarTensor should get ScalarNative preference
+        let b_prefs = prefs.get("B");
+        assert!(
+            b_prefs
+                .iter()
+                .any(|p| matches!(p, ArgPreference::ScalarNative))
+        );
     }
 
     #[test]

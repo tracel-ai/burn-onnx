@@ -170,10 +170,11 @@ fn forward_burn_attention(
                 (quote! { None }, quote! { Some(#bias) })
             }
             ArgType::Tensor(t) if t.dtype.is_int() || t.dtype.is_uint() => {
+                let q_dtype = node.inputs.first().unwrap().ty.elem_type().to_tokens();
                 let bias = match t.rank {
-                    2 => quote! { #mask_arg.float().unsqueeze::<4>() },
-                    3 => quote! { #mask_arg.float().unsqueeze_dim::<4>(1) },
-                    4 => quote! { #mask_arg.float() },
+                    2 => quote! { #mask_arg.float().cast(#q_dtype).unsqueeze::<4>() },
+                    3 => quote! { #mask_arg.float().cast(#q_dtype).unsqueeze_dim::<4>(1) },
+                    4 => quote! { #mask_arg.float().cast(#q_dtype) },
                     _ => panic!("Attention bias must be rank 2, 3, or 4"),
                 };
                 (quote! { None }, quote! { Some(#bias) })
@@ -324,7 +325,8 @@ fn forward_custom(
         let mask = match &mask_input.ty {
             onnx_ir::ir::ArgType::Tensor(t) => match &t.dtype {
                 dtype if dtype.is_int() || dtype.is_uint() => {
-                    quote! { #mask_arg.float() }
+                    let q_dtype = node.inputs.first().unwrap().ty.elem_type().to_tokens();
+                    quote! { #mask_arg.float().cast(#q_dtype) }
                 }
                 dtype if dtype.is_float() => mask_arg,
                 dtype if dtype.is_bool() => {
@@ -1219,7 +1221,7 @@ mod tests {
                     k,
                     v,
                     None,
-                    Some(mask.float()),
+                    Some(mask.float().cast(burn::tensor::DType::F32)),
                     burn::tensor::ops::AttentionOptions {
                         scale: None,
                         softcap: None,
