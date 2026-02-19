@@ -146,7 +146,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 
         let output = self.outputs.first().unwrap();
 
-        // Collect snapshots for tensor constants (ScalarTensor is inlined, not stored)
+        // Collect snapshots for tensor and scalar-tensor constants (scalar-native and shape are not stored)
         match &output.ty {
             ArgType::Tensor(_) | ArgType::ScalarTensor(_) => {
                 if let Some(input) = self.inputs.first() {

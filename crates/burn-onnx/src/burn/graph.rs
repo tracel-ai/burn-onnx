@@ -235,7 +235,10 @@ impl BurnGraph {
         // Register graph tensor inputs with 0 as node position
         self.graph_input_args
             .iter()
-            .filter(|arg| matches!(arg.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_)))
+            .filter(|arg| {
+                matches!(arg.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_))
+                    || self.boundary_input_conversions.contains_key(&arg.name)
+            })
             .for_each(|arg| {
                 self.scope.tensor_register_variable(arg, 0);
             });
@@ -512,7 +515,7 @@ impl BurnGraph {
                 if dtype.is_float() {
                     input_conversions.extend(quote! {
                         let #name = Tensor::<B, 1>::from_data_dtype(
-                            burn::tensor::TensorData::from([#name as f64]),
+                            burn::tensor::TensorData::from([#name]),
                             &*self.device,
                             #dtype_tokens
                         );
@@ -520,7 +523,7 @@ impl BurnGraph {
                 } else if dtype.is_int() || dtype.is_uint() {
                     input_conversions.extend(quote! {
                         let #name = Tensor::<B, 1, Int>::from_data_dtype(
-                            burn::tensor::TensorData::from([#name as i64]),
+                            burn::tensor::TensorData::from([#name]),
                             &*self.device,
                             #dtype_tokens
                         );
