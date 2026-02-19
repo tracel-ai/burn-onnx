@@ -133,7 +133,7 @@ impl Argument {
 /// The type of an argument.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ArgType {
-    /// A 1D tensor on device (rank 1, shape [1]). Used for scalar constants and
+    /// A 1D tensor on device (rank 1, shape \[1\]). Used for scalar constants and
     /// intermediate values that participate in tensor arithmetic via broadcasting.
     ScalarTensor(DType),
     /// A native Rust scalar (rank 0). Used for shape computations, indices,
