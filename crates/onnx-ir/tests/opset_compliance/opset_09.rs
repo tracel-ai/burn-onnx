@@ -223,7 +223,7 @@ fn greater(graph: &OnnxGraph) {
         greater_a: F32[2, 3, 4]
         greater_b: F32[2, 3, 4]
       Outputs:
-        greater1_out1: Bool[?, ?, ?]
+        greater1_out1: Bool[2, 3, 4]
     "#);
 }
 
@@ -235,7 +235,7 @@ fn is_na_n(graph: &OnnxGraph) {
       Inputs:
         isnan_input: F32[2, 3]
       Outputs:
-        isnan1_out1: Bool[?, ?]
+        isnan1_out1: Bool[2, 3]
     "#);
 }
 
@@ -248,7 +248,7 @@ fn less(graph: &OnnxGraph) {
         less_a: F32[2, 3, 4]
         less_b: F32[2, 3, 4]
       Outputs:
-        less1_out1: Bool[?, ?, ?]
+        less1_out1: Bool[2, 3, 4]
     "#);
 }
 

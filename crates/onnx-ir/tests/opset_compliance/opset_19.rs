@@ -111,7 +111,7 @@ fn equal(graph: &OnnxGraph) {
         equal_a: F32[2, 3, 4]
         equal_b: F32[2, 3, 4]
       Outputs:
-        equal1_out1: Bool[?, ?, ?]
+        equal1_out1: Bool[2, 3, 4]
     "#);
 }
 

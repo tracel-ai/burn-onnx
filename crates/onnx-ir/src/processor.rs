@@ -70,8 +70,6 @@ pub struct InputPreferences {
 
 #[derive(Debug, Clone)]
 pub enum ArgPreference {
-    /// Either scalar variant is fine (backward compat default)
-    Scalar,
     /// Must be native scalar (for shape ops, arange bounds, conditions, indices)
     ScalarNative,
     Shape,
@@ -616,23 +614,33 @@ pub fn compute_broadcast_static_shape(
     Some(result)
 }
 
-/// Update output type for broadcasting operations to max input rank
-pub fn same_as_input_broadcast(node: &mut RawNode) {
+/// Compute the broadcast output ArgType for a set of inputs.
+///
+/// Rules:
+/// - Shape + no real Tensor -> Shape
+/// - All rank-0 (ScalarNative) -> ScalarNative(output_dtype)
+/// - All on-device rank-1 with no real Tensor -> ScalarTensor(output_dtype)
+/// - Otherwise -> Tensor(output_dtype, max_rank)
+///
+/// `output_dtype` is the dtype to use for the output. Pass `None` to infer
+/// from the inputs (first on-device element type). Pass `Some(dtype)` to
+/// override (e.g., `DType::Bool` for comparison ops).
+pub fn broadcast_output_type(
+    inputs: &[crate::ir::Argument],
+    output_dtype: Option<crate::ir::DType>,
+) -> crate::ir::ArgType {
     use crate::ir::ArgType;
 
-    let has_real_tensor_input = node
-        .inputs
+    let has_real_tensor = inputs
         .iter()
         .any(|input| matches!(&input.ty, ArgType::Tensor(_)));
 
-    let has_shape_input = node
-        .inputs
+    let has_shape = inputs
         .iter()
         .any(|input| matches!(&input.ty, ArgType::Shape(_)));
 
-    if has_shape_input && !has_real_tensor_input {
-        let shape_rank = node
-            .inputs
+    if has_shape && !has_real_tensor {
+        let shape_rank = inputs
             .iter()
             .find_map(|input| match &input.ty {
                 ArgType::Shape(rank) => Some(*rank),
@@ -640,44 +648,39 @@ pub fn same_as_input_broadcast(node: &mut RawNode) {
             })
             .expect("Shape input must exist");
 
-        node.outputs[0].ty = ArgType::Shape(shape_rank);
-        return;
+        return ArgType::Shape(shape_rank);
     }
 
-    let max_rank = compute_broadcast_rank(&node.inputs);
+    let max_rank = compute_broadcast_rank(inputs);
 
-    if max_rank == 0 {
-        // All inputs are ScalarNative (rank 0), output is ScalarNative
-        node.outputs[0].ty = ArgType::ScalarNative(node.inputs[0].ty.elem_type());
-    } else {
-        let has_real_tensor = node
-            .inputs
-            .iter()
-            .any(|input| matches!(&input.ty, ArgType::Tensor(_)));
-
-        let elem_type = node
-            .inputs
+    let dtype = output_dtype.unwrap_or_else(|| {
+        inputs
             .iter()
             .find_map(|input| match &input.ty {
                 ArgType::Tensor(tensor) => Some(tensor.dtype),
                 ArgType::ScalarTensor(dtype) => Some(*dtype),
                 _ => None,
             })
-            .unwrap_or_else(|| node.inputs[0].ty.elem_type());
+            .unwrap_or_else(|| inputs[0].ty.elem_type())
+    });
 
-        if !has_real_tensor && max_rank == 1 {
-            // All on-device inputs are ScalarTensor (rank 1), output stays ScalarTensor
-            node.outputs[0].ty = ArgType::ScalarTensor(elem_type);
-        } else {
-            let static_shape = compute_broadcast_static_shape(&node.inputs);
-
-            node.outputs[0].ty = ArgType::Tensor(crate::ir::TensorType {
-                dtype: elem_type,
-                rank: max_rank,
-                static_shape,
-            });
-        }
+    if max_rank == 0 {
+        ArgType::ScalarNative(dtype)
+    } else if !has_real_tensor && max_rank == 1 {
+        ArgType::ScalarTensor(dtype)
+    } else {
+        let static_shape = compute_broadcast_static_shape(inputs);
+        ArgType::Tensor(crate::ir::TensorType {
+            dtype,
+            rank: max_rank,
+            static_shape,
+        })
     }
+}
+
+/// Update output type for broadcasting operations to max input rank
+pub fn same_as_input_broadcast(node: &mut RawNode) {
+    node.outputs[0].ty = broadcast_output_type(&node.inputs, None);
 }
 
 #[cfg(test)]

@@ -46,7 +46,7 @@
 
 use onnx_ir_derive::NodeBuilder;
 
-use crate::ir::{ArgType, Argument, DType, Node, RawNode, TensorType};
+use crate::ir::{Argument, DType, Node, RawNode};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -93,44 +93,7 @@ pub struct LessOrEqualNode {
 
 /// Update output type for comparison operations (e.g., Equal, Greater) to max input rank.
 pub(crate) fn elementwise_comparison_outputs(node: &mut RawNode) {
-    // Check if both inputs are Shape types
-    let both_shapes = node.inputs.len() == 2
-        && matches!(&node.inputs[0].ty, ArgType::Shape(_))
-        && matches!(&node.inputs[1].ty, ArgType::Shape(_));
-
-    if both_shapes {
-        // For Shape-to-Shape comparison, output should be a Shape type
-        // Get the dimension from the first Shape input
-        if let ArgType::Shape(dim) = &node.inputs[0].ty {
-            node.outputs[0].ty = ArgType::Shape(*dim);
-            return;
-        }
-    }
-
-    let max_rank = node.inputs.iter().fold(0, |acc, input| match &input.ty {
-        ArgType::Tensor(tensor) => acc.max(tensor.rank),
-        ArgType::ScalarTensor(_) => acc.max(1),
-        ArgType::ScalarNative(_) => acc,
-        ArgType::Shape(_) => acc.max(1),
-    });
-
-    if max_rank == 0 {
-        node.outputs[0].ty = ArgType::ScalarNative(DType::Bool);
-    } else {
-        let has_real_tensor = node
-            .inputs
-            .iter()
-            .any(|input| matches!(&input.ty, ArgType::Tensor(_)));
-        if !has_real_tensor && max_rank == 1 {
-            node.outputs[0].ty = ArgType::ScalarTensor(DType::Bool);
-        } else {
-            node.outputs[0].ty = ArgType::Tensor(TensorType {
-                dtype: DType::Bool,
-                rank: max_rank,
-                static_shape: None,
-            });
-        }
-    }
+    node.outputs[0].ty = crate::processor::broadcast_output_type(&node.inputs, Some(DType::Bool));
 }
 
 pub(crate) struct ComparisonProcessor;
@@ -171,53 +134,8 @@ impl NodeProcessor for ComparisonProcessor {
             });
         }
 
-        // TODO: Add validation for unexpected attributes - comparison ops should have no attributes
-        // TODO: Add test for NaN comparison behavior - spec doesn't clearly specify Equal(NaN, NaN) result
-        // TODO: Add test for inf comparisons - positive and negative infinity edge cases
-        // TODO: Add test for bfloat16 support (opset 13+ for Equal, 16+ for GreaterOrEqual/LessOrEqual)
-        // TODO: Add test for int4/uint4 types (opset 19+ for Equal) - mentioned in spec
-        // TODO: Validate broadcasting rules are correctly applied for mismatched shapes
-
-        // Check if both inputs are Shape types
-        let both_shapes = node.inputs.len() == 2
-            && matches!(&node.inputs[0].ty, ArgType::Shape(_))
-            && matches!(&node.inputs[1].ty, ArgType::Shape(_));
-
-        if both_shapes {
-            // For Shape-to-Shape comparison, output should be a Shape type
-            // Get the dimension from the first Shape input
-            if let ArgType::Shape(dim) = &node.inputs[0].ty {
-                node.outputs[0].ty = ArgType::Shape(*dim);
-                return Ok(());
-            }
-        }
-
-        let max_rank = node.inputs.iter().fold(0, |acc, input| match &input.ty {
-            ArgType::Tensor(tensor) => acc.max(tensor.rank),
-            ArgType::ScalarTensor(_) => acc.max(1),
-            ArgType::ScalarNative(_) => acc,
-            ArgType::Shape(_) => acc.max(1), // Shape types are always rank 1
-        });
-
-        if max_rank == 0 {
-            node.outputs[0].ty = ArgType::ScalarNative(DType::Bool);
-        } else {
-            let has_real_tensor = node
-                .inputs
-                .iter()
-                .any(|input| matches!(&input.ty, ArgType::Tensor(_)));
-
-            if !has_real_tensor && max_rank == 1 {
-                // All on-device inputs are ScalarTensor, output stays ScalarTensor
-                node.outputs[0].ty = ArgType::ScalarTensor(DType::Bool);
-            } else {
-                node.outputs[0].ty = ArgType::Tensor(TensorType {
-                    dtype: DType::Bool,
-                    rank: max_rank,
-                    static_shape: None,
-                });
-            }
-        }
+        node.outputs[0].ty =
+            crate::processor::broadcast_output_type(&node.inputs, Some(DType::Bool));
 
         Ok(())
     }
@@ -257,7 +175,7 @@ impl NodeProcessor for ComparisonProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::NodeType;
+    use crate::ir::{ArgType, NodeType};
     use crate::node::test_utils::TestNodeBuilder;
 
     fn create_test_node(input1_rank: usize, input2_rank: usize) -> RawNode {

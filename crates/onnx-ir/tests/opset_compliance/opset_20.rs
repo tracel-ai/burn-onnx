@@ -88,7 +88,7 @@ fn is_inf(graph: &OnnxGraph) {
       Inputs:
         isinf_input: F32[2, 3]
       Outputs:
-        isinf1_out1: Bool[?, ?]
+        isinf1_out1: Bool[2, 3]
       Config:
         IsInfConfig {
             detect_negative: true,
@@ -105,7 +105,7 @@ fn is_na_n(graph: &OnnxGraph) {
       Inputs:
         isnan_input: F32[2, 3]
       Outputs:
-        isnan1_out1: Bool[?, ?]
+        isnan1_out1: Bool[2, 3]
     "#);
 }
 

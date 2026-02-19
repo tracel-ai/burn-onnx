@@ -84,10 +84,20 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                     let #output = #lhs.#mod_op(#rhs);
                 }
             }
+            (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
+                let lhs = arg_to_ident(lhs_arg);
+                let rhs = arg_to_ident(rhs_arg);
+                quote! {
+                    let #output = #lhs % #rhs;
+                }
+            }
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 panic!("Mod operation with scalar dividend and tensor divisor is not supported")
             }
-            _ => panic!("Mod operation requires at least one tensor input"),
+            _ => panic!(
+                "Unsupported Mod input types: lhs={:?}, rhs={:?}",
+                lhs_arg.ty, rhs_arg.ty
+            ),
         }
     }
 }

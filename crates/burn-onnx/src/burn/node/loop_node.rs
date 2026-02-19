@@ -72,7 +72,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
             self.inputs.iter().skip(num_onnx_inputs).cloned().collect();
 
         // Extract max trip count
-        let max_count = if max_trip_count_arg.name.is_empty() {
+        let max_count = if max_trip_count_arg.is_optional() {
             quote! { i64::MAX } // No limit if not provided
         } else {
             match &max_trip_count_arg.ty {
@@ -93,7 +93,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
         };
 
         // Extract initial condition
-        let init_cond = if init_cond_arg.name.is_empty() {
+        let init_cond = if init_cond_arg.is_optional() {
             quote! { true } // Run if not provided
         } else {
             match &init_cond_arg.ty {

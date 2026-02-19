@@ -57,7 +57,7 @@ fn is_inf(graph: &OnnxGraph) {
       Inputs:
         isinf_input: F32[2, 3]
       Outputs:
-        isinf1_out1: Bool[?, ?]
+        isinf1_out1: Bool[2, 3]
       Config:
         IsInfConfig {
             detect_negative: true,
