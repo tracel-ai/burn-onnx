@@ -22,12 +22,17 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
             let is_native = matches!(&self.outputs[0].ty, ArgType::ScalarNative(_));
             // Scalar output: k == r, each index tuple fully specifies a single element
             let extract_expr = if is_native {
-                quote! {
+                let dtype = match &self.outputs[0].ty {
+                    ArgType::ScalarNative(d) => d,
+                    _ => unreachable!(),
+                };
+                let select_expr = quote! {
                     data_flat.select(0, Tensor::<B, 1, Int>::from_data(
                         burn::tensor::TensorData::from([offset as i32].as_slice()),
                         &*self.device,
-                    )).into_scalar()
-                }
+                    ))
+                };
+                on_device_to_native(select_expr, dtype)
             } else {
                 // ScalarTensor: keep as Tensor<B, 1> on device
                 quote! {
@@ -574,6 +579,7 @@ mod tests {
                         ),
                     )
                     .into_scalar()
+                    .elem::<f32>()
             };
             output
         }
