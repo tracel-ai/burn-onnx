@@ -15,14 +15,36 @@ impl NodeCodegen for onnx_ir::gather::GatherNode {
         let input_arg = self.inputs.first().unwrap();
 
         match &input_arg.ty {
-            ArgType::Shape(_) => forward_shape_gather(self),
+            ArgType::Shape(_) => forward_shape_gather(self, scope),
             ArgType::Tensor(_) => forward_tensor_gather(self, scope),
-            ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => forward_scalar_gather(self),
+            ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
+                forward_scalar_gather(self, scope)
+            }
         }
     }
 }
 
-fn forward_shape_gather(node: &onnx_ir::gather::GatherNode) -> proc_macro2::TokenStream {
+/// Convert a scalar index argument to an Ident suitable for use in generated code.
+/// For ScalarTensor, generates a let-binding that converts to native, returning the
+/// conversion code and the ident. For ScalarNative, returns empty code and the arg ident.
+fn scalar_index_to_ident(
+    index_arg: &Argument,
+    scope: &mut super::super::scope::ScopeAtPosition<'_>,
+) -> (proc_macro2::TokenStream, proc_macro2::Ident) {
+    if index_arg.ty.is_scalar_tensor() {
+        let tensor = scope.arg(index_arg);
+        let native_expr = on_device_to_native(quote! { #tensor }, &index_arg.ty.elem_type());
+        let temp = Ident::new("__scalar_idx", Span::call_site());
+        (quote! { let #temp = #native_expr; }, temp)
+    } else {
+        (quote! {}, arg_to_ident(index_arg))
+    }
+}
+
+fn forward_shape_gather(
+    node: &onnx_ir::gather::GatherNode,
+    scope: &mut super::super::scope::ScopeAtPosition<'_>,
+) -> proc_macro2::TokenStream {
     let input_arg = node.inputs.first().unwrap();
     let index_arg = &node.inputs[1];
     let output_arg = node.outputs.first().unwrap();
@@ -46,9 +68,10 @@ fn forward_shape_gather(node: &onnx_ir::gather::GatherNode) -> proc_macro2::Toke
             // Gathering a single element from a shape, keep on device as Tensor<B, 1, Int>
             match &index_arg.ty {
                 ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                    let index = arg_to_ident(index_arg);
-                    let index_resolve = gen_index_resolve(&index);
+                    let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
+                    let index_resolve = gen_index_resolve(&index_ident);
                     quote! {
+                        #pre_convert
                         #index_resolve
                         let #output = Tensor::<B, 1, Int>::from_data(
                             burn::tensor::TensorData::from([#input_shape_name[actual_idx]]),
@@ -67,9 +90,10 @@ fn forward_shape_gather(node: &onnx_ir::gather::GatherNode) -> proc_macro2::Toke
             let scalar_ty = scalar_type_tokens(dtype);
             match &index_arg.ty {
                 ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                    let index = arg_to_ident(index_arg);
-                    let index_resolve = gen_index_resolve(&index);
+                    let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
+                    let index_resolve = gen_index_resolve(&index_ident);
                     quote! {
+                        #pre_convert
                         #index_resolve
                         let #output = #input_shape_name[actual_idx] as #scalar_ty;
                     }
@@ -148,11 +172,19 @@ fn forward_shape_gather(node: &onnx_ir::gather::GatherNode) -> proc_macro2::Toke
 
 /// Forward for scalar input - just pass through the scalar value
 /// When gathering from a scalar, there's only one element, so the result is the scalar itself
-fn forward_scalar_gather(node: &onnx_ir::gather::GatherNode) -> proc_macro2::TokenStream {
+fn forward_scalar_gather(
+    node: &onnx_ir::gather::GatherNode,
+    scope: &mut super::super::scope::ScopeAtPosition<'_>,
+) -> proc_macro2::TokenStream {
     let input_arg = node.inputs.first().unwrap();
     let output_arg = node.outputs.first().unwrap();
 
-    let input = arg_to_ident(input_arg);
+    let input = if input_arg.ty.is_on_device() {
+        scope.arg(input_arg)
+    } else {
+        let ident = arg_to_ident(input_arg);
+        quote! { #ident }
+    };
     let output = arg_to_ident(output_arg);
 
     // A scalar only has one element, so gathering from it just returns the scalar

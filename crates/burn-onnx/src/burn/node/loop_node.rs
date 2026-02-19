@@ -232,9 +232,9 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
         // Update condition from body output (skip if same name)
         let update_cond = if cond_in_name != cond_out_name {
             let cond_out_ty = &self.config.body.outputs[0].ty;
-            if cond_out_ty.is_scalar_tensor() {
-                // ScalarTensor(Bool) -> native bool
-                let convert = on_device_to_native(quote! { #cond_out_name }, &DType::Bool);
+            if let ArgType::ScalarTensor(dtype) = cond_out_ty {
+                // ScalarTensor -> native bool
+                let convert = on_device_to_native(quote! { #cond_out_name }, dtype);
                 quote! { #cond_in_name = #convert; }
             } else {
                 quote! { #cond_in_name = #cond_out_name; }

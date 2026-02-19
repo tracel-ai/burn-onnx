@@ -82,7 +82,9 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
             }
             (PowerType::Int, _, ArgType::ScalarNative(_)) => quote! { #lhs.powi_scalar(#rhs) },
             (PowerType::Float, _, ArgType::ScalarNative(_)) => quote! { #lhs.powf_scalar(#rhs) },
-            _ => panic!("Invalid power type combination"),
+            (pt, lhs, rhs) => panic!(
+                "Unsupported pow type combination: power_type={pt:?}, lhs={lhs:?}, rhs={rhs:?}"
+            ),
         };
 
         quote! {

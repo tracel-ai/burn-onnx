@@ -68,7 +68,7 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                         );
                     },
                 )
-            } else {
+            } else if dtype.is_bool() {
                 let val = tensor_data.as_slice::<bool>().unwrap()[0];
                 (
                     quote! { burn::module::Param<Tensor<B, 1, Bool>> },
@@ -81,6 +81,11 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                             [1].into(),
                         );
                     },
+                )
+            } else {
+                panic!(
+                    "Unsupported ScalarTensor dtype {:?} for constant '{}'",
+                    dtype, self.name
                 )
             }
         } else {
@@ -202,7 +207,10 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                         let val = tensor_data.as_slice::<bool>().unwrap()[0];
                         quote! { #val }
                     }
-                    _ => panic!("Unsupported scalar type for constant"),
+                    _ => panic!(
+                        "Unsupported ScalarNative dtype {:?} for constant '{}'",
+                        elem_type, self.name
+                    ),
                 };
 
                 quote! {
@@ -232,4 +240,3 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
         }
     }
 }
-

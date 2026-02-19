@@ -62,7 +62,19 @@ impl NodeCodegen for onnx_ir::comparison::LessNode {
                     ))
                 }
             }
-            (lhs, rhs) => panic!("lower is not supported for {lhs:?} > {rhs:?}"),
+            (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
+                quote! { #lhs_value < #rhs_value }
+            }
+            (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
+                {
+                    let mut result = #lhs_value;
+                    for (result_item, rhs_item) in result.iter_mut().zip(#rhs_value.iter()) {
+                        *result_item = if result_item < rhs_item { 1i64 } else { 0i64 };
+                    }
+                    result
+                }
+            },
+            (lhs, rhs) => panic!("lower is not supported for {lhs:?} < {rhs:?}"),
         };
 
         quote! {
@@ -234,6 +246,46 @@ mod tests {
                         burn::tensor::DType::I64,
                     ),
                 );
+            output
+        }
+        ");
+    }
+
+    // --- ScalarNative + ScalarNative ---
+
+    #[test]
+    fn test_scalar_native_scalar_native() {
+        let node = LessNodeBuilder::new("less1")
+            .input_scalar("lhs", DType::F32)
+            .input_scalar("rhs", DType::F32)
+            .output_scalar("output", DType::Bool)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: f32, rhs: f32) -> bool {
+            let output = lhs < rhs;
+            output
+        }
+        ");
+    }
+
+    // --- Shape + Shape ---
+
+    #[test]
+    fn test_shape_shape() {
+        let node = LessNodeBuilder::new("less1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let mut result = lhs;
+                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
+                    *result_item = if result_item < rhs_item { 1i64 } else { 0i64 };
+                }
+                result
+            };
             output
         }
         ");
