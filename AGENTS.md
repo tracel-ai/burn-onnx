@@ -71,8 +71,11 @@ Key principles:
 
 ### burn-onnx
 
-- Implement `NodeCodegen<PS>` directly on onnx-ir node types
-- Use `scope.arg()` for tensor/scalar/shape handling, `quote!` for code generation
+- Implement `NodeCodegen` directly on onnx-ir node types
+- Use `scope.arg()` for inputs: handles clone tracking for on-device values (`Tensor`,
+  `ScalarTensor`) and bare idents for host values (`ScalarNative`, `Shape`)
+- Use `arg_to_ident()` only for outputs and host-side values. Never use it for `ScalarTensor`
+  inputs (it skips clone tracking)
 - Scope temporary variables in block expressions to avoid name collisions
 - `insta` snapshot tests for ALL codegen branches (inline snapshots only:
   `assert_snapshot!(code, @r"...")`)
@@ -97,7 +100,7 @@ Read `DEVELOPMENT-GUIDE.md` for the full walkthrough with code examples. Checkli
    - Register in: `node/mod.rs`, `ir/node.rs` (macro), `registry.rs`
 
 2. **burn-onnx**: `crates/burn-onnx/src/burn/node/<op>.rs`
-   - Implement `NodeCodegen<PS>`, add `insta` snapshot tests
+   - Implement `NodeCodegen`, add `insta` snapshot tests
    - Register in: `node/mod.rs`, `node_codegen.rs` (dispatch macro)
 
 3. **onnx-tests**: `crates/onnx-tests/tests/<op>/`

@@ -165,13 +165,13 @@ For example, the squeeze operation in `crates/onnx-ir/src/node/squeeze.rs` conta
    This file implements code generation for your operation by implementing the `NodeCodegen` trait
    directly on the onnx-ir node type.
 
-2. Implement the `NodeCodegen<PS>` trait for the onnx-ir node type. This trait defines how the node
+2. Implement the `NodeCodegen` trait for the onnx-ir node type. This trait defines how the node
    generates Rust code during the graph compilation process:
 
    ```rust
    use super::prelude::*;
 
-   impl<PS: PrecisionSettings> NodeCodegen<PS> for onnx_ir::squeeze::SqueezeNode {
+   impl NodeCodegen for onnx_ir::squeeze::SqueezeNode {
        fn inputs(&self) -> &[Argument] {
            &self.inputs
        }
@@ -222,8 +222,20 @@ For example, the squeeze operation in `crates/onnx-ir/src/node/squeeze.rs` conta
      serialization
 
 3. Use helper utilities from `argument_helpers.rs`:
-   - `scope.arg(argument)` - Automatically handles Tensor/Scalar/Shape with proper cloning
-   - `arg_to_ident(argument)` - Converts argument to identifier for code generation
+   - `scope.arg(argument)` - Use for all inputs. Handles clone tracking for on-device values
+     (`Tensor`, `ScalarTensor`) and returns bare idents for host values (`ScalarNative`, `Shape`)
+   - `arg_to_ident(argument)` - Converts argument name to an identifier. Use for output bindings and
+     host-side values only. Never use for `ScalarTensor` inputs (it skips clone tracking)
+
+   **Scalar type system**: ONNX scalar constants are represented as two `ArgType` variants:
+   - `ScalarTensor(DType)` - A `Tensor<B, 1>` on device (rank 1). Default for scalar constants.
+     Participates in tensor arithmetic via broadcasting. Use `scope.arg()` to access
+   - `ScalarNative(DType)` - A native Rust scalar (`f32`, `i64`, etc., rank 0). Used for shape
+     computation, control flow conditions, array indices. Use `arg_to_ident()` to access
+
+   Nodes that need native scalars (e.g., Range, If, Loop, Slice) request `ArgPreference::ScalarNative`
+   via `input_preferences()` in their processor. Top-level graph I/O always uses `ScalarNative` so
+   user-facing function signatures are unchanged.
 
 4. **Prefer existing Burn tensor APIs over manual loops**: Before implementing an operator with
    manual loops or per-element tensor operations in generated code, check the Burn tensor API for
@@ -493,7 +505,11 @@ and `Some(value)` for known ones. This enables downstream merging via `merge_sta
 - `extract_config()` - Extract configuration from attributes/inputs (default returns
   `Default::default()`)
 - `lift_constants()` - Request constant lifting for specific inputs (default does nothing)
-- `input_preferences()` - Declare preferred input types from producers (default returns `None`)
+- `input_preferences()` - Declare preferred input types from producers (default returns `None`).
+  Use `ArgPreference::ScalarNative` for inputs that must be native Rust scalars (control flow
+  conditions, shape indices, arange bounds). Use `ArgPreference::Shape` for inputs that should be
+  shape arrays. Scalar constants default to `ScalarTensor` (on-device) unless a consumer requests
+  otherwise
 - `is_noop()` - Return `true` if this node is a no-op after type inference, causing it to be
   eliminated during post-processing (default returns `false`)
 
