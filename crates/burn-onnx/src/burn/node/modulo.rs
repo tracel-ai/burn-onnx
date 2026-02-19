@@ -91,8 +91,41 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                     let #output = #lhs % #rhs;
                 }
             }
-            (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
-                panic!("Mod operation with scalar dividend and tensor divisor is not supported")
+            (ArgType::ScalarNative(dtype), rhs_ty) if rhs_ty.is_on_device() => {
+                let lhs = scope.arg(lhs_arg);
+                let rhs = scope.arg(rhs_arg);
+                let dtype_tokens = dtype.to_tokens();
+                let rhs_rank = rhs_ty.rank();
+                let mod_op = if self.config.fmod {
+                    quote! { fmod }
+                } else {
+                    quote! { remainder }
+                };
+
+                let (tensor_type, cast_as) = if dtype.is_float() {
+                    (quote! { Tensor::<B, 1> }, quote! { f64 })
+                } else {
+                    (quote! { Tensor::<B, 1, burn::tensor::Int> }, quote! { i64 })
+                };
+
+                if rhs_rank > 1 {
+                    let dims: Vec<isize> = (0..rhs_rank - 1).map(|i| i as isize).collect();
+                    quote! {
+                        let #output = #tensor_type::from_data_dtype(
+                            burn::tensor::TensorData::from([#lhs as #cast_as]),
+                            &*self.device,
+                            #dtype_tokens
+                        ).unsqueeze_dims(&[#(#dims),*]).#mod_op(#rhs);
+                    }
+                } else {
+                    quote! {
+                        let #output = #tensor_type::from_data_dtype(
+                            burn::tensor::TensorData::from([#lhs as #cast_as]),
+                            &*self.device,
+                            #dtype_tokens
+                        ).#mod_op(#rhs);
+                    }
+                }
             }
             _ => panic!(
                 "Unsupported Mod input types: lhs={:?}, rhs={:?}",
@@ -299,6 +332,60 @@ mod tests {
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<B, 2>, b: f32) -> Tensor<B, 2> {
             let output = a.fmod_scalar(b);
+            output
+        }
+        ");
+    }
+
+    // --- ScalarNative + on_device ---
+
+    #[test]
+    fn test_remainder_scalar_native_tensor() {
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_scalar("a", DType::F32)
+            .input_tensor("b", 2, DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, a: f32, b: Tensor<B, 2>) -> Tensor<B, 2> {
+            let output = Tensor::<
+                B,
+                1,
+            >::from_data_dtype(
+                    burn::tensor::TensorData::from([a as f64]),
+                    &*self.device,
+                    burn::tensor::DType::F32,
+                )
+                .unsqueeze_dims(&[0isize])
+                .remainder(b);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_fmod_scalar_native_tensor() {
+        let config = ModConfig::new(true);
+        let node = ModNodeBuilder::new("mod1")
+            .input_scalar("a", DType::F32)
+            .input_tensor("b", 2, DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, a: f32, b: Tensor<B, 2>) -> Tensor<B, 2> {
+            let output = Tensor::<
+                B,
+                1,
+            >::from_data_dtype(
+                    burn::tensor::TensorData::from([a as f64]),
+                    &*self.device,
+                    burn::tensor::DType::F32,
+                )
+                .unsqueeze_dims(&[0isize])
+                .fmod(b);
             output
         }
         ");

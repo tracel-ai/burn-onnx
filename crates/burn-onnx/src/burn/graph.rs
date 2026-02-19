@@ -537,7 +537,7 @@ impl BurnGraph {
                         );
                     });
                 } else {
-                    unreachable!(
+                    panic!(
                         "Unsupported dtype {:?} for graph boundary ScalarNative -> ScalarTensor conversion",
                         dtype
                     );

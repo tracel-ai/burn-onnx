@@ -195,6 +195,16 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                         let val = tensor_data.as_slice::<f64>().unwrap()[0];
                         super::super::codegen::f64_to_tokens(val)
                     }
+                    onnx_ir::ir::DType::F16 => {
+                        let val = tensor_data.scalar_f64().unwrap();
+                        let val_tokens = super::super::codegen::f64_to_tokens(val);
+                        quote! { half::f16::from_f64(#val_tokens) }
+                    }
+                    onnx_ir::ir::DType::BF16 => {
+                        let val = tensor_data.scalar_f64().unwrap();
+                        let val_tokens = super::super::codegen::f64_to_tokens(val);
+                        quote! { half::bf16::from_f64(#val_tokens) }
+                    }
                     onnx_ir::ir::DType::I32 => {
                         let val = tensor_data.as_slice::<i32>().unwrap()[0];
                         quote! { #val }
@@ -202,6 +212,12 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                     onnx_ir::ir::DType::I64 => {
                         let val = tensor_data.as_slice::<i64>().unwrap()[0];
                         quote! { #val }
+                    }
+                    d if d.is_int() || d.is_uint() => {
+                        // I8, I16, U8, U16, U32, U64
+                        let val = tensor_data.to_i64_vec().unwrap()[0];
+                        let ty = super::super::argument_helpers::scalar_type_tokens(elem_type);
+                        quote! { #val as #ty }
                     }
                     onnx_ir::ir::DType::Bool => {
                         let val = tensor_data.as_slice::<bool>().unwrap()[0];

@@ -123,7 +123,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                             }
                         }
                     }
-                    ArgType::ScalarNative(_) => {
+                    ArgType::ScalarNative(input_dtype) => {
                         // Native scalar input - convert to tensor or pass through
                         let input_name = arg_to_ident(input_arg);
 
@@ -153,10 +153,15 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                         ).reshape(#shape_values);
                                     }
                                 } else {
-                                    // Bool
+                                    // Bool output
+                                    let bool_expr = if input_dtype.is_bool() {
+                                        quote! { #input_name }
+                                    } else {
+                                        quote! { #input_name != 0 }
+                                    };
                                     quote! {
                                         let #output = Tensor::<B, #output_rank, Bool>::from_data_dtype(
-                                            burn::tensor::TensorData::from([#input_name != 0]),
+                                            burn::tensor::TensorData::from([#bool_expr]),
                                             &*self.device,
                                             #dtype_tokens
                                         ).reshape(#shape_values);

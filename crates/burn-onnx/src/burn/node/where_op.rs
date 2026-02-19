@@ -29,7 +29,17 @@ impl NodeCodegen for onnx_ir::where_op::WhereNode {
 
                 // Check if x is a scalar - if so, use mask_fill
                 if let ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) = &x_arg.ty {
-                    let x_name = arg_to_ident(x_arg);
+                    // Convert x to a native scalar for mask_fill
+                    let x_value = match &x_arg.ty {
+                        ArgType::ScalarTensor(dtype) => {
+                            let tensor = scope.arg(x_arg);
+                            on_device_to_native(tensor, dtype)
+                        }
+                        _ => {
+                            let name = arg_to_ident(x_arg);
+                            quote! { #name }
+                        }
+                    };
                     // When y is also scalar, it becomes a [1,1,...,1] tensor that may be
                     // smaller than the condition. Expand y to match condition shape so
                     // mask_fill can broadcast the mask correctly.
@@ -40,12 +50,12 @@ impl NodeCodegen for onnx_ir::where_op::WhereNode {
                         quote! {
                             let #output = {
                                 let cond = #cond;
-                                #y_tensor.expand(cond.dims()).mask_fill(cond, #x_name)
+                                #y_tensor.expand(cond.dims()).mask_fill(cond, #x_value)
                             };
                         }
                     } else {
                         quote! {
-                            let #output = #y_tensor.mask_fill(#cond, #x_name);
+                            let #output = #y_tensor.mask_fill(#cond, #x_value);
                         }
                     }
                 } else {
@@ -177,7 +187,7 @@ fn where_input_as_tensor(
                 tensor
             }
         }
-        ArgType::ScalarNative(_) => {
+        ArgType::ScalarNative(input_dtype) => {
             // Convert native scalar to tensor with shape [1, 1, ...] (broadcast_rank dimensions)
             let name = arg_to_ident(arg);
             let shape_vec: Vec<_> = (0..broadcast_rank).map(|_| quote! { 1 }).collect();
@@ -200,10 +210,15 @@ fn where_input_as_tensor(
                     ).reshape([#(#shape_vec),*])
                 }
             } else {
-                // Bool
+                // Bool output: if input is already bool, use directly; otherwise != 0
+                let bool_expr = if input_dtype.is_bool() {
+                    quote! { #name }
+                } else {
+                    quote! { #name != 0 }
+                };
                 quote! {
                     Tensor::<B, 1, burn::tensor::Bool>::from_data_dtype(
-                        burn::tensor::TensorData::from([#name != 0]),
+                        burn::tensor::TensorData::from([#bool_expr]),
                         &*self.device,
                         #dtype_tokens
                     ).reshape([#(#shape_vec),*])

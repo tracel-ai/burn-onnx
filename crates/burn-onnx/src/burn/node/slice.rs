@@ -21,7 +21,7 @@ impl NodeCodegen for onnx_ir::slice::SliceNode {
                 generate_tensor_slice(self, input_arg, tensor.rank, scope, &output)
             }
             ArgType::Shape(shape_rank) => {
-                generate_shape_slice(self, input_arg, *shape_rank, &output)
+                generate_shape_slice(self, input_arg, *shape_rank, &output, scope)
             }
             ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                 panic!("Unsupported input type for SliceNode")
@@ -465,6 +465,7 @@ fn generate_shape_slice(
     input_arg: &Argument,
     shape_rank: usize,
     output: &proc_macro2::Ident,
+    scope: &mut super::super::scope::ScopeAtPosition<'_>,
 ) -> TokenStream {
     let shape_name = arg_to_ident(input_arg);
 
@@ -552,7 +553,7 @@ fn generate_shape_slice(
         }
         _ => {
             // Runtime slicing with scalars
-            let (start_expr, end_expr) = get_slice_range_expressions(node);
+            let (start_expr, end_expr) = get_slice_range_expressions(node, scope);
             let shape_len_lit = Literal::i64_suffixed(shape_rank as i64);
 
             quote! {
@@ -568,12 +569,15 @@ fn generate_shape_slice(
     }
 }
 
-fn get_slice_range_expressions(node: &onnx_ir::slice::SliceNode) -> (TokenStream, TokenStream) {
+fn get_slice_range_expressions(
+    node: &onnx_ir::slice::SliceNode,
+    scope: &mut super::super::scope::ScopeAtPosition<'_>,
+) -> (TokenStream, TokenStream) {
     let start_expr = match &node.config.starts {
         onnx_ir::slice::SliceInput::Static(starts) => starts[0].to_tokens(),
         onnx_ir::slice::SliceInput::Runtime(start_ref) => {
             let start_arg = &node.inputs[start_ref.input_index];
-            get_scalar_expr(start_arg)
+            get_scalar_expr(start_arg, scope)
         }
     };
 
@@ -581,22 +585,25 @@ fn get_slice_range_expressions(node: &onnx_ir::slice::SliceNode) -> (TokenStream
         onnx_ir::slice::SliceInput::Static(ends) => ends[0].to_tokens(),
         onnx_ir::slice::SliceInput::Runtime(end_ref) => {
             let end_arg = &node.inputs[end_ref.input_index];
-            get_scalar_expr(end_arg)
+            get_scalar_expr(end_arg, scope)
         }
     };
 
     (start_expr, end_expr)
 }
 
-fn get_scalar_expr(arg: &Argument) -> TokenStream {
+fn get_scalar_expr(
+    arg: &Argument,
+    scope: &mut super::super::scope::ScopeAtPosition<'_>,
+) -> TokenStream {
     match &arg.ty {
         ArgType::ScalarNative(_) => {
             let name = arg_to_ident(arg);
             quote! { #name }
         }
         ArgType::ScalarTensor(dtype) => {
-            let name = arg_to_ident(arg);
-            on_device_to_native(quote! { #name }, dtype)
+            let tensor = scope.arg(arg);
+            on_device_to_native(tensor, dtype)
         }
         ArgType::Shape(_) => {
             let name = arg_to_ident(arg);

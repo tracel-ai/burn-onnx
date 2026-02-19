@@ -80,6 +80,67 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                     quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).powf(#rhs) }
                 }
             }
+            // ScalarNative + ScalarNative (native Rust pow)
+            (PowerType::Float, ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
+                quote! { #lhs.powf(#rhs) }
+            }
+            (PowerType::Int, ArgType::ScalarNative(lhs_dtype), ArgType::ScalarNative(_)) => {
+                if lhs_dtype.is_float() {
+                    quote! { #lhs.powi(#rhs as i32) }
+                } else {
+                    quote! { #lhs.pow(#rhs as u32) }
+                }
+            }
+            // ScalarNative + on_device (promote scalar to tensor)
+            (PowerType::Float, ArgType::ScalarNative(dtype), rhs_ty) if rhs_ty.is_on_device() => {
+                let dtype_tokens = dtype.to_tokens();
+                let rhs_rank = rhs_ty.rank();
+                let base = if rhs_rank > 1 {
+                    let dims: Vec<isize> = (0..rhs_rank - 1).map(|i| i as isize).collect();
+                    quote! {
+                        Tensor::<B, 1>::from_data_dtype(
+                            burn::tensor::TensorData::from([#lhs as f64]),
+                            &*self.device,
+                            #dtype_tokens
+                        ).unsqueeze_dims(&[#(#dims),*])
+                    }
+                } else {
+                    quote! {
+                        Tensor::<B, 1>::from_data_dtype(
+                            burn::tensor::TensorData::from([#lhs as f64]),
+                            &*self.device,
+                            #dtype_tokens
+                        )
+                    }
+                };
+                quote! { #base.powf(#rhs) }
+            }
+            (PowerType::Int, ArgType::ScalarNative(dtype), rhs_ty)
+                if rhs_ty.is_on_device() && dtype.is_float() =>
+            {
+                let dtype_tokens = dtype.to_tokens();
+                let rhs_rank = rhs_ty.rank();
+                let base = if rhs_rank > 1 {
+                    let dims: Vec<isize> = (0..rhs_rank - 1).map(|i| i as isize).collect();
+                    quote! {
+                        Tensor::<B, 1>::from_data_dtype(
+                            burn::tensor::TensorData::from([#lhs as f64]),
+                            &*self.device,
+                            #dtype_tokens
+                        ).unsqueeze_dims(&[#(#dims),*])
+                    }
+                } else {
+                    quote! {
+                        Tensor::<B, 1>::from_data_dtype(
+                            burn::tensor::TensorData::from([#lhs as f64]),
+                            &*self.device,
+                            #dtype_tokens
+                        )
+                    }
+                };
+                quote! { #base.powi(#rhs) }
+            }
+            // on_device + ScalarNative
             (PowerType::Int, _, ArgType::ScalarNative(_)) => quote! { #lhs.powi_scalar(#rhs) },
             (PowerType::Float, _, ArgType::ScalarNative(_)) => quote! { #lhs.powf_scalar(#rhs) },
             (pt, lhs, rhs) => panic!(
@@ -311,6 +372,126 @@ mod tests {
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, base: Tensor<B, 2, Int>, exponent: i32) -> Tensor<B, 2, Int> {
             let output = base.powi_scalar(exponent);
+            output
+        }
+        ");
+    }
+
+    // --- ScalarNative + ScalarNative ---
+
+    #[test]
+    fn test_powf_scalar_native_scalar_native() {
+        let node = PowNodeBuilder::new("pow1")
+            .input_scalar("base", DType::F32)
+            .input_scalar("exponent", DType::F32)
+            .output_scalar("output", DType::F32)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, base: f32, exponent: f32) -> f32 {
+            let output = base.powf(exponent);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_powi_scalar_native_scalar_native() {
+        let node = PowNodeBuilder::new("pow1")
+            .input_scalar("base", DType::F32)
+            .input_scalar("exponent", DType::I32)
+            .output_scalar("output", DType::F32)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, base: f32, exponent: i32) -> f32 {
+            let output = base.powi(exponent as i32);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_pow_int_scalar_native_scalar_native() {
+        let node = PowNodeBuilder::new("pow1")
+            .input_scalar("base", DType::I32)
+            .input_scalar("exponent", DType::I32)
+            .output_scalar("output", DType::I32)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, base: i32, exponent: i32) -> i32 {
+            let output = base.pow(exponent as u32);
+            output
+        }
+        ");
+    }
+
+    // --- ScalarNative + on_device ---
+
+    #[test]
+    fn test_powf_scalar_native_tensor() {
+        let node = PowNodeBuilder::new("pow1")
+            .input_scalar("base", DType::F32)
+            .input_tensor("exponent", 2, DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, base: f32, exponent: Tensor<B, 2>) -> Tensor<B, 2> {
+            let output = Tensor::<
+                B,
+                1,
+            >::from_data_dtype(
+                    burn::tensor::TensorData::from([base as f64]),
+                    &*self.device,
+                    burn::tensor::DType::F32,
+                )
+                .unsqueeze_dims(&[0isize])
+                .powf(exponent);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_powi_scalar_native_tensor() {
+        let node = PowNodeBuilder::new("pow1")
+            .input_scalar("base", DType::F32)
+            .input_tensor("exponent", 2, DType::I32)
+            .output_tensor("output", 2, DType::F32)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, base: f32, exponent: Tensor<B, 2, Int>) -> Tensor<B, 2> {
+            let output = Tensor::<
+                B,
+                1,
+            >::from_data_dtype(
+                    burn::tensor::TensorData::from([base as f64]),
+                    &*self.device,
+                    burn::tensor::DType::F32,
+                )
+                .unsqueeze_dims(&[0isize])
+                .powi(exponent);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_powf_scalar_native_scalar_tensor() {
+        let node = PowNodeBuilder::new("pow1")
+            .input_scalar("base", DType::F32)
+            .input_scalar_tensor("exponent", DType::F32)
+            .output_scalar_tensor("output", DType::F32)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, base: f32, exponent: Tensor<B, 1>) -> Tensor<B, 1> {
+            let output = Tensor::<
+                B,
+                1,
+            >::from_data_dtype(
+                    burn::tensor::TensorData::from([base as f64]),
+                    &*self.device,
+                    burn::tensor::DType::F32,
+                )
+                .powf(exponent);
             output
         }
         ");
