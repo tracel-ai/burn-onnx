@@ -123,8 +123,8 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                             }
                         }
                     }
-                    ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                        // Scalar input - convert scalar to tensor or pass through
+                    ArgType::ScalarNative(_) => {
+                        // Native scalar input - convert to tensor or pass through
                         let input_name = arg_to_ident(input_arg);
 
                         match &output_arg.ty {
@@ -163,14 +163,43 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                     }
                                 }
                             }
-                            ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                                // Scalar to scalar - just pass through
+                            ArgType::ScalarNative(_) => {
                                 quote! {
                                     let #output = #input_name;
                                 }
                             }
+                            ArgType::ScalarTensor(_) => {
+                                panic!("Reshape: ScalarNative to ScalarTensor not supported")
+                            }
                             _ => {
                                 panic!("Reshape: scalar input to {:?} not supported", output_arg.ty)
+                            }
+                        }
+                    }
+                    ArgType::ScalarTensor(_) => {
+                        // ScalarTensor is already a Tensor<B, 1> on device
+                        let input = scope.arg(input_arg);
+
+                        match &output_arg.ty {
+                            ArgType::Tensor(_) => {
+                                let shape_values = shape_values.to_tokens();
+                                quote! {
+                                    let #output = #input.reshape(#shape_values);
+                                }
+                            }
+                            ArgType::ScalarTensor(_) => {
+                                quote! {
+                                    let #output = #input;
+                                }
+                            }
+                            ArgType::ScalarNative(elem_type) => {
+                                let elem_cast = on_device_to_native(input, elem_type);
+                                quote! {
+                                    let #output = #elem_cast;
+                                }
+                            }
+                            _ => {
+                                panic!("Reshape: ScalarTensor to {:?} not supported", output_arg.ty)
                             }
                         }
                     }

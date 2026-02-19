@@ -59,15 +59,34 @@ impl NodeCodegen for onnx_ir::where_op::WhereNode {
             }
             ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                 // Scalar output means all inputs are scalars
-                let cond_name = arg_to_ident(condition_arg);
-                let x_name = arg_to_ident(x_arg);
-                let y_name = arg_to_ident(y_arg);
+                let cond_expr = match &condition_arg.ty {
+                    ArgType::ScalarTensor(dtype) => {
+                        let tensor = scope.arg(condition_arg);
+                        on_device_to_native(tensor, dtype)
+                    }
+                    _ => {
+                        let name = arg_to_ident(condition_arg);
+                        quote! { #name }
+                    }
+                };
+                let x_expr = if x_arg.ty.is_on_device() {
+                    scope.arg(x_arg)
+                } else {
+                    let name = arg_to_ident(x_arg);
+                    quote! { #name }
+                };
+                let y_expr = if y_arg.ty.is_on_device() {
+                    scope.arg(y_arg)
+                } else {
+                    let name = arg_to_ident(y_arg);
+                    quote! { #name }
+                };
 
                 quote! {
-                    let #output = if #cond_name {
-                        #x_name
+                    let #output = if #cond_expr {
+                        #x_expr
                     } else {
-                        #y_name
+                        #y_expr
                     };
                 }
             }
@@ -98,12 +117,21 @@ impl NodeCodegen for onnx_ir::where_op::WhereNode {
                         ArgType::Shape(_),
                     ) => {
                         // Scalar condition: select entire shape x or y
-                        let cond_name = arg_to_ident(condition_arg);
+                        let cond_expr = match &condition_arg.ty {
+                            ArgType::ScalarTensor(dtype) => {
+                                let tensor = scope.arg(condition_arg);
+                                on_device_to_native(tensor, dtype)
+                            }
+                            _ => {
+                                let name = arg_to_ident(condition_arg);
+                                quote! { #name }
+                            }
+                        };
                         let x_name = arg_to_ident(x_arg);
                         let y_name = arg_to_ident(y_arg);
 
                         quote! {
-                            let #output = if #cond_name { #x_name } else { #y_name };
+                            let #output = if #cond_expr { #x_name } else { #y_name };
                         }
                     }
                     _ => panic!(
@@ -138,9 +166,19 @@ fn where_input_as_tensor(
                 tensor
             }
         }
-        ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-            // Convert scalar to tensor with shape [1, 1, ...] (broadcast_rank dimensions)
-            // Use from_data_dtype with reshape and expand to ensure correct dtype
+        ArgType::ScalarTensor(_) => {
+            // ScalarTensor is already a Tensor<B, 1> on device, just reshape/unsqueeze
+            let tensor = scope.arg(arg);
+            if broadcast_rank > 1 {
+                let dims_to_unsqueeze: Vec<isize> =
+                    (0..broadcast_rank - 1).map(|d| d as isize).collect();
+                quote! { #tensor.unsqueeze_dims(&[#(#dims_to_unsqueeze),*]) }
+            } else {
+                tensor
+            }
+        }
+        ArgType::ScalarNative(_) => {
+            // Convert native scalar to tensor with shape [1, 1, ...] (broadcast_rank dimensions)
             let name = arg_to_ident(arg);
             let shape_vec: Vec<_> = (0..broadcast_rank).map(|_| quote! { 1 }).collect();
             let dtype_tokens = target_dtype.to_tokens();

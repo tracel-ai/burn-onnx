@@ -80,6 +80,10 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
                     let name = arg_to_ident(max_trip_count_arg);
                     quote! { #name }
                 }
+                ArgType::ScalarTensor(dtype) => {
+                    let tensor = scope.arg(max_trip_count_arg);
+                    on_device_to_native(tensor, dtype)
+                }
                 ArgType::Tensor(_) => {
                     let tensor = scope.arg(max_trip_count_arg);
                     quote! { #tensor.into_scalar().elem::<i64>() }
@@ -96,6 +100,10 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
                 ArgType::ScalarNative(_) => {
                     let name = arg_to_ident(init_cond_arg);
                     quote! { #name }
+                }
+                ArgType::ScalarTensor(dtype) => {
+                    let tensor = scope.arg(init_cond_arg);
+                    on_device_to_native(tensor, dtype)
                 }
                 ArgType::Tensor(_) => {
                     let tensor = scope.arg(init_cond_arg);
@@ -248,7 +256,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
                         #collector.push(#out_name);
                     });
                 }
-                ArgType::Tensor(_) => {
+                ArgType::Tensor(_) | ArgType::ScalarTensor(_) => {
                     collect_scans.extend(quote! {
                         #collector.push(#out_name.clone());
                     });
@@ -309,7 +317,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
                         }
                     });
                 }
-                ArgType::Tensor(_) => {
+                ArgType::Tensor(_) | ArgType::ScalarTensor(_) => {
                     // Concatenate tensors
                     output_values.push(quote! { Tensor::cat(#collector, 0) });
                 }

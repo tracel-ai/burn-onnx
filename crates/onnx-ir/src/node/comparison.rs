@@ -117,11 +117,19 @@ pub(crate) fn elementwise_comparison_outputs(node: &mut RawNode) {
     if max_rank == 0 {
         node.outputs[0].ty = ArgType::ScalarNative(DType::Bool);
     } else {
-        node.outputs[0].ty = ArgType::Tensor(TensorType {
-            dtype: DType::Bool,
-            rank: max_rank,
-            static_shape: None,
-        });
+        let has_real_tensor = node
+            .inputs
+            .iter()
+            .any(|input| matches!(&input.ty, ArgType::Tensor(_)));
+        if !has_real_tensor && max_rank == 1 {
+            node.outputs[0].ty = ArgType::ScalarTensor(DType::Bool);
+        } else {
+            node.outputs[0].ty = ArgType::Tensor(TensorType {
+                dtype: DType::Bool,
+                rank: max_rank,
+                static_shape: None,
+            });
+        }
     }
 }
 

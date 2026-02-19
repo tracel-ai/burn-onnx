@@ -48,8 +48,11 @@ impl NodeCodegen for onnx_ir::pad::PadNode {
                                     t.rank
                                 )
                             }
-                            ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
+                            ArgType::ScalarNative(_) => {
                                 quote! { #value }
+                            }
+                            ArgType::ScalarTensor(dtype) => {
+                                on_device_to_native(quote! { #value }, dtype)
                             }
                             ArgType::Shape(_) => {
                                 panic!("Pad: constant_value cannot be a shape")

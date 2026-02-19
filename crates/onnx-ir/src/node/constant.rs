@@ -110,10 +110,6 @@ impl NodeProcessor for ConstantProcessor {
                         base_type
                     }
                 }
-                // Convert scalar-compatible tensor to ScalarNative if requested
-                ArgType::Tensor(tensor) if tensor.rank == 0 && wants_scalar_native => {
-                    ArgType::ScalarNative(tensor.dtype)
-                }
                 // Convert ScalarTensor to ScalarNative if consumer needs native
                 ArgType::ScalarTensor(dtype) if wants_scalar_native => {
                     ArgType::ScalarNative(*dtype)

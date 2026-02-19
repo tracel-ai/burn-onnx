@@ -590,9 +590,13 @@ fn get_slice_range_expressions(node: &onnx_ir::slice::SliceNode) -> (TokenStream
 
 fn get_scalar_expr(arg: &Argument) -> TokenStream {
     match &arg.ty {
-        ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
+        ArgType::ScalarNative(_) => {
             let name = arg_to_ident(arg);
             quote! { #name }
+        }
+        ArgType::ScalarTensor(dtype) => {
+            let name = arg_to_ident(arg);
+            on_device_to_native(quote! { #name }, dtype)
         }
         ArgType::Shape(_) => {
             let name = arg_to_ident(arg);
