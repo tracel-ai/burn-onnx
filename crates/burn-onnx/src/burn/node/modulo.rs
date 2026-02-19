@@ -99,8 +99,10 @@ mod tests {
     use insta::assert_snapshot;
     use onnx_ir::modulo::{ModConfig, ModNodeBuilder};
 
+    // --- on_device + on_device (same rank) ---
+
     #[test]
-    fn test_modulo_remainder() {
+    fn test_remainder_tensor_tensor_same_rank() {
         let config = ModConfig::new(false);
         let node = ModNodeBuilder::new("mod1")
             .input_tensor("a", 2, DType::F32)
@@ -108,8 +110,7 @@ mod tests {
             .output_tensor("output", 2, DType::F32)
             .config(config)
             .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 2>) -> Tensor<B, 2> {
             let output = a.remainder(b);
             output
@@ -118,16 +119,15 @@ mod tests {
     }
 
     #[test]
-    fn test_modulo_fmod() {
+    fn test_fmod_tensor_tensor_same_rank() {
         let config = ModConfig::new(true);
-        let node = ModNodeBuilder::new("mod2")
+        let node = ModNodeBuilder::new("mod1")
             .input_tensor("a", 2, DType::F32)
             .input_tensor("b", 2, DType::F32)
             .output_tensor("output", 2, DType::F32)
             .config(config)
             .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 2>) -> Tensor<B, 2> {
             let output = a.fmod(b);
             output
@@ -135,53 +135,18 @@ mod tests {
         ");
     }
 
-    #[test]
-    fn test_modulo_tensor_scalar_remainder() {
-        let config = ModConfig::new(false);
-        let node = ModNodeBuilder::new("mod3")
-            .input_tensor("a", 2, DType::F32)
-            .input_scalar("b", DType::F32)
-            .output_tensor("output", 2, DType::F32)
-            .config(config)
-            .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2>, b: f32) -> Tensor<B, 2> {
-            let output = a.remainder_scalar(b);
-            output
-        }
-        ");
-    }
+    // --- on_device + on_device (broadcast) ---
 
     #[test]
-    fn test_modulo_tensor_scalar_fmod() {
-        let config = ModConfig::new(true);
-        let node = ModNodeBuilder::new("mod4")
-            .input_tensor("a", 2, DType::F32)
-            .input_scalar("b", DType::F32)
-            .output_tensor("output", 2, DType::F32)
-            .config(config)
-            .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2>, b: f32) -> Tensor<B, 2> {
-            let output = a.fmod_scalar(b);
-            output
-        }
-        ");
-    }
-
-    #[test]
-    fn test_modulo_broadcast_lhs_smaller_remainder() {
+    fn test_remainder_broadcast_lhs_smaller() {
         let config = ModConfig::new(false);
-        let node = ModNodeBuilder::new("mod5")
+        let node = ModNodeBuilder::new("mod1")
             .input_tensor("a", 2, DType::F32)
             .input_tensor("b", 3, DType::F32)
             .output_tensor("output", 3, DType::F32)
             .config(config)
             .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 3>) -> Tensor<B, 3> {
             let output = a.unsqueeze_dims(&[0isize]).remainder(b);
             output
@@ -190,16 +155,15 @@ mod tests {
     }
 
     #[test]
-    fn test_modulo_broadcast_rhs_smaller_remainder() {
+    fn test_remainder_broadcast_rhs_smaller() {
         let config = ModConfig::new(false);
-        let node = ModNodeBuilder::new("mod6")
+        let node = ModNodeBuilder::new("mod1")
             .input_tensor("a", 3, DType::F32)
             .input_tensor("b", 2, DType::F32)
             .output_tensor("output", 3, DType::F32)
             .config(config)
             .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<B, 3>, b: Tensor<B, 2>) -> Tensor<B, 3> {
             let output = a.remainder(b.unsqueeze_dims(&[0isize]));
             output
@@ -208,16 +172,15 @@ mod tests {
     }
 
     #[test]
-    fn test_modulo_broadcast_lhs_smaller_fmod() {
+    fn test_fmod_broadcast_lhs_smaller() {
         let config = ModConfig::new(true);
-        let node = ModNodeBuilder::new("mod7")
+        let node = ModNodeBuilder::new("mod1")
             .input_tensor("a", 2, DType::F32)
             .input_tensor("b", 3, DType::F32)
             .output_tensor("output", 3, DType::F32)
             .config(config)
             .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 3>) -> Tensor<B, 3> {
             let output = a.unsqueeze_dims(&[0isize]).fmod(b);
             output
@@ -226,18 +189,106 @@ mod tests {
     }
 
     #[test]
-    fn test_modulo_broadcast_rhs_smaller_fmod() {
+    fn test_fmod_broadcast_rhs_smaller() {
         let config = ModConfig::new(true);
-        let node = ModNodeBuilder::new("mod8")
+        let node = ModNodeBuilder::new("mod1")
             .input_tensor("a", 3, DType::F32)
             .input_tensor("b", 2, DType::F32)
             .output_tensor("output", 3, DType::F32)
             .config(config)
             .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<B, 3>, b: Tensor<B, 2>) -> Tensor<B, 3> {
             let output = a.fmod(b.unsqueeze_dims(&[0isize]));
+            output
+        }
+        ");
+    }
+
+    // --- on_device + on_device (ScalarTensor broadcast) ---
+
+    #[test]
+    fn test_remainder_tensor_scalar_tensor() {
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_tensor("a", 3, DType::F32)
+            .input_scalar_tensor("b", DType::F32)
+            .output_tensor("output", 3, DType::F32)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, a: Tensor<B, 3>, b: Tensor<B, 1>) -> Tensor<B, 3> {
+            let output = a.remainder(b.unsqueeze_dims(&[0isize, 1isize]));
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_fmod_tensor_scalar_tensor() {
+        let config = ModConfig::new(true);
+        let node = ModNodeBuilder::new("mod1")
+            .input_tensor("a", 3, DType::F32)
+            .input_scalar_tensor("b", DType::F32)
+            .output_tensor("output", 3, DType::F32)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, a: Tensor<B, 3>, b: Tensor<B, 1>) -> Tensor<B, 3> {
+            let output = a.fmod(b.unsqueeze_dims(&[0isize, 1isize]));
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_remainder_scalar_tensor_scalar_tensor() {
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_scalar_tensor("a", DType::F32)
+            .input_scalar_tensor("b", DType::F32)
+            .output_scalar_tensor("output", DType::F32)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, a: Tensor<B, 1>, b: Tensor<B, 1>) -> Tensor<B, 1> {
+            let output = a.remainder(b);
+            output
+        }
+        ");
+    }
+
+    // --- on_device + ScalarNative ---
+
+    #[test]
+    fn test_remainder_tensor_scalar_native() {
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_tensor("a", 2, DType::F32)
+            .input_scalar("b", DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, a: Tensor<B, 2>, b: f32) -> Tensor<B, 2> {
+            let output = a.remainder_scalar(b);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_fmod_tensor_scalar_native() {
+        let config = ModConfig::new(true);
+        let node = ModNodeBuilder::new("mod1")
+            .input_tensor("a", 2, DType::F32)
+            .input_scalar("b", DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, a: Tensor<B, 2>, b: f32) -> Tensor<B, 2> {
+            let output = a.fmod_scalar(b);
             output
         }
         ");
