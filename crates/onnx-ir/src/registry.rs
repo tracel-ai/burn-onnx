@@ -244,7 +244,6 @@ impl ProcessorRegistry {
             NodeType::GlobalMaxPool,
             Box::new(crate::node::global_max_pool::GlobalMaxPoolProcessor),
         );
-        
 
         // Identity operation (typically eliminated during post-processing)
         registry.register(
