@@ -100,7 +100,14 @@ fn main() {
     println!("  input_ids shape: {:?}", input_shape);
     println!("  reference logits shape: {:?}", ref_shape);
 
-    println!("\nRunning model inference...");
+    // Warmup run (compiles GPU shaders, allocates buffers)
+    println!("\nWarmup inference...");
+    let warmup_input = input_ids.clone();
+    let start = Instant::now();
+    let _ = model.forward(warmup_input);
+    println!("  Warmup completed in {:.2?}", start.elapsed());
+
+    println!("Running model inference...");
     let start = Instant::now();
     let output_logits = model.forward(input_ids);
     let inference_time = start.elapsed();
