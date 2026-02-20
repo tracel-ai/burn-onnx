@@ -256,7 +256,14 @@ fn run_one(
 
 pub fn handle_command(args: ModelCheckArgs) -> anyhow::Result<()> {
     let subcmd = args.command.unwrap_or(ModelCheckSubCommand::All);
-    let features = &args.features;
+    // Auto-enable fusion for GPU backends (metal, wgpu).
+    let features = if ["metal", "wgpu"].iter().any(|b| args.features.contains(b))
+        && !args.features.contains("fusion")
+    {
+        format!("{},fusion", args.features)
+    } else {
+        args.features.clone()
+    };
     let release = !args.debug;
 
     let models: Vec<&ModelInfo> = match &args.model {
@@ -280,7 +287,7 @@ pub fn handle_command(args: ModelCheckArgs) -> anyhow::Result<()> {
     let mut failed: Vec<&str> = Vec::new();
 
     for model in &models {
-        if let Err(e) = run_one(model, &subcmd, features, release) {
+        if let Err(e) = run_one(model, &subcmd, &features, release) {
             error!("\x1B[31;1m{} failed: {}\x1B[0m", model.name, e);
             if args.fail_fast {
                 return Err(e);
