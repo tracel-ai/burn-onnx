@@ -11,6 +11,7 @@ ndarray = ["burn/ndarray"]
 tch = ["burn/tch"]
 wgpu = ["burn/wgpu"]
 metal = ["burn/metal"]
+fusion = ["burn/fusion"]
 
 [dependencies]
 burn = { workspace = true }
