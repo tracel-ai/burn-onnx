@@ -35,7 +35,8 @@ pub enum Command {
 fn ensure_cargo_bin_on_path() {
     let cargo_home = env::var_os("CARGO_HOME")
         .map(PathBuf::from)
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")));
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))
+        .or_else(|| env::var_os("USERPROFILE").map(|home| PathBuf::from(home).join(".cargo")));
 
     let Some(cargo_home) = cargo_home else {
         return;
@@ -52,6 +53,8 @@ fn ensure_cargo_bin_on_path() {
     paths.insert(0, cargo_bin.clone());
 
     if let Ok(new_path) = env::join_paths(paths) {
+        // SAFETY: This function runs at the start of `main` before any threads are
+        // spawned, so no concurrent reads/writes of process environment can occur.
         unsafe {
             env::set_var("PATH", new_path);
         }
