@@ -163,6 +163,10 @@ impl ProcessorRegistry {
             Box::new(crate::node::round::RoundProcessor),
         );
         registry.register(NodeType::Sign, Box::new(crate::node::sign::SignProcessor));
+        registry.register(
+            NodeType::Shrink,
+            Box::new(crate::node::shrink::ShrinkProcessor),
+        );
 
         // Trigonometric operations
         registry.register(NodeType::Sin, Box::new(crate::node::sin::SinProcessor));

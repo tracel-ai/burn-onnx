@@ -394,7 +394,7 @@ define_node_enum! {
     SequenceInsert => unsupported::SequenceInsertNode,
     SequenceLength => unsupported::SequenceLengthNode,
     SequenceMap => unsupported::SequenceMapNode,
-    Shrink => unsupported::ShrinkNode,
+    Shrink => shrink::ShrinkNode,
     SoftmaxCrossEntropyLoss => unsupported::SoftmaxCrossEntropyLossNode,
     SplitToSequence => unsupported::SplitToSequenceNode,
     Stft => unsupported::StftNode,

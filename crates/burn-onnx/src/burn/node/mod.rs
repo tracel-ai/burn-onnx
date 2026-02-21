@@ -125,6 +125,7 @@ pub(crate) mod scatter_elements;
 pub(crate) mod scatter_nd;
 pub(crate) mod selu;
 pub(crate) mod shape;
+pub(crate) mod shrink;
 pub(crate) mod sigmoid;
 pub(crate) mod sign;
 pub(crate) mod sin;

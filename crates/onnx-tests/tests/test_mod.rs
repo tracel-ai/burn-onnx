@@ -122,6 +122,7 @@ pub mod scatter_elements;
 pub mod scatter_nd;
 pub mod selu;
 pub mod shape;
+pub mod shrink;
 pub mod sigmoid;
 pub mod sign;
 pub mod simplify;
