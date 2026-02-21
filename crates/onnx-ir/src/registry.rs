@@ -240,6 +240,10 @@ impl ProcessorRegistry {
             NodeType::GlobalAveragePool,
             Box::new(crate::node::global_avg_pool::GlobalAveragePoolProcessor),
         );
+        registry.register(
+            NodeType::GlobalMaxPool,
+            Box::new(crate::node::global_max_pool::GlobalMaxPoolProcessor),
+        );
 
         // Identity operation (typically eliminated during post-processing)
         registry.register(

@@ -78,7 +78,7 @@ functionality.
 | [Gemm][62]                       | ✅             | ✅           |
 | [GlobalAveragePool][63]          | ✅             | ✅           |
 | [GlobalLpPool][64]               | ❌             | ❌           |
-| [GlobalMaxPool][65]              | ❌             | ❌           |
+| [GlobalMaxPool][65]              | ✅             | ✅           |
 | [Greater][66]                    | ✅             | ✅           |
 | [GreaterOrEqual][67]             | ✅             | ✅           |
 | [GridSample][68]                 | ✅             | ✅           |

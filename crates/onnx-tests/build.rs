@@ -230,6 +230,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/gemm/gemm_non_unit_alpha_beta.onnx")
         .input("tests/gemm/gemm_no_c.onnx")
         .input("tests/global_avr_pool/global_avr_pool.onnx")
+        .input("tests/global_max_pool/global_max_pool.onnx")
         .input("tests/graph_multiple_output_tracking/graph_multiple_output_tracking.onnx")
         .input("tests/greater/greater.onnx")
         .input("tests/greater/greater_scalar.onnx")
