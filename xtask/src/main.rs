@@ -3,7 +3,7 @@ extern crate log;
 
 mod model_check;
 
-use std::time::Instant;
+use std::{env, path::PathBuf, time::Instant};
 use tracel_xtask::prelude::*;
 
 // no-std
@@ -32,7 +32,39 @@ pub enum Command {
     ModelCheck(model_check::ModelCheckArgs),
 }
 
+fn ensure_cargo_bin_on_path() {
+    let cargo_home = env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))
+        .or_else(|| env::var_os("USERPROFILE").map(|home| PathBuf::from(home).join(".cargo")));
+
+    let Some(cargo_home) = cargo_home else {
+        return;
+    };
+
+    let cargo_bin = cargo_home.join("bin");
+    let current_path = env::var_os("PATH").unwrap_or_default();
+    let mut paths: Vec<PathBuf> = env::split_paths(&current_path).collect();
+
+    if paths.iter().any(|path| path == &cargo_bin) {
+        return;
+    }
+
+    paths.insert(0, cargo_bin.clone());
+
+    if let Ok(new_path) = env::join_paths(paths) {
+        // SAFETY: This function runs at the start of `main` before any threads are
+        // spawned, so no concurrent reads/writes of process environment can occur.
+        unsafe {
+            env::set_var("PATH", new_path);
+        }
+        info!("Added '{}' to PATH for this xtask run", cargo_bin.display());
+    }
+}
+
 fn main() -> anyhow::Result<()> {
+    ensure_cargo_bin_on_path();
+
     let start = Instant::now();
     let (args, environment) = init_xtask::<Command>(parse_args::<Command>()?)?;
 
