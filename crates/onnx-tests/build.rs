@@ -380,6 +380,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/shape/shape_of_shape.onnx")
         .input("tests/shape/shape_slice.onnx")
         .input("tests/shape/shape_chain.onnx")
+        .input("tests/shrink/shrink.onnx")
         .input("tests/sigmoid/sigmoid.onnx")
         .input("tests/sign/sign.onnx")
         .input("tests/sin/sin.onnx")
