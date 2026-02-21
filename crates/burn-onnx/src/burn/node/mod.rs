@@ -90,6 +90,8 @@ pub(crate) mod log_softmax;
 pub(crate) mod loop_node;
 pub(crate) mod lower;
 pub(crate) mod lower_equal;
+pub(crate) mod lp_pool1d;
+pub(crate) mod lp_pool2d;
 pub(crate) mod lstm;
 pub(crate) mod matmul;
 pub(crate) mod matmul_integer;

@@ -70,6 +70,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/avg_pool2d_ceil_mode/avg_pool2d_ceil_mode.onnx")
         .input("tests/avg_pool/avg_pool1d_asymmetric_padding.onnx")
         .input("tests/avg_pool/avg_pool2d_asymmetric_padding.onnx")
+        .input("tests/lp_pool1d/lp_pool1d.onnx")
+        .input("tests/lp_pool2d/lp_pool2d.onnx")
         .input("tests/batch_norm/batch_norm.onnx")
         .input("tests/batch_norm/batch_norm_runtime.onnx")
         .input("tests/batch_norm/batch_norm_partial_constant.onnx")
