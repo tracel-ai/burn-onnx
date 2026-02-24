@@ -56,7 +56,7 @@ functionality.
 | [CumSum][41]                     | ✅             | ✅           |
 | [DeformConv][196]                | ✅             | ✅           |
 | [DepthToSpace][42]               | ✅             | ✅           |
-| [DequantizeLinear][43]           | ❌             | ❌           |
+| [DequantizeLinear][43]           | ✅             | ✅           |
 | [Det][44]                        | ❌             | ❌           |
 | [DFT][45]                        | ❌             | ❌           |
 | [Div][46]                        | ✅             | ✅           |
@@ -105,7 +105,8 @@ functionality.
 | [LogSoftmax][88]                 | ✅             | ✅           |
 | [Loop][89]                       | ✅             | ✅           |
 | [LpNormalization][90]            | ❌             | ❌           |
-| [LpPool][91]                     | ❌             | ❌           |
+| [LpPool1d][91]                   | ✅             | ✅           |
+| [LpPool2d][91]                   | ✅             | ✅           |
 | [LRN][92]                        | ❌             | ❌           |
 | [LSTM][93]                       | ✅             | ✅           |
 | [MatMul][94]                     | ✅             | ✅           |
@@ -138,7 +139,7 @@ functionality.
 | [PRelu][122]                     | ✅             | ✅           |
 | [QLinearConv][123]               | ❌             | ❌           |
 | [QLinearMatMul][124]             | ❌             | ❌           |
-| [QuantizeLinear][125]            | ❌             | ❌           |
+| [QuantizeLinear][125]            | ✅             | ✅           |
 | [RMSNormalization][198]          | ❌             | ❌           |
 | [RNN][145]                       | ✅             | ✅           |
 | [RandomNormal][126]              | ✅             | ✅           |

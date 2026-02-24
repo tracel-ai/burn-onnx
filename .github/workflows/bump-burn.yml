@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GH_BOT_TOKEN }}
 
       - name: Get latest burn commit
         id: latest

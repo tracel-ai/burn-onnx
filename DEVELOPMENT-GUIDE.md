@@ -6,7 +6,8 @@ learning framework written in Rust. It converts ONNX models to Rust source code 
 `.bpk` files.
 
 For an introduction to ONNX import in Burn, see
-[this section of the Burn book](https://burn.dev/books/burn/import/onnx-model.html).
+[this section of the Burn book](https://burn.dev/books/burn/import/onnx-model.html). Before opening a
+PR, please read the [Contributing Guidelines](CONTRIBUTING.md).
 
 ## Design Overview
 

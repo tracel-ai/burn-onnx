@@ -96,8 +96,14 @@ fn main() {
         ref_image_embeds_shape.as_slice()
     );
 
+    // Warmup run (compiles GPU shaders, allocates buffers)
+    println!("\nWarmup inference...");
+    let start = Instant::now();
+    let _ = model.forward(pixel_values.clone());
+    println!("  Warmup completed in {:.2?}", start.elapsed());
+
     // Run inference with the loaded input
-    println!("\nRunning model inference with test input...");
+    println!("Running model inference with test input...");
     let start = Instant::now();
 
     let image_embeds = model.forward(pixel_values);

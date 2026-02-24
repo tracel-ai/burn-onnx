@@ -118,7 +118,7 @@ fn forward_burn_attention(
         });
     }
 
-    // Build AttentionOptions
+    // Build AttentionModuleOptions
     let scale_tokens = match node.config.scale {
         Some(scale) => quote! { Some(#scale) },
         None => quote! { None },
@@ -131,7 +131,7 @@ fn forward_burn_attention(
     };
     let is_causal = node.config.is_causal;
     let options = quote! {
-        burn::tensor::ops::AttentionOptions {
+        burn::tensor::ops::AttentionModuleOptions {
             scale: #scale_tokens,
             softcap: #softcap_tokens,
             is_causal: #is_causal,
@@ -480,7 +480,7 @@ mod tests {
                     v,
                     None,
                     None,
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
                         is_causal: false,
@@ -544,7 +544,7 @@ mod tests {
                     v,
                     None,
                     None,
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
                         is_causal: false,
@@ -596,7 +596,7 @@ mod tests {
                     v,
                     None,
                     None,
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
                         is_causal: true,
@@ -647,7 +647,7 @@ mod tests {
                     v,
                     None,
                     Some(mask),
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
                         is_causal: false,
@@ -696,7 +696,7 @@ mod tests {
                     v,
                     None,
                     None,
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: Some(50f64),
                         is_causal: false,
@@ -745,7 +745,7 @@ mod tests {
                     v,
                     None,
                     None,
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: Some(0.125f64),
                         softcap: None,
                         is_causal: false,
@@ -796,7 +796,7 @@ mod tests {
                     v,
                     Some(mask.bool_not().unsqueeze::<4>()),
                     None,
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
                         is_causal: false,
@@ -847,7 +847,7 @@ mod tests {
                     v,
                     Some(mask.bool_not().unsqueeze_dim::<4>(1)),
                     None,
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
                         is_causal: false,
@@ -908,7 +908,7 @@ mod tests {
                     v,
                     Some(mask.bool_not().unsqueeze::<4>()),
                     None,
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
                         is_causal: false,
@@ -969,7 +969,7 @@ mod tests {
                     v,
                     None,
                     Some(bias),
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
                         is_causal: false,
@@ -1222,7 +1222,7 @@ mod tests {
                     v,
                     None,
                     Some(mask.float().cast(burn::tensor::DType::F32)),
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
                         is_causal: false,
@@ -1274,7 +1274,7 @@ mod tests {
                     v,
                     None,
                     None,
-                    burn::tensor::ops::AttentionOptions {
+                    burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
                         is_causal: true,

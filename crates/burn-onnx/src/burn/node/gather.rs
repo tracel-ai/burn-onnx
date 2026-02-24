@@ -215,17 +215,21 @@ fn forward_tensor_gather(
             // Gathering a single element, keep as Tensor<B, 1> on device (no GPU stall)
             match &index_arg.ty {
                 ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                    let index = if index_arg.ty.is_scalar_tensor() {
-                        let tensor = scope.arg(index_arg);
-                        on_device_to_native(quote! { #tensor }, &index_arg.ty.elem_type())
-                    } else {
-                        let ident = arg_to_ident(index_arg);
-                        quote! { #ident }
-                    };
+                    let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
+                    let axis = node.config.axis;
+                    let slice_args = (0..input_rank)
+                        .map(|i| {
+                            if i == axis {
+                                quote! { #index_ident }
+                            } else {
+                                quote! { .. }
+                            }
+                        })
+                        .collect::<Vec<_>>();
                     quote! {
                         let #output = {
-                            let indices = Tensor::<B, 1, _>::from_data([#index], &*self.device);
-                            Tensor::select(#input, #dim, indices)
+                            #pre_convert
+                            #input.slice(s![#(#slice_args),*])
                         };
                     }
                 }
@@ -240,17 +244,21 @@ fn forward_tensor_gather(
             let scalar_ty = scalar_type_tokens(dtype);
             match &index_arg.ty {
                 ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                    let index = if index_arg.ty.is_scalar_tensor() {
-                        let tensor = scope.arg(index_arg);
-                        on_device_to_native(quote! { #tensor }, &index_arg.ty.elem_type())
-                    } else {
-                        let ident = arg_to_ident(index_arg);
-                        quote! { #ident }
-                    };
+                    let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
+                    let axis = node.config.axis;
+                    let slice_args = (0..input_rank)
+                        .map(|i| {
+                            if i == axis {
+                                quote! { #index_ident }
+                            } else {
+                                quote! { .. }
+                            }
+                        })
+                        .collect::<Vec<_>>();
                     quote! {
+                        #pre_convert
                         let #output = {
-                            let indices = Tensor::<B, 1, _>::from_data([#index], &*self.device);
-                            let selected = Tensor::select(#input, #dim, indices);
+                            let selected = #input.slice(s![#(#slice_args),*]);
                             selected.into_scalar().elem::<#scalar_ty>()
                         };
                     }
@@ -526,8 +534,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, values: Tensor<B, 2>, idx: i32) -> f32 {
             let elem = {
-                let indices = Tensor::<B, 1, _>::from_data([idx], &*self.device);
-                let selected = Tensor::select(values, 0, indices);
+                let selected = values.slice(s![idx, ..]);
                 selected.into_scalar().elem::<f32>()
             };
             elem
@@ -548,8 +555,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, matrix: Tensor<B, 3>, col_idx: i64) -> f64 {
             let value = {
-                let indices = Tensor::<B, 1, _>::from_data([col_idx], &*self.device);
-                let selected = Tensor::select(matrix, 1, indices);
+                let selected = matrix.slice(s![.., col_idx, ..]);
                 selected.into_scalar().elem::<f64>()
             };
             value
@@ -570,9 +576,33 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, int_array: Tensor<B, 1, Int>, position: i32) -> i32 {
             let result = {
-                let indices = Tensor::<B, 1, _>::from_data([position], &*self.device);
-                let selected = Tensor::select(int_array, 0, indices);
+                let selected = int_array.slice(s![position]);
                 selected.into_scalar().elem::<i32>()
+            };
+            result
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gather_tensor_to_scalar_tensor_with_scalar_tensor_index() {
+        let config = GatherConfig { axis: 0 };
+        let node = GatherNodeBuilder::new("pick_elem")
+            .input_tensor("values", 1, DType::F32)
+            .input_scalar_tensor("position", DType::I64)
+            .output_scalar_tensor("result", DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            values: Tensor<B, 1>,
+            position: Tensor<B, 1, Int>,
+        ) -> Tensor<B, 1> {
+            let result = {
+                let __scalar_idx = position.into_scalar().elem::<i64>();
+                values.slice(s![__scalar_idx])
             };
             result
         }

@@ -87,7 +87,8 @@ operators.
 
 ## Contributing
 
-We welcome contributions! Please read the [Development Guide](DEVELOPMENT-GUIDE.md) to get started.
+We welcome contributions! Please read the [Contributing Guidelines](CONTRIBUTING.md) before opening
+a PR, and the [Development Guide](DEVELOPMENT-GUIDE.md) for architecture and implementation details.
 
 For questions and discussions, join us on [Discord](https://discord.gg/uPEBbYYDB6).
 

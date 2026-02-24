@@ -49,6 +49,70 @@ impl FromStr for ResizeMode {
     }
 }
 
+/// Coordinate transformation mode for resize operation.
+///
+/// Determines how coordinates in the resized tensor map to coordinates in the original tensor.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum CoordinateTransformMode {
+    /// Half-pixel coordinate transformation (default for opset 11+)
+    #[default]
+    HalfPixel,
+    /// Align corners coordinate transformation
+    AlignCorners,
+    /// Asymmetric coordinate transformation (default for opset <11)
+    Asymmetric,
+    /// PyTorch-style half-pixel transformation
+    PytorchHalfPixel,
+    /// TensorFlow crop-and-resize transformation
+    TfCropAndResize,
+    /// TensorFlow half-pixel for nearest-neighbor
+    TfHalfPixelForNn,
+}
+
+impl FromStr for CoordinateTransformMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "half_pixel" => Ok(Self::HalfPixel),
+            "align_corners" => Ok(Self::AlignCorners),
+            "asymmetric" => Ok(Self::Asymmetric),
+            "pytorch_half_pixel" => Ok(Self::PytorchHalfPixel),
+            "tf_crop_and_resize" => Ok(Self::TfCropAndResize),
+            "tf_half_pixel_for_nn" => Ok(Self::TfHalfPixelForNn),
+            _ => Err(format!("Unsupported coordinate transformation mode: {}", s)),
+        }
+    }
+}
+
+/// Nearest-neighbor rounding mode for resize operation.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum NearestMode {
+    /// Round half down (default)
+    #[default]
+    RoundPreferFloor,
+    /// Round half up
+    RoundPreferCeil,
+    /// Floor rounding
+    Floor,
+    /// Ceil rounding
+    Ceil,
+}
+
+impl FromStr for NearestMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "round_prefer_floor" => Ok(Self::RoundPreferFloor),
+            "round_prefer_ceil" => Ok(Self::RoundPreferCeil),
+            "floor" => Ok(Self::Floor),
+            "ceil" => Ok(Self::Ceil),
+            _ => Err(format!("Unsupported nearest mode: {}", s)),
+        }
+    }
+}
+
 /// Configuration for the Resize operation.
 #[derive(Debug, Clone, new)]
 #[allow(clippy::too_many_arguments)]
@@ -56,19 +120,18 @@ pub struct ResizeConfig {
     pub mode: ResizeMode,
     pub scales: Option<ResizeScales>,
     pub sizes: Option<ResizeSizes>,
-    /// Coordinate transformation mode (default: "half_pixel")
-    pub coordinate_transformation_mode: String,
+    /// Coordinate transformation mode
+    pub coordinate_transformation_mode: CoordinateTransformMode,
     /// Cubic coefficient for cubic interpolation (default: -0.75)
     pub cubic_coeff_a: f32,
-    /// Nearest mode rounding strategy (default: "round_prefer_floor")
-    pub nearest_mode: String, // TODO convert to enum
+    /// Nearest mode rounding strategy
+    pub nearest_mode: NearestMode,
     /// Exclude outside weights (default: 0)
     pub exclude_outside: i32,
     /// Extrapolation value for tf_crop_and_resize mode (default: 0.0)
     pub extrapolation_value: f32,
     /// Antialias flag (default: 0) - opset 13+
     pub antialias: i32,
-    // FIXME add other missing fields
 }
 
 impl Default for ResizeConfig {
@@ -77,9 +140,9 @@ impl Default for ResizeConfig {
             mode: ResizeMode::Nearest,
             scales: None,
             sizes: None,
-            coordinate_transformation_mode: "half_pixel".to_string(),
+            coordinate_transformation_mode: CoordinateTransformMode::HalfPixel,
             cubic_coeff_a: -0.75,
-            nearest_mode: "round_prefer_floor".to_string(), // TODO convert to enum
+            nearest_mode: NearestMode::RoundPreferFloor,
             exclude_outside: 0,
             extrapolation_value: 0.0,
             antialias: 0,
@@ -262,65 +325,6 @@ impl NodeProcessor for ResizeProcessor {
         opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        // TODO: Add maximum input count validation
-        // Spec allows 1-4 inputs (X, roi, scales, sizes). Should validate max 4 inputs.
-        // Location: After validate_min_inputs
-
-        // TODO: Missing validation for scales and sizes both provided
-        // Spec states: "Either 'scales' or 'sizes' MUST be provided, MUST NOT provide both."
-        // Implementation checks at least one is provided (line 331-335) but doesn't reject both.
-        // Should add validation: if both scales and sizes are non-None, return error.
-        // Location: After extracting config, before checking at least one exists
-
-        // TODO: Missing test coverage for cubic mode
-        // ResizeMode::Cubic is defined and parsed but no test validates cubic interpolation.
-        // Add test: resize_cubic_mode
-
-        // TODO: Missing test coverage for different coordinate_transformation_mode values
-        // Implementation accepts and stores coordinate_transformation_mode but doesn't validate values.
-        // Spec defines: "half_pixel", "pytorch_half_pixel", "align_corners", "asymmetric", "tf_crop_and_resize"
-        // Tests don't verify different modes produce different/correct results.
-        // Add tests: resize_align_corners, resize_asymmetric, resize_tf_crop_and_resize
-
-        // TODO: Missing test coverage for nearest_mode variations
-        // Spec defines nearest_mode: "round_prefer_floor", "round_prefer_ceil", "floor", "ceil"
-        // No tests validate different rounding behaviors.
-        // Add tests: resize_nearest_floor, resize_nearest_ceil
-
-        // TODO: Missing test coverage for keep_aspect_ratio_policy (opset 18+)
-        // Attribute is validated to reject non-"stretch" values (lines 291-299) but no test.
-        // Add test: resize_keep_aspect_ratio_not_stretch (should fail)
-
-        // TODO: Missing test coverage for axes attribute (opset 18+)
-        // Attribute is validated to reject custom axes (lines 262-266) but no test.
-        // Add test: resize_custom_axes (should fail)
-
-        // FIXME: ROI input support is missing
-        // Implementation explicitly rejects non-empty ROI (lines 309-325) but ROI is part of spec.
-        // ROI (Region of Interest) allows resizing only a subregion. This is a spec deviation.
-        // Impact: MEDIUM - Models using ROI-based resize will fail.
-        // Either implement ROI support or clearly document limitation.
-
-        // TODO: Missing test coverage for 1D and 3D tensors
-        // Tests only cover 4D tensors (N,C,H,W). Spec supports any rank >= 1.
-        // Add tests: resize_1d, resize_3d, resize_5d
-
-        // TODO: Missing test coverage for antialias attribute validation
-        // antialias is validated to reject non-zero (lines 254-260) but no test.
-        // Add test: resize_antialias_enabled (should fail with current implementation)
-
-        // Note: we are ignoring some attributes because results are approximately the same
-        // and we are not supporting all the attributes of the Resize operator.
-        // However, some attributes are important to be checked and we are checking
-        // against the default values of the attributes.
-        // TODO revisit this when we have more Resize operators in the model
-
-        // TODO: Missing validation for coordinate_transformation_mode values
-        // Implementation stores coordinate_transformation_mode string but doesn't validate it
-        // against spec-defined values. Invalid mode strings are accepted silently.
-        // Should validate mode is one of: "half_pixel", "pytorch_half_pixel", "align_corners",
-        // "asymmetric", "tf_crop_and_resize", "tf_half_pixel_for_nn"
-        // Location: extract_config method after extracting coordinate_transformation_mode
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
                 "antialias" => {
@@ -337,11 +341,8 @@ impl NodeProcessor for ResizeProcessor {
                         reason: "custom axes attribute is not supported".to_string(),
                     });
                 }
-                "coordinate_transformation_mode" => {
-                    // Stored in config, mapped to align_corners in codegen
-                }
-                "cubic_coeff_a" => {
-                    // FIXME: Implement conversion to enum and pass CubicCoeffA::HalfPixel
+                "coordinate_transformation_mode" | "cubic_coeff_a" => {
+                    // Parsed in extract_config
                 }
                 "exclude_outside" => {
                     if value.clone().into_i32() != 0 {
@@ -370,11 +371,8 @@ impl NodeProcessor for ResizeProcessor {
                         });
                     }
                 }
-                "mode" => {
-                    // FIXME: Implement conversion to enum
-                } // Validated in extract_config
-                "nearest_mode" => {
-                    // FIXME: Implement conversion to enum
+                "mode" | "nearest_mode" => {
+                    // Parsed in extract_config
                 }
                 _ => {}
             }
@@ -402,16 +400,21 @@ impl NodeProcessor for ResizeProcessor {
             }
         }
 
-        // Get reference to config for validation
-        let config = self
-            .extract_config(node, opset)
-            .expect("Config extraction failed");
+        let config = self.extract_config(node, opset)?;
 
-        // Check that at least one of scales or sizes is provided
-        if config.scales.is_none() && config.sizes.is_none() {
-            return Err(ProcessError::Custom(
-                "Resize: either scales or sizes input is required".to_string(),
-            ));
+        // Exactly one of scales or sizes must be provided
+        match (&config.scales, &config.sizes) {
+            (None, None) => {
+                return Err(ProcessError::Custom(
+                    "Resize: either scales or sizes input is required".to_string(),
+                ));
+            }
+            (Some(_), Some(_)) => {
+                return Err(ProcessError::Custom(
+                    "Resize: scales and sizes are mutually exclusive".to_string(),
+                ));
+            }
+            _ => {}
         }
 
         // Infer output type
@@ -424,12 +427,12 @@ impl NodeProcessor for ResizeProcessor {
         let mut mode: Option<ResizeMode> = None;
         // Opset 10 had no coordinate_transformation_mode (implicit asymmetric)
         let mut coordinate_transformation_mode = if opset < 11 {
-            "asymmetric".to_string()
+            CoordinateTransformMode::Asymmetric
         } else {
-            "half_pixel".to_string()
+            CoordinateTransformMode::HalfPixel
         };
         let mut cubic_coeff_a = -0.75f32;
-        let mut nearest_mode = "round_prefer_floor".to_string();
+        let mut nearest_mode = NearestMode::RoundPreferFloor;
         let mut exclude_outside = 0i32;
         let mut extrapolation_value = 0.0f32;
         let mut antialias = 0i32;
@@ -463,13 +466,28 @@ impl NodeProcessor for ResizeProcessor {
                     )
                 }
                 "coordinate_transformation_mode" => {
-                    coordinate_transformation_mode = value.clone().into_string();
+                    coordinate_transformation_mode = value
+                        .clone()
+                        .into_string()
+                        .parse::<CoordinateTransformMode>()
+                        .map_err(|e| ProcessError::InvalidAttribute {
+                            name: "coordinate_transformation_mode".to_string(),
+                            reason: e,
+                        })?;
                 }
                 "cubic_coeff_a" => {
                     cubic_coeff_a = value.clone().into_f32();
                 }
                 "nearest_mode" => {
-                    nearest_mode = value.clone().into_string();
+                    nearest_mode =
+                        value
+                            .clone()
+                            .into_string()
+                            .parse::<NearestMode>()
+                            .map_err(|e| ProcessError::InvalidAttribute {
+                                name: "nearest_mode".to_string(),
+                                reason: e,
+                            })?;
                 }
                 "exclude_outside" => {
                     exclude_outside = value.clone().into_i32();
@@ -591,9 +609,12 @@ mod tests {
         }
         assert!(config.sizes.is_none(), "Expected no sizes");
         // Verify default attribute values
-        assert_eq!(config.coordinate_transformation_mode, "half_pixel");
+        assert_eq!(
+            config.coordinate_transformation_mode,
+            CoordinateTransformMode::HalfPixel
+        );
         assert_eq!(config.cubic_coeff_a, -0.75);
-        assert_eq!(config.nearest_mode, "round_prefer_floor");
+        assert_eq!(config.nearest_mode, NearestMode::RoundPreferFloor);
         assert_eq!(config.exclude_outside, 0);
         assert_eq!(config.extrapolation_value, 0.0);
         assert_eq!(config.antialias, 0);
@@ -661,5 +682,64 @@ mod tests {
         let _prefs = OutputPreferences::new();
         let result = processor.extract_config(&node, 16);
         assert!(matches!(result, Err(ProcessError::MissingAttribute(_))));
+    }
+
+    #[test]
+    fn test_resize_invalid_coordinate_transformation_mode() {
+        let mut node = create_test_node("nearest", Some(vec![1.0, 1.0, 2.0, 2.0]), None, None)
+            .build_with_graph_data(16);
+        node.attrs.insert(
+            "coordinate_transformation_mode".to_string(),
+            crate::ir::AttributeValue::String("invalid_mode".to_string()),
+        );
+        let processor = ResizeProcessor;
+        let result = processor.extract_config(&node, 16);
+        assert!(matches!(result, Err(ProcessError::InvalidAttribute { .. })));
+    }
+
+    #[test]
+    fn test_resize_invalid_nearest_mode() {
+        let mut node = create_test_node("nearest", Some(vec![1.0, 1.0, 2.0, 2.0]), None, None)
+            .build_with_graph_data(16);
+        node.attrs.insert(
+            "nearest_mode".to_string(),
+            crate::ir::AttributeValue::String("bad_mode".to_string()),
+        );
+        let processor = ResizeProcessor;
+        let result = processor.extract_config(&node, 16);
+        assert!(matches!(result, Err(ProcessError::InvalidAttribute { .. })));
+    }
+
+    #[test]
+    fn test_resize_scales_and_sizes_both_provided() {
+        let node = create_test_node(
+            "nearest",
+            Some(vec![1.0, 1.0, 2.0, 2.0]),
+            Some(vec![1, 3, 224, 224]),
+            None,
+        )
+        .build_with_graph_data(16);
+        let mut node = node;
+        let processor = ResizeProcessor;
+        let prefs = OutputPreferences::new();
+        let result = processor.infer_types(&mut node, 16, &prefs);
+        assert!(matches!(result, Err(ProcessError::Custom(_))));
+    }
+
+    #[test]
+    fn test_resize_coordinate_transformation_mode_opset10_default() {
+        // For opset 10, only inputs are [X, scales] (no roi, no sizes)
+        let node = TestNodeBuilder::new(NodeType::Resize, "test_resize")
+            .input_tensor_f32("X", 4, None)
+            .output_tensor_f32("Y", 4, None)
+            .attr_string("mode", "nearest")
+            .input_tensor_f32_data("scales", vec![1.0, 1.0, 2.0, 2.0], vec![4])
+            .build_with_graph_data(10);
+        let processor = ResizeProcessor;
+        let config = processor.extract_config(&node, 10).unwrap();
+        assert_eq!(
+            config.coordinate_transformation_mode,
+            CoordinateTransformMode::Asymmetric
+        );
     }
 }

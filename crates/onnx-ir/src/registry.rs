@@ -231,6 +231,14 @@ impl ProcessorRegistry {
             Box::new(crate::node::avg_pool2d::AvgPool2dProcessor),
         );
         registry.register(
+            NodeType::LpPool1d,
+            Box::new(crate::node::lp_pool1d::LpPool1dProcessor),
+        );
+        registry.register(
+            NodeType::LpPool2d,
+            Box::new(crate::node::lp_pool2d::LpPool2dProcessor),
+        );
+        registry.register(
             NodeType::MaxPool1d,
             Box::new(crate::node::max_pool1d::MaxPool1dProcessor),
         );
@@ -418,6 +426,14 @@ impl ProcessorRegistry {
         registry.register(
             NodeType::MatMulInteger,
             Box::new(crate::node::matmulinteger::MatMulIntegerProcessor),
+        );
+        registry.register(
+            NodeType::DequantizeLinear,
+            Box::new(crate::node::dequantize_linear::DequantizeLinearProcessor),
+        );
+        registry.register(
+            NodeType::QuantizeLinear,
+            Box::new(crate::node::quantize_linear::QuantizeLinearProcessor),
         );
 
         // Array operations

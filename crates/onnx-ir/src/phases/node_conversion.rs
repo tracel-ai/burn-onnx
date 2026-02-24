@@ -407,6 +407,11 @@ fn remap_node_type(node: &mut RawNode) {
                 _ => panic!("Only avg_pool 1d and 2d are supported"),
             })
         }
+        NodeType::LpPool => remap_node_with_kernel_shape(node, |spatial_dims| match spatial_dims {
+            1 => NodeType::LpPool1d,
+            2 => NodeType::LpPool2d,
+            _ => panic!("Only lp_pool 1d and 2d are supported"),
+        }),
         _ => (),
     }
 }

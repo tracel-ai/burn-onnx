@@ -27,7 +27,7 @@ cortex-m-rt = "0.7.5"
 critical-section = "1.1"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 portable-atomic = { version = "1.7", features = ["critical-section"] }
-embedded-alloc = "0.6.0"
+embedded-alloc = "0.7.0"
 
 burn = { workspace = true, features = ["ndarray"] }
 burn-store = { workspace = true, features = ["burnpack"] }

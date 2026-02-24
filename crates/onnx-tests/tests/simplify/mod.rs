@@ -564,7 +564,7 @@ mod tests {
                         v,
                         None,
                         None,
-                        burn::tensor::ops::AttentionOptions {
+                        burn::tensor::ops::AttentionModuleOptions {
                             scale: Some(0.5f64),
                             softcap: None,
                             is_causal: false,

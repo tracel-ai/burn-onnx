@@ -92,8 +92,14 @@ fn main() {
         ref_depth_shape
     );
 
+    // Warmup run (compiles GPU shaders, allocates buffers)
+    println!("\nWarmup inference...");
+    let start = Instant::now();
+    let _ = model.forward(pixel_values.clone());
+    println!("  Warmup completed in {:.2?}", start.elapsed());
+
     // Run inference
-    println!("\nRunning model inference with test input...");
+    println!("Running model inference with test input...");
     let start = Instant::now();
 
     let predicted_depth = model.forward(pixel_values);

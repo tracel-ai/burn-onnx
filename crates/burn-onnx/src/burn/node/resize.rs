@@ -41,7 +41,8 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
             ResizeMode::Linear => quote! { burn::nn::interpolate::InterpolateMode::Linear },
             ResizeMode::Cubic => quote! { burn::nn::interpolate::InterpolateMode::Cubic },
         };
-        let align_corners = self.config.coordinate_transformation_mode == "align_corners";
+        let align_corners = self.config.coordinate_transformation_mode
+            == onnx_ir::node::resize::CoordinateTransformMode::AlignCorners;
 
         if input_rank == 3 {
             let size = match &self.config.sizes {
@@ -142,7 +143,8 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                 ResizeMode::Linear => quote! { burn::tensor::ops::InterpolateMode::Bilinear },
                 ResizeMode::Cubic => quote! { burn::tensor::ops::InterpolateMode::Bicubic },
             };
-            let align_corners = self.config.coordinate_transformation_mode == "align_corners";
+            let align_corners = self.config.coordinate_transformation_mode
+                == onnx_ir::node::resize::CoordinateTransformMode::AlignCorners;
 
             // Handle runtime sizes or scales input
             // Per ONNX spec: either sizes or scales must be provided (mutually exclusive)
@@ -239,7 +241,8 @@ mod tests {
     use insta::assert_snapshot;
     use onnx_ir::ir::{DType, RuntimeInputRef};
     use onnx_ir::node::resize::{
-        ResizeConfig, ResizeMode, ResizeNodeBuilder, ResizeScales, ResizeSizes,
+        CoordinateTransformMode, ResizeConfig, ResizeMode, ResizeNodeBuilder, ResizeScales,
+        ResizeSizes,
     };
 
     // ==================== Static Resize - Rank 3 (1D) Tests ====================
@@ -568,7 +571,7 @@ mod tests {
                 name: "target_size".to_string(),
                 input_index: 1,
             })),
-            coordinate_transformation_mode: "align_corners".to_string(),
+            coordinate_transformation_mode: CoordinateTransformMode::AlignCorners,
             ..Default::default()
         };
         let node = ResizeNodeBuilder::new("resize_ac")

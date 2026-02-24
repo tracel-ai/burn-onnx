@@ -52,6 +52,9 @@ Key principles:
 ### Rust
 
 - Edition 2024
+- **No `unsafe` code.** This project has no need for unsafe. Do not introduce `unsafe` blocks,
+  `unsafe fn`, or `unsafe impl`. If a dependency requires unsafe, wrap it in a safe abstraction
+  upstream
 - `#[derive(Debug, Clone)]` on public types
 - `thiserror` for errors, `log` for logging (not `println!`)
 - `///` doc comments on public APIs
@@ -119,6 +122,7 @@ Read `DEVELOPMENT-GUIDE.md` for the full walkthrough with code examples. Checkli
 ## Code Review Checklist
 
 - Config structs include ALL ONNX attributes (don't skip because burn-onnx doesn't use them yet)
+- No `unsafe` code anywhere in the project
 - No `unwrap` in library code (tests are fine)
 - No `panic!` for structural validation (use `ProcessError`)
 - Generated code compiles without warnings

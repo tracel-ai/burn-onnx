@@ -105,8 +105,14 @@ fn main() {
         ref_classifiers.shape().as_slice()
     );
 
+    // Warmup run (compiles GPU shaders, allocates buffers)
+    println!("\nWarmup inference...");
+    let start = Instant::now();
+    let _ = model.forward(input.clone());
+    println!("  Warmup completed in {:.2?}", start.elapsed());
+
     // Run inference
-    println!("\nRunning model inference...");
+    println!("Running model inference...");
     let start = Instant::now();
     let (out_regressors, out_classifiers) = model.forward(input);
     let inference_time = start.elapsed();

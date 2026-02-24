@@ -51,7 +51,7 @@ quote = "1.0.42"
 rust-format = "0.3.4"
 tracing-core = { version = "0.1.36", default-features = false }
 tracing-subscriber = "0.3.20"
-syn = { version = "2.0.116", features = ["full", "extra-traits"] }
+syn = { version = "2.0.117", features = ["full", "extra-traits"] }
 
 # onnx-ir
 half = { version = "2.7.1", features = [
@@ -70,14 +70,14 @@ serde = { version = "1.0.228", default-features = false, features = [
     "derive",
     "alloc",
 ] } # alloc is for no_std, derive is needed
-strum = { version = "0.27.2", features = ["derive"] }
+strum = { version = "0.28.0", features = ["derive"] }
 bytes = { version = "1.11.1", default-features = false }
 memmap2 = { version = "0.9" }
 
-burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "25264198eba03701a8c0c996c5aaa6442181e3a9" }
-burn-ndarray = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "25264198eba03701a8c0c996c5aaa6442181e3a9" }
-burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "25264198eba03701a8c0c996c5aaa6442181e3a9" }
-burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "25264198eba03701a8c0c996c5aaa6442181e3a9" }
+burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "421535d9662a7ab4d63078a2ef85831973c3c20c" }
+burn-ndarray = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "421535d9662a7ab4d63078a2ef85831973c3c20c" }
+burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "421535d9662a7ab4d63078a2ef85831973c3c20c" }
+burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "421535d9662a7ab4d63078a2ef85831973c3c20c" }
 
 ### For local development. ###
 # burn = { path = "../burn/crates/burn", default-features = false }
@@ -92,7 +92,7 @@ burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = fa
 # burn-tensor = { version = "0.21.0-pre.1", default-features = false }
 
 ### For xtask crate ###
-tracel-xtask = "=4.13.2"
+tracel-xtask = "=4.13.3"
 # ### For local development. ###
 # tracel-xtask = { path = "../xtask/crates/tracel-xtask", default-features = false }
 

@@ -3,6 +3,7 @@ extern crate alloc;
 use burn::prelude::*;
 use serde::Deserialize;
 use std::fs;
+use std::time::Instant;
 
 model_checks_common::backend_type!();
 
@@ -107,6 +108,16 @@ fn main() {
     let device = Default::default();
     let model: Model<MyBackend> = Model::default();
     println!("  Model initialized\n");
+
+    // Warmup run (compiles GPU shaders, allocates buffers)
+    println!("Warmup inference...");
+    {
+        let input = Tensor::<MyBackend, 1>::zeros([1 * 512], &device).reshape([1, 512]);
+        let state = Tensor::<MyBackend, 3>::zeros([2, 1, 128], &device);
+        let start = Instant::now();
+        let _ = model.forward(input, reference.sample_rate, state);
+        println!("  Warmup completed in {:.2?}\n", start.elapsed());
+    }
 
     // Run tests
     println!("Running test cases...");

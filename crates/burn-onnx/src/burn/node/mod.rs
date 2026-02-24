@@ -5,6 +5,7 @@
 pub(crate) mod prelude;
 
 // Shared helpers for subgraph code generation (If, Loop, Scan)
+mod broadcast_helpers;
 mod subgraph_helper;
 
 // Test helpers for node code generation tests
@@ -53,6 +54,7 @@ pub(crate) mod cosh;
 pub(crate) mod cumsum;
 pub(crate) mod deform_conv;
 pub(crate) mod depth_to_space;
+pub(crate) mod dequantize_linear;
 pub(crate) mod div;
 pub(crate) mod dropout;
 pub(crate) mod elu;
@@ -90,6 +92,8 @@ pub(crate) mod log_softmax;
 pub(crate) mod loop_node;
 pub(crate) mod lower;
 pub(crate) mod lower_equal;
+pub(crate) mod lp_pool1d;
+pub(crate) mod lp_pool2d;
 pub(crate) mod lstm;
 pub(crate) mod matmul;
 pub(crate) mod matmul_integer;
@@ -108,6 +112,7 @@ pub(crate) mod one_hot;
 pub(crate) mod pad;
 pub(crate) mod pow;
 pub(crate) mod prelu;
+pub(crate) mod quantize_linear;
 pub(crate) mod random_normal;
 pub(crate) mod random_normal_like;
 pub(crate) mod random_uniform;
