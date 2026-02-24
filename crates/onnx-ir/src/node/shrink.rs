@@ -16,10 +16,10 @@ use crate::processor::{
 /// Configuration for Shrink operation
 #[derive(Debug, Clone, new)]
 pub struct ShrinkConfig {
+    /// The lambda value for the Shrink formulation. Default is 0.5.
+    pub lambda: f64,
     /// The bias value added to output. Default is 0.
     pub bias: f64,
-    /// The lambd value for the Shrink formulation. Default is 0.5.
-    pub lambd: f64,
 }
 
 /// Node representation for Shrink operation
@@ -70,8 +70,8 @@ impl NodeProcessor for ShrinkProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+        let mut lambda = 0.5;
         let mut bias = 0.0;
-        let mut lambd = 0.5;
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
@@ -79,7 +79,7 @@ impl NodeProcessor for ShrinkProcessor {
                     bias = value.clone().into_f32() as f64;
                 }
                 "lambd" => {
-                    lambd = value.clone().into_f32() as f64;
+                    lambda = value.clone().into_f32() as f64;
                 }
                 _ => {
                     return Err(ProcessError::InvalidAttribute {
@@ -90,7 +90,7 @@ impl NodeProcessor for ShrinkProcessor {
             }
         }
 
-        Ok(ShrinkConfig { bias, lambd })
+        Ok(ShrinkConfig { lambda, bias })
     }
 
     fn build_node(&self, builder: RawNode, opset: usize) -> Node {
@@ -113,24 +113,24 @@ mod tests {
     use crate::ir::NodeType;
     use crate::node::test_utils::TestNodeBuilder;
 
-    fn create_test_node(bias: f32, lambd: f32) -> RawNode {
+    fn create_test_node(bias: f32, lambda: f32) -> RawNode {
         TestNodeBuilder::new(NodeType::Shrink, "test_shrink")
             .input_tensor_f32("X", 3, None)
             .output_tensor_f32("Y", 3, None)
+            .attr_float("lambda", lambda)
             .attr_float("bias", bias)
-            .attr_float("lambd", lambd)
             .build()
     }
 
     #[test]
-    fn test_shrink_config_with_bias_and_lambd() {
+    fn test_shrink_config_with_lambda_and_bias() {
         let node = create_test_node(1.0, 1.5);
         let processor = ShrinkProcessor;
         let config = processor
             .extract_config(&node, 9)
             .expect("Config extraction failed");
+        assert_eq!(config.lambda, 1.5);
         assert_eq!(config.bias, 1.0);
-        assert_eq!(config.lambd, 1.5);
     }
 
     #[test]
@@ -143,8 +143,8 @@ mod tests {
         let config = processor
             .extract_config(&node, 9)
             .expect("Config extraction failed");
+        assert_eq!(config.lambda, 0.5);
         assert_eq!(config.bias, 0.0);
-        assert_eq!(config.lambd, 0.5);
     }
 
     #[test]
@@ -152,8 +152,8 @@ mod tests {
         let mut node = TestNodeBuilder::new(NodeType::Shrink, "test_shrink_infer")
             .input_tensor_f32("X", 3, None)
             .output_default("Y")
+            .attr_float("lambda", 1.5)
             .attr_float("bias", 1.0)
-            .attr_float("lambd", 1.5)
             .build();
         let processor = ShrinkProcessor;
         processor
