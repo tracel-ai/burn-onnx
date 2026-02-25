@@ -8,7 +8,7 @@
 //! - **Opset 9**: Initial version
 use onnx_ir_derive::NodeBuilder;
 
-use crate::ir::{ArgType, Argument, Node, RawNode};
+use crate::ir::{Argument, Node, RawNode};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -51,21 +51,7 @@ impl NodeProcessor for ShrinkProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        // Get input tensor type
-        let input_tensor = match &node.inputs[0].ty {
-            ArgType::Tensor(tensor) => tensor,
-            _ => {
-                return Err(ProcessError::TypeMismatch {
-                    expected: "Tensor".to_string(),
-                    actual: format!("{:?}", node.inputs[0].ty),
-                });
-            }
-        };
-
-        // Output has the same type and shape as input
-        node.outputs[0].ty = ArgType::Tensor(input_tensor.clone());
-
-        let _config = self.extract_config(node, _opset)?;
+        crate::processor::same_as_input(node);
         Ok(())
     }
 
@@ -81,12 +67,7 @@ impl NodeProcessor for ShrinkProcessor {
                 "lambd" => {
                     lambda = value.clone().into_f32() as f64;
                 }
-                _ => {
-                    return Err(ProcessError::InvalidAttribute {
-                        name: key.clone(),
-                        reason: format!("Unexpected attribute for Shrink: {}", key),
-                    });
-                }
+                _ => {}
             }
         }
 
