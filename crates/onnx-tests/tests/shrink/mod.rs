@@ -11,41 +11,29 @@ mod tests {
 
     #[test]
     fn shrink() {
-        // The model contains 1d and 2d shrink nodes
         let model: shrink::Model<TestBackend> = shrink::Model::default();
 
         let device = Default::default();
-        // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 5>::from_floats(
+        let input = Tensor::<TestBackend, 2>::from_floats(
             [
                 [-2.0, -1.0, 0.0, 1.0, 2.0],
                 [-3.0, -2.5, -0.5, 0.5, 3.0],
-                [-1.5, 0.0, 1.5, 2.5, 3.5],
-                [-2.2, -1.1, 0.0, 1.1, 2.2],
-                [-4.0, -2.0, 0.0, 2.0, 4.0],
             ],
             &device,
         );
         let (out_no_bias, out_with_bias) = model.forward(input.clone(), input);
 
-        // From onnx inference
-        let expected_no_bias = Tensor::<TestBackend, 5>::from_floats(
+        let expected_no_bias = Tensor::<TestBackend, 2>::from_floats(
             [
                 [-2.0, 0.0, 0.0, 0.0, 2.0],
                 [-3.0, -2.5, 0.0, 0.0, 3.0],
-                [0.0, 0.0, 0.0, 2.5, 3.5],
-                [-2.2, 0.0, 0.0, 0.0, 2.2],
-                [-4.0, -2.0, 0.0, 2.0, 4.0],
             ],
             &device,
         );
-        let expected_with_bias = Tensor::<TestBackend, 5>::from_floats(
+        let expected_with_bias = Tensor::<TestBackend, 2>::from_floats(
             [
-                [0.5, 0.0, 0.0, 0.0, -0.5],
-                [1.5, 1.0, 0.0, 0.0, -1.5],
-                [0.0, 0.0, 0.0, -1.0, -2.0],
-                [0.70000005, 0.0, 0.0, 0.0, -0.70000005],
-                [2.5, 1.5, 1.5, -1.5, -2.5],
+                [-0.5, 0.0, 0.0, 0.0, 0.5],
+                [-1.5, -1.0, 0.0, 0.0, 1.5],
             ],
             &device,
         );

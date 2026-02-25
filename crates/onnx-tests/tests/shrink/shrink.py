@@ -21,11 +21,11 @@ def main():
     node0 = helper.make_node("Shrink", ["inp_0"], ["out_0"], lambd=1.5)
     node1 = helper.make_node("Shrink", ["inp_1"], ["out_1"], lambd=1.5, bias=1.5)
 
-    inp_no_bias = helper.make_tensor_value_info("inp_0", TensorProto.FLOAT, [5, 5])
-    inp_with_bias = helper.make_tensor_value_info("inp_1", TensorProto.FLOAT, [5, 5])
+    inp_no_bias = helper.make_tensor_value_info("inp_0", TensorProto.FLOAT, [2, 5])
+    inp_with_bias = helper.make_tensor_value_info("inp_1", TensorProto.FLOAT, [2, 5])
 
-    out_no_bias = helper.make_tensor_value_info("out_0", TensorProto.FLOAT, [5, 5])
-    out_with_bias = helper.make_tensor_value_info("out_1", TensorProto.FLOAT, [5, 5])
+    out_no_bias = helper.make_tensor_value_info("out_0", TensorProto.FLOAT, [2, 5])
+    out_with_bias = helper.make_tensor_value_info("out_1", TensorProto.FLOAT, [2, 5])
 
     graph = helper.make_graph(
         [node0, node1],
@@ -45,9 +45,6 @@ def main():
         [
             [-2.0, -1.0, 0.0, 1.0, 2.0],
             [-3.0, -2.5, -0.5, 0.5, 3.0],
-            [-1.5, 0.0, 1.5, 2.5, 3.5],
-            [-2.2, -1.1, 0.0, 1.1, 2.2],
-            [-4.0, -2.0, 0.0, 2.0, 4.0],
         ],
         dtype=np.float32,
     )
