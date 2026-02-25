@@ -178,7 +178,7 @@ functionality.
 | [SequenceLength][158]            | ❌             | ❌           |
 | [SequenceMap][159]               | ❌             | ❌           |
 | [Shape][160]                     | ✅             | ✅           |
-| [Shrink][161]                    | ❌             | ❌           |
+| [Shrink][161]                    | ✅             | ✅           |
 | [Sigmoid][162]                   | ✅             | ✅           |
 | [Sign][163]                      | ✅             | ✅           |
 | [Sin][164]                       | ✅             | ✅           |
