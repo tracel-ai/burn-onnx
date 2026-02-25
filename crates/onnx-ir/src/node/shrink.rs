@@ -1,6 +1,6 @@
 //! # Shrink
 //!
-//! Applies global average pooling to the input tensor.
+//! Applies element-wise shrinkage to the input tensor.
 //!
 //! **ONNX Spec**: <https://onnx.ai/onnx/operators/onnx__Shrink.html>
 //!

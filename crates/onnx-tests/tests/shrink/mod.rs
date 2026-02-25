@@ -5,8 +5,7 @@ include_models!(shrink);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor};
-    use float_cmp::ApproxEq;
+    use burn::tensor::{Tensor};
 
     use crate::backend::TestBackend;
 
@@ -51,7 +50,7 @@ mod tests {
             &device,
         );
 
-        assert_eq!(out_no_bias, expected_no_bias);
-        assert_eq!(out_with_bias, expected_with_bias);
+        assert_eq!(out_no_bias.into_data(), expected_no_bias.into_data());
+        assert_eq!(out_with_bias.into_data(), expected_with_bias.into_data());
     }
 }
