@@ -5,7 +5,7 @@ include_models!(shrink);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor};
+    use burn::tensor::Tensor;
 
     use crate::backend::TestBackend;
 
@@ -15,26 +15,17 @@ mod tests {
 
         let device = Default::default();
         let input = Tensor::<TestBackend, 2>::from_floats(
-            [
-                [-2.0, -1.0, 0.0, 1.0, 2.0],
-                [-3.0, -2.5, -0.5, 0.5, 3.0],
-            ],
+            [[-2.0, -1.0, 0.0, 1.0, 2.0], [-3.0, -2.5, -0.5, 0.5, 3.0]],
             &device,
         );
         let (out_no_bias, out_with_bias) = model.forward(input.clone(), input);
 
         let expected_no_bias = Tensor::<TestBackend, 2>::from_floats(
-            [
-                [-2.0, 0.0, 0.0, 0.0, 2.0],
-                [-3.0, -2.5, 0.0, 0.0, 3.0],
-            ],
+            [[-2.0, 0.0, 0.0, 0.0, 2.0], [-3.0, -2.5, 0.0, 0.0, 3.0]],
             &device,
         );
         let expected_with_bias = Tensor::<TestBackend, 2>::from_floats(
-            [
-                [-0.5, 0.0, 0.0, 0.0, 0.5],
-                [-1.5, -1.0, 0.0, 0.0, 1.5],
-            ],
+            [[-0.5, 0.0, 0.0, 0.0, 0.5], [-1.5, -1.0, 0.0, 0.0, 1.5]],
             &device,
         );
 
