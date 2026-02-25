@@ -117,7 +117,7 @@ mod tests {
         TestNodeBuilder::new(NodeType::Shrink, "test_shrink")
             .input_tensor_f32("X", 3, None)
             .output_tensor_f32("Y", 3, None)
-            .attr_float("lambda", lambda)
+            .attr_float("lambd", lambda)
             .attr_float("bias", bias)
             .build()
     }
@@ -152,7 +152,7 @@ mod tests {
         let mut node = TestNodeBuilder::new(NodeType::Shrink, "test_shrink_infer")
             .input_tensor_f32("X", 3, None)
             .output_default("Y")
-            .attr_float("lambda", 1.5)
+            .attr_float("lambd", 1.5)
             .attr_float("bias", 1.0)
             .build();
         let processor = ShrinkProcessor;
