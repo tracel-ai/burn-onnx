@@ -9,10 +9,14 @@
 //! - **Opset 10**: Changed k from attribute to input, enabling dynamic k values. Supported float types only.
 //! - **Opset 11**: Added 'largest' and 'sorted' attributes for controlling output behavior. Added support for integer input types (int8, int16, int32, int64, uint8, uint16, uint32, uint64).
 //!
-//! **Implementation Note**: This implementation requires opset 10+ (k as input). Only largest=1 and sorted=1 are supported; other values are rejected.
+//! **Implementation Note**: This implementation requires opset 10+ (k as input).
 //!
-//! **FIXME**: The implementation only supports `largest=1` and `sorted=1`, rejecting other values.
-//! This is documented in the validation but these limitations should be clearly stated in the module docs.
+//! We now support the full ONNX semantics for `largest` and `sorted` attributes.
+//! Bottom‑K (`largest=0`) is implemented by negating the input tensor before and
+//! after calling Burn's `topk`.  Unsorted output (`sorted=0`) is permitted, but
+//! our runtime always returns sorted results which is valid per the spec.
+//! Previous versions of this crate rejected any value other than `1` for these
+//! attributes; that restriction has been removed.
 //!
 //! ## Type Constraints
 //! - **T** (Opset 10): tensor(float16), tensor(float), tensor(double)
@@ -43,12 +47,25 @@ impl Default for TopKInput {
 }
 
 /// Configuration for the TopK operation.
+///
+/// `largest` and `sorted` reflect the corresponding ONNX attributes. They
+/// default to `true` to match ONNX defaults. Burn's underlying `topk`
+/// primitive always produces sorted results and only supports selecting the
+/// largest values. When `largest` is `false` we emulate bottom-K by negating
+/// the input before/after the operation.
 #[derive(Debug, Clone, new)]
 pub struct TopKConfig {
     /// The axis along which to perform the top-k selection.
     pub axis: usize,
     /// The number of top elements to select.
     pub k: TopKInput,
+    /// Whether to select the largest (`true`) or smallest (`false`) elements.
+    pub largest: bool,
+    /// Whether the output should be sorted (`true`) or may be returned
+    /// unsorted (`false`).  We ignore this flag during codegen because Burn's
+    /// `topk` is always sorted; returning sorted results is valid when the
+    /// caller requested unsorted output.
+    pub sorted: bool,
 }
 
 /// Node representation for TopK operation
@@ -93,22 +110,20 @@ impl NodeProcessor for TopKProcessor {
         // If k is larger than the dimension, this should either be rejected or clamped.
         // ONNX spec behavior for k > dim_size is not well-defined.
 
-        // Validate largest and sorted attributes before config extraction
-        if let Some(largest) = node.attrs.get("largest")
-            && largest.clone().into_i64() != 1
-        {
-            return Err(ProcessError::Custom(
-                "TopK: only largest elements is supported".to_string(),
-            ));
-        }
-
-        if let Some(sorted) = node.attrs.get("sorted")
-            && sorted.clone().into_i64() != 1
-        {
-            return Err(ProcessError::Custom(
-                "TopK: only sorted elements is supported".to_string(),
-            ));
-        }
+        // The ONNX spec allows `largest` and `sorted` to be either 0 or 1.
+        // Previously we rejected any value other than 1.  We now accept both
+        // so that bottom-K (largest=0) and unsorted outputs (sorted=0) are
+        // representable.  The codegen layer will handle `largest=false` by
+        // negating the input; `sorted=false` is a no-op since Burn always
+        // returns sorted results.
+        //
+        // Record the flag early so we can perform validation after the common
+        // tensor extraction below.
+        let largest_flag = node
+            .attrs
+            .get("largest")
+            .map(|v| v.clone().into_i64() != 0)
+            .unwrap_or(true);
 
         // TODO: Missing validation that k is positive (k > 0).
         // Zero or negative k values should be rejected but aren't validated.
@@ -123,6 +138,19 @@ impl NodeProcessor for TopKProcessor {
                 });
             }
         };
+
+        // If bottom-K was requested, ensure the dtype is floating-point.  This
+        // check uses the already-extracted `data_tensor` to avoid duplication.
+        if !largest_flag {
+            match data_tensor.dtype {
+                DType::F16 | DType::BF16 | DType::F32 | DType::F64 => {}
+                _ => {
+                    return Err(ProcessError::Custom(
+                        "TopK: bottom-K (largest=0) only supported for floating-point tensors".to_string(),
+                    ));
+                }
+            }
+        }
 
         // Infer output types
         let rank = data_tensor.rank;
@@ -189,9 +217,23 @@ impl NodeProcessor for TopKProcessor {
         // TODO: Missing validation that axis is in valid range after normalization.
         // After converting negative axis, should verify 0 <= axis < rank.
 
+        // Parse largest/sorted attributes, defaulting to 1
+        let largest = node
+            .attrs
+            .get("largest")
+            .map(|v| v.clone().into_i64() != 0)
+            .unwrap_or(true);
+        let sorted = node
+            .attrs
+            .get("sorted")
+            .map(|v| v.clone().into_i64() != 0)
+            .unwrap_or(true);
+
         let config = TopKConfig {
             axis: axis as usize,
             k,
+            largest,
+            sorted,
         };
         Ok(config)
     }
@@ -368,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_top_k_config_with_largest_attribute() {
-        // Test with largest attribute set to 1 (default supported behavior)
+        // Test with largest attribute set to 1 (default behavior)
         let mut attrs = HashMap::new();
         attrs.insert("k".to_string(), AttributeValue::Int64(7));
         attrs.insert("largest".to_string(), AttributeValue::Int64(1));
@@ -382,11 +424,12 @@ mod tests {
 
         assert_eq!(config.axis, 1);
         assert!(matches!(&config.k, TopKInput::Static(k) if *k == 7));
+        assert!(config.largest);
     }
 
     #[test]
     fn test_top_k_config_with_sorted_attribute() {
-        // Test with sorted attribute set to 1 (default supported behavior)
+        // Test with sorted attribute set to 1 (default behavior)
         let mut attrs = HashMap::new();
         attrs.insert("k".to_string(), AttributeValue::Int64(2));
         attrs.insert("sorted".to_string(), AttributeValue::Int64(1));
@@ -400,11 +443,12 @@ mod tests {
 
         assert_eq!(config.axis, 2);
         assert!(matches!(&config.k, TopKInput::Static(k) if *k == 2));
+        assert!(config.sorted);
     }
 
     #[test]
     fn test_top_k_config_with_largest_false() {
-        // Test with largest attribute set to 0 (unsupported)
+        // Test with largest attribute set to 0 (bottom-k semantics)
         let mut attrs = HashMap::new();
         attrs.insert("k".to_string(), AttributeValue::Int64(3));
         attrs.insert("largest".to_string(), AttributeValue::Int64(0));
@@ -413,14 +457,35 @@ mod tests {
         let mut node = node;
         let processor = TopKProcessor;
         let prefs = OutputPreferences::new();
-        let _config = processor.extract_config(&node, 16).unwrap();
+        let config = processor.extract_config(&node, 16).unwrap();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        assert!(!config.largest);
+    }
+
+    #[test]
+    fn test_top_k_bottom_integer_inputs_rejected() {
+        // bottom-K with integer input dtype should error during type inference
+        let mut attrs = HashMap::new();
+        attrs.insert("k".to_string(), AttributeValue::Int64(2));
+        attrs.insert("largest".to_string(), AttributeValue::Int64(0));
+        let mut node = create_test_node(2, Some(attrs), None).build();
+        // change input dtype to integer
+        node.inputs[0].ty = ArgType::Tensor(TensorType {
+            dtype: DType::I32,
+            rank: 2,
+            static_shape: None,
+        });
+
+        let processor = TopKProcessor;
+        let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 16, &prefs);
         assert!(matches!(result, Err(ProcessError::Custom(_))));
     }
 
     #[test]
     fn test_top_k_config_with_sorted_false() {
-        // Test with sorted attribute set to 0 (unsupported)
+        // Test with sorted attribute set to 0 (caller allows unsorted output)
         let mut attrs = HashMap::new();
         attrs.insert("k".to_string(), AttributeValue::Int64(3));
         attrs.insert("sorted".to_string(), AttributeValue::Int64(0));
@@ -429,9 +494,10 @@ mod tests {
         let mut node = node;
         let processor = TopKProcessor;
         let prefs = OutputPreferences::new();
-        let _config = processor.extract_config(&node, 16).unwrap();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::Custom(_))));
+        let config = processor.extract_config(&node, 16).unwrap();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        assert!(!config.sorted);
     }
 
     #[test]

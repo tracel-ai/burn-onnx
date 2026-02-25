@@ -440,6 +440,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/topk/topk_3d.onnx")
         .input("tests/topk/topk_k_full.onnx")
         .input("tests/topk/topk_negative_axis.onnx")
+        .input("tests/topk/topk_bottom.onnx")
+        .input("tests/topk/topk_unsorted.onnx")
         .input("tests/trilu/trilu_upper.onnx")
         .input("tests/trilu/trilu_lower.onnx")
         .input("tests/transpose/transpose.onnx")
