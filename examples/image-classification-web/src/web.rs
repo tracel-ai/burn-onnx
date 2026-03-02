@@ -5,6 +5,7 @@ use alloc::{
     vec::Vec,
 };
 use core::convert::Into;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::model::{label::LABELS, normalizer::Normalizer, squeezenet::Model as SqueezenetModel};
 
@@ -19,6 +20,9 @@ use burn::backend::wgpu::{WebGpu, WgpuDevice, graphics::AutoGraphicsApi};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use web_time::Instant;
+
+// Global value to ensure that the wgpu backend is initialized at most once
+static WGPU_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 #[wasm_bindgen(start)]
 pub fn start() {
@@ -94,7 +98,12 @@ impl ImageClassifier {
         log::info!("Loading the model to the Wgpu backend");
         let start = Instant::now();
         let device = WgpuDevice::default();
-        init_setup_async::<AutoGraphicsApi>(&device, Default::default()).await;
+
+        if let Ok(_) =
+            WGPU_INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        {
+            init_setup_async::<AutoGraphicsApi>(&device, Default::default()).await;
+        }
         self.model = ModelType::WithWgpuBackend(Model::new(&device));
         let duration = start.elapsed();
         log::debug!("Model is loaded to the Wgpu backend in {duration:?}");
