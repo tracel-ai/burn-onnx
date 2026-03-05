@@ -83,9 +83,13 @@ impl BurnGraph {
             .expect("Failed to write burnpack file");
 
         // Register the loading code
+        self.imports.register("burn_store::BurnpackStore");
+        self.imports.register("burn_store::ModuleSnapshot");
         if embed_states {
             self.register_burnpack_embed(burnpack_file);
         } else {
+            self.register_burnpack_bytes();
+            #[cfg(feature = "std")]
             self.register_burnpack_file(burnpack_file);
         }
 
@@ -529,11 +533,10 @@ impl BurnGraph {
             });
     }
 
+    #[cfg(feature = "std")]
     fn register_burnpack_file(&mut self, file: PathBuf) {
-        self.imports.register("burn_store::BurnpackStore");
-        self.imports.register("burn_store::ModuleSnapshot");
-
         let file = file.to_str().unwrap();
+
         self.default = Some(quote! {
             _blank_!();
             impl<B: Backend> Default for Model<B> {
@@ -554,10 +557,23 @@ impl BurnGraph {
         });
     }
 
-    fn register_burnpack_embed(&mut self, file: PathBuf) {
-        self.imports.register("burn_store::BurnpackStore");
-        self.imports.register("burn_store::ModuleSnapshot");
+    fn register_burnpack_bytes(&mut self) {
+        self.default = Some(quote! {
+            _blank_!();
+            impl<B: Backend> Model<B> {
+                /// Load model weights from a separate serialized burnpack file.
+                pub fn from_bytes(device: &B::Device, bytes:alloc::vec::Vec<u8>) -> Self {
+                    use burn::tensor::Bytes;
+                    let mut model = Self::new(device);
+                    let mut store = BurnpackStore::from_bytes(Some(Bytes::from_bytes_vec(bytes)));
+                    model.load_from(&mut store).expect("Failed to load embedded burnpack");
+                    model
+                }
+            }
+        });
+    }
 
+    fn register_burnpack_embed(&mut self, file: PathBuf) {
         // Get file size to create properly-sized aligned wrapper
         let file_size = std::fs::metadata(&file)
             .expect("Failed to read burnpack file metadata")

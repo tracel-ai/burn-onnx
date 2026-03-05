@@ -3861,6 +3861,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "image-classification-web-no-embed"
+version = "0.21.0-pre.1"
+dependencies = [
+ "burn",
+ "burn-onnx",
+ "burn-store",
+ "console_error_panic_hook",
+ "log",
+ "serde",
+ "serde-wasm-bindgen",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-logger",
+ "web-time",
+]
+
+[[package]]
 name = "image-webp"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -18,8 +18,9 @@ default-run = "onnx2burn"
 workspace = true
 
 [features]
-default = ["mmap"]
+default = ["mmap", "std"]
 mmap = ["onnx-ir/mmap"]
+std = []
 
 [dependencies]
 onnx-ir = { path = "../onnx-ir", version = "=0.21.0-pre.1", default-features = false }
