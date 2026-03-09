@@ -47,7 +47,7 @@ float-cmp = "0.10.0"
 insta = "1.45.0"
 log = { default-features = false, version = "0.4.29" }
 proc-macro2 = "1.0.106"
-quote = "1.0.42"
+quote = "1.0.45"
 rust-format = "0.3.4"
 tracing-core = { version = "0.1.36", default-features = false }
 tracing-subscriber = "0.3.20"
