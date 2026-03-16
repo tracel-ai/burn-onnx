@@ -50,7 +50,7 @@ proc-macro2 = "1.0.106"
 quote = "1.0.45"
 rust-format = "0.3.4"
 tracing-core = { version = "0.1.36", default-features = false }
-tracing-subscriber = "0.3.20"
+tracing-subscriber = "0.3.23"
 syn = { version = "2.0.117", features = ["full", "extra-traits"] }
 
 # onnx-ir
