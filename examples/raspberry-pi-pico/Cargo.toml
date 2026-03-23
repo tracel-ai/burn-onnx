@@ -11,7 +11,7 @@ version = "0.1.0"
 [dependencies]
 embassy-embedded-hal = { version = "0.5.0", features = ["defmt"] }
 embassy-executor = { version = "0.9.1", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
-embassy-time = { version = "0.5.0", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-usb-logger = { version = "0.5.1" }
 
 # Change rp235xa to rp2040 for Raspberry Pi Pico
