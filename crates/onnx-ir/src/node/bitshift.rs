@@ -79,9 +79,6 @@ impl NodeProcessor for BitShiftProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        // TODO: Add validation for unexpected attributes
-        // FIXME: Spec says 'direction' is required but extract_config provides default "left"
-        // Should either validate presence here or update spec documentation
 
         // Output type is same as input with broadcasting
         crate::processor::same_as_input_broadcast(node);
