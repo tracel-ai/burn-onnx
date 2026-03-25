@@ -79,6 +79,8 @@ impl NodeProcessor for BitShiftProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
+        // Validate node attributes
+        let _ = self.extract_config(node, _opset)?;
 
         // Output type is same as input with broadcasting
         crate::processor::same_as_input_broadcast(node);
