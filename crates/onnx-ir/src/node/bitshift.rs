@@ -76,11 +76,11 @@ impl NodeProcessor for BitShiftProcessor {
     fn infer_types(
         &self,
         node: &mut RawNode,
-        _opset: usize,
+        opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
         // Validate node attributes
-        let _ = self.extract_config(node, _opset)?;
+        let _ = self.extract_config(node, opset)?;
 
         // Output type is same as input with broadcasting
         crate::processor::same_as_input_broadcast(node);
