@@ -45,7 +45,7 @@ mod tests {
         // Create rank-1 tensor first, then reshape to 3D and expand
         let i_expected = Tensor::<TestBackend, 1, Int>::from_data(
             TensorData::from([5i32]),
-            (&device, DType::I32,)
+            (&device, DType::I32),
         )
         .reshape([1, 1, 1])
         .expand(shape);

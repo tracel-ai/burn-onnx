@@ -16,8 +16,7 @@ mod tests {
         let input = Tensor::<TestBackend, 2>::from_floats([[-1.0, 0.0, 1.0, 2.1]], &device);
         let scale = Tensor::<TestBackend, 1>::from_floats([0.5], &device);
         let zero_data = TensorData::from([3i16]);
-        let zero_point =
-            Tensor::<TestBackend, 1, Int>::from_data(zero_data, (&device, DType::I16));
+        let zero_point = Tensor::<TestBackend, 1, Int>::from_data(zero_data, (&device, DType::I16));
 
         let output = model.forward(input, scale, zero_point);
 
@@ -35,8 +34,7 @@ mod tests {
             Tensor::<TestBackend, 2>::from_floats([[-1.0, 0.0, 1.0], [2.0, 4.0, 6.0]], &device);
         let scale = Tensor::<TestBackend, 1>::from_floats([0.5, 2.0], &device);
         let zero_data = TensorData::from([3i16, 10i16]);
-        let zero_point =
-            Tensor::<TestBackend, 1, Int>::from_data(zero_data, (&device, DType::I16));
+        let zero_point = Tensor::<TestBackend, 1, Int>::from_data(zero_data, (&device, DType::I16));
 
         let output = model.forward(input, scale, zero_point);
 
