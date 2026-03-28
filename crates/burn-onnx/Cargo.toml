@@ -31,6 +31,7 @@ burn-store = { workspace = true, features = [
     "burnpack",
 ] }
 
+clap = { version = "4", features = ["derive"] }
 derive-new = { workspace = true }
 log = { workspace = true }
 proc-macro2 = { workspace = true }
