@@ -1,23 +1,47 @@
-use burn_onnx::ModelGen;
+use burn_onnx::{LoadStrategy, ModelGen};
+use clap::Parser;
 
-/// Takes an ONNX file and generates a model from it.
-///
-/// Usage: onnx2burn <input.onnx> <output_dir> [--no-simplify] [--no-partition]
+/// Convert an ONNX model to Burn Rust source code and `.bpk` weights.
+#[derive(Parser)]
+#[command(
+    name = "onnx2burn",
+    version,
+    about = "Takes an ONNX file and generates a model from it."
+)]
+struct Args {
+    /// Path to the input ONNX file
+    input: String,
+    /// Output directory for generated Rust code and weights
+    output_dir: String,
+    /// Disable graph simplification passes
+    #[arg(long)]
+    no_simplify: bool,
+    /// Disable submodule partitioning for large models
+    #[arg(long)]
+    no_partition: bool,
+    /// Disable development mode (suppresses `.onnx.txt` and `.graph.txt` debug files)
+    #[arg(long)]
+    no_development: bool,
+    /// Embed model weights into the generated Rust code instead of a `.bpk` file
+    #[arg(long)]
+    embed_states: bool,
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let args = Args::parse();
 
-    let onnx_file = args.get(1).expect("No input file provided");
-    let output_dir = args.get(2).expect("No output directory provided");
-    let simplify = !args.iter().any(|a| a == "--no-simplify");
-    let partition = !args.iter().any(|a| a == "--no-partition");
+    let load_strategy = if args.embed_states {
+        LoadStrategy::Embedded
+    } else {
+        LoadStrategy::File
+    };
 
-    // Generate the model code from the ONNX file.
-    // Weights are saved in burnpack format (.bpk file alongside the generated code)
     ModelGen::new()
-        .input(onnx_file.as_str())
-        .development(true)
-        .simplify(simplify)
-        .partition(partition)
-        .out_dir(output_dir.as_str())
+        .input(&args.input)
+        .out_dir(&args.output_dir)
+        .development(!args.no_development)
+        .simplify(!args.no_simplify)
+        .partition(!args.no_partition)
+        .load_strategy(load_strategy)
         .run_from_cli();
 }
