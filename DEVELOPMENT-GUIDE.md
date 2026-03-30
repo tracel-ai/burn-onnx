@@ -495,7 +495,7 @@ The top-level `Model` struct contains `SubmoduleN` fields and chains their `forw
 Weight paths are auto-prefixed (`submoduleN.field.weight`) for `load_from` routing. Small models
 take the flat codegen path with zero behavior change.
 
-Partitioning is enabled by default. Use `ModelGen::new().partition(false)` to disable it.
+Partitioning is enabled by default. Use `--no-partition` to disable it from the CLI, or `ModelGen::new().partition(false)` in a build script.
 
 ### NodeProcessor Trait
 
