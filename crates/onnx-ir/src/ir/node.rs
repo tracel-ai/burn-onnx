@@ -367,7 +367,7 @@ define_node_enum! {
     ImageDecoder => unsupported::ImageDecoderNode,
     LpNormalization => unsupported::LpNormalizationNode,
     LpPool => unsupported::LpPoolNode,
-    Lrn => unsupported::LrnNode,
+    Lrn => lrn::LrnNode,
     Lstm => lstm::LstmNode,
     MaxPool => unsupported::MaxPoolNode,
     MaxRoiPool => unsupported::MaxRoiPoolNode,

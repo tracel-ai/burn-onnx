@@ -109,6 +109,7 @@ pub mod log_softmax;
 pub mod loop_node;
 pub mod lp_pool1d;
 pub mod lp_pool2d;
+pub mod lrn;
 pub mod lstm;
 pub mod matmul;
 pub mod matmulinteger;
