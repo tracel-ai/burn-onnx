@@ -277,6 +277,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/less_or_equal/less_or_equal_scalar.onnx")
         .input("tests/less_or_equal/less_or_equal_broadcast.onnx")
         .input("tests/linear/linear.onnx")
+        .input("tests/lrn/lr_size3.onnx")
+        .input("tests/lrn/lr_size2.onnx")
         .input("tests/log/log.onnx")
         .input("tests/gru/gru.onnx")
         .input("tests/gru/gru_reverse.onnx")
