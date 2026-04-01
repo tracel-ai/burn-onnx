@@ -103,6 +103,7 @@ pub mod hard_swish;
 pub mod hardmax;
 pub mod identity;
 pub mod if_node;
+pub mod imputer;
 pub mod instance_norm;
 pub mod is_inf;
 pub mod is_nan;

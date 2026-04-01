@@ -82,6 +82,7 @@ pub mod hard_swish;
 pub mod hardmax;
 pub mod identity;
 pub mod if_op;
+pub mod imputer;
 pub mod initializer_to_const;
 pub mod instance_norm;
 pub mod is_inf;

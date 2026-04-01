@@ -93,6 +93,7 @@ functionality.
 | [If][77]                         | ✅             | ✅           |
 | [Im][78]                         | ❌             | ❌           |
 | [ImageDecoder][197]              | ❌             | ❌           |
+| [Imputer][205]                   | ✅             | ✅           |
 | [InstanceNormalization][79]      | ✅             | ✅           |
 | [IsInf][80]                      | ✅             | ✅           |
 | [IsNaN][81]                      | ✅             | ✅           |

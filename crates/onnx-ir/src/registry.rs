@@ -498,7 +498,10 @@ impl ProcessorRegistry {
             NodeType::IsNaN,
             Box::new(crate::node::is_nan::IsNaNProcessor),
         );
-
+        registry.register(
+            NodeType::Imputer,
+            Box::new(crate::node::imputer::ImputerProcessor),
+        );
         // Special operations
         registry.register(NodeType::Cast, Box::new(crate::node::cast::CastProcessor));
         registry.register(

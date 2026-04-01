@@ -240,6 +240,9 @@ impl_node_codegen_dispatch! {
     IsInf,
     IsNaN,
 
+     // ML ops
+    Imputer,
+
     // Special ops
     Attention,
 
