@@ -4,8 +4,8 @@ include_models!(imputer, imputer_per_feature);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, Tolerance};
     use crate::backend::TestBackend;
+    use burn::tensor::{Tensor, TensorData, Tolerance};
 
     #[test]
     fn imputer_nan_replacement() {
@@ -22,7 +22,9 @@ mod tests {
         let output = model.forward(input);
 
         let expected = TensorData::from([[1.0f32, 0.0, 3.0], [4.0, 5.0, 0.0]]);
-        output.to_data().assert_approx_eq::<f32>(&expected, Tolerance::default());
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
@@ -41,6 +43,8 @@ mod tests {
         let output = model.forward(input);
 
         let expected = TensorData::from([[10.0f32, 2.0, 30.0], [4.0, 20.0, 6.0]]);
-        output.to_data().assert_approx_eq::<f32>(&expected, Tolerance::default());
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 }
