@@ -157,6 +157,24 @@ impl TestNodeBuilder {
         )
     }
 
+    /// Add a bfloat16 tensor input with the given name and rank
+    pub fn input_tensor_bf16(
+        self,
+        name: &str,
+        rank: usize,
+        static_shape: Option<Vec<usize>>,
+    ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
+        self.add_input(
+            name,
+            ArgType::Tensor(TensorType {
+                dtype: DType::BF16,
+                rank,
+                static_shape,
+            }),
+        )
+    }
+
     /// Add a scalar input with the given name and data type
     pub fn input_scalar(self, name: &str, dtype: DType) -> Self {
         self.add_input(name, ArgType::ScalarNative(dtype))
