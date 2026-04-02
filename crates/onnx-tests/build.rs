@@ -280,6 +280,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/is_nan/is_nan_scalar.onnx")
         .input("tests/imputer/imputer.onnx")
         .input("tests/imputer/imputer_per_feature.onnx")
+        .input("tests/imputer/imputer_int.onnx")
+        .input("tests/imputer/imputer_nan.onnx")
         .input("tests/layer_norm/layer_norm.onnx")
         .input("tests/layer_norm/layer_norm_no_bias.onnx")
         .input("tests/layer_norm/layer_norm_custom_epsilon.onnx")

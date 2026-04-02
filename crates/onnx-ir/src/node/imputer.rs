@@ -28,8 +28,10 @@ pub struct ImputerConfig {
     pub imputed_value_floats: Option<Vec<f32>>,
     /// Imputed values for integer data
     pub imputed_value_ints: Option<Vec<i64>>,
-    /// Value to replace (NaN if not specified for floats)
+    /// Value to replace for float inputs (NaN if not specified)
     pub replaced_value_float: Option<f32>,
+    /// Value to replace for integer inputs
+    pub replaced_value_int64: Option<i64>,
 }
 
 /// Node representation for Imputer operation
@@ -71,6 +73,7 @@ impl NodeProcessor for ImputerProcessor {
         let mut imputed_value_floats: Option<Vec<f32>> = None;
         let mut imputed_value_ints: Option<Vec<i64>> = None;
         let mut replaced_value_float: Option<f32> = None;
+        let mut replaced_value_int64: Option<i64> = None;
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
@@ -79,13 +82,16 @@ impl NodeProcessor for ImputerProcessor {
                         imputed_value_floats = Some(floats.clone());
                     }
                 }
-                "imputed_value_ints" => {
+                "imputed_value_int64s" => {
                     if let AttributeValue::Int64s(ints) = value {
                         imputed_value_ints = Some(ints.clone());
                     }
                 }
                 "replaced_value_float" => {
                     replaced_value_float = Some(value.clone().into_f32());
+                }
+                "replaced_value_int64" => {
+                    replaced_value_int64 = Some(value.clone().into_i64());
                 }
                 _ => {}
             }
@@ -95,11 +101,14 @@ impl NodeProcessor for ImputerProcessor {
             imputed_value_floats,
             imputed_value_ints,
             replaced_value_float,
+            replaced_value_int64,
         ))
     }
 
     fn build_node(&self, builder: RawNode, opset: usize) -> Node {
-        let config = self.extract_config(&builder, opset).unwrap();
+        let config = self
+            .extract_config(&builder, opset)
+            .expect("Config extraction failed");
         Node::Imputer(ImputerNode::new(
             builder.name,
             builder.inputs,
@@ -115,14 +124,14 @@ mod tests {
 
     #[test]
     fn test_imputer_config_extraction() {
-        let config = ImputerConfig::new(Some(vec![0.0]), None, None);
+        let config = ImputerConfig::new(Some(vec![0.0]), None, None, None);
         assert!(config.imputed_value_floats.is_some());
         assert_eq!(config.imputed_value_floats.unwrap(), vec![0.0]);
     }
 
     #[test]
     fn test_imputer_node_builder() {
-        let config = ImputerConfig::new(Some(vec![1.0]), None, Some(-999.0));
+        let config = ImputerConfig::new(Some(vec![1.0]), None, Some(-999.0), None);
         let node = ImputerNode::new("test_imputer".to_string(), vec![], vec![], config);
 
         assert_eq!(node.name, "test_imputer");

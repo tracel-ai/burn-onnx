@@ -416,6 +416,7 @@ functionality.
 [202]: https://onnx.ai/onnx/operators/onnx__StringSplit.html "ONNX StringSplit"
 [203]: https://onnx.ai/onnx/operators/onnx__Swish.html "ONNX Swish"
 [204]: https://onnx.ai/onnx/operators/onnx__TensorScatter.html "ONNX TensorScatter"
+[205]: https://onnx.ai/onnx/operators/onnx_aionnxml_Imputer.html "ONNX Imputer"
 
 ## Pattern Coalescing
 

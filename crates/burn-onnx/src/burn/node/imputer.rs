@@ -23,7 +23,11 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                             if let Some(first_value) = imputed_floats.first() {
                                 let replaced_value =
                                     self.config.replaced_value_float.unwrap_or(f32::NAN);
-                                quote! { if #input.clone().is_nan() || #input == #replaced_value { #first_value } else { #input } }
+                                if replaced_value.is_nan() {
+                                    quote! { if #input.is_nan() { #first_value } else { #input } }
+                                } else {
+                                    quote! { if #input == #replaced_value { #first_value } else { #input } }
+                                }
                             } else {
                                 quote! { #input }
                             }
@@ -106,10 +110,8 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                     }
                     DType::I32 | DType::I64 | DType::I8 | DType::I16 => {
                         if let Some(imputed_ints) = &self.config.imputed_value_ints {
-                            if let Some(replaced_value) = self.config.replaced_value_float {
-                                let replaced_int = replaced_value as i64;
-
-                                if imputed_ints.len() == 1 {
+                            let replaced_int = self.config.replaced_value_int64.unwrap_or(0i64);
+                            if imputed_ints.len() == 1 {
                                     let imputed_value = imputed_ints[0];
                                     quote! {
                                         {
@@ -143,9 +145,6 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                                         }
                                     }
                                 }
-                            } else {
-                                quote! { #input.clone() }
-                            }
                         } else {
                             quote! { #input.clone() }
                         }
@@ -173,7 +172,7 @@ mod tests {
 
     #[test]
     fn test_imputer_single_float() {
-        let config = ImputerConfig::new(Some(vec![0.0]), None, None);
+        let config = ImputerConfig::new(Some(vec![0.0]), None, None, None);
         let input = onnx_ir::ir::Argument::new(
             "input",
             ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
@@ -197,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_imputer_single_float_with_replaced_value() {
-        let config = ImputerConfig::new(Some(vec![1.0]), None, Some(-999.0));
+        let config = ImputerConfig::new(Some(vec![1.0]), None, Some(-999.0), None);
         let input = onnx_ir::ir::Argument::new(
             "input",
             ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
@@ -221,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_imputer_multiple_floats() {
-        let config = ImputerConfig::new(Some(vec![0.0, 1.0, 2.0]), None, None);
+        let config = ImputerConfig::new(Some(vec![0.0, 1.0, 2.0]), None, None, None);
         let input = onnx_ir::ir::Argument::new(
             "input",
             ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
@@ -258,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_imputer_single_int() {
-        let config = ImputerConfig::new(None, Some(vec![0]), Some(-1.0));
+        let config = ImputerConfig::new(None, Some(vec![0]), None, Some(-1));
         let input = onnx_ir::ir::Argument::new(
             "input",
             ArgType::Tensor(TensorType::new(DType::I64, 2, None)),
@@ -275,6 +274,63 @@ mod tests {
                 let mask = input.clone().equal_elem(-1i64);
                 input.clone().mask_fill(mask, 0i64)
             };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_imputer_int_default_replaced_value() {
+        // replaced_value_int64 absent → default sentinel is 0 per ONNX spec
+        let config = ImputerConfig::new(None, Some(vec![99]), None, None);
+        let input = onnx_ir::ir::Argument::new(
+            "input",
+            ArgType::Tensor(TensorType::new(DType::I64, 2, None)),
+        );
+        let output = onnx_ir::ir::Argument::new(
+            "output",
+            ArgType::Tensor(TensorType::new(DType::I64, 2, None)),
+        );
+        let node = ImputerNode::new("imputer7".to_string(), vec![input], vec![output], config);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @"
+        pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
+            let output = {
+                let mask = input.clone().equal_elem(0i64);
+                input.clone().mask_fill(mask, 99i64)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_imputer_scalar_float_nan_replacement() {
+        // replaced_value_float absent → replace NaN
+        let config = ImputerConfig::new(Some(vec![0.0f32]), None, None, None);
+        let input = onnx_ir::ir::Argument::new("input", ArgType::ScalarNative(DType::F32));
+        let output = onnx_ir::ir::Argument::new("output", ArgType::ScalarNative(DType::F32));
+        let node = ImputerNode::new("imputer5".to_string(), vec![input], vec![output], config);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @"
+        pub fn forward(&self, input: f32) -> f32 {
+            let output = if input.is_nan() { 0f32 } else { input };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_imputer_scalar_float_sentinel_replacement() {
+        // replaced_value_float set to a non-NaN sentinel → only replace that value
+        let config = ImputerConfig::new(Some(vec![1.0f32]), None, Some(-999.0f32), None);
+        let input = onnx_ir::ir::Argument::new("input", ArgType::ScalarNative(DType::F32));
+        let output = onnx_ir::ir::Argument::new("output", ArgType::ScalarNative(DType::F32));
+        let node = ImputerNode::new("imputer6".to_string(), vec![input], vec![output], config);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @"
+        pub fn forward(&self, input: f32) -> f32 {
+            let output = if input == -999f32 { 1f32 } else { input };
             output
         }
         ");

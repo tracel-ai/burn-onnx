@@ -21,8 +21,7 @@ def main():
     np.random.seed(42)
 
     # Test case 1: single imputed value (replace -999.0 with 0.0)
-    # Note: ONNX Imputer doesn't handle NaN directly; it replaces specific values.
-    # We use -999.0 as a sentinel for missing values.
+    # -999.0 is used as an explicit sentinel for missing values.
     input_data = np.array([[1.0, -999.0, 3.0], [4.0, 5.0, -999.0]], dtype=np.float32)
     node = helper.make_node(
         "Imputer",
@@ -106,6 +105,83 @@ def main():
     print(per_feature_input)
     print("\nPer-feature output (-999.0 replaced by [10, 20, 30] per column):")
     print(per_feature_result[0])
+
+    # Test case 3: integer input — replace sentinel -1 with 0
+    int_input_data = np.array([[1, -1, 3], [4, 5, -1]], dtype=np.int64)
+    int_node = helper.make_node(
+        "Imputer",
+        ["input"],
+        ["output"],
+        domain="ai.onnx.ml",
+        imputed_value_int64s=[0],
+        replaced_value_int64=-1,
+    )
+
+    int_input_tensor = helper.make_tensor_value_info("input", TensorProto.INT64, [2, 3])
+    int_output_tensor = helper.make_tensor_value_info("output", TensorProto.INT64, [2, 3])
+
+    int_graph = helper.make_graph(
+        [int_node],
+        "imputer_int_test",
+        [int_input_tensor],
+        [int_output_tensor],
+    )
+
+    int_model = helper.make_model(
+        int_graph,
+        opset_imports=[
+            helper.make_operatorsetid("ai.onnx.ml", OPSET_VERSION),
+            helper.make_operatorsetid("", 17),
+        ],
+    )
+
+    onnx.save(int_model, "imputer_int.onnx")
+    print("Finished exporting model to imputer_int.onnx")
+
+    int_sess = ReferenceEvaluator(int_model)
+    int_result = int_sess.run(None, {"input": int_input_data})
+
+    print("\nInteger input:")
+    print(int_input_data)
+    print("\nInteger output (-1 replaced with 0):")
+    print(int_result[0])
+
+    # Test case 4: float input with explicit NaN sentinel (replaced_value_float=NaN)
+    nan_input_data = np.array([[1.0, float("nan"), 3.0], [4.0, 5.0, float("nan")]], dtype=np.float32)
+    nan_node = helper.make_node(
+        "Imputer",
+        ["input"],
+        ["output"],
+        domain="ai.onnx.ml",
+        imputed_value_floats=[0.0],
+        replaced_value_float=float("nan"),
+    )
+
+    nan_graph = helper.make_graph(
+        [nan_node],
+        "imputer_nan_test",
+        [input_tensor],
+        [output_tensor],
+    )
+
+    nan_model = helper.make_model(
+        nan_graph,
+        opset_imports=[
+            helper.make_operatorsetid("ai.onnx.ml", OPSET_VERSION),
+            helper.make_operatorsetid("", 17),
+        ],
+    )
+
+    onnx.save(nan_model, "imputer_nan.onnx")
+    print("Finished exporting model to imputer_nan.onnx")
+
+    nan_sess = ReferenceEvaluator(nan_model)
+    nan_result = nan_sess.run(None, {"input": nan_input_data})
+
+    print("\nNaN input:")
+    print(nan_input_data)
+    print("\nNaN output (NaN replaced with 0.0):")
+    print(nan_result[0])
 
 
 if __name__ == "__main__":
