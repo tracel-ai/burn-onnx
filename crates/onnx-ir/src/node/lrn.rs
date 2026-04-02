@@ -161,6 +161,7 @@ mod tests {
     use super::*;
     use crate::ir::NodeType;
     use crate::node::test_utils::TestNodeBuilder;
+    use rstest::rstest;
 
     fn create_test_node(alpha: f32, beta: f32, bias: f32, size: i64) -> RawNode {
         TestNodeBuilder::new(NodeType::Lrn, "test_lrn")
@@ -210,6 +211,96 @@ mod tests {
             result,
             Err(ProcessError::MissingAttribute(ref s)) if s == "size"
         ))
+    }
+
+    #[test]
+    fn test_lrn_rejects_non_tensor_input() {
+        let mut node = TestNodeBuilder::new(NodeType::Lrn, "test_lrn")
+            .input_scalar_f32("X")
+            .output_tensor_f32("Y", 4, None)
+            .attr_float("alpha", 0.0001)
+            .attr_float("beta", 0.75)
+            .attr_float("bias", 1.0)
+            .attr_int("size", 5)
+            .build();
+
+        let prefs = OutputPreferences::new();
+        let result = LrnProcessor.infer_types(&mut node, 13, &prefs);
+
+        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+    }
+
+    #[rstest]
+    #[case(2)]
+    #[case(3)]
+    fn test_lrn_rejects_low_rank_tensor(#[case] rank: usize) {
+        let mut node = TestNodeBuilder::new(NodeType::Lrn, "test_lrn")
+            .input_tensor_f32("X", rank, None)
+            .output_tensor_f32("Y", rank, None)
+            .attr_float("alpha", 0.0001)
+            .attr_float("beta", 0.75)
+            .attr_float("bias", 1.0)
+            .attr_int("size", 5)
+            .build();
+
+        let prefs = OutputPreferences::new();
+        let result = LrnProcessor.infer_types(&mut node, 13, &prefs);
+
+        assert!(
+            matches!(result, Err(ProcessError::TypeMismatch { .. })),
+            "rank {rank} should be rejected"
+        );
+    }
+
+    #[test]
+    fn test_lrn_rejects_bfloat_below_opset_13() {
+        let mut node = TestNodeBuilder::new(NodeType::Lrn, "test_lrn")
+            .input_tensor_bf16("X", 4, None)
+            .output_tensor_f32("Y", 4, None)
+            .attr_float("alpha", 0.0001)
+            .attr_float("beta", 0.75)
+            .attr_float("bias", 1.0)
+            .attr_int("size", 5)
+            .build();
+
+        let prefs = OutputPreferences::new();
+        let result = LrnProcessor.infer_types(&mut node, 1, &prefs);
+
+        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+    }
+
+    #[test]
+    fn test_lrn_rejects_integer_dtype_below_opset_13() {
+        let mut node = TestNodeBuilder::new(NodeType::Lrn, "test_lrn")
+            .input_tensor_i32("X", 4, None)
+            .output_tensor_f32("Y", 4, None)
+            .attr_float("alpha", 0.0001)
+            .attr_float("beta", 0.75)
+            .attr_float("bias", 1.0)
+            .attr_int("size", 5)
+            .build();
+
+        let prefs = OutputPreferences::new();
+        let result = LrnProcessor.infer_types(&mut node, 1, &prefs);
+
+        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+    }
+
+    #[test]
+    fn test_lrn_rejects_integer_dtype_opset_13_and_above() {
+        let mut node = TestNodeBuilder::new(NodeType::Lrn, "test_lrn")
+            .input_tensor_i32("X", 4, None)
+            .output_tensor_f32("Y", 4, None)
+            .attr_float("alpha", 0.0001)
+            .attr_float("beta", 0.75)
+            .attr_float("bias", 1.0)
+            .attr_int("size", 5)
+            .build();
+
+        let prefs = OutputPreferences::new();
+        let result = LrnProcessor.infer_types(&mut node, 13, &prefs);
+
+        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
     }
 
     #[test]
