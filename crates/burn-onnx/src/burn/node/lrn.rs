@@ -31,7 +31,7 @@ impl NodeCodegen for LrnNode {
             let pad_left = (#size - 1) / 2;
             let pad_right = #size / 2;
 
-            // Compute `square_sum` by accummulating channel-by-channel.
+            // Compute `square_sum` by accumulating channel-by-channel.
             let squared = #input.clone().square();
             let mut square_sum = Tensor::zeros_like(&squared);
             for c in 0..num_channels {
