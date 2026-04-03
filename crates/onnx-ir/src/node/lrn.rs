@@ -136,7 +136,7 @@ impl NodeProcessor for LrnProcessor {
         if size == 0 {
             return Err(ProcessError::InvalidAttribute {
                 name: "size".to_string(),
-                reason: "`size` must be strictly positive. Got 0. instead".to_string(),
+                reason: "`size` must be strictly positive. Got 0 instead".to_string(),
             });
         }
 
