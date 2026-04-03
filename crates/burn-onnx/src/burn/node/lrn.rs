@@ -84,4 +84,34 @@ mod tests {
         }
         ");
     }
+
+    #[test]
+    fn test_lrn_forward_custom_params() {
+        let config = LrnConfig::new(0.0002, 0.5, 2.0, 10);
+        let node = LrnNodeBuilder::new("lrn")
+            .input_tensor("input", 4, DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+            let shape = input.dims();
+            let num_channels = shape[1];
+            let pad_left = (10 - 1) / 2;
+            let pad_right = 10 / 2;
+            let squared = input.clone().square();
+            let mut square_sum = Tensor::zeros_like(&squared);
+            for c in 0..num_channels {
+                let win_start = if c >= pad_left { c - pad_left } else { 0 };
+                let win_end = (c + pad_right + 1).min(num_channels);
+                let win_len = win_end - win_start;
+                let window_sum = squared.clone().narrow(1, win_start, win_len).sum_dim(1);
+                square_sum = square_sum.slice_assign([0..shape[0], c..c + 1], window_sum);
+            }
+            let output = input / (2f32 + 0.0002f32 / 10 as f32 * square_sum).powf_scalar(0.5f32);
+            output
+        }
+        ");
+    }
 }

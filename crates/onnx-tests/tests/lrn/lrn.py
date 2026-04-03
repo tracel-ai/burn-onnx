@@ -7,7 +7,7 @@
 # ]
 # ///
 
-# used to generate model: `lrn_size2.onnx` and `lrn_size3.onnx`
+# used to generate model: `lrn_size2.onnx`, `lrn_size3.onnx`, and `lrn_non_default.onnx`
 
 import numpy as np
 import onnx
@@ -16,13 +16,8 @@ from onnx import TensorProto
 from onnx.reference import ReferenceEvaluator
 
 
-def build_model(size):
+def build_model(size, alpha=0.0001, beta=0.75, bias=1.0, suffix=None):
     np.random.seed(42)
-
-    # Default LRN attributes: alpha=0.0001, beta=0.75, bias=1.0 (ONNX defaults)
-    alpha = 0.0001
-    beta = 0.75
-    bias = 1.0
 
     # Shape: [N, C, H, W] — LRN normalizes over the channel dimension
     input_shape = [1, 5, 3, 3]
@@ -54,7 +49,7 @@ def build_model(size):
 
     onnx.checker.check_model(model)
 
-    file_name = f"lrn_size{size}.onnx"
+    file_name = f"lrn_{suffix}.onnx"
     onnx.save(model, file_name)
     print("Finished exporting model to {}".format(file_name))
 
@@ -69,5 +64,7 @@ def build_model(size):
 
 
 if __name__ == "__main__":
-    build_model(size=3)
-    build_model(size=2)
+    build_model(size=2, suffix="size2")
+    build_model(size=3, suffix="size3")
+    # Non-default params: larger alpha and different beta make normalization effect clearly visible
+    build_model(size=3, alpha=0.01, beta=0.5, bias=2.0, suffix="non_default")
