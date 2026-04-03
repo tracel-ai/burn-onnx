@@ -35,7 +35,7 @@ impl NodeCodegen for LrnNode {
             let squared = #input.clone().square();
             let mut square_sum = Tensor::zeros_like(&squared);
             for c in 0..num_channels {
-                let win_start = if c >= pad_left { c - pad_left } else { 0 };
+                let win_start = c.saturating_sub(pad_left).max(0);
                 let win_end = (c + pad_right + 1).min(num_channels); // exclusive
                 let win_len = win_end - win_start;
                 // Sum over the channel window [win_start, win_end) using narrow
@@ -73,7 +73,7 @@ mod tests {
             let squared = input.clone().square();
             let mut square_sum = Tensor::zeros_like(&squared);
             for c in 0..num_channels {
-                let win_start = if c >= pad_left { c - pad_left } else { 0 };
+                let win_start = c.saturating_sub(pad_left).max(0);
                 let win_end = (c + pad_right + 1).min(num_channels);
                 let win_len = win_end - win_start;
                 let window_sum = squared.clone().narrow(1, win_start, win_len).sum_dim(1);
@@ -103,7 +103,7 @@ mod tests {
             let squared = input.clone().square();
             let mut square_sum = Tensor::zeros_like(&squared);
             for c in 0..num_channels {
-                let win_start = if c >= pad_left { c - pad_left } else { 0 };
+                let win_start = c.saturating_sub(pad_left).max(0);
                 let win_end = (c + pad_right + 1).min(num_channels);
                 let win_len = win_end - win_start;
                 let window_sum = squared.clone().narrow(1, win_start, win_len).sum_dim(1);
