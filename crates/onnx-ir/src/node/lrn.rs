@@ -3,7 +3,7 @@
 //! Local Response Normalization as proposed in the AlexNet paper. Normalizes
 //! over local input regions across the channel dimension.
 //!
-//! **ONNX Spec**: <https://onnx.ai/onnx/operators/onnx__Lrn.html>
+//! **ONNX Spec**: <https://onnx.ai/onnx/operators/onnx__LRN.html>
 //!
 //! ## Formula
 //! `Y[n,c,...] = X[n,c,...] / (bias + alpha/size * sum(X[n,i,...]^2))^beta`
@@ -145,7 +145,7 @@ impl NodeProcessor for LrnProcessor {
     fn build_node(&self, builder: RawNode, opset: usize) -> Node {
         let config = self
             .extract_config(&builder, opset)
-            .expect("Configi extraction failed");
+            .expect("Config extraction failed");
 
         Node::Lrn(LrnNode {
             name: builder.name,
