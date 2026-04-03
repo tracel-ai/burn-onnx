@@ -78,22 +78,22 @@ impl NodeProcessor for LrnProcessor {
                 actual: format!("{:?}", arg.ty),
             });
         };
-        if tensor_ty.rank < 4 {
+        if tensor_ty.rank < 3 {
             return Err(ProcessError::TypeMismatch {
-                expected: "Expecting a tensor of at least rank 4".to_string(),
+                expected: "Expecting a tensor of at least rank 3".to_string(),
                 actual: format!("Got a rank-{:?} tensor instead", tensor_ty.rank),
             });
         }
-        if opset >= 13
-            && !matches!(
+        if opset >= 13 {
+            if !matches!(
                 tensor_ty.dtype,
                 DType::BF16 | DType::F16 | DType::F32 | DType::F64
-            )
-        {
-            return Err(ProcessError::TypeMismatch {
-                expected: "Only BF16, F16, F32, F64 tensor dtypes are supported".to_string(),
-                actual: format!("{:?}", tensor_ty.dtype),
-            });
+            ) {
+                return Err(ProcessError::TypeMismatch {
+                    expected: "Only BF16, F16, F32, F64 tensor dtypes are supported".to_string(),
+                    actual: format!("{:?}", tensor_ty.dtype),
+                });
+            }
         } else if !matches!(tensor_ty.dtype, DType::F16 | DType::F32 | DType::F64) {
             return Err(ProcessError::TypeMismatch {
                 expected: "Only F16, F32, F64 tensor dtypes are supported".to_string(),
@@ -133,6 +133,12 @@ impl NodeProcessor for LrnProcessor {
             .get("size")
             .map(|val| val.clone().into_i64())
             .ok_or_else(|| ProcessError::MissingAttribute("size".to_string()))?;
+        if size == 0 {
+            return Err(ProcessError::InvalidAttribute {
+                name: "size".to_string(),
+                reason: "`size` must be strictly positive. Got 0. instead".to_string(),
+            });
+        }
 
         Ok(LrnConfig {
             alpha,
@@ -230,10 +236,21 @@ mod tests {
         assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
     }
 
-    #[rstest]
-    #[case(2)]
-    #[case(3)]
-    fn test_lrn_rejects_low_rank_tensor(#[case] rank: usize) {
+    #[test]
+    fn test_lrn_rejects_zero_size() {
+        let node = create_test_node(0.0001, 0.75, 1.0, 0);
+
+        let result = LrnProcessor.extract_config(&node, 13);
+
+        assert!(matches!(
+            result,
+            Err(ProcessError::InvalidAttribute { ref name, .. }) if name == "size"
+        ));
+    }
+
+    #[test]
+    fn test_lrn_rejects_low_rank_tensor() {
+        let rank = 2;
         let mut node = TestNodeBuilder::new(NodeType::Lrn, "test_lrn")
             .input_tensor_f32("X", rank, None)
             .output_tensor_f32("Y", rank, None)
@@ -270,26 +287,9 @@ mod tests {
     }
 
     #[test]
-    fn test_lrn_rejects_integer_dtype_below_opset_13() {
+    fn test_lrn_accepts_bfloat_at_opset_13() {
         let mut node = TestNodeBuilder::new(NodeType::Lrn, "test_lrn")
-            .input_tensor_i32("X", 4, None)
-            .output_tensor_f32("Y", 4, None)
-            .attr_float("alpha", 0.0001)
-            .attr_float("beta", 0.75)
-            .attr_float("bias", 1.0)
-            .attr_int("size", 5)
-            .build();
-
-        let prefs = OutputPreferences::new();
-        let result = LrnProcessor.infer_types(&mut node, 1, &prefs);
-
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
-    }
-
-    #[test]
-    fn test_lrn_rejects_integer_dtype_opset_13_and_above() {
-        let mut node = TestNodeBuilder::new(NodeType::Lrn, "test_lrn")
-            .input_tensor_i32("X", 4, None)
+            .input_tensor_bf16("X", 4, None)
             .output_tensor_f32("Y", 4, None)
             .attr_float("alpha", 0.0001)
             .attr_float("beta", 0.75)
@@ -300,7 +300,29 @@ mod tests {
         let prefs = OutputPreferences::new();
         let result = LrnProcessor.infer_types(&mut node, 13, &prefs);
 
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+        assert!(result.is_ok());
+    }
+
+    #[rstest]
+    #[case(1)]
+    #[case(13)]
+    fn test_lrn_rejects_integer_dtype(#[case] opset: usize) {
+        let mut node = TestNodeBuilder::new(NodeType::Lrn, "test_lrn")
+            .input_tensor_i32("X", 4, None)
+            .output_tensor_f32("Y", 4, None)
+            .attr_float("alpha", 0.0001)
+            .attr_float("beta", 0.75)
+            .attr_float("bias", 1.0)
+            .attr_int("size", 5)
+            .build();
+
+        let prefs = OutputPreferences::new();
+        let result = LrnProcessor.infer_types(&mut node, opset, &prefs);
+
+        assert!(
+            matches!(result, Err(ProcessError::TypeMismatch { .. })),
+            "opset {opset} should reject integer dtype"
+        );
     }
 
     #[test]
