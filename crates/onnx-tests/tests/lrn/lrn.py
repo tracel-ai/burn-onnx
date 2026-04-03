@@ -7,7 +7,7 @@
 # ]
 # ///
 
-# used to generate model: lrn.onnx
+# used to generate model: `lrn_size2.onnx` and `lrn_size3.onnx`
 
 import numpy as np
 import onnx
@@ -54,7 +54,7 @@ def build_model(size):
 
     onnx.checker.check_model(model)
 
-    file_name = f"lr_size{size}.onnx"
+    file_name = f"lrn_size{size}.onnx"
     onnx.save(model, file_name)
     print("Finished exporting model to {}".format(file_name))
 
