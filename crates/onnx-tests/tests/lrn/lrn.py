@@ -66,5 +66,5 @@ def build_model(size, alpha=0.0001, beta=0.75, bias=1.0, suffix=None):
 if __name__ == "__main__":
     build_model(size=3, suffix="default_size3")
     # Non-default params: larger alpha and different beta make normalization effect clearly visible
-    build_model(size=3, alpha=0.01, beta=0.5, bias=2.0, suffix="custom_size3")
-    build_model(size=2, alpha=0.01, beta=0.5, bias=2.0, suffix="custom_size2")
+    build_model(size=3, alpha=0.1, beta=0.5, bias=0.5, suffix="custom_size3")
+    build_model(size=2, alpha=0.1, beta=0.5, bias=0.5, suffix="custom_size2")
