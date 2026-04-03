@@ -22,6 +22,9 @@ impl NodeCodegen for LrnNode {
         let size = self.config.size.to_tokens();
 
         // NOTE: `input`'s ArgType is already checked in `onnx-ir`
+
+        // TODO: Re-implement using vectorized conv ops natively in Burn
+        // See https://github.com/tracel-ai/burn/issues/4724.
         quote! {
             let shape = #input.dims(); // [N, C, D1, ..., Dk]
             let num_channels = shape[1];
