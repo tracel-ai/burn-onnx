@@ -482,7 +482,7 @@ checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
 [[package]]
 name = "burn"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-autodiff",
  "burn-candle",
@@ -504,7 +504,7 @@ dependencies = [
 [[package]]
 name = "burn-autodiff"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-std",
@@ -520,7 +520,7 @@ dependencies = [
 [[package]]
 name = "burn-backend"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-std",
  "bytemuck",
@@ -540,7 +540,7 @@ dependencies = [
 [[package]]
 name = "burn-candle"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-std",
@@ -551,7 +551,7 @@ dependencies = [
 [[package]]
 name = "burn-core"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "ahash",
  "bincode",
@@ -582,7 +582,7 @@ dependencies = [
 [[package]]
 name = "burn-cpu"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -593,7 +593,7 @@ dependencies = [
 [[package]]
 name = "burn-cubecl"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-cubecl-fusion",
@@ -612,7 +612,7 @@ dependencies = [
 [[package]]
 name = "burn-cubecl-fusion"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-fusion",
@@ -627,7 +627,7 @@ dependencies = [
 [[package]]
 name = "burn-cuda"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -638,7 +638,7 @@ dependencies = [
 [[package]]
 name = "burn-dataset"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-std",
  "csv",
@@ -660,7 +660,7 @@ dependencies = [
 [[package]]
 name = "burn-derive"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "derive-new",
  "proc-macro2",
@@ -671,7 +671,7 @@ dependencies = [
 [[package]]
 name = "burn-dispatch"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-autodiff",
  "burn-backend",
@@ -687,7 +687,7 @@ dependencies = [
 [[package]]
 name = "burn-fusion"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-ir",
@@ -711,7 +711,7 @@ dependencies = [
 [[package]]
 name = "burn-ir"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "hashbrown 0.16.1",
@@ -721,7 +721,7 @@ dependencies = [
 [[package]]
 name = "burn-ndarray"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "atomic_float",
  "burn-autodiff",
@@ -743,7 +743,7 @@ dependencies = [
 [[package]]
 name = "burn-nn"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-core",
  "burn-std",
@@ -926,7 +926,7 @@ dependencies = [
 [[package]]
 name = "burn-optim"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-core",
  "derive-new",
@@ -939,7 +939,7 @@ dependencies = [
 [[package]]
 name = "burn-rocm"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -950,7 +950,7 @@ dependencies = [
 [[package]]
 name = "burn-router"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-ir",
@@ -963,7 +963,7 @@ dependencies = [
 [[package]]
 name = "burn-std"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "bytemuck",
  "bytes",
@@ -982,7 +982,7 @@ dependencies = [
 [[package]]
 name = "burn-store"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-core",
  "burn-tensor",
@@ -1003,7 +1003,7 @@ dependencies = [
 [[package]]
 name = "burn-tch"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "cc",
@@ -1016,7 +1016,7 @@ dependencies = [
 [[package]]
 name = "burn-tensor"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-std",
@@ -1029,7 +1029,7 @@ dependencies = [
 [[package]]
 name = "burn-vision"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "aligned-vec",
  "bon",
@@ -1049,7 +1049,7 @@ dependencies = [
 [[package]]
 name = "burn-wgpu"
 version = "0.21.0-pre.2"
-source = "git+https://github.com/tracel-ai/burn?rev=204b1d0df38d8f0d3a84459c5e2b3f967b499be5#204b1d0df38d8f0d3a84459c5e2b3f967b499be5"
+source = "git+https://github.com/tracel-ai/burn?rev=c3917da4ea1e424e60a9a6d809dab0ef9ef39e14#c3917da4ea1e424e60a9a6d809dab0ef9ef39e14"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -1321,7 +1321,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.2",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
