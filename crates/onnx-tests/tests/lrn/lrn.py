@@ -7,7 +7,14 @@
 # ]
 # ///
 
-# used to generate model: `lrn_default_size3.onnx`, `lrn_custom_size3.onnx`, and `lrn_custom_size2.onnx`
+# Used to generate model: `lrn_default_size3.onnx`, `lrn_custom_size3.onnx`, and `lrn_custom_size2.onnx`
+# and expected values for the integration test suite in `./mod.rs`.
+#
+# NOTE: Do not regenerate the expected values using `onnx`'s stock `ReferenceEvaluator`
+#       until https://github.com/onnx/onnx/issues/7805 has been resolved.
+#       Expected values in the integration test suite were generated
+#       using a manually patched LRN op.
+# TODO: Once resolved, remove these "NOTE" and "TODO" comments.
 
 import numpy as np
 import onnx
