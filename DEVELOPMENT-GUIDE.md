@@ -894,7 +894,7 @@ Set `BURN_CACHE_DIR` to override the base cache path (useful for CI).
 
 In `src/main.rs`, use `Model::from_file(bpk_path, &device)` to load the model on the correct
 device. Do NOT use `Model::default().to_device(&device)` because the generated code stores the
-device as `Ignored<B::Device>` which `to_device()` does not update, causing device mismatch errors
+device as `#[module(skip)]` which `to_device()` does not update, causing device mismatch errors
 on GPU backends:
 
 ```rust
