@@ -129,7 +129,7 @@ impl NodeCodegen for onnx_ir::cast::CastNode {
                                 let float_array: [f64; #rank] = shape_array.map(|x| x as f64);
                                 Tensor::<B, 1>::from_data(
                                     TensorData::from(float_array),
-                                    (&*self.device, #dtype_tokens)
+                                    (&self.device, #dtype_tokens)
                                 )
                             };
                         }
@@ -142,7 +142,7 @@ impl NodeCodegen for onnx_ir::cast::CastNode {
                                 let bool_array: [bool; #rank] = shape_array.map(|x| x != 0);
                                 Tensor::<B, 1, Bool>::from_data(
                                     TensorData::from(bool_array),
-                                    (&*self.device, #dtype_tokens)
+                                    (&self.device, #dtype_tokens)
                                 )
                             };
                         }

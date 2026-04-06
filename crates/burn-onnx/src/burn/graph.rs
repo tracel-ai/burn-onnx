@@ -28,7 +28,7 @@ pub struct BurnGraph {
     /// Graph I/O args that were converted from ScalarTensor to ScalarNative at the
     /// boundary. Maps arg name -> DType. Used to insert conversion code:
     /// - Outputs: `.into_scalar().elem::<T>()` before the return
-    /// - Inputs: `Tensor::from_data([name as T], &*self.device)` after the params
+    /// - Inputs: `Tensor::from_data([name as T], &self.device)` after the params
     boundary_output_conversions: HashMap<String, onnx_ir::ir::DType>,
     boundary_input_conversions: HashMap<String, onnx_ir::ir::DType>,
 }
@@ -349,7 +349,8 @@ impl BurnGraph {
                 pub struct #struct_name<B: Backend> {
                     #(#struct_fields)*
                     phantom: core::marker::PhantomData<B>,
-                    device: burn::module::Ignored<B::Device>,
+                    #[module(skip)]
+                    device: B::Device,
                 }
 
                 impl<B: Backend> #struct_name<B> {
@@ -359,7 +360,7 @@ impl BurnGraph {
                         Self {
                             #(#field_names_for_init,)*
                             phantom: core::marker::PhantomData,
-                            device: burn::module::Ignored(device.clone()),
+                            device: device.clone(),
                         }
                     }
 
@@ -440,7 +441,8 @@ impl BurnGraph {
             pub struct Model<B: Backend> {
                 #(#submodule_field_decls)*
                 phantom: core::marker::PhantomData<B>,
-                device: burn::module::Ignored<B::Device>,
+                #[module(skip)]
+                device: B::Device,
             }
             #maybe_blank
 
@@ -453,7 +455,7 @@ impl BurnGraph {
                     Self {
                         #(#submodule_field_names,)*
                         phantom: core::marker::PhantomData,
-                        device: burn::module::Ignored(device.clone()),
+                        device: device.clone(),
                     }
                 }
 
@@ -636,7 +638,8 @@ impl BurnGraph {
         // Extend with phantom data to avoid unused generic type.
         body.extend(quote! {
             phantom: core::marker::PhantomData<B>,
-            device: burn::module::Ignored<B::Device>,
+            #[module(skip)]
+            device: B::Device,
         });
 
         quote! {
@@ -667,7 +670,7 @@ impl BurnGraph {
                 Self {
                     #(#field_names,)*
                     phantom: core::marker::PhantomData,
-                    device: burn::module::Ignored(device.clone()),
+                    device: device.clone(),
                 }
             }
         }
@@ -800,21 +803,21 @@ impl BurnGraph {
                     tokens.extend(quote! {
                         let #name = Tensor::<B, 1>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (&*self.device, #dtype_tokens)
+                            (&self.device, #dtype_tokens)
                         );
                     });
                 } else if dtype.is_int() || dtype.is_uint() {
                     tokens.extend(quote! {
                         let #name = Tensor::<B, 1, Int>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (&*self.device, #dtype_tokens)
+                            (&self.device, #dtype_tokens)
                         );
                     });
                 } else if dtype.is_bool() {
                     tokens.extend(quote! {
                         let #name = Tensor::<B, 1, Bool>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (&*self.device, #dtype_tokens)
+                            (&self.device, #dtype_tokens)
                         );
                     });
                 } else {

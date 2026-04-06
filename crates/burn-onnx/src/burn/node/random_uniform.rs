@@ -23,7 +23,7 @@ impl NodeCodegen for onnx_ir::node::random::RandomUniformNode {
         let dist = quote! { Distribution::Uniform(#low, #high) };
 
         quote! {
-            let #output = Tensor::random(#shape, #dist, &*self.device);
+            let #output = Tensor::random(#shape, #dist, &self.device);
         }
     }
 
@@ -56,7 +56,7 @@ mod tests {
             let output = Tensor::random(
                 Shape::new([3usize, 4usize]),
                 Distribution::Uniform(0f64, 1f64),
-                &*self.device,
+                &self.device,
             );
             output
         }

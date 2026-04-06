@@ -52,7 +52,7 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
                     {
                         let shape_tensor = Tensor::<B, 1, Int>::from_data(
                             burn::tensor::TensorData::from(#lhs_value.as_slice()),
-                            (&*self.device, #dtype_tokens)
+                            (&self.device, #dtype_tokens)
                         );
                         shape_tensor.equal(#rhs_value)
                     }
@@ -64,7 +64,7 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
                     {
                         let shape_tensor = Tensor::<B, 1, Int>::from_data(
                             burn::tensor::TensorData::from(#rhs_value.as_slice()),
-                            (&*self.device, #dtype_tokens)
+                            (&self.device, #dtype_tokens)
                         );
                         #lhs_value.equal(shape_tensor)
                     }
@@ -270,7 +270,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::from(lhs.as_slice()),
-                    (&*self.device, burn::tensor::DType::I64),
+                    (&self.device, burn::tensor::DType::I64),
                 );
                 shape_tensor.equal(rhs)
             };
@@ -295,7 +295,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::from(rhs.as_slice()),
-                    (&*self.device, burn::tensor::DType::I64),
+                    (&self.device, burn::tensor::DType::I64),
                 );
                 lhs.equal(shape_tensor)
             };

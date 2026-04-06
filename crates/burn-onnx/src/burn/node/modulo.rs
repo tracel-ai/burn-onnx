@@ -83,14 +83,14 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                     quote! {
                         #tensor_type::from_data(
                             burn::tensor::TensorData::from([#lhs as #cast_as]),
-                            (&*self.device, #dtype_tokens)
+                            (&self.device, #dtype_tokens)
                         ).unsqueeze_dims(&[#(#dims),*])
                     }
                 } else {
                     quote! {
                         #tensor_type::from_data(
                             burn::tensor::TensorData::from([#lhs as #cast_as]),
-                            (&*self.device, #dtype_tokens)
+                            (&self.device, #dtype_tokens)
                         )
                     }
                 };
@@ -408,7 +408,7 @@ mod tests {
                     1,
                 >::from_data(
                         burn::tensor::TensorData::from([a as f64]),
-                        (&*self.device, burn::tensor::DType::F32),
+                        (&self.device, burn::tensor::DType::F32),
                     )
                     .unsqueeze_dims(&[0isize]);
                 let __rhs = b;
@@ -445,7 +445,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([a as f64]),
-                    (&*self.device, burn::tensor::DType::F32),
+                    (&self.device, burn::tensor::DType::F32),
                 )
                 .unsqueeze_dims(&[0isize])
                 .fmod(b);

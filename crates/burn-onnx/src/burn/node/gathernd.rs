@@ -29,7 +29,7 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
                 let select_expr = quote! {
                     data_flat.select(0, Tensor::<B, 1, Int>::from_data(
                         burn::tensor::TensorData::from([offset as i32].as_slice()),
-                        &*self.device,
+                        &self.device,
                     ))
                 };
                 on_device_to_native(select_expr, dtype)
@@ -38,7 +38,7 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
                 quote! {
                     data_flat.select(0, Tensor::<B, 1, Int>::from_data(
                         burn::tensor::TensorData::from([offset as i32].as_slice()),
-                        &*self.device,
+                        &self.device,
                     ))
                 }
             };
@@ -126,7 +126,7 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
                     let data_flat = #data.reshape([total_data_size]);
                     let indices_tensor = Tensor::<B, 1, Int>::from_data(
                         burn::tensor::TensorData::from(flat_indices.as_slice()),
-                        &*self.device,
+                        &self.device,
                     );
                     let output_flat = data_flat.select(0, indices_tensor);
 
@@ -228,7 +228,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::from(flat_indices.as_slice()),
-                    &*self.device,
+                    &self.device,
                 );
                 let output_flat = data_flat.select(0, indices_tensor);
                 let mut output_shape = [0usize; 1];
@@ -320,7 +320,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::from(flat_indices.as_slice()),
-                    &*self.device,
+                    &self.device,
                 );
                 let output_flat = data_flat.select(0, indices_tensor);
                 let mut output_shape = [0usize; 2];
@@ -412,7 +412,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::from(flat_indices.as_slice()),
-                    &*self.device,
+                    &self.device,
                 );
                 let output_flat = data_flat.select(0, indices_tensor);
                 let mut output_shape = [0usize; 2];
@@ -508,7 +508,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::from(flat_indices.as_slice()),
-                    &*self.device,
+                    &self.device,
                 );
                 let output_flat = data_flat.select(0, indices_tensor);
                 let mut output_shape = [0usize; 1];
@@ -575,7 +575,7 @@ mod tests {
                             Int,
                         >::from_data(
                             burn::tensor::TensorData::from([offset as i32].as_slice()),
-                            &*self.device,
+                            &self.device,
                         ),
                     )
                     .into_scalar()
@@ -654,7 +654,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::from(flat_indices.as_slice()),
-                    &*self.device,
+                    &self.device,
                 );
                 let output_flat = data_flat.select(0, indices_tensor);
                 let mut output_shape = [0usize; 2];

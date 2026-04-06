@@ -83,7 +83,7 @@ impl NodeCodegen for onnx_ir::node::arithmetic::MulNode {
                 quote! {
                     Tensor::<B, 1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#lhs as &[i64]),
-                        (&*self.device, #dtype_tokens)
+                        (&self.device, #dtype_tokens)
                     ).mul(#rhs)
                 }
             }
@@ -92,7 +92,7 @@ impl NodeCodegen for onnx_ir::node::arithmetic::MulNode {
                 quote! {
                     #lhs.mul(Tensor::<B, 1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#rhs as &[i64]),
-                        (&*self.device, #dtype_tokens)
+                        (&self.device, #dtype_tokens)
                     ))
                 }
             }
@@ -386,7 +386,7 @@ mod tests {
                 burn::tensor::Int,
             >::from_data(
                     burn::tensor::TensorData::from(&lhs as &[i64]),
-                    (&*self.device, burn::tensor::DType::I64),
+                    (&self.device, burn::tensor::DType::I64),
                 )
                 .mul(rhs);
             output
@@ -411,7 +411,7 @@ mod tests {
                         burn::tensor::Int,
                     >::from_data(
                         burn::tensor::TensorData::from(&rhs as &[i64]),
-                        (&*self.device, burn::tensor::DType::I64),
+                        (&self.device, burn::tensor::DType::I64),
                     ),
                 );
             output

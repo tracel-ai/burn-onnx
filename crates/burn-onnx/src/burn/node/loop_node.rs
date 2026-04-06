@@ -295,16 +295,16 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
 
                     let tensor_creation = if dtype.is_float() {
                         quote! {
-                            Tensor::<B, 1>::from_data(data, (&*self.device, #dtype_tokens))
+                            Tensor::<B, 1>::from_data(data, (&self.device, #dtype_tokens))
                         }
                     } else if dtype.is_int() || dtype.is_uint() {
                         quote! {
-                            Tensor::<B, 1, Int>::from_data(data, (&*self.device, #dtype_tokens))
+                            Tensor::<B, 1, Int>::from_data(data, (&self.device, #dtype_tokens))
                         }
                     } else {
                         // Bool
                         quote! {
-                            Tensor::<B, 1, Bool>::from_data(data, (&*self.device, #dtype_tokens))
+                            Tensor::<B, 1, Bool>::from_data(data, (&self.device, #dtype_tokens))
                         }
                     };
 

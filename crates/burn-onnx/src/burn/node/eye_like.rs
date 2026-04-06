@@ -37,7 +37,7 @@ impl NodeCodegen for onnx_ir::node::eye_like::EyeLikeNode {
         // diag_mask returns false on diagonal, true off-diagonal
         // EyeLike needs true on diagonal, false off-diagonal
         quote! {
-            let #output = Tensor::diag_mask(#input.shape(), #k_offset, &*self.device).bool_not()#conversion;
+            let #output = Tensor::diag_mask(#input.shape(), #k_offset, &self.device).bool_not()#conversion;
         }
     }
 }
@@ -60,7 +60,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
-            let output = Tensor::diag_mask(input.shape(), 0i64, &*self.device)
+            let output = Tensor::diag_mask(input.shape(), 0i64, &self.device)
                 .bool_not()
                 .float()
                 .cast(burn::tensor::DType::F32);
@@ -80,7 +80,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
-            let output = Tensor::diag_mask(input.shape(), 1i64, &*self.device)
+            let output = Tensor::diag_mask(input.shape(), 1i64, &self.device)
                 .bool_not()
                 .int()
                 .cast(burn::tensor::DType::I32);
@@ -100,7 +100,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2, Bool>) -> Tensor<B, 2, Bool> {
-            let output = Tensor::diag_mask(input.shape(), 0i64, &*self.device).bool_not();
+            let output = Tensor::diag_mask(input.shape(), 0i64, &self.device).bool_not();
             output
         }
         ");

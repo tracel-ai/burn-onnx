@@ -47,7 +47,7 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
                     let onnx_shape: [i64; #output_rank] = #shape;
                     let input_tensor = Tensor::<B, 1, Int>::from_data(
                         burn::tensor::TensorData::from(#input.as_slice()),
-                        (&*self.device, burn::tensor::DType::I64)
+                        (&self.device, burn::tensor::DType::I64)
                     );
                     let input_dims = [#shape_rank];
                     let mut shape = onnx_shape;
@@ -97,7 +97,7 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
                 let #output = {
                     let input = Tensor::<B, 1 #kind>::from_data(
                         burn::tensor::TensorData::from([#input]),
-                        (&*self.device, #dtype_tokens)
+                        (&self.device, #dtype_tokens)
                     );
                     input.expand(#shape)
                 };
@@ -208,7 +208,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::from([input]),
-                    (&*self.device, burn::tensor::DType::I64),
+                    (&self.device, burn::tensor::DType::I64),
                 );
                 input.expand([2, 3])
             };
@@ -234,7 +234,7 @@ mod tests {
                     1,
                 >::from_data(
                     burn::tensor::TensorData::from([input]),
-                    (&*self.device, burn::tensor::DType::F32),
+                    (&self.device, burn::tensor::DType::F32),
                 );
                 input.expand([2, 3])
             };
@@ -261,7 +261,7 @@ mod tests {
                     Bool,
                 >::from_data(
                     burn::tensor::TensorData::from([input]),
-                    (&*self.device, burn::tensor::DType::Bool(burn::tensor::BoolStore::Native)),
+                    (&self.device, burn::tensor::DType::Bool(burn::tensor::BoolStore::Native)),
                 );
                 input.expand([2, 3])
             };
@@ -312,7 +312,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::from(shape_out.as_slice()),
-                    (&*self.device, burn::tensor::DType::I64),
+                    (&self.device, burn::tensor::DType::I64),
                 );
                 let input_dims = [2];
                 let mut shape = onnx_shape;

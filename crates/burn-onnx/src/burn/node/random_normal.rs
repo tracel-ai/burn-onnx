@@ -23,7 +23,7 @@ impl NodeCodegen for onnx_ir::node::random::RandomNormalNode {
         let dist = quote! { Distribution::Normal(#mean, #std_deviation) };
 
         quote! {
-            let #output = Tensor::random(#shape, #dist, &*self.device);
+            let #output = Tensor::random(#shape, #dist, &self.device);
         }
     }
 
@@ -56,7 +56,7 @@ mod tests {
             let output = Tensor::random(
                 Shape::new([2usize, 3usize, 4usize]),
                 Distribution::Normal(0f64, 1f64),
-                &*self.device,
+                &self.device,
             );
             output
         }

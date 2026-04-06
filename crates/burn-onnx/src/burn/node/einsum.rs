@@ -49,35 +49,35 @@ fn scalar_native_to_tensor(expr: TokenStream, dtype: DType) -> TokenStream {
         quote! {
             Tensor::<B, 1>::from_data(
                 burn::tensor::TensorData::from([(#expr).to_f64()]),
-                (&*self.device, #dtype_tokens)
+                (&self.device, #dtype_tokens)
             )
         }
     } else if matches!(dtype, DType::F32) {
         quote! {
             Tensor::<B, 1>::from_data(
                 burn::tensor::TensorData::from([f64::from(#expr)]),
-                (&*self.device, #dtype_tokens)
+                (&self.device, #dtype_tokens)
             )
         }
     } else if matches!(dtype, DType::F64) {
         quote! {
             Tensor::<B, 1>::from_data(
                 burn::tensor::TensorData::from([#expr]),
-                (&*self.device, #dtype_tokens)
+                (&self.device, #dtype_tokens)
             )
         }
     } else if dtype.is_int() || dtype.is_uint() {
         quote! {
             Tensor::<B, 1, burn::tensor::Int>::from_data(
                 burn::tensor::TensorData::from([#expr as i64]),
-                (&*self.device, #dtype_tokens)
+                (&self.device, #dtype_tokens)
             )
         }
     } else if dtype.is_bool() {
         quote! {
             Tensor::<B, 1, burn::tensor::Bool>::from_data(
                 burn::tensor::TensorData::from([#expr]),
-                (&*self.device, #dtype_tokens)
+                (&self.device, #dtype_tokens)
             )
         }
     } else {

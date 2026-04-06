@@ -71,7 +71,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                         quote! {
                             Tensor::<B, #output_rank, Int>::from_data(
                                 burn::tensor::TensorData::from([#scalar_name as i64]),
-                                (&*self.device, #dtype_tokens)
+                                (&self.device, #dtype_tokens)
                             ).unsqueeze()
                         }
                     }
@@ -80,7 +80,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                         quote! {
                             Tensor::<B, #output_rank>::from_data(
                                 burn::tensor::TensorData::from([#scalar_name as f64]),
-                                (&*self.device, #dtype_tokens)
+                                (&self.device, #dtype_tokens)
                             ).unsqueeze()
                         }
                     }
@@ -88,7 +88,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                         quote! {
                             Tensor::<B, #output_rank, Bool>::from_data(
                                 burn::tensor::TensorData::from([#scalar_name != 0]),
-                                (&*self.device, #dtype_tokens)
+                                (&self.device, #dtype_tokens)
                             ).unsqueeze()
                         }
                     }
@@ -120,7 +120,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                 quote! {
                     let #output: Tensor<B, #output_rank, Int> = Tensor::<B, 1, Int>::from_data(
                         burn::tensor::TensorData::from(#input_name.as_slice()),
-                        (&*self.device, #dtype_tokens)
+                        (&self.device, #dtype_tokens)
                     ).unsqueeze_dims::<#output_rank>(&#axes);
                 }
             }
@@ -204,7 +204,7 @@ mod tests {
                 Int,
             >::from_data(
                     burn::tensor::TensorData::from(shape_val.as_slice()),
-                    (&*self.device, burn::tensor::DType::I64),
+                    (&self.device, burn::tensor::DType::I64),
                 )
                 .unsqueeze_dims::<2>(&[0]);
             output

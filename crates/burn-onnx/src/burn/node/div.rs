@@ -94,7 +94,7 @@ impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
                 quote! {
                     Tensor::<B, 1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#lhs as &[i64]),
-                        (&*self.device, #dtype_tokens)
+                        (&self.device, #dtype_tokens)
                     ).div(#rhs)
                 }
             }
@@ -103,7 +103,7 @@ impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
                 quote! {
                     #lhs.div(Tensor::<B, 1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#rhs as &[i64]),
-                        (&*self.device, #dtype_tokens)
+                        (&self.device, #dtype_tokens)
                     ))
                 }
             }
@@ -432,7 +432,7 @@ mod tests {
                 burn::tensor::Int,
             >::from_data(
                     burn::tensor::TensorData::from(&lhs as &[i64]),
-                    (&*self.device, burn::tensor::DType::I64),
+                    (&self.device, burn::tensor::DType::I64),
                 )
                 .div(rhs);
             output
@@ -457,7 +457,7 @@ mod tests {
                         burn::tensor::Int,
                     >::from_data(
                         burn::tensor::TensorData::from(&rhs as &[i64]),
-                        (&*self.device, burn::tensor::DType::I64),
+                        (&self.device, burn::tensor::DType::I64),
                     ),
                 );
             output

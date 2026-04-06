@@ -75,7 +75,7 @@ fn forward_shape_gather(
                         #index_resolve
                         let #output = Tensor::<B, 1, Int>::from_data(
                             burn::tensor::TensorData::from([#input_shape_name[actual_idx]]),
-                            &*self.device,
+                            &self.device,
                         );
                     }
                 }
@@ -331,7 +331,7 @@ fn forward_tensor_gather(
                     // Shape array can be directly used to create tensor data
                     quote! {
                         let #output = {
-                            let indices = Tensor::<B, 1, _>::from_data(#shape_name, &*self.device);
+                            let indices = Tensor::<B, 1, _>::from_data(#shape_name, &self.device);
                             Tensor::select(#input, #dim, indices)
                         };
                     }
@@ -838,7 +838,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, weights: Tensor<B, 2>, positions: [i64; 2]) -> Tensor<B, 2> {
             let selected_weights = {
-                let indices = Tensor::<B, 1, _>::from_data(positions, &*self.device);
+                let indices = Tensor::<B, 1, _>::from_data(positions, &self.device);
                 Tensor::select(weights, 0, indices)
             };
             selected_weights
@@ -859,7 +859,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, matrix_data: Tensor<B, 3>, col_indices: [i64; 3]) -> Tensor<B, 3> {
             let columns = {
-                let indices = Tensor::<B, 1, _>::from_data(col_indices, &*self.device);
+                let indices = Tensor::<B, 1, _>::from_data(col_indices, &self.device);
                 Tensor::select(matrix_data, 1, indices)
             };
             columns
@@ -880,7 +880,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, tensor3d: Tensor<B, 4>, plane_ids: [i64; 4]) -> Tensor<B, 4> {
             let planes = {
-                let indices = Tensor::<B, 1, _>::from_data(plane_ids, &*self.device);
+                let indices = Tensor::<B, 1, _>::from_data(plane_ids, &self.device);
                 Tensor::select(tensor3d, 2, indices)
             };
             planes

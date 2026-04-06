@@ -55,7 +55,7 @@ impl NodeCodegen for onnx_ir::node::range::RangeNode {
                 let d_lit = Literal::i64_suffixed(*d);
                 let s_lit = Literal::i64_suffixed(*s);
                 quote! {
-                    let #output = Tensor::arange(0..#n_lit, &*self.device)
+                    let #output = Tensor::arange(0..#n_lit, &self.device)
                         .cast(#output_dtype)
                         .mul_scalar(#d_lit)
                         .add_scalar(#s_lit);
@@ -74,7 +74,7 @@ impl NodeCodegen for onnx_ir::node::range::RangeNode {
                         assert!(__delta != 0);
                         let __n = ((__limit - __start) as f64 / __delta as f64)
                             .ceil().max(0.0) as i64;
-                        Tensor::arange(0..__n, &*self.device)
+                        Tensor::arange(0..__n, &self.device)
                             .cast(#output_dtype)
                             .mul_scalar(__delta)
                             .add_scalar(__start)
@@ -107,7 +107,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<B, 1, Int> {
-            let output = Tensor::arange(0..5i64, &*self.device)
+            let output = Tensor::arange(0..5i64, &self.device)
                 .cast(burn::tensor::DType::I64)
                 .mul_scalar(2i64)
                 .add_scalar(0i64);
@@ -130,7 +130,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<B, 1, Int> {
-            let output = Tensor::arange(0..5i64, &*self.device)
+            let output = Tensor::arange(0..5i64, &self.device)
                 .cast(burn::tensor::DType::I64)
                 .mul_scalar(-2i64)
                 .add_scalar(10i64);
@@ -171,7 +171,7 @@ mod tests {
                 let __delta = delta;
                 assert!(__delta != 0);
                 let __n = ((__limit - __start) as f64 / __delta as f64).ceil().max(0.0) as i64;
-                Tensor::arange(0..__n, &*self.device)
+                Tensor::arange(0..__n, &self.device)
                     .cast(burn::tensor::DType::I64)
                     .mul_scalar(__delta)
                     .add_scalar(__start)
@@ -196,7 +196,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<B, 1, Int> {
-            let output = Tensor::arange(0..0i64, &*self.device)
+            let output = Tensor::arange(0..0i64, &self.device)
                 .cast(burn::tensor::DType::I64)
                 .mul_scalar(2i64)
                 .add_scalar(10i64);

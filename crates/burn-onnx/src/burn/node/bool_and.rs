@@ -31,13 +31,13 @@ impl NodeCodegen for onnx_ir::node::and::AndNode {
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 let rank = rhs_ty.rank();
                 quote! {
-                    if #lhs_value { #rhs_value } else { Tensor::<B, #rank, Int>::zeros(#rhs_value.shape(), &*self.device).bool() }
+                    if #lhs_value { #rhs_value } else { Tensor::<B, #rank, Int>::zeros(#rhs_value.shape(), &self.device).bool() }
                 }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                 let rank = lhs_ty.rank();
                 quote! {
-                    if #rhs_value { #lhs_value } else { Tensor::<B, #rank, Int>::zeros(#lhs_value.shape(), &*self.device).bool() }
+                    if #rhs_value { #lhs_value } else { Tensor::<B, #rank, Int>::zeros(#lhs_value.shape(), &self.device).bool() }
                 }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
@@ -84,7 +84,7 @@ mod tests {
             let output = if lhs {
                 rhs
             } else {
-                Tensor::<B, 4usize, Int>::zeros(rhs.shape(), &*self.device).bool()
+                Tensor::<B, 4usize, Int>::zeros(rhs.shape(), &self.device).bool()
             };
             output
         }
@@ -104,7 +104,7 @@ mod tests {
             let output = if rhs {
                 lhs
             } else {
-                Tensor::<B, 4usize, Int>::zeros(lhs.shape(), &*self.device).bool()
+                Tensor::<B, 4usize, Int>::zeros(lhs.shape(), &self.device).bool()
             };
             output
         }

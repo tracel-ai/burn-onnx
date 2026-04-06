@@ -90,11 +90,11 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
 
                     if bool_val {
                         quote! {
-                            let #output = Tensor::<B, #output_rank, Int>::ones(#shape_expr, &*self.device).bool();
+                            let #output = Tensor::<B, #output_rank, Int>::ones(#shape_expr, &self.device).bool();
                         }
                     } else {
                         quote! {
-                            let #output = Tensor::<B, #output_rank, Int>::zeros(#shape_expr, &*self.device).bool();
+                            let #output = Tensor::<B, #output_rank, Int>::zeros(#shape_expr, &self.device).bool();
                         }
                     }
                 } else {
@@ -108,7 +108,7 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
                         quote! {
                             let #output = Tensor::<B, 1>::from_data(
                                 burn::tensor::TensorData::from([#value as f64]),
-                                (&*self.device, #dtype_tokens)
+                                (&self.device, #dtype_tokens)
                             ).reshape([#(#ones),*]).expand(#shape_expr);
                         }
                     } else {
@@ -116,7 +116,7 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
                         quote! {
                             let #output = Tensor::<B, 1, Int>::from_data(
                                 burn::tensor::TensorData::from([#value as i64]),
-                                (&*self.device, #dtype_tokens)
+                                (&self.device, #dtype_tokens)
                             ).reshape([#(#ones),*]).expand(#shape_expr);
                         }
                     }
@@ -287,7 +287,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([1.5f32 as f64]),
-                    (&*self.device, burn::tensor::DType::F32),
+                    (&self.device, burn::tensor::DType::F32),
                 )
                 .reshape([1, 1, 1])
                 .expand([2usize, 3usize, 4usize]);
@@ -315,7 +315,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([0.5f64 as f64]),
-                    (&*self.device, burn::tensor::DType::F64),
+                    (&self.device, burn::tensor::DType::F64),
                 )
                 .reshape([1, 1])
                 .expand([10usize, 20usize]);
@@ -344,7 +344,7 @@ mod tests {
                 Int,
             >::from_data(
                     burn::tensor::TensorData::from([7i32 as i64]),
-                    (&*self.device, burn::tensor::DType::I32),
+                    (&self.device, burn::tensor::DType::I32),
                 )
                 .reshape([1, 1])
                 .expand([5usize, 5usize]);
@@ -373,7 +373,7 @@ mod tests {
                 Int,
             >::from_data(
                     burn::tensor::TensorData::from([100i64 as i64]),
-                    (&*self.device, burn::tensor::DType::I64),
+                    (&self.device, burn::tensor::DType::I64),
                 )
                 .reshape([1])
                 .expand([8usize]);
@@ -396,7 +396,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, shape_dims: [i64; 2]) -> Tensor<B, 2, Bool> {
-            let mask = Tensor::<B, 2, Int>::ones([3usize, 4usize], &*self.device).bool();
+            let mask = Tensor::<B, 2, Int>::ones([3usize, 4usize], &self.device).bool();
             mask
         }
         ");
@@ -416,7 +416,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, dimensions: [i64; 3]) -> Tensor<B, 3, Bool> {
-            let flags = Tensor::<B, 3, Int>::zeros([6usize, 7usize, 8usize], &*self.device)
+            let flags = Tensor::<B, 3, Int>::zeros([6usize, 7usize, 8usize], &self.device)
                 .bool();
             flags
         }
@@ -442,7 +442,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([0.0f32 as f64]),
-                    (&*self.device, burn::tensor::DType::F32),
+                    (&self.device, burn::tensor::DType::F32),
                 )
                 .reshape([1, 1])
                 .expand([2usize, 2usize]);
@@ -475,7 +475,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([2.5f32 as f64]),
-                    (&*self.device, burn::tensor::DType::F32),
+                    (&self.device, burn::tensor::DType::F32),
                 )
                 .reshape([1, 1, 1])
                 .expand(dynamic_shape);
@@ -507,7 +507,7 @@ mod tests {
                 Int,
             >::from_data(
                     burn::tensor::TensorData::from([255i64 as i64]),
-                    (&*self.device, burn::tensor::DType::I64),
+                    (&self.device, burn::tensor::DType::I64),
                 )
                 .reshape([1, 1])
                 .expand(shape_param);
@@ -533,7 +533,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, sz: [i64; 4]) -> Tensor<B, 4, Bool> {
-            let bitmask = Tensor::<B, 4, Int>::ones(sz, &*self.device).bool();
+            let bitmask = Tensor::<B, 4, Int>::ones(sz, &self.device).bool();
             bitmask
         }
         ");
@@ -556,7 +556,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, target_dims: [i64; 2]) -> Tensor<B, 2, Bool> {
-            let empty_mask = Tensor::<B, 2, Int>::zeros(target_dims, &*self.device).bool();
+            let empty_mask = Tensor::<B, 2, Int>::zeros(target_dims, &self.device).bool();
             empty_mask
         }
         ");
@@ -584,7 +584,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([0.0f32 as f64]),
-                    (&*self.device, burn::tensor::DType::F32),
+                    (&self.device, burn::tensor::DType::F32),
                 )
                 .reshape([1, 1, 1])
                 .expand(runtime_shape);
