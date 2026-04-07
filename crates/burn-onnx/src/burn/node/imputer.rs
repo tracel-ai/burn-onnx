@@ -112,39 +112,38 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                         if let Some(imputed_ints) = &self.config.imputed_value_ints {
                             let replaced_int = self.config.replaced_value_int64.unwrap_or(0i64);
                             if imputed_ints.len() == 1 {
-                                    let imputed_value = imputed_ints[0];
-                                    quote! {
-                                        {
-                                            let mask = #input.clone().equal_elem(#replaced_int);
-                                            #input.clone().mask_fill(mask, #imputed_value)
-                                        }
-                                    }
-                                } else {
-                                    // Multiple imputed values per feature.
-                                    // Build a feature vector tensor and broadcast it over the input shape,
-                                    // then apply mask_where element-wise to avoid cross-feature mask bleed.
-                                    let imputed_values_vec: Vec<_> = imputed_ints.to_vec();
-                                    let imputed_values_len = imputed_values_vec.len();
-                                    let dtype_tokens = tensor_ty.dtype.to_tokens();
-                                    let reshape_dims: Vec<_> =
-                                        (0..tensor_ty.rank.saturating_sub(1))
-                                            .map(|_| quote! { 1usize })
-                                            .chain(std::iter::once(quote! { #imputed_values_len }))
-                                            .collect();
-                                    quote! {
-                                        {
-                                            let mask = #input.clone().equal_elem(#replaced_int);
-                                            let imputed_values = Tensor::<B, 1, burn::tensor::Int>::from_data(
-                                                burn::tensor::TensorData::from([#(#imputed_values_vec),*]),
-                                                (&*self.device, #dtype_tokens),
-                                            )
-                                            .reshape([#(#reshape_dims),*])
-                                            .expand(#input.dims());
-
-                                            #input.clone().mask_where(mask, imputed_values)
-                                        }
+                                let imputed_value = imputed_ints[0];
+                                quote! {
+                                    {
+                                        let mask = #input.clone().equal_elem(#replaced_int);
+                                        #input.clone().mask_fill(mask, #imputed_value)
                                     }
                                 }
+                            } else {
+                                // Multiple imputed values per feature.
+                                // Build a feature vector tensor and broadcast it over the input shape,
+                                // then apply mask_where element-wise to avoid cross-feature mask bleed.
+                                let imputed_values_vec: Vec<_> = imputed_ints.to_vec();
+                                let imputed_values_len = imputed_values_vec.len();
+                                let dtype_tokens = tensor_ty.dtype.to_tokens();
+                                let reshape_dims: Vec<_> = (0..tensor_ty.rank.saturating_sub(1))
+                                    .map(|_| quote! { 1usize })
+                                    .chain(std::iter::once(quote! { #imputed_values_len }))
+                                    .collect();
+                                quote! {
+                                    {
+                                        let mask = #input.clone().equal_elem(#replaced_int);
+                                        let imputed_values = Tensor::<B, 1, burn::tensor::Int>::from_data(
+                                            burn::tensor::TensorData::from([#(#imputed_values_vec),*]),
+                                            (&*self.device, #dtype_tokens),
+                                        )
+                                        .reshape([#(#reshape_dims),*])
+                                        .expand(#input.dims());
+
+                                        #input.clone().mask_where(mask, imputed_values)
+                                    }
+                                }
+                            }
                         } else {
                             quote! { #input.clone() }
                         }
