@@ -18,4 +18,4 @@ Length of imputed values must be 1 (broadcast) or F (one per feature, input shap
 
 ## Type Constraints
 
-- **T**: tensor(float), tensor(double), tensor(int32), tensor(int64)
+- **T**: tensor(float), tensor(double), tensor(int8), tensor(int16), tensor(int32), tensor(int64)

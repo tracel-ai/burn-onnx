@@ -3,7 +3,7 @@
 //! Replaces missing values in the input tensor with specified replacement values.
 //! The Imputer operator supports replacing NaN values and specified values with imputation values.
 //!
-//! **ONNX Spec**: <https://onnx.ai/onnx/operators/onnx_ml__Imputer.html>
+//! **ONNX Spec**: <https://onnx.ai/onnx/operators/onnx_aionnxml_Imputer.html>
 //!
 //! ## Type Constraints
 //!
