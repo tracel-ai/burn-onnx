@@ -27,7 +27,7 @@ pub struct ImputerConfig {
     /// Imputed values for float data
     pub imputed_value_floats: Option<Vec<f32>>,
     /// Imputed values for integer data
-    pub imputed_value_ints: Option<Vec<i64>>,
+    pub imputed_value_int64s: Option<Vec<i64>>,
     /// Value to replace for float inputs (NaN if not specified)
     pub replaced_value_float: Option<f32>,
     /// Value to replace for integer inputs
@@ -71,7 +71,7 @@ impl NodeProcessor for ImputerProcessor {
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
         let mut imputed_value_floats: Option<Vec<f32>> = None;
-        let mut imputed_value_ints: Option<Vec<i64>> = None;
+        let mut imputed_value_int64s: Option<Vec<i64>> = None;
         let mut replaced_value_float: Option<f32> = None;
         let mut replaced_value_int64: Option<i64> = None;
 
@@ -84,7 +84,7 @@ impl NodeProcessor for ImputerProcessor {
                 }
                 "imputed_value_int64s" => {
                     if let AttributeValue::Int64s(ints) = value {
-                        imputed_value_ints = Some(ints.clone());
+                        imputed_value_int64s = Some(ints.clone());
                     }
                 }
                 "replaced_value_float" => {
@@ -99,7 +99,7 @@ impl NodeProcessor for ImputerProcessor {
 
         Ok(ImputerConfig::new(
             imputed_value_floats,
-            imputed_value_ints,
+            imputed_value_int64s,
             replaced_value_float,
             replaced_value_int64,
         ))

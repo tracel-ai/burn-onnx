@@ -1,5 +1,5 @@
 use crate::include_models;
-include_models!(imputer, imputer_per_feature, imputer_int, imputer_nan);
+include_models!(imputer, imputer_per_feature, imputer_int, imputer_nan, imputer_nan_default);
 
 #[cfg(test)]
 mod tests {
@@ -73,6 +73,28 @@ mod tests {
 
         // input: [[1.0, NaN, 3.0], [4.0, 5.0, NaN]]
         // NaN is the explicit sentinel replaced by 0.0 (imputed value)
+        let input = Tensor::<TestBackend, 2>::from_floats(
+            [[1.0f32, f32::NAN, 3.0], [4.0, 5.0, f32::NAN]],
+            &device,
+        );
+
+        let output = model.forward(input);
+
+        let expected = TensorData::from([[1.0f32, 0.0, 3.0], [4.0, 5.0, 0.0]]);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
+    }
+
+    #[test]
+    fn imputer_nan_default_sentinel_replacement() {
+        let device = Default::default();
+        let model: imputer_nan_default::Model<TestBackend> = 
+            imputer_nan_default::Model::new(&device);
+
+        // input: [[1.0, NaN, 3.0], [4.0, 5.0, NaN]]
+        // NaN is the DEFAULT sentinel (replaced_value_float attribute omitted)
+        // replaced by 0.0 (imputed value)
         let input = Tensor::<TestBackend, 2>::from_floats(
             [[1.0f32, f32::NAN, 3.0], [4.0, 5.0, f32::NAN]],
             &device,

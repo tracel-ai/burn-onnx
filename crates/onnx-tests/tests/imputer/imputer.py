@@ -183,6 +183,44 @@ def main():
     print("\nNaN output (NaN replaced with 0.0):")
     print(nan_result[0])
 
+    # Test case 5: float input with DEFAULT NaN sentinel (no replaced_value_float attribute)
+    # This tests the case where replaced_value_float is omitted entirely and defaults to NaN
+    nan_default_input_data = np.array([[1.0, float("nan"), 3.0], [4.0, 5.0, float("nan")]], dtype=np.float32)
+    nan_default_node = helper.make_node(
+        "Imputer",
+        ["input"],
+        ["output"],
+        domain="ai.onnx.ml",
+        imputed_value_floats=[0.0],
+        # Note: replaced_value_float is NOT set, so it defaults to NaN per ONNX spec
+    )
+
+    nan_default_graph = helper.make_graph(
+        [nan_default_node],
+        "imputer_nan_default_test",
+        [input_tensor],
+        [output_tensor],
+    )
+
+    nan_default_model = helper.make_model(
+        nan_default_graph,
+        opset_imports=[
+            helper.make_operatorsetid("ai.onnx.ml", OPSET_VERSION),
+            helper.make_operatorsetid("", 17),
+        ],
+    )
+
+    onnx.save(nan_default_model, "imputer_nan_default.onnx")
+    print("Finished exporting model to imputer_nan_default.onnx")
+
+    nan_default_sess = ReferenceEvaluator(nan_default_model)
+    nan_default_result = nan_default_sess.run(None, {"input": nan_default_input_data})
+
+    print("\nNaN default input:")
+    print(nan_default_input_data)
+    print("\nNaN default output (NaN replaced with 0.0, replaced_value_float omitted):")
+    print(nan_default_result[0])
+
 
 if __name__ == "__main__":
     main()

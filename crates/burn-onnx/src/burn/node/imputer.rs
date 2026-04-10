@@ -20,13 +20,29 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                 match scalar_ty {
                     DType::F32 | DType::F64 => {
                         if let Some(imputed_floats) = &self.config.imputed_value_floats {
-                            if let Some(first_value) = imputed_floats.first() {
+                            if let Some(&first_value) = imputed_floats.first() {
                                 let replaced_value =
                                     self.config.replaced_value_float.unwrap_or(f32::NAN);
-                                if replaced_value.is_nan() {
-                                    quote! { if #input.is_nan() { #first_value } else { #input } }
+                                
+                                // Generate appropriate literal type based on dtype
+                                let first_literal = if scalar_ty == &DType::F64 {
+                                    let first_f64 = first_value as f64;
+                                    quote! { #first_f64 }
                                 } else {
-                                    quote! { if #input == #replaced_value { #first_value } else { #input } }
+                                    quote! { #first_value }
+                                };
+                                
+                                if replaced_value.is_nan() {
+                                    quote! { if #input.is_nan() { #first_literal } else { #input } }
+                                } else {
+                                    // Only generate replaced_literal for non-NaN values
+                                    let replaced_literal = if scalar_ty == &DType::F64 {
+                                        let replaced_f64 = replaced_value as f64;
+                                        quote! { #replaced_f64 }
+                                    } else {
+                                        quote! { #replaced_value }
+                                    };
+                                    quote! { if #input == #replaced_literal { #first_literal } else { #input } }
                                 }
                             } else {
                                 quote! { #input }
@@ -109,7 +125,7 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                         }
                     }
                     DType::I32 | DType::I64 | DType::I8 | DType::I16 => {
-                        if let Some(imputed_ints) = &self.config.imputed_value_ints {
+                        if let Some(imputed_ints) = &self.config.imputed_value_int64s {
                             let replaced_int = self.config.replaced_value_int64.unwrap_or(0i64);
                             if imputed_ints.len() == 1 {
                                 let imputed_value = imputed_ints[0];
