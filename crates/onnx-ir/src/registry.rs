@@ -440,6 +440,10 @@ impl ProcessorRegistry {
             NodeType::QuantizeLinear,
             Box::new(crate::node::quantize_linear::QuantizeLinearProcessor),
         );
+        registry.register(
+            NodeType::QLinearMatMul,
+            Box::new(crate::node::qlinear_matmul::QLinearMatMulProcessor),
+        );
 
         // Array operations
         registry.register(

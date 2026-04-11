@@ -381,7 +381,7 @@ define_node_enum! {
     OptionalGetElement => unsupported::OptionalGetElementNode,
     OptionalHasElement => unsupported::OptionalHasElementNode,
     QLinearConv => unsupported::QLinearConvNode,
-    QLinearMatMul => unsupported::QLinearMatMulNode,
+    QLinearMatMul => qlinear_matmul::QLinearMatMulNode,
     QuantizeLinear => quantize_linear::QuantizeLinearNode,
     RMSNormalization => unsupported::RMSNormalizationNode,
     Rnn => rnn::RnnNode,

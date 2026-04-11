@@ -128,6 +128,7 @@ pub mod pad;
 pub mod padding;
 pub mod pow;
 pub mod prelu;
+pub mod qlinear_matmul;
 pub mod quantize_linear;
 pub mod random;
 pub mod random_like;
