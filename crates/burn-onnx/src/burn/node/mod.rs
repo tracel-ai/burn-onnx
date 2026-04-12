@@ -115,6 +115,7 @@ pub(crate) mod one_hot;
 pub(crate) mod pad;
 pub(crate) mod pow;
 pub(crate) mod prelu;
+pub(crate) mod qlinear_matmul;
 pub(crate) mod quantize_linear;
 pub(crate) mod random_normal;
 pub(crate) mod random_normal_like;

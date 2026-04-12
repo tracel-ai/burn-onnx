@@ -208,6 +208,7 @@ impl_node_codegen_dispatch! {
     MatMulInteger,
     DequantizeLinear,
     QuantizeLinear,
+    QLinearMatMul,
 
     // Constant ops
     Constant,
