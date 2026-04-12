@@ -85,6 +85,24 @@ impl TestNodeBuilder {
         )
     }
 
+    /// Add an int8 tensor input with the given name and rank
+    pub fn input_tensor_i8(
+        self,
+        name: &str,
+        rank: usize,
+        static_shape: Option<Vec<usize>>,
+    ) -> Self {
+        let static_shape = static_shape.map(|s| s.into_iter().map(Some).collect());
+        self.add_input(
+            name,
+            ArgType::Tensor(TensorType {
+                dtype: DType::I8,
+                rank,
+                static_shape,
+            }),
+        )
+    }
+
     /// Add an int32 tensor input with the given name and rank
     pub fn input_tensor_i32(
         self,
