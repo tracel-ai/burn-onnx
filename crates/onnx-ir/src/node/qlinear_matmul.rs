@@ -169,6 +169,18 @@ impl NodeProcessor for QLinearMatMulProcessor {
                 });
             }
         }
+        // Validate ranks for y_scale and y_zero_point do not exceed the input tensor (using `a`)
+        if y_scale.ty.rank() > a.ty.rank() {
+            return Err(ProcessError::TypeMismatch {
+                expected: "y_scale rank must be less than or equal to input tensor (a) rank"
+                    .to_string(),
+                actual: format!(
+                    "`a` has rank {} while `y_scale` has rank {}",
+                    a.ty.rank(),
+                    y_scale.ty.rank()
+                ),
+            });
+        }
 
         // Set the output dtype and rank
         let output_dtype = y_zero_point.ty.elem_type();
@@ -408,6 +420,19 @@ mod tests {
         // Scale rank exceeds tensor rank
         node.inputs[0].ty = ArgType::Tensor(TensorType::new(DType::I8, 2, None)); // a rank 2
         node.inputs[1].ty = ArgType::Tensor(TensorType::new(DType::F32, 3, None)); // a_scale rank 3
+        node.inputs[2].ty = ArgType::Tensor(TensorType::new(DType::F32, 3, None)); // a_zero_point rank 3
+
+        let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
+        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+    }
+
+    #[test]
+    fn test_y_scale_rank_exceeds_tensor_rank() {
+        let mut node = build_base_node();
+        // y_scale rank (3) exceeds a rank (2)
+        node.inputs[0].ty = ArgType::Tensor(TensorType::new(DType::I8, 2, None)); // a rank 2
+        node.inputs[6].ty = ArgType::Tensor(TensorType::new(DType::F32, 3, None)); // y_scale rank 3
+        node.inputs[7].ty = ArgType::Tensor(TensorType::new(DType::F32, 3, None)); // y_zero_point rank 3
 
         let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
         assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
