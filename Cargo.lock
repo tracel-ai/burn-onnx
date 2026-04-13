@@ -5211,7 +5211,7 @@ dependencies = [
  "protobuf",
  "serde",
  "thiserror 2.0.18",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.1.0+spec-1.1.0",
 ]
 
 [[package]]
@@ -8579,7 +8579,7 @@ dependencies = [
  "rstest",
  "serde",
  "strum 0.28.0",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.1.0+spec-1.1.0",
  "tracel-xtask",
 ]
 
