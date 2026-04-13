@@ -111,6 +111,7 @@ pub mod or;
 pub mod pad;
 pub mod pow;
 pub mod prelu;
+pub mod qlinear_matmul;
 pub mod quantize_linear;
 pub mod random_normal;
 pub mod random_normal_like;
