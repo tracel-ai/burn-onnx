@@ -49,14 +49,6 @@ impl NodeProcessor for QLinearMatMulProcessor {
         opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        // Validations performed:
-        // 1. Zero-point inputs (a_zero_point, b_zero_point, y_zero_point) must be quantized integer types (I8, U8, F8E5M2, F8E4M3)
-        // 2. Operand inputs (a, b) must be tensors, not scalars
-        // 3. Each tensor and its zero-point must be of the same dtype
-        // 4. Scale inputs (a_scale, b_scale, y_scale) must be floating-point types (BF16, F16, F32)
-        // 5. Scale and zero-point pairs must have matching ranks
-        // 6. Scale/zero-point ranks must not exceed their corresponding tensor's rank
-
         let a = &node.inputs[0];
         let a_scale = &node.inputs[1];
         let a_zero_point = &node.inputs[2];
@@ -95,6 +87,19 @@ impl NodeProcessor for QLinearMatMulProcessor {
                 return Err(ProcessError::TypeMismatch {
                     expected: "Tensor".to_string(),
                     actual: format!("{name}: {:?}", input.ty),
+                });
+            }
+        }
+
+        // Validate that operand tensors `a` and `b` are not QFloat (F8).
+        // While the ONNX spec allows F8 operands at opset 21+, this implementation
+        // does not yet support quantized float operand types in codegen.
+        // FIXME: Remove this validation once QFloats are supported.
+        for (input, name) in [(a, "a"), (b, "b")] {
+            if matches!(input.ty.elem_type(), DType::QFloat(..)) {
+                return Err(ProcessError::TypeMismatch {
+                    expected: "I8 or U8 tensor dtype".to_string(),
+                    actual: format!("{name}: QFloat (F8) operand tensors are not supported"),
                 });
             }
         }
@@ -266,15 +271,29 @@ mod tests {
     #[rstest]
     #[case::int8(DType::I8)]
     #[case::uint8(DType::U8)]
-    #[case::e4m3(DType::QFloat(QuantScheme::default().with_value(QuantValue::E4M3)))]
-    #[case::e5m2(DType::QFloat(QuantScheme::default().with_value(QuantValue::E5M2)))]
+    // FIXME: Uncomment test cases when QFloats are supported in codegen
+    // #[case::e4m3(DType::QFloat(QuantScheme::default().with_value(QuantValue::E4M3)))]
+    // #[case::e5m2(DType::QFloat(QuantScheme::default().with_value(QuantValue::E5M2)))]
     fn test_valid_zero_point_dtypes_opset21(#[case] zero_point_dtype: DType) {
         let mut node = build_base_node();
         replace_all_zero_point_arg_types(&mut node, zero_point_dtype, 0);
         replace_all_tensor_arg_types(&mut node, zero_point_dtype, 2);
-
         let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
         assert!(result.is_ok());
+    }
+
+    // FIXME: Remove this test once QFloats are supported in `burn-onnx` crate codegen.
+    #[rstest]
+    #[case(QuantValue::E5M2)]
+    #[case(QuantValue::E4M3)]
+    fn test_qfloat_operand_tensor_not_supported(#[case] value: QuantValue) {
+        let mut node = build_base_node();
+        let qfloat_dtype = DType::QFloat(QuantScheme::default().with_value(value));
+        node.inputs[0].ty = ArgType::Tensor(TensorType::new(qfloat_dtype, 2, None)); // a
+        node.inputs[2].ty = ArgType::Tensor(TensorType::new(qfloat_dtype, 0, None)); // a_zero_point
+
+        let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
+        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
     }
 
     #[rstest]

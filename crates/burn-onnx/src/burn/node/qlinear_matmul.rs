@@ -13,6 +13,11 @@ impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
         // ASSUMPTIONS (per the ONNX spec)
         // 1. Scale and zero point input for a given operand have the same shape.
         // 2. Tensor operands have the same rank.
+
+        // NOTE: QFloat operand tensors are rejected by the onnx-ir processor
+        //       for now until they are supported in codegen.
+        //       As such, operand tensors and their zero points of type I8 or U8.
+
         let a_arg = self.inputs.first().unwrap();
         let a_scale_arg = self.inputs.get(1).unwrap();
         let a_zero_point_arg = self.inputs.get(2).unwrap();
@@ -40,13 +45,6 @@ impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
             DType::I8 => quote! { .clamp(-128f32, 127f32) },
             _ => quote! {},
         };
-
-        if matches!(a_arg.ty.elem_type(), DType::QFloat(..))
-            || matches!(b_arg.ty.elem_type(), DType::QFloat(..))
-            || matches!(y_zero_point_arg.ty.elem_type(), DType::QFloat(..))
-        {
-            panic!("Quantized floats are not supported in `burn`")
-        }
 
         let reshape_a_scale_and_zp = reshape_scale_and_zp(a_scale_arg, &a, &a_scale, &a_zero_point);
         let reshape_b_scale_and_zp = reshape_scale_and_zp(b_scale_arg, &b, &b_scale, &b_zero_point);
@@ -128,10 +126,7 @@ fn reshape_scale_and_zp(
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::*;
-    use burn::tensor::{
-        DType,
-        quantization::{QuantScheme, QuantValue},
-    };
+    use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::qlinear_matmul::QLinearMatMulNodeBuilder;
 
@@ -211,38 +206,6 @@ mod tests {
             y
         }
         ");
-    }
-
-    #[test]
-    #[should_panic(expected = "Quantized floats are not supported in `burn`")]
-    fn test_qlinear_matmul_case_1_f8_dtype() {
-        let node = QLinearMatMulNodeBuilder::new("qmm")
-            .input_tensor(
-                "a",
-                2,
-                DType::QFloat(QuantScheme::default().with_value(QuantValue::E5M2)),
-            )
-            .input_scalar("a_scale", DType::F32)
-            .input_scalar(
-                "a_zero_point",
-                DType::QFloat(QuantScheme::default().with_value(QuantValue::E5M2)),
-            )
-            .input_tensor(
-                "b",
-                2,
-                DType::QFloat(QuantScheme::default().with_value(QuantValue::E5M2)),
-            )
-            .input_scalar("b_scale", DType::F32)
-            .input_scalar(
-                "b_zero_point",
-                DType::QFloat(QuantScheme::default().with_value(QuantValue::E5M2)),
-            )
-            .input_scalar("y_scale", DType::F32)
-            .input_tensor("y_zero_point", 0, DType::I8)
-            .output_tensor("y", 2, DType::I8)
-            .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"");
     }
 
     #[test]
