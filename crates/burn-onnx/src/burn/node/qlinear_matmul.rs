@@ -86,13 +86,13 @@ impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
 
 /// Cast the tensor and zero points to float
 fn to_float(arg: &Argument, token_stream: TokenStream) -> TokenStream {
-    let needs_cast = arg.ty.elem_type().is_int() | arg.ty.elem_type().is_uint();
+    let needs_cast = arg.ty.elem_type().is_int() || arg.ty.elem_type().is_uint();
     if !needs_cast {
         token_stream
     } else if arg.ty.is_scalar() {
         quote! { (#token_stream as f32) }
     } else {
-        quote! { #token_stream.cast(burn::tensor::DType::I32).float() }
+        quote! { #token_stream.float() }
     }
 }
 
