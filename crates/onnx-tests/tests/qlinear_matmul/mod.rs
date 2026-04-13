@@ -137,10 +137,7 @@ mod tests {
         );
 
         let y_scale = Tensor::<TestBackend, 3>::from_data(
-            TensorData::from([
-                [[1.7899106f32], [1.5204613]],
-                [[1.1757488], [0.51989746]],
-            ]),
+            TensorData::from([[[1.7899106f32], [1.5204613]], [[1.1757488], [0.51989746]]]),
             &device,
         );
         let y_zero_point = Tensor::<TestBackend, 3, Int>::from_data(
@@ -159,10 +156,8 @@ mod tests {
             y_zero_point,
         );
 
-        let expected = TensorData::from([
-            [[51u8, 9, 8], [23, 12, 11]],
-            [[16, 30, 16], [0, 33, 14]],
-        ]);
+        let expected =
+            TensorData::from([[[51u8, 9, 8], [23, 12, 11]], [[16, 30, 16], [0, 33, 14]]]);
         output.to_data().assert_eq(&expected, true);
     }
 
