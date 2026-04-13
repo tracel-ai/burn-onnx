@@ -161,10 +161,8 @@ mod tests {
             y_scale: f32,
             y_zero_point: i8,
         ) -> Tensor<B, 2, Int> {
-            let a_dequantized = a_scale
-                * (a.cast(burn::tensor::DType::I32).float() - (a_zero_point as f32));
-            let b_dequantized = b_scale
-                * (b.cast(burn::tensor::DType::I32).float() - (b_zero_point as f32));
+            let a_dequantized = a_scale * (a.float() - (a_zero_point as f32));
+            let b_dequantized = b_scale * (b.float() - (b_zero_point as f32));
             let output_tensor = a_dequantized.matmul(b_dequantized);
             let y = (output_tensor / y_scale).round();
             let y = (y + (y_zero_point as f32))
@@ -186,8 +184,8 @@ mod tests {
             .input_scalar("b_scale", DType::F32)
             .input_scalar("b_zero_point", DType::I8)
             .input_scalar("y_scale", DType::F32)
-            .input_scalar("y_zero_point", DType::BF16)
-            .output_tensor("y", 2, DType::BF16) // Different from `a` and `b`
+            .input_scalar("y_zero_point", DType::U8)
+            .output_tensor("y", 2, DType::U8) // Different from `a` and `b`
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
@@ -200,15 +198,16 @@ mod tests {
             b_scale: f32,
             b_zero_point: i8,
             y_scale: f32,
-            y_zero_point: half::bf16,
-        ) -> Tensor<B, 2> {
-            let a_dequantized = a_scale
-                * (a.cast(burn::tensor::DType::I32).float() - (a_zero_point as f32));
-            let b_dequantized = b_scale
-                * (b.cast(burn::tensor::DType::I32).float() - (b_zero_point as f32));
+            y_zero_point: u8,
+        ) -> Tensor<B, 2, Int> {
+            let a_dequantized = a_scale * (a.float() - (a_zero_point as f32));
+            let b_dequantized = b_scale * (b.float() - (b_zero_point as f32));
             let output_tensor = a_dequantized.matmul(b_dequantized);
             let y = (output_tensor / y_scale).round();
-            let y = (y + y_zero_point).int().cast(burn::tensor::DType::BF16);
+            let y = (y + (y_zero_point as f32))
+                .clamp(0f32, 255f32)
+                .int()
+                .cast(burn::tensor::DType::U8);
             y
         }
         ");
@@ -280,18 +279,14 @@ mod tests {
             let expansion_dim = if b_scale.dims()[0] == b.dims()[0] { 1 } else { 0 };
             let b_scale = b_scale.unsqueeze_dim(expansion_dim);
             let b_zero_point = b_zero_point.unsqueeze_dim(expansion_dim);
-            let a_dequantized = a_scale
-                * (a.cast(burn::tensor::DType::I32).float()
-                    - a_zero_point.cast(burn::tensor::DType::I32).float());
-            let b_dequantized = b_scale
-                * (b.cast(burn::tensor::DType::I32).float()
-                    - b_zero_point.cast(burn::tensor::DType::I32).float());
+            let a_dequantized = a_scale * (a.float() - a_zero_point.float());
+            let b_dequantized = b_scale * (b.float() - b_zero_point.float());
             let output_tensor = a_dequantized.matmul(b_dequantized);
             let expansion_dim = if y_scale.dims()[0] == output_tensor.dims()[0] { 1 } else { 0 };
             let y_scale = y_scale.unsqueeze_dim(expansion_dim);
             let y_zero_point = y_zero_point.unsqueeze_dim(expansion_dim);
             let y = (output_tensor / y_scale).round();
-            let y = (y + y_zero_point.cast(burn::tensor::DType::I32).float())
+            let y = (y + y_zero_point.float())
                 .clamp(-128f32, 127f32)
                 .int()
                 .cast(burn::tensor::DType::I8);
@@ -328,15 +323,11 @@ mod tests {
             y_scale: Tensor<B, 3>,
             y_zero_point: Tensor<B, 3, Int>,
         ) -> Tensor<B, 3, Int> {
-            let a_dequantized = a_scale
-                * (a.cast(burn::tensor::DType::I32).float()
-                    - a_zero_point.cast(burn::tensor::DType::I32).float());
-            let b_dequantized = b_scale
-                * (b.cast(burn::tensor::DType::I32).float()
-                    - b_zero_point.cast(burn::tensor::DType::I32).float());
+            let a_dequantized = a_scale * (a.float() - a_zero_point.float());
+            let b_dequantized = b_scale * (b.float() - b_zero_point.float());
             let output_tensor = a_dequantized.matmul(b_dequantized);
             let y = (output_tensor / y_scale).round();
-            let y = (y + y_zero_point.cast(burn::tensor::DType::I32).float())
+            let y = (y + y_zero_point.float())
                 .clamp(-128f32, 127f32)
                 .int()
                 .cast(burn::tensor::DType::I8);
