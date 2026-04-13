@@ -138,7 +138,7 @@ functionality.
 | [Pow][121]                       | ✅             | ✅           |
 | [PRelu][122]                     | ✅             | ✅           |
 | [QLinearConv][123]               | ❌             | ❌           |
-| [QLinearMatMul][124]             | ❌             | ❌           |
+| [QLinearMatMul][124]             | ✅             | ✅           |
 | [QuantizeLinear][125]            | ✅             | ✅           |
 | [RMSNormalization][198]          | ❌             | ❌           |
 | [RNN][145]                       | ✅             | ✅           |
