@@ -1,5 +1,11 @@
 use crate::include_models;
-include_models!(imputer, imputer_per_feature, imputer_int, imputer_nan, imputer_nan_default);
+include_models!(
+    imputer,
+    imputer_per_feature,
+    imputer_int,
+    imputer_nan,
+    imputer_nan_default
+);
 
 #[cfg(test)]
 mod tests {
@@ -89,7 +95,7 @@ mod tests {
     #[test]
     fn imputer_nan_default_sentinel_replacement() {
         let device = Default::default();
-        let model: imputer_nan_default::Model<TestBackend> = 
+        let model: imputer_nan_default::Model<TestBackend> =
             imputer_nan_default::Model::new(&device);
 
         // input: [[1.0, NaN, 3.0], [4.0, 5.0, NaN]]
