@@ -1,3 +1,5 @@
+use crate::burn::node::matmul::matmul_forward;
+
 use super::prelude::*;
 
 impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
@@ -12,7 +14,6 @@ impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
         // ASSUMPTIONS (per the ONNX spec)
         // 1. Scale and zero point input for a given operand have the same shape.
-        // 2. Tensor operands have the same rank.
 
         // NOTE: QFloat operand tensors are rejected by the onnx-ir processor
         //       for now until they are supported in codegen.
@@ -65,6 +66,20 @@ impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
         let b_zero_point_float = to_float(b_zero_point_arg, b_zero_point);
         let y_zero_point_float = to_float(y_zero_point_arg, y_zero_point);
 
+        let mut output_rank = a_arg.ty.rank().max(b_arg.ty.rank());
+        if a_arg.ty.rank() == 1 || b_arg.ty.rank() == 1 {
+            output_rank -= 1;
+        }
+
+        let matmul_statement = matmul_forward(
+            quote! { a_dequantized },
+            quote! { b_dequantized },
+            output_tensor_ts,
+            a_arg.ty.rank(),
+            b_arg.ty.rank(),
+            output_rank,
+        );
+
         quote! {
             // Dequantize inputs
             #reshape_a_scale_and_zp
@@ -72,7 +87,7 @@ impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
             let a_dequantized = #a_scale * (#a_float - #a_zero_point_float);
             let b_dequantized = #b_scale * (#b_float - #b_zero_point_float);
 
-            let output_tensor = a_dequantized.matmul(b_dequantized);
+            #matmul_statement
 
             // Quantize output
             #reshape_y_scale_and_zp
@@ -198,6 +213,47 @@ mod tests {
             let a_dequantized = a_scale * (a.float() - (a_zero_point as f32));
             let b_dequantized = b_scale * (b.float() - (b_zero_point as f32));
             let output_tensor = a_dequantized.matmul(b_dequantized);
+            let y = (output_tensor / y_scale).round();
+            let y = (y + (y_zero_point as f32))
+                .clamp(0f32, 255f32)
+                .int()
+                .cast(burn::tensor::DType::U8);
+            y
+        }
+        ");
+    }
+
+    #[test]
+    fn test_qlinear_matmul_case_1_scalar_matrix_matmul_vector() {
+        let node = QLinearMatMulNodeBuilder::new("qmm")
+            .input_tensor("a", 2, DType::I8) // Matrix operand
+            .input_scalar("a_scale", DType::F32)
+            .input_scalar("a_zero_point", DType::I8)
+            .input_tensor("b", 1, DType::I8) // Vector operand
+            .input_scalar("b_scale", DType::F32)
+            .input_scalar("b_zero_point", DType::I8)
+            .input_scalar("y_scale", DType::F32)
+            .input_scalar("y_zero_point", DType::U8)
+            .output_tensor("y", 2, DType::U8)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            a: Tensor<B, 2, Int>,
+            a_scale: f32,
+            a_zero_point: i8,
+            b: Tensor<B, 1, Int>,
+            b_scale: f32,
+            b_zero_point: i8,
+            y_scale: f32,
+            y_zero_point: u8,
+        ) -> Tensor<B, 2, Int> {
+            let a_dequantized = a_scale * (a.float() - (a_zero_point as f32));
+            let b_dequantized = b_scale * (b.float() - (b_zero_point as f32));
+            let output_tensor = a_dequantized
+                .matmul(b_dequantized.unsqueeze_dims(&[-1isize]))
+                .squeeze_dim::<1usize>(1usize);
             let y = (output_tensor / y_scale).round();
             let y = (y + (y_zero_point as f32))
                 .clamp(0f32, 255f32)

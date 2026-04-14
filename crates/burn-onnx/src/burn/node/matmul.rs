@@ -42,55 +42,66 @@ impl NodeCodegen for onnx_ir::matmul::MatMulNode {
             _ => panic!("output must be a tensor"),
         };
 
-        // Support broadcasting for missing dimensions
-        match lhs_rank.cmp(&rhs_rank) {
-            Ordering::Greater => {
-                let num_unsqueezes = lhs_rank - rhs_rank;
+        matmul_forward(lhs, rhs, output, lhs_rank, rhs_rank, output_rank)
+    }
+}
 
-                if rhs_rank == 1 {
-                    // Matrix-vector product: expand vector to match matrix rank
-                    let squeeze_dim = lhs_rank - 1;
+pub(super) fn matmul_forward(
+    lhs: TokenStream,
+    rhs: TokenStream,
+    output: impl quote::ToTokens,
+    lhs_rank: usize,
+    rhs_rank: usize,
+    output_rank: usize,
+) -> TokenStream {
+    // Support broadcasting for missing dimensions
+    match lhs_rank.cmp(&rhs_rank) {
+        Ordering::Greater => {
+            let num_unsqueezes = lhs_rank - rhs_rank;
 
-                    // Build unsqueeze dimensions: [-1, 0, 0, ...]
-                    let mut unsqueeze_dims = vec![-1isize];
-                    if num_unsqueezes > 1 {
-                        unsqueeze_dims.extend(std::iter::repeat_n(0isize, num_unsqueezes - 1));
-                    }
+            if rhs_rank == 1 {
+                // Matrix-vector product: expand vector to match matrix rank
+                let squeeze_dim = lhs_rank - 1;
 
-                    quote! {
-                        let #output = #lhs.matmul(#rhs.unsqueeze_dims(&[#(#unsqueeze_dims),*])).squeeze_dim::<#output_rank>(#squeeze_dim);
-                    }
-                } else {
-                    // General tensor broadcasting: add leading dimensions
-                    let target_rank = lhs_rank;
+                // Build unsqueeze dimensions: [-1, 0, 0, ...]
+                let mut unsqueeze_dims = vec![-1isize];
+                if num_unsqueezes > 1 {
+                    unsqueeze_dims.extend(std::iter::repeat_n(0isize, num_unsqueezes - 1));
+                }
 
-                    quote! {
-                        let #output = #lhs.matmul(#rhs.unsqueeze::<#target_rank>());
-                    }
+                quote! {
+                    let #output = #lhs.matmul(#rhs.unsqueeze_dims(&[#(#unsqueeze_dims),*])).squeeze_dim::<#output_rank>(#squeeze_dim);
+                }
+            } else {
+                // General tensor broadcasting: add leading dimensions
+                let target_rank = lhs_rank;
+
+                quote! {
+                    let #output = #lhs.matmul(#rhs.unsqueeze::<#target_rank>());
                 }
             }
-            Ordering::Less => {
-                if lhs_rank == 1 {
-                    // Vector-matrix product: expand vector to match matrix rank
-                    let squeeze_dim = rhs_rank - 2;
-                    let target_rank = rhs_rank;
-
-                    quote! {
-                        let #output = #lhs.unsqueeze::<#target_rank>().matmul(#rhs).squeeze_dim::<#output_rank>(#squeeze_dim);
-                    }
-                } else {
-                    // General tensor broadcasting: add leading dimensions
-                    let target_rank = rhs_rank;
-
-                    quote! {
-                        let #output = #lhs.unsqueeze::<#target_rank>().matmul(#rhs);
-                    }
-                }
-            }
-            Ordering::Equal => quote! {
-                let #output = #lhs.matmul(#rhs);
-            },
         }
+        Ordering::Less => {
+            if lhs_rank == 1 {
+                // Vector-matrix product: expand vector to match matrix rank
+                let squeeze_dim = rhs_rank - 2;
+                let target_rank = rhs_rank;
+
+                quote! {
+                    let #output = #lhs.unsqueeze::<#target_rank>().matmul(#rhs).squeeze_dim::<#output_rank>(#squeeze_dim);
+                }
+            } else {
+                // General tensor broadcasting: add leading dimensions
+                let target_rank = rhs_rank;
+
+                quote! {
+                    let #output = #lhs.unsqueeze::<#target_rank>().matmul(#rhs);
+                }
+            }
+        }
+        Ordering::Equal => quote! {
+            let #output = #lhs.matmul(#rhs);
+        },
     }
 }
 
