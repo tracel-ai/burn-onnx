@@ -70,11 +70,23 @@ impl NodeProcessor for QLinearMatMulProcessor {
                 // FIXME: Support unsized F8 types (F85ME2UZ and F8M5E2UZ) as required by the spec
                 DType::QFloat(quant_scheme)
                     if opset >= 21
-                        && matches!(quant_scheme.value, QuantValue::E5M2 | QuantValue::E4M3) => {}
+                        && matches!(quant_scheme.value, QuantValue::E5M2 | QuantValue::E4M3) =>
+                {
+                    // Quantized float types are not yet supported in codegen.
+                    // FIXME: Remove this validation once QFloats are supported.
+                    return Err(ProcessError::TypeMismatch {
+                        expected: "I8 or U8 operand tensor dtypes. F8 is not yet supported."
+                            .to_string(),
+                        actual: format!("{name}: {:?}", quant_scheme.value),
+                    });
+                }
                 _ => {
                     return Err(ProcessError::TypeMismatch {
-                        expected: "Only I8, U8, F8M5E2, F8M4E3 tensor dtypes are supported"
-                            .to_string(),
+                        expected: if opset >= 21 {
+                            "Only I8, U8, F8M5E2, F8M4E3 tensor dtypes are supported".to_string()
+                        } else {
+                            "Only I8, U8 tensor dtypes are supported".to_string()
+                        },
                         actual: format!("{name}: {dtype:?}"),
                     });
                 }
@@ -87,19 +99,6 @@ impl NodeProcessor for QLinearMatMulProcessor {
                 return Err(ProcessError::TypeMismatch {
                     expected: "Tensor".to_string(),
                     actual: format!("{name}: {:?}", input.ty),
-                });
-            }
-        }
-
-        // Validate that operand tensors `a` and `b` are not QFloat (F8).
-        // While the ONNX spec allows F8 operands at opset 21+, this implementation
-        // does not yet support quantized float operand types in codegen.
-        // FIXME: Remove this validation once QFloats are supported.
-        for (input, name) in [(a, "a"), (b, "b")] {
-            if matches!(input.ty.elem_type(), DType::QFloat(..)) {
-                return Err(ProcessError::TypeMismatch {
-                    expected: "I8 or U8 tensor dtype".to_string(),
-                    actual: format!("{name}: QFloat (F8) operand tensors are not supported"),
                 });
             }
         }
@@ -165,31 +164,40 @@ impl NodeProcessor for QLinearMatMulProcessor {
             }
         }
 
-        // Validate ranks for scale and zero point against corresponding input tensor
-        for (tensor, scale, name) in [(a, a_scale, "a"), (b, b_scale, "b")] {
-            if scale.ty.rank() > tensor.ty.rank() {
-                return Err(ProcessError::TypeMismatch {
-                    expected: "The ranks for the scale and zero point must be less than or equal to its corresponding tensor".to_string(),
-                    actual: format!("{name} has rank {} while {name}_scale has rank {}", tensor.ty.rank(), scale.ty.rank()),
-                });
-            }
+        // Calculate output rank for validation
+        let mut output_rank = a.ty.rank().max(b.ty.rank());
+        if a.ty.rank() == 1 || b.ty.rank() == 1 {
+            output_rank -= 1;
         }
-        // Validate ranks for y_scale and y_zero_point do not exceed the input tensor (using `a`)
-        if y_scale.ty.rank() > a.ty.rank() {
-            return Err(ProcessError::TypeMismatch {
-                expected: "y_scale rank must be less than or equal to input tensor (a) rank"
-                    .to_string(),
-                actual: format!(
-                    "`a` has rank {} while `y_scale` has rank {}",
-                    a.ty.rank(),
-                    y_scale.ty.rank()
-                ),
-            });
+
+        // Validate rank compatibility between tensors and their corresponding scales (and zero points)
+        for (tensor_rank, scale_rank, name) in [
+            (a.ty.rank(), a_scale.ty.rank(), "a"),
+            (b.ty.rank(), b_scale.ty.rank(), "b"),
+            (output_rank, y_scale.ty.rank(), "y"),
+        ] {
+            match (tensor_rank, scale_rank) {
+                // Scalar scale (rank 0) is compatible with any tensor rank
+                (_, 0) => {}
+                // Rank-1 scale is only compatible with rank-2 tensors (per-row quantization)
+                (2, 1) => {}
+                // Matching ranks are compatible
+                (t, s) if t == s => {}
+                // All other rank combinations are invalid
+                (t, s) => {
+                    return Err(ProcessError::TypeMismatch {
+                        expected: format!(
+                            "Rank compatibility between {name} and {name}_scale: \
+                            scale can be rank 0, rank 1 (if {name} is rank 2), or match {name}'s rank"
+                        ),
+                        actual: format!("{name} rank {} vs {name}_scale rank {}", t, s),
+                    });
+                }
+            }
         }
 
         // Set the output dtype and rank
         let output_dtype = y_zero_point.ty.elem_type();
-        let output_rank = a.ty.rank();
         node.outputs[0].ty = ArgType::Tensor(TensorType::new(output_dtype, output_rank, None));
 
         Ok(())
@@ -244,6 +252,8 @@ mod tests {
         node.inputs[6].ty = ArgType::Tensor(TensorType::new(dtype, rank, None)); // y_scale
     }
 
+    // === Zero point dtype validations ===
+
     #[rstest]
     #[case::int8(DType::I8)]
     #[case::uint8(DType::U8)]
@@ -265,7 +275,9 @@ mod tests {
         replace_all_tensor_arg_types(&mut node, zero_point_dtype, 2);
 
         let result = QLinearMatMulProcessor.infer_types(&mut node, 10, &OutputPreferences::new());
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+        assert!(
+            matches!(result, Err(ProcessError::TypeMismatch { ref expected, .. }) if expected == "Only I8, U8 tensor dtypes are supported")
+        );
     }
 
     #[rstest]
@@ -282,33 +294,51 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // FIXME: Remove this test once QFloats are supported in `burn-onnx` crate codegen.
-    #[rstest]
-    #[case(QuantValue::E5M2)]
-    #[case(QuantValue::E4M3)]
-    fn test_qfloat_operand_tensor_not_supported(#[case] value: QuantValue) {
-        let mut node = build_base_node();
-        let qfloat_dtype = DType::QFloat(QuantScheme::default().with_value(value));
-        node.inputs[0].ty = ArgType::Tensor(TensorType::new(qfloat_dtype, 2, None)); // a
-        node.inputs[2].ty = ArgType::Tensor(TensorType::new(qfloat_dtype, 0, None)); // a_zero_point
+    // Tensor type validations ===
+
+    #[test]
+    fn test_non_tensor_input() {
+        let mut node = TestNodeBuilder::new(NodeType::QLinearMatMul, "qmm")
+            .input_scalar_f32("a") // Wrong: should be tensor
+            .input_tensor_f32("a_scale", 0, None)
+            .input_tensor_i8("a_zero_point", 0, None)
+            .input_tensor_i8("b", 2, None)
+            .input_tensor_f32("b_scale", 0, None)
+            .input_tensor_i8("b_zero_point", 0, None)
+            .input_tensor_f32("y_scale", 0, None)
+            .input_tensor_i8("y_zero_point", 0, None)
+            .output_tensor_f32("y", 2, None)
+            .build();
 
         let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+        assert!(
+            matches!(result, Err(ProcessError::TypeMismatch { ref expected, .. }) if expected == "Tensor")
+        );
     }
+
+    // === Tensor and zero_point dtype matches ===
 
     #[rstest]
-    #[case::i16(DType::I16)]
-    #[case::i32(DType::I32)]
-    #[case::i64(DType::I64)]
-    #[case::f32(DType::F32)]
-    fn test_invalid_zero_point_dtypes(#[case] zero_point_dtype: DType) {
+    #[case::a_mismatch(0, 2, DType::I32, DType::U8)]
+    #[case::b_mismatch(3, 5, DType::I32, DType::U8)]
+    #[case::a_f32_zp_i8(0, 2, DType::F32, DType::I8)]
+    fn test_tensor_and_zero_point_dtype_mismatch(
+        #[case] tensor_idx: usize,
+        #[case] zp_idx: usize,
+        #[case] tensor_dtype: DType,
+        #[case] zp_dtype: DType,
+    ) {
         let mut node = build_base_node();
-        replace_all_zero_point_arg_types(&mut node, zero_point_dtype, 0);
-        replace_all_tensor_arg_types(&mut node, zero_point_dtype, 2);
+        node.inputs[tensor_idx].ty = ArgType::Tensor(TensorType::new(tensor_dtype, 2, None));
+        node.inputs[zp_idx].ty = ArgType::Tensor(TensorType::new(zp_dtype, 0, None));
 
         let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+        assert!(
+            matches!(result, Err(ProcessError::TypeMismatch { ref expected, .. }) if expected == "Same types for tensor and zero_point")
+        );
     }
+
+    // === Scale dtype validations ===
 
     #[test]
     fn test_valid_scale_dtype_opset10() {
@@ -328,7 +358,9 @@ mod tests {
         replace_all_scale_arg_types(&mut node, scale_dtype, 0);
 
         let result = QLinearMatMulProcessor.infer_types(&mut node, 10, &OutputPreferences::new());
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+        assert!(
+            matches!(result, Err(ProcessError::TypeMismatch { ref expected, .. }) if expected == "Only F32 is supported")
+        );
     }
 
     #[rstest]
@@ -353,44 +385,75 @@ mod tests {
         node.inputs[1].ty = ArgType::Tensor(TensorType::new(invalid_dtype, 0, None));
 
         let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+        assert!(
+            matches!(result, Err(ProcessError::TypeMismatch { ref expected, .. }) if expected == "Only BF16, F16, and F32 dtypes are supported")
+        );
     }
 
-    #[rstest]
-    #[case::a_mismatch(0, 2, DType::I32, DType::U8)]
-    #[case::b_mismatch(3, 5, DType::I32, DType::U8)]
-    #[case::a_f32_zp_i8(0, 2, DType::F32, DType::I8)]
-    fn test_tensor_zero_point_dtype_mismatch(
-        #[case] tensor_idx: usize,
-        #[case] zp_idx: usize,
-        #[case] tensor_dtype: DType,
-        #[case] zp_dtype: DType,
-    ) {
+    // === Scale and zero_point rank matches ===
+
+    #[test]
+    fn test_rank_mismatch_between_scale_and_zero_point() {
         let mut node = build_base_node();
-        node.inputs[tensor_idx].ty = ArgType::Tensor(TensorType::new(tensor_dtype, 2, None));
-        node.inputs[zp_idx].ty = ArgType::Tensor(TensorType::new(zp_dtype, 0, None));
+        // Scale and zero-point have mismatched ranks
+        node.inputs[1].ty = ArgType::Tensor(TensorType::new(DType::F32, 0, None)); // a_scale rank 0
+        node.inputs[2].ty = ArgType::Tensor(TensorType::new(DType::I8, 1, None)); // a_zero_point rank 1
 
         let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+        assert!(
+            matches!(result, Err(ProcessError::TypeMismatch { ref expected, .. }) if expected.contains("must have the same rank"))
+        );
+    }
+
+    // === Tensor and scale/zp rank compatibilities ===
+
+    #[rstest]
+    #[case(3, 1)]
+    #[case(4, 3)]
+    fn test_input_scale_zp_and_tensor_rank_mismatch(
+        #[case] tensor_rank: usize,
+        #[case] scale_and_zp_rank: usize,
+    ) {
+        let mut node = build_base_node();
+        node.inputs[0].ty = ArgType::Tensor(TensorType::new(DType::I8, tensor_rank, None)); // a
+        node.inputs[1].ty = ArgType::Tensor(TensorType::new(DType::F32, scale_and_zp_rank, None)); // a_scale
+        node.inputs[2].ty = ArgType::Tensor(TensorType::new(DType::I8, scale_and_zp_rank, None)); // a_zero_point
+
+        let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
+        assert!(
+            matches!(result, Err(ProcessError::TypeMismatch { ref expected, .. }) if expected.contains("Rank compatibility"))
+        );
     }
 
     #[test]
-    fn test_non_tensor_input() {
-        let mut node = TestNodeBuilder::new(NodeType::QLinearMatMul, "qmm")
-            .input_scalar_f32("a") // Wrong: should be tensor
-            .input_tensor_f32("a_scale", 0, None)
-            .input_tensor_i32("a_zero_point", 0, None)
-            .input_tensor_i32("b", 2, None)
-            .input_tensor_f32("b_scale", 0, None)
-            .input_tensor_i32("b_zero_point", 0, None)
-            .input_tensor_f32("y_scale", 0, None)
-            .input_tensor_i32("y_zero_point", 0, None)
-            .output_tensor_f32("y", 2, None)
-            .build();
+    fn test_output_scale_zp_and_tensor_rank_mismatch() {
+        let mut node = build_base_node();
+        node.inputs[0].ty = ArgType::Tensor(TensorType::new(DType::I8, 3, None)); // a
+        node.inputs[3].ty = ArgType::Tensor(TensorType::new(DType::I8, 2, None)); // b
+        node.inputs[6].ty = ArgType::Tensor(TensorType::new(DType::F32, 2, None)); // y_scale rank 2 (output rank will be 3)
+        node.inputs[7].ty = ArgType::Tensor(TensorType::new(DType::I8, 2, None)); // y_zero_point
 
         let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+        assert!(
+            matches!(result, Err(ProcessError::TypeMismatch { ref expected, .. }) if expected.contains("Rank compatibility"))
+        );
     }
+
+    #[test]
+    fn test_per_row_quantization() {
+        let mut node = build_base_node();
+        // Per-row quantization: zero-points and scales are rank-1 (one per row)
+        replace_all_zero_point_arg_types(&mut node, DType::I8, 1);
+        replace_all_scale_arg_types(&mut node, DType::F32, 1);
+
+        let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
+        assert!(result.is_ok());
+
+        // Output rank should match matmul output rank (still 2 for 2D @ 2D)
+        assert_eq!(node.outputs[0].ty.rank(), 2);
+    }
+
+    // === Output derivation tests ===
 
     #[test]
     fn test_output_rank_matches_input_operands_ranks() {
@@ -417,54 +480,5 @@ mod tests {
         // Output dtype should match y_zero_point dtype (U8)
         let output_dtype = node.outputs[0].ty.elem_type();
         assert_eq!(output_dtype, DType::U8);
-    }
-
-    #[test]
-    fn test_per_row_quantization() {
-        let mut node = build_base_node();
-        // Per-row quantization: zero-points and scales are rank-1 (one per row)
-        replace_all_zero_point_arg_types(&mut node, DType::I8, 1);
-        replace_all_scale_arg_types(&mut node, DType::F32, 1);
-
-        let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
-        assert!(result.is_ok());
-
-        // Output rank should match matmul output rank (still 2 for 2D @ 2D)
-        assert_eq!(node.outputs[0].ty.rank(), 2);
-    }
-
-    #[test]
-    fn test_scale_rank_exceeds_tensor_rank() {
-        let mut node = build_base_node();
-        // Scale rank exceeds tensor rank
-        node.inputs[0].ty = ArgType::Tensor(TensorType::new(DType::I8, 2, None)); // a rank 2
-        node.inputs[1].ty = ArgType::Tensor(TensorType::new(DType::F32, 3, None)); // a_scale rank 3
-        node.inputs[2].ty = ArgType::Tensor(TensorType::new(DType::F32, 3, None)); // a_zero_point rank 3
-
-        let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
-    }
-
-    #[test]
-    fn test_y_scale_rank_exceeds_tensor_rank() {
-        let mut node = build_base_node();
-        // y_scale rank (3) exceeds a rank (2)
-        node.inputs[0].ty = ArgType::Tensor(TensorType::new(DType::I8, 2, None)); // a rank 2
-        node.inputs[6].ty = ArgType::Tensor(TensorType::new(DType::F32, 3, None)); // y_scale rank 3
-        node.inputs[7].ty = ArgType::Tensor(TensorType::new(DType::F32, 3, None)); // y_zero_point rank 3
-
-        let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
-    }
-
-    #[test]
-    fn test_rank_mismatch_between_scale_and_zero_point() {
-        let mut node = build_base_node();
-        // Scale and zero-point have mismatched ranks
-        node.inputs[1].ty = ArgType::Tensor(TensorType::new(DType::F32, 0, None)); // a_scale rank 0
-        node.inputs[2].ty = ArgType::Tensor(TensorType::new(DType::I8, 1, None)); // a_zero_point rank 1
-
-        let result = QLinearMatMulProcessor.infer_types(&mut node, 21, &OutputPreferences::new());
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
     }
 }
