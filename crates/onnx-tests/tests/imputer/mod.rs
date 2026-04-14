@@ -61,14 +61,15 @@ mod tests {
 
         // input: [[1, -1, 3], [4, 5, -1]]
         // -1 is the sentinel replaced by 0 (imputed value)
+        // Note: Using i32 literals to match backend's default Int type
         let input = burn::tensor::Tensor::<TestBackend, 2, burn::tensor::Int>::from_ints(
-            [[1i64, -1, 3], [4, 5, -1]],
+            [[1i32, -1, 3], [4, 5, -1]],
             &device,
         );
 
         let output = model.forward(input);
 
-        let expected = burn::tensor::TensorData::from([[1i64, 0, 3], [4, 5, 0]]);
+        let expected = burn::tensor::TensorData::from([[1i32, 0, 3], [4, 5, 0]]);
         output.to_data().assert_eq(&expected, true);
     }
 
