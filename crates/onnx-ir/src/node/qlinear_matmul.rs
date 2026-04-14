@@ -14,6 +14,7 @@ use burn_tensor::quantization::QuantValue;
 use onnx_ir_derive::NodeBuilder;
 
 use crate::ir::{Argument, Node, RawNode};
+use crate::matmul::matmul_output_rank;
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -164,11 +165,7 @@ impl NodeProcessor for QLinearMatMulProcessor {
             }
         }
 
-        // Calculate output rank for validation
-        let mut output_rank = a.ty.rank().max(b.ty.rank());
-        if a.ty.rank() == 1 || b.ty.rank() == 1 {
-            output_rank -= 1;
-        }
+        let output_rank = matmul_output_rank(a.ty.rank(), b.ty.rank());
 
         // Validate rank compatibility between tensors and their corresponding scales (and zero points)
         for (tensor_rank, scale_rank, name) in [

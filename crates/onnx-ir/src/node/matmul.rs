@@ -31,7 +31,6 @@ use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
-use core::cmp::max;
 
 /// Node representation for MatMul operation
 #[derive(Debug, Clone, NodeBuilder)]
@@ -104,10 +103,7 @@ impl NodeProcessor for MatMulProcessor {
                 // When A is 2D and B is 1D: A[M, K] x B[K] -> valid
                 // Higher dimensional cases use broadcasting on batch dimensions
 
-                let mut out_rank = max(a.rank, b.rank);
-                if (a.rank >= 2 && b.rank == 1) || (a.rank == 1 && b.rank >= 2) {
-                    out_rank -= 1;
-                }
+                let out_rank = matmul_output_rank(a.rank, b.rank);
 
                 node.outputs[0].ty = ArgType::Tensor(TensorType {
                     dtype: a.dtype,
@@ -133,6 +129,14 @@ impl NodeProcessor for MatMulProcessor {
             outputs: builder.outputs,
         })
     }
+}
+
+pub(crate) fn matmul_output_rank(lhs_rank: usize, rhs_rank: usize) -> usize {
+    let mut output_rank = lhs_rank.max(rhs_rank);
+    if lhs_rank == 1 || rhs_rank == 1 {
+        output_rank -= 1;
+    }
+    output_rank
 }
 
 #[cfg(test)]
