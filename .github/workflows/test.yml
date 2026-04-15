@@ -33,8 +33,9 @@ env:
   TEST_RELEASE_FLAG: "--release"
   # Crates excluded from CI builds/tests:
   # - model-checks: require externally downloaded ONNX files
+  # - onnx-official-tests: has its own dedicated job (see below)
   # - raspberry-pi-pico: embedded no_std example, requires ARM target
-  CI_EXCLUDE: "burn-onnx-model-checks-*,model-checks-common,raspberry-pi-pico"
+  CI_EXCLUDE: "burn-onnx-model-checks-*,model-checks-common,onnx-official-tests,raspberry-pi-pico"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -195,3 +196,91 @@ jobs:
       # --------------------------------------------------------------------------------
       - name: Tests
         run: xtask test ${{ env.TEST_RELEASE_FLAG }} -x ${{ env.CI_EXCLUDE }}
+
+  onnx-official-tests:
+    # Dedicated regression gate against the upstream ONNX backend test
+    # suite vendored under crates/onnx-official-tests/. Kept separate
+    # from linux-std-tests so the gate produces its own visible PR check
+    # and so future op-prefix sharding (tracked in #315 M3) can land as
+    # a small change to this job rather than a workflow restructure.
+    #
+    # Linux-only by design: the crate is platform-agnostic Rust + burn
+    # tensor math, so Windows/macOS coverage adds cost without catching
+    # anything the std jobs above do not already catch via the rest of
+    # the workspace.
+    runs-on: ubuntu-22.04
+    needs: [prepare-checks, code-quality]
+    # fetch-depth: 0 is required so that `git show origin/main:...`
+    # inside the expectations-delta step below can reach the base
+    # branch's tree. Default fetch-depth of 1 would produce a shallow
+    # clone that does not contain origin/main.
+    env:
+      CARGO_PROFILE_TEST_INCREMENTAL: 'false'
+    permissions:
+      # Required for the expectations-delta step to post a PR comment.
+      # No effect on push events because the step itself is gated on
+      # `github.event_name == 'pull_request'`.
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      # --------------------------------------------------------------------------------
+      - name: Install Rust
+        uses: tracel-ai/github-actions/install-rust@v9
+        with:
+          rust-toolchain: stable
+          cache-key: ""
+          shared-key: stable-linux
+      # --------------------------------------------------------------------------------
+      - name: Tests
+        run: cargo test -p onnx-official-tests ${{ env.TEST_RELEASE_FLAG }}
+      # --------------------------------------------------------------------------------
+      # M4: post the expectations.toml delta as a PR comment so
+      # contributors see at a glance which tests their change promoted,
+      # regressed, or reclassified. Only runs on pull_request events
+      # (push events to main have nothing to compare against) and only
+      # posts when the delta is non-empty (the xtask prints the sentinel
+      # string `_No changes._` for an empty diff, which we grep for
+      # to decide whether to post).
+      # The `if` condition has two guards:
+      #   1. pull_request event — push-to-main has no base to diff.
+      #   2. head.repo.fork == false — fork PRs run with a read-only
+      #      GITHUB_TOKEN and cannot post issue comments; attempting
+      #      would fail the job. Contributors from forks will not get
+      #      the auto-delta comment until a workflow_run-based
+      #      alternative lands as a follow-up.
+      # The `gh pr comment` call also has its own || fallback so an
+      # unexpected permission edge case (e.g. org-level restriction
+      # tightens, or branch protection changes) downgrades to a
+      # warning rather than failing the whole job.
+      - name: Expectations delta (diff against origin/main)
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.fork == false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          cargo xtask diff-expectations \
+            --base "origin/${PR_BASE_REF}" \
+            --format markdown \
+            > /tmp/expectations-delta.md 2> /tmp/expectations-delta.log || {
+              echo "::warning::diff-expectations failed; see log below"
+              cat /tmp/expectations-delta.log
+              exit 0
+            }
+          # Skip posting when the delta is empty. The xtask emits the
+          # literal `_No changes._` line for that case.
+          if grep -q '^_No changes\._$' /tmp/expectations-delta.md; then
+            echo "No expectations.toml delta against origin/${PR_BASE_REF}; skipping PR comment."
+            exit 0
+          fi
+          gh pr comment "${PR_NUMBER}" --body-file /tmp/expectations-delta.md --repo "${GITHUB_REPOSITORY}" || {
+            echo "::warning::failed to post PR comment; expectations delta follows"
+            cat /tmp/expectations-delta.md
+            exit 0
+          }

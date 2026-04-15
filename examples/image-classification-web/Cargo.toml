@@ -17,7 +17,7 @@ default = []
 
 [dependencies]
 burn = { workspace = true, default-features = false, features = [
-    "ndarray", "webgpu",
+    "flex", "webgpu",
 ] }
 burn-store = { workspace = true, default-features = false, features = ["burnpack"] }
 

@@ -5,9 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["test-ndarray"]
+default = ["test-flex"]
 test-wgpu = ["burn/wgpu"]
-test-ndarray = ["burn/ndarray"]
+test-flex = ["burn/flex"]
 test-tch = ["burn/tch"]
 test-metal = ["burn/metal"]
 test-candle = ["burn/candle"]

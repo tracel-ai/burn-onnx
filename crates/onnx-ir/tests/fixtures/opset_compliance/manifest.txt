@@ -14,10 +14,10 @@
 14:Add,BatchNormalization,CumSum,Div,GRU,HardSwish,Identity,LSTM,Mul,Relu,Reshape,Sub,Trilu|
 15:BatchNormalization,Bernoulli,Pow,Shape|
 16:GreaterOrEqual,GridSample,Identity,If,LeakyRelu,LessOrEqual,PRelu,ScatterElements,ScatterND,Where|
-17:LayerNormalization|
+17:DFT,HammingWindow,HannWindow,LayerNormalization|
 18:BitwiseAnd,BitwiseNot,BitwiseOr,BitwiseXor,GroupNormalization,Mish,Pad,ReduceL1,ReduceL2,ReduceLogSum,ReduceLogSumExp,ReduceMax,ReduceMean,ReduceMin,ReduceProd,ReduceSumSquare,Resize,ScatterElements,ScatterND,Split|
 19:AveragePool,Cast,Constant,DeformConv,Equal,Identity,If,Pad,Reshape,Resize,Shape,Size|
-20:ConstantOfShape,Gelu,GridSample,IsInf,IsNaN,ReduceMax,ReduceMin|
+20:ConstantOfShape,DFT,Gelu,GridSample,IsInf,IsNaN,ReduceMax,ReduceMin|
 21:Cast,Constant,ConstantOfShape,Flatten,GroupNormalization,Identity,If,Pad,Reshape,Shape,Size,Squeeze,Transpose,Unsqueeze|
 22:Acos,Acosh,Asin,Asinh,Atan,Atanh,AveragePool,Bernoulli,Conv,ConvTranspose,Cos,Cosh,DeformConv,Dropout,Elu,EyeLike,GRU,GlobalAveragePool,GridSample,HardSigmoid,HardSwish,InstanceNormalization,LSTM,MaxPool,Mish,RandomNormal,RandomNormalLike,RandomUniform,RandomUniformLike,Round,Selu,Sin,Sinh,Softplus,Softsign,Tan,ThresholdedRelu|
 23:Cast,Constant,ConstantOfShape,Flatten,Identity,If,Pad,Reshape,Shape,Size,Squeeze,Transpose,Unsqueeze|

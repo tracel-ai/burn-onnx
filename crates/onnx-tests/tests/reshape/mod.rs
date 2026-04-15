@@ -47,7 +47,13 @@ mod tests {
             [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 11.],
             &device,
         );
-        let shape = Tensor::<TestBackend, 1, burn::tensor::Int>::from_ints([3, 4], &device);
+        // ONNX Reshape's `shape` input is always int64, and the generated codegen reads it
+        // back via `.as_slice::<i64>()`. Construct the tensor with explicit I64 dtype
+        // rather than relying on the backend's default int element.
+        let shape = Tensor::<TestBackend, 1, burn::tensor::Int>::from_data(
+            TensorData::from([3i64, 4]),
+            (&device, burn::tensor::DType::I64),
+        );
         let output = model.forward(input, shape);
 
         // Output should be 2D with shape [3, 4] as specified in the ONNX model

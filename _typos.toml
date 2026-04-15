@@ -9,6 +9,9 @@ extend-exclude = [
     "examples/image-classification-web/src/model/label.txt",
     # Auto-generated ONNX operator specs contain formulas with variable names that look like typos
     "onnx-spec/ops/",
+    # Vendored upstream ONNX backend test data contains binary protobuf
+    # `.pb` files whose raw bytes can match typo patterns by chance.
+    "crates/onnx-official-tests/vendor/",
 ]
 
 [default.extend-words]

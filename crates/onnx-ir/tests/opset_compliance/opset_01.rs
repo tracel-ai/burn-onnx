@@ -62,6 +62,7 @@ fn arg_max(graph: &OnnxGraph) {
         ArgMaxConfig {
             axis: 1,
             keepdims: true,
+            select_last_index: false,
         }
     "#);
 }
@@ -79,6 +80,7 @@ fn arg_min(graph: &OnnxGraph) {
         ArgMinConfig {
             axis: 1,
             keepdims: true,
+            select_last_index: false,
         }
     "#);
 }

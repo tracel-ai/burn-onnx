@@ -55,9 +55,11 @@ mod tests {
         // because the output tensor is too large to compare with the expected tensor.
         let output_sum = output.sum().into_scalar();
 
-        let expected_sum = -113.869_99; // from pytorch
-
-        assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));
+        // PyTorch f32 ground truth (from conv2d/conv2d.py, torch 2.10.0 CPU).
+        // Tolerance accommodates gemm-order accumulation drift on the ~1080-element
+        // output sum; burn-flex's gemm-backed conv stays within ~2e-4 of PyTorch.
+        let expected_sum = -113.86999_5_f32;
+        assert!(expected_sum.approx_eq(output_sum, (1.0e-3, 2)));
     }
 
     #[test]
@@ -127,9 +129,10 @@ mod tests {
         // because the output tensor is too large to compare with the expected tensor.
         let output_sum = output.sum().into_scalar();
 
-        let expected_sum = -481.674_65; // from burn (close to pytorch's -481.6749572753906)
-
-        // Use a slightly larger tolerance to account for floating-point differences
-        assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));
+        // PyTorch f32 ground truth (from conv/conv2d_asymmetric_padding.py, torch 2.10.0
+        // CPU). Tolerance is a bit larger than conv2d because the ~2304-element output
+        // sum magnifies gemm-order accumulation drift (~2.5e-3 absolute vs PyTorch).
+        let expected_sum = -481.67495_7_f32;
+        assert!(expected_sum.approx_eq(output_sum, (5.0e-3, 2)));
     }
 }

@@ -557,11 +557,61 @@ fn is_add_node_with_bias(
         return false;
     }
 
-    // Check if one input is the matmul output and the other has a value
-    (peek_node.inputs[0].name == current_node.outputs[0].name
-        && graph_data.has_value(&peek_node.inputs[1].name))
-        || (peek_node.inputs[1].name == current_node.outputs[0].name
-            && graph_data.has_value(&peek_node.inputs[0].name))
+    // Identify which Add input is the bias (constant) and which is the matmul output
+    let bias_input = if peek_node.inputs[0].name == current_node.outputs[0].name
+        && graph_data.has_value(&peek_node.inputs[1].name)
+    {
+        &peek_node.inputs[1]
+    } else if peek_node.inputs[1].name == current_node.outputs[0].name
+        && graph_data.has_value(&peek_node.inputs[0].name)
+    {
+        &peek_node.inputs[0]
+    } else {
+        return false;
+    };
+
+    // The bias must be a 1D tensor whose size matches out_features (weight dim[1]).
+    // A scalar bias (e.g. shape [1]) would cause a shape mismatch in the Linear layer.
+    let weight_input = &current_node.inputs[1];
+    match (&bias_input.ty, &weight_input.ty) {
+        (ArgType::Tensor(bias_ty), ArgType::Tensor(weight_ty)) => {
+            if bias_ty.rank != 1 {
+                log::debug!(
+                    "Skipping Add fusion: bias rank is {}, expected 1",
+                    bias_ty.rank
+                );
+                return false;
+            }
+            // If both static shapes are known, verify the bias dimension matches out_features
+            if let (Some(bias_shape), Some(weight_shape)) =
+                (&bias_ty.static_shape, &weight_ty.static_shape)
+            {
+                let out_features = weight_shape.get(1).copied().flatten();
+                let bias_dim = bias_shape.first().copied().flatten();
+                if let (Some(out_f), Some(bias_d)) = (out_features, bias_dim)
+                    && out_f != bias_d
+                {
+                    log::debug!(
+                        "Skipping Add fusion: bias size {} != out_features {}",
+                        bias_d,
+                        out_f
+                    );
+                    return false;
+                }
+            } else {
+                log::debug!("Add fusion: static shapes not fully known, proceeding optimistically");
+            }
+            true
+        }
+        _ => {
+            log::debug!(
+                "Skipping Add fusion: expected (Tensor, Tensor), got ({}, {})",
+                bias_input.ty,
+                weight_input.ty
+            );
+            false
+        }
+    }
 }
 
 /// Merge the Add node's bias into the MatMul node
@@ -656,5 +706,203 @@ mod tests {
 
         // Node type should remain MatMul (not converted to Linear)
         assert_eq!(node.node_type, NodeType::MatMul);
+    }
+
+    /// Helper to create a MatMul node and Add node pair for bias fusion tests.
+    /// Sets static_shape on weight and bias inputs (matching the real pipeline).
+    fn make_matmul_add_pair(
+        out_features: usize,
+        bias_shape: Vec<usize>,
+    ) -> (RawNode, RawNode, crate::graph_state::GraphState) {
+        use crate::ir::{TensorData, TensorType};
+
+        let in_features = 4;
+        let weight_data = vec![0.0; in_features * out_features];
+        let weight_shape = vec![in_features, out_features];
+
+        let matmul_node = TestNodeBuilder::new(NodeType::MatMul, "matmul")
+            .input_tensor_f32("input", 2, Some(vec![8, in_features]))
+            .input_tensor_f32_data("weight", weight_data.clone(), weight_shape.clone())
+            .output_tensor_f32("matmul_out", 2, Some(vec![8, out_features]))
+            .build();
+
+        // Patch the weight input to have static_shape (as it would in the real pipeline)
+        let mut matmul_node = matmul_node;
+        matmul_node.inputs[1].ty = ArgType::Tensor(TensorType {
+            dtype: burn_tensor::DType::F32,
+            rank: 2,
+            static_shape: Some(weight_shape.iter().map(|&d| Some(d)).collect()),
+        });
+
+        let bias_data = vec![0.0; bias_shape.iter().product::<usize>()];
+        let mut add_node = TestNodeBuilder::new(NodeType::Add, "add")
+            .input_tensor_f32("matmul_out", 2, Some(vec![8, out_features]))
+            .input_tensor_f32_data("bias", bias_data.clone(), bias_shape.clone())
+            .output_tensor_f32("add_out", 2, Some(vec![8, out_features]))
+            .build();
+
+        // Patch the bias input to have static_shape (as it would in the real pipeline)
+        add_node.inputs[1].ty = ArgType::Tensor(TensorType {
+            dtype: burn_tensor::DType::F32,
+            rank: 1,
+            static_shape: Some(bias_shape.iter().map(|&d| Some(d)).collect()),
+        });
+
+        let mut graph_state = crate::graph_state::GraphState::new(&[], &[], &[], &[]);
+        graph_state.register_test_constant(
+            "weight".to_string(),
+            TensorData::new(weight_data, weight_shape),
+        );
+        graph_state
+            .register_test_constant("bias".to_string(), TensorData::new(bias_data, bias_shape));
+
+        (matmul_node, add_node, graph_state)
+    }
+
+    #[test]
+    fn should_fuse_add_bias_when_shape_matches() {
+        let (matmul_node, add_node, graph_state) = make_matmul_add_pair(32, vec![32]);
+        assert!(is_add_node_with_bias(&add_node, &matmul_node, &graph_state));
+    }
+
+    #[test]
+    fn should_skip_add_fusion_when_bias_is_scalar() {
+        // Bias shape [1] does not match out_features=32
+        let (matmul_node, add_node, graph_state) = make_matmul_add_pair(32, vec![1]);
+        assert!(!is_add_node_with_bias(
+            &add_node,
+            &matmul_node,
+            &graph_state
+        ));
+    }
+
+    #[test]
+    fn should_skip_add_fusion_when_bias_rank_is_2d() {
+        use crate::ir::{TensorData, TensorType};
+
+        let out_features = 32;
+        let in_features = 4;
+        let weight_data = vec![0.0; in_features * out_features];
+        let weight_shape = vec![in_features, out_features];
+
+        let matmul_node = {
+            let mut n = TestNodeBuilder::new(NodeType::MatMul, "matmul")
+                .input_tensor_f32("input", 2, Some(vec![8, in_features]))
+                .input_tensor_f32_data("weight", weight_data.clone(), weight_shape.clone())
+                .output_tensor_f32("matmul_out", 2, Some(vec![8, out_features]))
+                .build();
+            n.inputs[1].ty = ArgType::Tensor(TensorType {
+                dtype: burn_tensor::DType::F32,
+                rank: 2,
+                static_shape: Some(weight_shape.iter().map(|&d| Some(d)).collect()),
+            });
+            n
+        };
+
+        // Bias is rank 2 [1, 32], should be rejected
+        let bias_data = vec![0.0; out_features];
+        let bias_shape = vec![1, out_features];
+        let mut add_node = TestNodeBuilder::new(NodeType::Add, "add")
+            .input_tensor_f32("matmul_out", 2, Some(vec![8, out_features]))
+            .input_tensor_f32_data("bias", bias_data.clone(), bias_shape.clone())
+            .output_tensor_f32("add_out", 2, Some(vec![8, out_features]))
+            .build();
+        add_node.inputs[1].ty = ArgType::Tensor(TensorType {
+            dtype: burn_tensor::DType::F32,
+            rank: 2,
+            static_shape: Some(bias_shape.iter().map(|&d| Some(d)).collect()),
+        });
+
+        let mut graph_state = crate::graph_state::GraphState::new(&[], &[], &[], &[]);
+        graph_state.register_test_constant(
+            "weight".to_string(),
+            TensorData::new(weight_data, weight_shape),
+        );
+        graph_state
+            .register_test_constant("bias".to_string(), TensorData::new(bias_data, bias_shape));
+
+        assert!(!is_add_node_with_bias(
+            &add_node,
+            &matmul_node,
+            &graph_state
+        ));
+    }
+
+    #[test]
+    fn should_fuse_add_bias_with_reversed_operand_order() {
+        use crate::ir::{TensorData, TensorType};
+
+        let out_features = 32;
+        let in_features = 4;
+        let weight_data = vec![0.0; in_features * out_features];
+        let weight_shape = vec![in_features, out_features];
+
+        let matmul_node = {
+            let mut n = TestNodeBuilder::new(NodeType::MatMul, "matmul")
+                .input_tensor_f32("input", 2, Some(vec![8, in_features]))
+                .input_tensor_f32_data("weight", weight_data.clone(), weight_shape.clone())
+                .output_tensor_f32("matmul_out", 2, Some(vec![8, out_features]))
+                .build();
+            n.inputs[1].ty = ArgType::Tensor(TensorType {
+                dtype: burn_tensor::DType::F32,
+                rank: 2,
+                static_shape: Some(weight_shape.iter().map(|&d| Some(d)).collect()),
+            });
+            n
+        };
+
+        // Bias as inputs[0], matmul output as inputs[1] (reversed order)
+        let bias_data = vec![0.0; out_features];
+        let bias_shape = vec![out_features];
+        let mut add_node = TestNodeBuilder::new(NodeType::Add, "add")
+            .input_tensor_f32_data("bias", bias_data.clone(), bias_shape.clone())
+            .input_tensor_f32("matmul_out", 2, Some(vec![8, out_features]))
+            .output_tensor_f32("add_out", 2, Some(vec![8, out_features]))
+            .build();
+        add_node.inputs[0].ty = ArgType::Tensor(TensorType {
+            dtype: burn_tensor::DType::F32,
+            rank: 1,
+            static_shape: Some(bias_shape.iter().map(|&d| Some(d)).collect()),
+        });
+
+        let mut graph_state = crate::graph_state::GraphState::new(&[], &[], &[], &[]);
+        graph_state.register_test_constant(
+            "weight".to_string(),
+            TensorData::new(weight_data, weight_shape),
+        );
+        graph_state
+            .register_test_constant("bias".to_string(), TensorData::new(bias_data, bias_shape));
+
+        assert!(is_add_node_with_bias(&add_node, &matmul_node, &graph_state));
+    }
+
+    #[test]
+    fn should_fuse_add_bias_when_static_shapes_unknown() {
+        use crate::ir::TensorData;
+
+        // When static shapes are not available, fusion proceeds optimistically
+        let matmul_node = TestNodeBuilder::new(NodeType::MatMul, "matmul")
+            .input_tensor_f32("input", 2, None)
+            .input_tensor_f32_data("weight", vec![0.0; 128], vec![4, 32])
+            .output_tensor_f32("matmul_out", 2, None)
+            .build();
+        // Note: input_tensor_f32_data does not set static_shape, simulating unknown shapes
+
+        let add_node = TestNodeBuilder::new(NodeType::Add, "add")
+            .input_tensor_f32("matmul_out", 2, None)
+            .input_tensor_f32_data("bias", vec![0.0; 32], vec![32])
+            .output_tensor_f32("add_out", 2, None)
+            .build();
+
+        let mut graph_state = crate::graph_state::GraphState::new(&[], &[], &[], &[]);
+        graph_state.register_test_constant(
+            "weight".to_string(),
+            TensorData::new(vec![0.0; 128], vec![4, 32]),
+        );
+        graph_state
+            .register_test_constant("bias".to_string(), TensorData::new(vec![0.0; 32], vec![32]));
+
+        // Should return true (optimistic fallback)
+        assert!(is_add_node_with_bias(&add_node, &matmul_node, &graph_state));
     }
 }

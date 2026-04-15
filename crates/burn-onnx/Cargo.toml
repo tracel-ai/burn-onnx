@@ -22,10 +22,9 @@ default = ["mmap"]
 mmap = ["onnx-ir/mmap"]
 
 [dependencies]
-onnx-ir = { path = "../onnx-ir", version = "=0.21.0-pre.2", default-features = false }
+onnx-ir = { path = "../onnx-ir", version = "=0.21.0-pre.3", default-features = false }
 
-burn = { workspace = true, features = ["std"] }
-burn-ndarray = { workspace = true }
+burn = { workspace = true, features = ["std", "flex"] }
 burn-store = { workspace = true, features = [
     "std",
     "burnpack",

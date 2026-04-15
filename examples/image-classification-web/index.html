@@ -43,7 +43,7 @@
           1.
           <label for="backend">Backend:</label>
           <select id="backend">
-            <option value="ndarray" selected>CPU - Ndarray</option>
+            <option value="flex" selected>CPU - Flex</option>
             <option value="webgpu">GPU - WebGPU</option>
           </select>
         </div>
@@ -164,7 +164,7 @@
 
       async function handleBackendDropdownChange() {
         const backend = this.value;
-        if (backend === "ndarray") await imageClassifier.set_backend_ndarray();
+        if (backend === "flex") await imageClassifier.set_backend_flex();
         if (backend === "webgpu") await imageClassifier.set_backend_wgpu();
 
         resetCanvasAndInputs();

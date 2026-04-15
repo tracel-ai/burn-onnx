@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use burn::{backend::NdArray, tensor::Tensor};
+use burn::{backend::Flex, tensor::Tensor};
 use embassy_executor::Spawner;
 use embassy_rp::{
     bind_interrupts,
@@ -14,8 +14,8 @@ use embedded_alloc::LlffHeap as Heap;
 use raspberry_pi_pico::sine::Model;
 use {defmt_rtt as _, panic_probe as _};
 
-// Set the backend to NdArray with f32
-type Backend = NdArray<f32>;
+// Set the backend to Flex (pure-Rust CPU backend)
+type Backend = Flex;
 // Get the backend device we use (cpu)
 type BackendDevice = <Backend as burn::tensor::backend::Backend>::Device;
 
@@ -76,7 +76,7 @@ async fn main(spawner: Spawner) {
     }
 }
 
-fn run_model(model: &Model<NdArray>, device: &BackendDevice, input: f32) -> Tensor<Backend, 2> {
+fn run_model(model: &Model<Backend>, device: &BackendDevice, input: f32) -> Tensor<Backend, 2> {
     // Define the tensor
     let input = Tensor::<Backend, 2>::from_floats([[input]], device);
 

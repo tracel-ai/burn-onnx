@@ -23,7 +23,7 @@ mod tests {
         let input1 = Tensor::<TestBackend, 2, Int>::from_ints([[1, 2, 3, 4]], &device);
         let input2 = Tensor::<TestBackend, 2, Int>::from_ints([[1, 1, 2, 2]], &device);
         let output = model.forward(input1, input2);
-        let expected = TensorData::from([[1i64, 3, 3, 6]]);
+        let expected = TensorData::from([[1i32, 3, 3, 6]]);
         output.to_data().assert_eq(&expected, true);
     }
 
@@ -36,7 +36,7 @@ mod tests {
         let input1 = Tensor::<TestBackend, 2, Int>::from_ints([[1, 2, 3, 4]], &device);
         let scalar = 2;
         let output = model.forward(input1, scalar);
-        let expected = TensorData::from([[3i64, 2, 3, 6]]);
+        let expected = TensorData::from([[3i32, 2, 3, 6]]);
         output.to_data().assert_eq(&expected, true);
     }
 
@@ -50,7 +50,7 @@ mod tests {
         let input2 = Tensor::<TestBackend, 2, Int>::from_ints([[1, 2, 3, 4]], &device);
         let output = model.forward(scalar, input2);
         // Bitwise OR is commutative, so result should be same as tensor-scalar
-        let expected = TensorData::from([[3i64, 2, 3, 6]]);
+        let expected = TensorData::from([[3i32, 2, 3, 6]]);
         output.to_data().assert_eq(&expected, true);
     }
 

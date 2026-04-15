@@ -1,6 +1,11 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(argmin, argmin_both_keepdims, argmin_1d);
+include_models!(
+    argmin,
+    argmin_both_keepdims,
+    argmin_1d,
+    argmin_select_last_index
+);
 
 #[cfg(test)]
 mod tests {
@@ -50,6 +55,26 @@ mod tests {
         output_keepdims_false
             .to_data()
             .assert_eq(&expected_keepdims_false, true);
+    }
+
+    #[test]
+    fn argmin_select_last_index() {
+        // select_last_index=1: returns the index of the LAST occurrence of
+        // the minimum along the axis (not the first).
+        let model: argmin_select_last_index::Model<TestBackend> =
+            argmin_select_last_index::Model::default();
+
+        let device = Default::default();
+        // Row 0: min is 1.0 at indices 1 and 2 -> last is 2
+        // Row 1: all tied at 2.0 -> last is 3
+        let input = Tensor::<TestBackend, 2>::from_floats(
+            [[5.0, 1.0, 1.0, 4.0], [2.0, 2.0, 2.0, 2.0]],
+            &device,
+        );
+        let output = model.forward(input);
+
+        let expected = TensorData::from([[2i64], [3]]);
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]

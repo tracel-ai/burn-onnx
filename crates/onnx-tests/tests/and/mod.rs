@@ -43,6 +43,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "burn-flex bool binary ops don't broadcast - tracel-ai/burn#4771"]
     fn and_scalar_tensor() {
         let device = Default::default();
         let model: and_scalar_tensor::Model<TestBackend> = and_scalar_tensor::Model::new(&device);
@@ -60,6 +61,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "burn-flex bool binary ops don't broadcast - tracel-ai/burn#4771"]
     fn and_broadcast_tensor_ranks() {
         let model = and_broadcast::Model::<TestBackend>::default();
         let device = Default::default();

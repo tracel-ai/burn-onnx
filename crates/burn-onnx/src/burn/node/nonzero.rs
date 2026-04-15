@@ -21,16 +21,25 @@ impl NodeCodegen for onnx_ir::nonzero::NonZeroNode {
             _ => panic!("Expected tensor input"),
         };
 
+        // ONNX spec: NonZero output is always int64. Burn's `argwhere` returns
+        // the backend's default int element type, which varies across backends,
+        // so cast to the ONNX-specified dtype to keep the output dtype faithful
+        // to the model regardless of backend default.
+        let output_dtype_tokens = match &self.outputs.first().unwrap().ty {
+            ArgType::Tensor(t) => t.dtype.to_tokens(),
+            other => panic!("NonZero output must be Tensor, got {other:?}"),
+        };
+
         // Generate the appropriate zero value based on input tensor type
         match input_kind {
             TensorKind::Float => {
                 quote! {
-                    let #output = #input.not_equal_elem(0.0).argwhere().transpose();
+                    let #output = #input.not_equal_elem(0.0).argwhere().transpose().cast(#output_dtype_tokens);
                 }
             }
             TensorKind::Int => {
                 quote! {
-                    let #output = #input.not_equal_elem(0).argwhere().transpose();
+                    let #output = #input.not_equal_elem(0).argwhere().transpose().cast(#output_dtype_tokens);
                 }
             }
             TensorKind::Bool => {
@@ -38,7 +47,7 @@ impl NodeCodegen for onnx_ir::nonzero::NonZeroNode {
                 // ONNX NonZero expects output shape [rank, num_nonzero] but argwhere returns [num_nonzero, rank]
                 // So we need to transpose the result
                 quote! {
-                    let #output = #input.argwhere().transpose();
+                    let #output = #input.argwhere().transpose().cast(#output_dtype_tokens);
                 }
             }
         }
@@ -61,7 +70,11 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Int> {
-            let output = input.not_equal_elem(0.0).argwhere().transpose();
+            let output = input
+                .not_equal_elem(0.0)
+                .argwhere()
+                .transpose()
+                .cast(burn::tensor::DType::I64);
             output
         }
         ");
@@ -76,7 +89,11 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
-            let output = input.not_equal_elem(0).argwhere().transpose();
+            let output = input
+                .not_equal_elem(0)
+                .argwhere()
+                .transpose()
+                .cast(burn::tensor::DType::I64);
             output
         }
         ");
@@ -91,7 +108,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2, Bool>) -> Tensor<B, 2, Int> {
-            let output = input.argwhere().transpose();
+            let output = input.argwhere().transpose().cast(burn::tensor::DType::I64);
             output
         }
         ");

@@ -101,8 +101,11 @@ mod tests {
         let output = model.forward(input);
 
         assert_eq!(output.shape(), Shape::from([1, 2]));
-        let expected = Tensor::<TestBackend, 2, burn::tensor::Int>::from_data([[2i64, 3]], &device);
-        output.to_data().assert_eq(&expected.to_data(), true);
+        // ONNX Shape returns int64, and Unsqueeze preserves that, so the model output is
+        // I64. Compare against an explicitly-I64 TensorData rather than relying on the
+        // backend's default int element.
+        let expected = burn::tensor::TensorData::from([[2i64, 3]]);
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]

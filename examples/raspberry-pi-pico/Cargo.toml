@@ -29,7 +29,8 @@ panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 portable-atomic = { version = "1.13", features = ["critical-section"] }
 embedded-alloc = "0.7.0"
 
-burn = { workspace = true, features = ["ndarray"] }
+burn = { workspace = true, features = ["flex"] }
+burn-flex = { workspace = true, features = ["critical-section"] }
 burn-store = { workspace = true, features = ["burnpack"] }
 
 [build-dependencies]

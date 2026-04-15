@@ -1,0 +1,11 @@
+{
+    "burn-onnx": {
+        "name": "burn-onnx",
+        "link": "https://github.com/tracel-ai/burn-onnx",
+        "description": "Converts ONNX models to native Rust code for inference using the Burn deep learning framework.",
+        "long_description": "burn-onnx converts ONNX models into type-safe Rust source code and optimized weight files for the Burn deep learning framework. Unlike runtime interpreters, it generates native Rust code at build time, enabling compile-time verification, backend-agnostic execution across CPUs and GPUs, and zero-overhead inference without requiring an external runtime dependency.",
+        "results_dir": "./results/burn-onnx/stable",
+        "core_packages": ["burn-onnx"],
+        "dockerfile_link": "runtimes/burn-onnx/stable/Dockerfile"
+    }
+}

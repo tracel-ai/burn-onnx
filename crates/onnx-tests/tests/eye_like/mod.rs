@@ -108,13 +108,12 @@ mod tests {
 
         let output = model.forward(input);
 
-        // Output should be integer tensor with identity matrix values
-        let expected = Tensor::<TestBackend, 2, burn::tensor::Int>::from_ints(
-            [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-            &device,
-        );
+        // Output should be an integer tensor with identity matrix values. ONNX EyeLike's
+        // `dtype` attribute is honored in codegen (int64 here), so compare against an
+        // explicitly-I64 TensorData rather than relying on the backend's default int dtype.
+        let expected = burn::tensor::TensorData::from([[1i64, 0, 0], [0, 1, 0], [0, 0, 1]]);
 
-        output.to_data().assert_eq(&expected.to_data(), true);
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]

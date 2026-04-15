@@ -328,10 +328,19 @@ fn forward_tensor_gather(
                 ArgType::Shape(_) => {
                     let shape_name = arg_to_ident(index_arg);
 
-                    // Shape array can be directly used to create tensor data
+                    // Shape array `[i64; N]` gets wrapped into a 1D Int tensor and then
+                    // fed to `Tensor::select`. Pin the tensor dtype to I64 explicitly
+                    // rather than letting the `Tensor::<B, 1, _>` element type inference
+                    // pick up the backend default IntElem: burn-flex's `int_select`
+                    // requires I64 indices (debug_assert enforced) and the bare-device
+                    // overload would otherwise drop the I64 source into the backend
+                    // default, which on Flex produces silently-wrong gather output.
                     quote! {
                         let #output = {
-                            let indices = Tensor::<B, 1, _>::from_data(#shape_name, &self.device);
+                            let indices = Tensor::<B, 1, burn::tensor::Int>::from_data(
+                                #shape_name,
+                                (&self.device, burn::tensor::DType::I64),
+                            );
                             Tensor::select(#input, #dim, indices)
                         };
                     }
@@ -838,7 +847,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, weights: Tensor<B, 2>, positions: [i64; 2]) -> Tensor<B, 2> {
             let selected_weights = {
-                let indices = Tensor::<B, 1, _>::from_data(positions, &self.device);
+                let indices = Tensor::<
+                    B,
+                    1,
+                    burn::tensor::Int,
+                >::from_data(positions, (&self.device, burn::tensor::DType::I64));
                 Tensor::select(weights, 0, indices)
             };
             selected_weights
@@ -859,7 +872,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, matrix_data: Tensor<B, 3>, col_indices: [i64; 3]) -> Tensor<B, 3> {
             let columns = {
-                let indices = Tensor::<B, 1, _>::from_data(col_indices, &self.device);
+                let indices = Tensor::<
+                    B,
+                    1,
+                    burn::tensor::Int,
+                >::from_data(col_indices, (&self.device, burn::tensor::DType::I64));
                 Tensor::select(matrix_data, 1, indices)
             };
             columns
@@ -880,7 +897,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, tensor3d: Tensor<B, 4>, plane_ids: [i64; 4]) -> Tensor<B, 4> {
             let planes = {
-                let indices = Tensor::<B, 1, _>::from_data(plane_ids, &self.device);
+                let indices = Tensor::<
+                    B,
+                    1,
+                    burn::tensor::Int,
+                >::from_data(plane_ids, (&self.device, burn::tensor::DType::I64));
                 Tensor::select(tensor3d, 2, indices)
             };
             planes

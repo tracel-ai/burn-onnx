@@ -87,7 +87,7 @@ mod tests {
 
         let output = model.forward(a, b);
 
-        let expected = TensorData::from([[4i64, 5, 6], [8, 10, 12], [12, 15, 18]]);
+        let expected = TensorData::from([[4i32, 5, 6], [8, 10, 12], [12, 15, 18]]);
         output.to_data().assert_eq(&expected, true);
     }
 

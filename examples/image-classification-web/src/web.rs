@@ -10,7 +10,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use crate::model::{label::LABELS, normalizer::Normalizer, squeezenet::Model as SqueezenetModel};
 
 use burn::{
-    backend::{NdArray, wgpu::init_setup_async},
+    backend::{Flex, wgpu::init_setup_async},
     prelude::*,
     tensor::activation::softmax,
 };
@@ -34,8 +34,8 @@ pub fn start() {
 #[allow(clippy::large_enum_variant)]
 /// The model is loaded to a specific backend
 pub enum ModelType {
-    /// The model is loaded to the NdArray backend
-    WithNdArrayBackend(Model<NdArray<f32>>),
+    /// The model is loaded to the Flex CPU backend
+    WithFlexBackend(Model<Flex>),
 
     /// The model is loaded to the WebGpu backend
     WithWgpuBackend(Model<WebGpu<f32, i32>>),
@@ -60,7 +60,7 @@ impl ImageClassifier {
         log::info!("Initializing the image classifier");
         let device = Default::default();
         Self {
-            model: ModelType::WithNdArrayBackend(Model::new(&device)),
+            model: ModelType::WithFlexBackend(Model::new(&device)),
         }
     }
 
@@ -71,7 +71,7 @@ impl ImageClassifier {
         let start = Instant::now();
 
         let result = match self.model {
-            ModelType::WithNdArrayBackend(ref model) => model.forward(input).await,
+            ModelType::WithFlexBackend(ref model) => model.forward(input).await,
             ModelType::WithWgpuBackend(ref model) => model.forward(input).await,
         };
 
@@ -82,14 +82,14 @@ impl ImageClassifier {
         top_5_classes(result)
     }
 
-    /// Sets the backend to NdArray
-    pub async fn set_backend_ndarray(&mut self) -> Result<(), JsValue> {
-        log::info!("Loading the model to the NdArray backend");
+    /// Sets the backend to Flex (pure-Rust CPU backend)
+    pub async fn set_backend_flex(&mut self) -> Result<(), JsValue> {
+        log::info!("Loading the model to the Flex backend");
         let start = Instant::now();
         let device = Default::default();
-        self.model = ModelType::WithNdArrayBackend(Model::new(&device));
+        self.model = ModelType::WithFlexBackend(Model::new(&device));
         let duration = start.elapsed();
-        log::debug!("Model is loaded to the NdArray backend in {duration:?}");
+        log::debug!("Model is loaded to the Flex backend in {duration:?}");
         Ok(())
     }
 

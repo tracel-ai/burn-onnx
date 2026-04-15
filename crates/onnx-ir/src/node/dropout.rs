@@ -59,9 +59,14 @@ pub(crate) struct DropoutProcessor;
 impl NodeProcessor for DropoutProcessor {
     type Config = DropoutConfig;
 
-    fn is_noop(&self, _node: &RawNode) -> bool {
-        // Dropout is always a no-op during inference (burn-onnx generates inference code only)
-        true
+    fn is_noop(&self, node: &RawNode) -> bool {
+        // Dropout is a no-op during inference (burn-onnx generates inference
+        // code only), but only when the optional `mask` output is absent.
+        // No-op elimination in post_processing rewires `output[0]` to
+        // `input[0]` and removes the node entirely, which would orphan any
+        // consumer of `output[1]` (the mask). When the mask is consumed we
+        // keep the node and let burn-onnx codegen emit an all-true mask.
+        node.outputs.len() == 1
     }
 
     fn spec(&self) -> NodeSpec {
@@ -129,13 +134,11 @@ impl NodeProcessor for DropoutProcessor {
             return Ok(config);
         }
 
-        // Opset 12+ uses input for ratio
-        let prob = match node.inputs.get(1) {
-            None => {
-                return Err(ProcessError::MissingInput(
-                    "Dropout: missing ratio input".to_string(),
-                ));
-            }
+        // Opset 12+: ratio is input[1] but is optional (defaults to 0.5 per
+        // ONNX spec). Models may omit it entirely or provide it as the
+        // empty-string "optional not provided" marker.
+        let prob = match node.get_input(1) {
+            None => DropoutInput::Static(0.5),
             Some(input) => match input.value() {
                 None => {
                     // Runtime input - no static value available
@@ -235,14 +238,21 @@ mod tests {
     }
 
     #[test]
-    fn test_dropout_config_missing_input() {
+    fn test_dropout_config_defaults_missing_ratio_to_half() {
+        // ONNX Dropout opset 12+ makes the ratio input optional with a
+        // spec-defined default of 0.5. The config extractor should fall
+        // back to that default rather than erroring.
         let mut node = create_test_node_with_input(0.5).build_with_graph_data(16);
         node.attrs.clear(); // Remove attributes
         node.inputs.remove(1); // Remove ratio input
         let node = node;
         let processor = DropoutProcessor;
-        let result = processor.extract_config(&node, 16);
-        assert!(matches!(result, Err(ProcessError::MissingInput(_))));
+        let config = processor.extract_config(&node, 16).unwrap();
+        assert!(
+            matches!(&config.prob, DropoutInput::Static(v) if (v - 0.5).abs() < 1e-6),
+            "expected DropoutInput::Static(0.5), got {:?}",
+            config.prob
+        );
     }
 
     // TODO: Add test for mask output - Opset 13+ supports optional mask output (boolean tensor) - Missing test coverage for second output
@@ -256,9 +266,28 @@ mod tests {
     // TODO: Add test for unexpected attributes - Should validate and reject unknown attributes - Missing attribute validation test
 
     #[test]
-    fn test_dropout_is_always_noop() {
+    fn test_dropout_is_noop_single_output() {
+        // Dropout with only the `y` output is eliminated by the noop pass.
         let node = create_test_node_with_attr(0.5).build_with_graph_data(16);
         let processor = DropoutProcessor;
         assert!(processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_dropout_is_not_noop_with_mask_output() {
+        // Dropout with the optional mask output must NOT be eliminated,
+        // because no-op elimination only rewires output[0] and would
+        // orphan any consumer of output[1] (the mask).
+        let node = TestNodeBuilder::new(NodeType::Dropout, "test_dropout_mask")
+            .input_tensor_f32("data", 3, None)
+            .output_tensor_f32("output", 3, None)
+            .output_tensor_bool("mask", 3, None)
+            .attr_float("ratio", 0.5)
+            .build_with_graph_data(16);
+        let processor = DropoutProcessor;
+        assert!(
+            !processor.is_noop(&node),
+            "Dropout with mask output must not be marked noop"
+        );
     }
 }

@@ -1,0 +1,24 @@
+# Job to append to `.github/workflows/benchmark-backends.yml` in the
+# onnx/backend-scoreboard repo. Also add `burn_onnx_stable` to
+# `collect_and_deploy.needs` and add a matching `download-artifact` step.
+  burn_onnx_stable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Build docker image
+        run: docker build -t scoreboard/burn-onnx -f runtimes/burn-onnx/stable/Dockerfile .
+
+      - name: Run docker container
+        run: docker run --name burn-onnx --env-file setup/env.list -v ${{ github.workspace }}/results/burn-onnx/stable:/root/results scoreboard/burn-onnx || true
+
+      - name: Upload results
+        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-burn-onnx-stable
+          path: results/burn-onnx/stable/

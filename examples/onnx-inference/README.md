@@ -29,7 +29,7 @@ https://huggingface.co/datasets/ylecun/mnist/viewer/mnist/test?row=15
 1. Add `burn-store` with the `burnpack` feature to your `Cargo.toml` dependencies:
    ```toml
    [dependencies]
-   burn = { version = "0.21", features = ["ndarray"] }
+   burn = { version = "0.21", features = ["flex"] }
    burn-store = { version = "0.21", features = ["burnpack"] }
 
    [build-dependencies]
@@ -71,7 +71,7 @@ https://huggingface.co/datasets/ylecun/mnist/viewer/mnist/test?row=15
 
    ```rust
    use burn::tensor;
-   use burn::backend::ndarray::NdArray;
+   use burn::backend::Flex;
 
    use onnx_inference::mnist::Model;
 
@@ -80,10 +80,10 @@ https://huggingface.co/datasets/ylecun/mnist/viewer/mnist/test?row=15
        let device = Default::default();
 
        // Create a new model and load weights from target dir default device
-       let model: Model<NdArray> = Model::default();
+       let model: Model<Flex> = Model::default();
 
        // Create a new input tensor (all zeros for demonstration purposes)
-       let input = tensor::Tensor::<NdArray<f32>, 4>::zeros([1, 1, 28, 28], &device);
+       let input = tensor::Tensor::<Flex, 4>::zeros([1, 1, 28, 28], &device);
 
        // Run the model
        let output = model.forward(input);

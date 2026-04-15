@@ -55,7 +55,7 @@ impl NodeProcessor for PReluProcessor {
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
         // Lift the slope input (input[1]) to static
-        if node.inputs.len() > 1 {
+        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
             node.inputs[1].to_static()?;
         }
         Ok(())
@@ -175,6 +175,16 @@ mod tests {
         } else {
             panic!("Expected tensor output");
         }
+    }
+
+    #[test]
+    fn test_prelu_lift_constants_dynamic_slope() {
+        // Slope arriving as a dynamic graph input (not a constant) should not fail.
+        // This happens in older ONNX models like ArcFace where weights are graph inputs.
+        let mut node = create_test_node(); // inputs have Dynamic value_source
+        let processor = PReluProcessor;
+        // Should succeed without error (slope is not constant, so nothing to lift)
+        processor.lift_constants(&mut node, 16).unwrap();
     }
 
     #[test]

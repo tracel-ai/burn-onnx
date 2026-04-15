@@ -6,7 +6,8 @@ include_models!(
     mod_remainder,
     mod_fmod,
     mod_broadcast_fixed,
-    mod_broadcast_remainder_fixed
+    mod_broadcast_remainder_fixed,
+    mod_shape
 );
 
 #[cfg(test)]
@@ -129,6 +130,25 @@ mod tests {
         assert!((values[1] - (-1.0)).abs() < 0.001);
         assert!((values[2] - 2.0).abs() < 0.001);
         assert!((values[3] - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn mod_shape_shape_and_shape_scalar() {
+        // Exercises Mod applied to Shape values (i.e. `[i64; N]` arrays in
+        // the generated code), which happens in expanded attention models
+        // when head counts are validated via Shape arithmetic.
+        let device = Default::default();
+        let model: mod_shape::Model<TestBackend> = mod_shape::Model::new(&device);
+
+        let input1 = Tensor::<TestBackend, 3>::zeros([12, 8, 6], &device);
+        let input2 = Tensor::<TestBackend, 3>::zeros([4, 2, 3], &device);
+
+        let (shape_mod_shape, shape_mod_scalar) = model.forward(input1, input2);
+
+        // [12, 8, 6] % [4, 2, 3] = [0, 0, 0]
+        assert_eq!(shape_mod_shape, [0i64, 0, 0]);
+        // [12, 8, 6] % 5 = [2, 3, 1]
+        assert_eq!(shape_mod_scalar, [2i64, 3, 1]);
     }
 
     #[test]

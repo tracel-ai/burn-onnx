@@ -51,7 +51,7 @@ fn to_burn_activation(onnx_activation: RnnActivationFunction) -> ActivationConfi
 /// Collect tensor snapshots for Rnn burnpack serialization.
 ///
 /// This function handles the weight transformation from ONNX's packed RNN format
-/// to Burn's Rnn weight structure using NdArray backend for tensor ops.
+/// to Burn's Rnn weight structure using the Flex CPU backend for tensor ops.
 ///
 /// ONNX Rnn weight layout:
 /// - W: `[num_directions, hidden_size, input_size]`
@@ -98,11 +98,18 @@ fn collect_rnn_snapshots(
 
     let mut snapshots = Vec::new();
 
-    // Create tensors from data
-    let w_tensor: Tensor<SerializationBackend, 3> = Tensor::from_data(data_w.clone(), &device);
-    let r_tensor: Tensor<SerializationBackend, 3> = Tensor::from_data(data_r.clone(), &device);
-    let b_tensor: Option<Tensor<SerializationBackend, 2>> =
-        data_b.clone().map(|b| Tensor::from_data(b, &device));
+    // Create tensors from data, pinning the runtime dtype to the ONNX weight
+    // dtype via `(device, dtype)`. A bare `&device` would let
+    // `Tensor::from_data` convert to SerializationBackend's default FloatElem
+    // (f32 on Flex), silently truncating f64 weights before they enter the
+    // snapshot pipeline.
+    let w_tensor: Tensor<SerializationBackend, 3> =
+        Tensor::from_data(data_w.clone(), (&device, dtype));
+    let r_tensor: Tensor<SerializationBackend, 3> =
+        Tensor::from_data(data_r.clone(), (&device, dtype));
+    let b_tensor: Option<Tensor<SerializationBackend, 2>> = data_b
+        .clone()
+        .map(|b| Tensor::from_data(b, (&device, dtype)));
 
     for (dir_idx, dir_prefix) in direction_prefixes.iter().enumerate() {
         // Select direction slice from W and R
@@ -185,7 +192,8 @@ fn collect_rnn_snapshots(
 
         // Hidden transform bias: zeros (combined bias is in input_transform)
         if b_dir.is_some() {
-            let zeros: Tensor<SerializationBackend, 1> = Tensor::zeros([hidden_size], &device);
+            let zeros: Tensor<SerializationBackend, 1> =
+                Tensor::zeros([hidden_size], (&device, dtype));
             let zeros_data = zeros.into_data();
 
             let path = format!(
@@ -203,9 +211,12 @@ fn collect_rnn_snapshots(
 
 /// Create a TensorSnapshot from TensorData.
 ///
-/// Converts the data to the target dtype to preserve the original precision.
-/// This is important because intermediate tensor operations use f64 for precision,
-/// but we need to store the data in the original dtype (e.g., F16, F32).
+/// Normalizes the data back to the target dtype as a safety net. The upstream
+/// weight-slicing pipeline already pins the dtype when building the intermediate
+/// `Tensor<SerializationBackend, _>` (via `from_data(data, (device, dtype))`),
+/// so this `convert_dtype` is ordinarily a no-op. It stays in place to guarantee
+/// the snapshot's dtype tag matches the tensor data even if a future refactor
+/// introduces a path that produces data in a different dtype.
 fn create_snapshot_from_data(
     data: burn::tensor::TensorData,
     path: &str,
@@ -216,8 +227,7 @@ fn create_snapshot_from_data(
     use burn_store::TensorSnapshotError;
     use std::rc::Rc;
 
-    // Convert data back to the original dtype
-    // This is necessary because we use f64 for intermediate operations to preserve precision
+    // No-op when `data` already has the declared dtype; defensive otherwise.
     let data = data.convert_dtype(dtype);
 
     let shape = data.shape.clone();

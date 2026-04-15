@@ -12,14 +12,72 @@ fn graph() -> OnnxGraph {
 }
 
 #[rstest]
+fn dft(graph: &OnnxGraph) {
+    let node = find_node(graph, "dft");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Dft "dft1"
+      Inputs:
+        dft_input: F32[1, 8, 1]
+      Outputs:
+        dft1_out1: F32[1, 5, 2]
+      Config:
+        DftConfig {
+            inverse: false,
+            onesided: true,
+            axis: 1,
+            dft_length: None,
+            is_real_input: true,
+        }
+    "#);
+}
+
+#[rstest]
+fn hamming_window(graph: &OnnxGraph) {
+    let node = find_node(graph, "hammingwindow");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    HammingWindow "hammingwindow1"
+      Inputs:
+      Outputs:
+        hammingwindow1_out1: F32[10]
+      Config:
+        HammingWindowConfig {
+            periodic: true,
+            output_dtype: F32,
+            size: Static(
+                10,
+            ),
+        }
+    "#);
+}
+
+#[rstest]
+fn hann_window(graph: &OnnxGraph) {
+    let node = find_node(graph, "hannwindow");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    HannWindow "hannwindow1"
+      Inputs:
+      Outputs:
+        hannwindow1_out1: F32[10]
+      Config:
+        HannWindowConfig {
+            periodic: true,
+            output_dtype: F32,
+            size: Static(
+                10,
+            ),
+        }
+    "#);
+}
+
+#[rstest]
 fn layer_normalization(graph: &OnnxGraph) {
     let node = find_node(graph, "layernormalization");
     insta::assert_snapshot!(format!("{node}"), @r#"
     LayerNormalization "layernormalization1"
       Inputs:
         layernormalization_input: F32[2, 3, 4]
-        _: F32[4] [static(0)]
-        _: F32[4] [static(1)]
+        _: F32[4] [static(2)]
+        _: F32[4] [static(3)]
       Outputs:
         layernormalization1_out1: F32[2, 3, 4]
       Config:

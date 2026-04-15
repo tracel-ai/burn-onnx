@@ -370,6 +370,7 @@ impl ProcessorRegistry {
             Box::new(crate::node::dropout::DropoutProcessor),
         );
         registry.register(NodeType::Det, Box::new(crate::node::det::DetProcessor));
+        registry.register(NodeType::Dft, Box::new(crate::node::dft::DftProcessor));
         registry.register(NodeType::Pad, Box::new(crate::node::pad::PadProcessor));
 
         // Reduction operations
@@ -583,6 +584,16 @@ impl ProcessorRegistry {
         registry.register(
             NodeType::Bernoulli,
             Box::new(crate::node::bernoulli::BernoulliProcessor),
+        );
+
+        // Signal processing operations
+        registry.register(
+            NodeType::HammingWindow,
+            Box::new(crate::node::hamming_window::HammingWindowProcessor),
+        );
+        registry.register(
+            NodeType::HannWindow,
+            Box::new(crate::node::hann_window::HannWindowProcessor),
         );
 
         // Misc operations

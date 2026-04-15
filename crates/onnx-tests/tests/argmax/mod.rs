@@ -1,6 +1,11 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(argmax, argmax_both_keepdims, argmax_1d);
+include_models!(
+    argmax,
+    argmax_both_keepdims,
+    argmax_1d,
+    argmax_select_last_index
+);
 
 #[cfg(test)]
 mod tests {
@@ -50,6 +55,26 @@ mod tests {
         output_keepdims_false
             .to_data()
             .assert_eq(&expected_false, true);
+    }
+
+    #[test]
+    fn argmax_select_last_index() {
+        // select_last_index=1: returns the index of the LAST occurrence of
+        // the maximum along the axis (not the first).
+        let model: argmax_select_last_index::Model<TestBackend> =
+            argmax_select_last_index::Model::default();
+
+        let device = Default::default();
+        // Row 0: max is 5.0 at indices 1 and 2 -> last is 2
+        // Row 1: all tied at 3.0 -> last is 3
+        let input = Tensor::<TestBackend, 2>::from_floats(
+            [[1.0, 5.0, 5.0, 2.0], [3.0, 3.0, 3.0, 3.0]],
+            &device,
+        );
+        let output = model.forward(input);
+
+        let expected = TensorData::from([[2i64], [3]]);
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]

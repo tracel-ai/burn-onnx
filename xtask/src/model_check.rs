@@ -9,8 +9,8 @@ pub struct ModelCheckArgs {
     #[arg(long)]
     pub model: Option<String>,
 
-    /// Cargo features to pass (default: ndarray).
-    #[arg(long, default_value = "ndarray")]
+    /// Cargo features to pass (default: flex).
+    #[arg(long, default_value = "flex")]
     pub features: String,
 
     /// Build in debug mode instead of release.
@@ -170,13 +170,19 @@ const MODELS: &[ModelInfo] = &[
         download_args: &[],
         blocked: false,
     },
+    // Blocked on upstream burn-flex bool broadcast bug (tracel-ai/burn#4771):
+    // ModernBERT's attention-mask AND path hits the same
+    // `bool_and_inplace_u8` OOB at `burn-flex/src/simd/scalar.rs:56` that
+    // the 10 ignored `test_{and,or}_bcast*` onnx-official-tests entries
+    // document. Unblock and re-run once the upstream fix lands in a burn
+    // rev bump. Still runnable manually via `--model modernbert-base`.
     ModelInfo {
         id: "modernbert-base",
         dir: "modernbert-base",
         name: "ModernBERT-base",
         env: None,
         download_args: &[],
-        blocked: false,
+        blocked: true,
     },
     ModelInfo {
         id: "rf-detr",
@@ -194,13 +200,17 @@ const MODELS: &[ModelInfo] = &[
         download_args: &[],
         blocked: false,
     },
+    // Blocked on tracel-ai/burn#4771 (see modernbert-base above). ALBERT's
+    // attention-mask AND path panics on warmup inference with the same
+    // `burn-flex/src/simd/scalar.rs:56` OOB in `bool_and_inplace_u8`.
+    // Unblock when a burn rev bump brings in the fix.
     ModelInfo {
         id: "albert",
         dir: "albert",
         name: "ALBERT",
         env: Some(("ALBERT_MODEL", "albert-base-v2")),
         download_args: &[],
-        blocked: false,
+        blocked: true,
     },
     ModelInfo {
         id: "yolo",
@@ -218,13 +228,17 @@ const MODELS: &[ModelInfo] = &[
         download_args: &[],
         blocked: false,
     },
+    // Blocked on tracel-ai/burn#4771 (see modernbert-base above). Both SmolLM
+    // variants are causal LMs whose attention-mask AND path hits the same
+    // `burn-flex/src/simd/scalar.rs:56` OOB in `bool_and_inplace_u8`. Unblock
+    // when a burn rev bump brings in the fix.
     ModelInfo {
         id: "smollm",
         dir: "smollm",
         name: "SmolLM 135M",
         env: Some(("SMOLLM_MODEL", "smollm-135m")),
         download_args: &["--model", "smollm-135m"],
-        blocked: false,
+        blocked: true,
     },
     ModelInfo {
         id: "smollm2",
@@ -232,7 +246,7 @@ const MODELS: &[ModelInfo] = &[
         name: "SmolLM2 135M",
         env: Some(("SMOLLM_MODEL", "smollm2-135m")),
         download_args: &["--model", "smollm2-135m"],
-        blocked: false,
+        blocked: true,
     },
     ModelInfo {
         id: "qwen-1.5",

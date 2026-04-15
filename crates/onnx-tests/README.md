@@ -54,7 +54,7 @@ constant-of-shape.
 ## Running Tests
 
 ```sh
-# Default backend (NdArray)
+# Default backend (Flex)
 cargo test
 
 # WGPU backend

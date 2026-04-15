@@ -371,8 +371,8 @@ mod tests {
                 attrs: Default::default(),
             },
             RawNode {
-                node_type: NodeType::Dft,
-                name: "dft1".to_string(),
+                node_type: NodeType::MelWeightMatrix,
+                name: "mel1".to_string(),
                 inputs: vec![],
                 outputs: vec![],
                 attrs: Default::default(),
@@ -386,7 +386,7 @@ mod tests {
             ProcessError::UnsupportedOps(ops) => {
                 assert_eq!(ops.len(), 2);
                 assert!(ops[0].contains("Stft"));
-                assert!(ops[1].contains("Dft"));
+                assert!(ops[1].contains("MelWeightMatrix"));
             }
             other => panic!("Expected UnsupportedOps, got: {other:?}"),
         }
@@ -395,6 +395,6 @@ mod tests {
         let msg = format!("{err}");
         assert!(msg.starts_with("Unsupported ONNX operation(s):"));
         assert!(msg.contains("Stft"));
-        assert!(msg.contains("Dft"));
+        assert!(msg.contains("MelWeightMatrix"));
     }
 }

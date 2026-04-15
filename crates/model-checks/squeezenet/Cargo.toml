@@ -5,8 +5,8 @@ edition = "2024"
 publish = false
 
 [features]
-default = ["ndarray"]
-ndarray = ["burn/ndarray"]
+default = ["flex"]
+flex = ["burn/flex"]
 tch = ["burn/tch"]
 wgpu = ["burn/wgpu", "burn/autotune", "burn/fusion"]
 metal = ["burn/metal", "burn/autotune", "burn/fusion"]

@@ -37,15 +37,15 @@ pub fn artifacts_dir_build(model_name: &str) -> PathBuf {
 /// Defines `MyBackend` type alias based on the active feature flag.
 ///
 /// Expands to four `#[cfg(feature = "...")]` type aliases for wgpu,
-/// ndarray, tch, and metal backends.
+/// flex, tch, and metal backends.
 #[macro_export]
 macro_rules! backend_type {
     () => {
         #[cfg(feature = "wgpu")]
         pub type MyBackend = burn::backend::Wgpu;
 
-        #[cfg(feature = "ndarray")]
-        pub type MyBackend = burn::backend::NdArray<f32>;
+        #[cfg(feature = "flex")]
+        pub type MyBackend = burn::backend::Flex;
 
         #[cfg(feature = "tch")]
         pub type MyBackend = burn::backend::LibTorch<f32>;
@@ -60,7 +60,7 @@ macro_rules! backend_type {
 /// Override with `BURN_DEVICE=cpu|mps|cuda|cuda:N`.
 ///
 /// Defaults:
-/// - **wgpu / metal / ndarray**: `Default::default()` (already picks the best device)
+/// - **wgpu / metal / flex**: `Default::default()` (already picks the best device)
 /// - **tch**: MPS on macOS, Cuda(0) elsewhere
 #[macro_export]
 macro_rules! best_device {

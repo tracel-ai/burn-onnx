@@ -5,7 +5,7 @@ include_models!(sub, sub_int, sub_shape, sub_broadcast, sub_shape_tensor);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, TensorData};
+    use burn::tensor::{DType, Int, Tensor, TensorData};
 
     use crate::backend::TestBackend;
 
@@ -30,8 +30,13 @@ mod tests {
         let model: sub_int::Model<TestBackend> = sub_int::Model::default();
 
         let device = Default::default();
-        // Run the model
-        let input = Tensor::<TestBackend, 4, Int>::from_ints([[[[1, 2, 3, 4]]]], &device);
+        // The ONNX model (sub_int.py) declares the tensor input as INT64.
+        // Construct with explicit I64 dtype so the dtype-preserving Sub
+        // carries I64 through to the output.
+        let input = Tensor::<TestBackend, 4, Int>::from_data(
+            TensorData::from([[[[1i64, 2, 3, 4]]]]),
+            (&device, DType::I64),
+        );
         let scalar = 3;
         let output = model.forward(input, scalar);
         let expected = TensorData::from([[[[-12i64, -12, -12, -12]]]]);

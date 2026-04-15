@@ -83,7 +83,7 @@ Key principles:
 - `insta` snapshot tests for ALL codegen branches (inline snapshots only:
   `assert_snapshot!(code, @r"...")`)
 - **Always specify explicit dtypes in generated code.** Never rely on Burn's default element types
-  (`IntElem`, `FloatElem`) because they vary by backend (e.g. NdArray uses I64, WGPU uses I32):
+  (`IntElem`, `FloatElem`) because they vary by backend (defaults differ across CPU/GPU backends):
   - Use `.cast(DType::XX)` after `.int()` or `.float()` to preserve the ONNX-specified dtype
   - When creating tensors, use `from_data_dtype` instead of `from_data` to specify the exact dtype
   - Never use bare `.int()` or `.float()` without a following `.cast(target_dtype)`

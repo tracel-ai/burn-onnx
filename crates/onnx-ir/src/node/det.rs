@@ -24,7 +24,7 @@
 //! Both 2D (non-batched) and batched inputs (`[*, M, M]`) are supported. For batched inputs
 //! the determinant is computed per-matrix using a loop over batch dimensions.
 //!
-//! **Limitation**: Singular or near-singular matrices cause a panic from `lu_decomposition`
+//! **Limitation**: Singular or near-singular matrices cause a panic from `linalg::lu`
 //! when partial pivoting encounters a pivot with magnitude <= 1e-6. A native `det()` function
 //! in Burn would handle this case correctly (tracked as a separate issue in the Burn repo).
 

@@ -9,7 +9,7 @@ WebAssembly . Specifically, it demonstrates:
 1. Converting an ONNX (Open Neural Networks Exchange) model into Rust code compatible with the Burn
    framework.
 2. Executing the model within a web browser using WebGPU via the `burn-wgpu` backend and WebAssembly
-   through the `burn-ndarray` backend.
+   through the `burn-flex` backend.
 
 ## Running the Demo
 

@@ -56,7 +56,7 @@ Each test compares the Burn model output against ONNX Runtime reference outputs 
 This model check supports multiple backends:
 
 ```bash
-# NdArray backend (default, CPU)
+# Flex backend (default, CPU)
 cargo run
 
 # LibTorch backend (CPU/CUDA)

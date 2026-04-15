@@ -345,6 +345,44 @@ pub(crate) fn build_graph_builder_from_proto_with_outer_scope(
     log::debug!(" PHASE 2: Node Conversion (Proto -> RawNode) ");
     node_conversion::convert_nodes_from_graph(graph, &state_rc, opset_version)?;
 
+    // Fold constant expressions (Slice, Concat, Unsqueeze, etc.) before type inference.
+    // Models exported from PyTorch often split initializer weights via Slice+Concat+Unsqueeze
+    // chains before feeding them into RNN nodes. Without folding, these remain Dynamic and
+    // block type inference for downstream nodes that need constant weight shapes.
+    log::debug!(" PHASE 2b: Early Constant Folding ");
+    {
+        let mut state = state_rc.borrow_mut();
+        let mut nodes = std::mem::take(&mut state.processed_nodes);
+        drop(state);
+
+        // Run in a fixed-point loop so that Slice -> Concat -> Unsqueeze chains cascade
+        let max_iterations = 10;
+        let mut converged = false;
+        for _ in 0..max_iterations {
+            let const_count_before = nodes
+                .iter()
+                .filter(|n| n.node_type == crate::ir::NodeType::Constant)
+                .count();
+            nodes = crate::simplify::constant_fold::fold_weight_rearrangements(nodes, &state_rc);
+            let const_count_after = nodes
+                .iter()
+                .filter(|n| n.node_type == crate::ir::NodeType::Constant)
+                .count();
+            if const_count_after == const_count_before {
+                converged = true;
+                break;
+            }
+        }
+        if !converged {
+            log::debug!(
+                "Early constant folding: reached max iterations ({max_iterations}) without converging"
+            );
+        }
+
+        let mut state = state_rc.borrow_mut();
+        state.processed_nodes = nodes;
+    }
+
     log::debug!(" PHASE 3: Type Inference ");
     type_inference::infer_types(&state_rc, opset_version).map_err(Error::TypeInference)?;
 

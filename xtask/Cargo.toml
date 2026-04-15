@@ -13,6 +13,15 @@ workspace = true
 log = { workspace = true }
 strum = { workspace = true }
 tracel-xtask = { workspace = true }
+# The diff-expectations and update-expectations subcommands each parse
+# the onnx-official-tests `expectations.toml` schema. We deliberately
+# re-implement the schema locally in `xtask/src/expectations_schema.rs`
+# rather than pulling `onnx-official-tests` in as a dep, because doing
+# so would trigger that crate's build script (burn_onnx::ModelGen over
+# ~500 vendored models, ~18s) on every xtask compile. The duplicated
+# schema is ~30 lines and covered by a unit test that keeps it in sync.
+serde = { workspace = true, features = ["std", "derive"] }
+toml = { workspace = true }
 
 [dev-dependencies]
 rstest = { workspace = true }

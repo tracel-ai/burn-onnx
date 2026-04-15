@@ -13,7 +13,7 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, Tolerance, ops::FloatElem};
+    use burn::tensor::{Int, Tensor, TensorData, Tolerance, ops::FloatElem};
 
     use crate::backend::TestBackend;
     type FT = FloatElem<TestBackend>;
@@ -127,9 +127,11 @@ mod tests {
         // Model has no inputs - the shape [2, 3, 4] comes from a constant
         let output = model.forward();
 
-        // Output should be a 2x3x4 tensor filled with 1 (as specified in the value attribute)
+        // Output should be a 2x3x4 tensor filled with 1 (as specified in the value attribute).
+        // ONNX ConstantOfShape honors the `value` attribute's dtype (int64 here), so the
+        // generated code emits an I64 tensor regardless of the backend's default int element.
         assert_eq!(output.dims(), [2, 3, 4]);
-        let expected = Tensor::<TestBackend, 3, Int>::full([2, 3, 4], 1i64, &device);
-        output.to_data().assert_eq(&expected.to_data(), true);
+        let expected = TensorData::from([[[1i64; 4]; 3]; 2]);
+        output.to_data().assert_eq(&expected, true);
     }
 }

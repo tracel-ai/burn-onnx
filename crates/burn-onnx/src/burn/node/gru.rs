@@ -70,10 +70,18 @@ fn collect_gru_snapshots(
 
     let mut snapshots = Vec::new();
 
-    let w_tensor: Tensor<SerializationBackend, 3> = Tensor::from_data(data_w.clone(), &device);
-    let r_tensor: Tensor<SerializationBackend, 3> = Tensor::from_data(data_r.clone(), &device);
-    let b_tensor: Option<Tensor<SerializationBackend, 2>> =
-        data_b.clone().map(|b| Tensor::from_data(b, &device));
+    // Create tensors from data, pinning the runtime dtype to the ONNX weight
+    // dtype via `(device, dtype)`. A bare `&device` would let
+    // `Tensor::from_data` convert to SerializationBackend's default FloatElem
+    // (f32 on Flex), silently truncating f64 weights before they enter the
+    // snapshot pipeline.
+    let w_tensor: Tensor<SerializationBackend, 3> =
+        Tensor::from_data(data_w.clone(), (&device, dtype));
+    let r_tensor: Tensor<SerializationBackend, 3> =
+        Tensor::from_data(data_r.clone(), (&device, dtype));
+    let b_tensor: Option<Tensor<SerializationBackend, 2>> = data_b
+        .clone()
+        .map(|b| Tensor::from_data(b, (&device, dtype)));
 
     for (dir_idx, dir_prefix) in direction_prefixes.iter().enumerate() {
         // W shape: [num_directions, 3*hidden_size, input_size]

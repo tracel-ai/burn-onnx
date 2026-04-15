@@ -232,6 +232,11 @@ impl_node_codegen_dispatch! {
     // Linear algebra ops
     Det,
 
+    // Signal processing ops
+    Dft,
+    HammingWindow,
+    HannWindow,
+
     // Test ops
     IsInf,
     IsNaN,

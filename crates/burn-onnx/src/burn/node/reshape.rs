@@ -63,18 +63,22 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                         let input_name = arg_to_ident(input_arg);
 
                         match &output_arg.ty {
-                            ArgType::ScalarTensor(_) => {
+                            ArgType::ScalarTensor(elem_type) => {
                                 if *input_rank != 1 {
                                     panic!(
                                         "Shape to scalar requires Shape(1), got Shape({})",
                                         input_rank
                                     );
                                 }
-                                // Shape [i64; 1] -> Tensor<B, 1, Int> on device
+                                // Shape [i64; 1] -> Tensor<B, 1, Int> on device.
+                                // Pin the runtime dtype via (device, dtype) so the bare
+                                // `&device` overload can't silently narrow the i64 source
+                                // to the backend's default IntElem (CLAUDE.md).
+                                let dtype_tokens = elem_type.to_tokens();
                                 quote! {
                                     let #output = Tensor::<B, 1, Int>::from_data(
                                         burn::tensor::TensorData::from([#input_name[0]]),
-                                        &self.device,
+                                        (&self.device, #dtype_tokens),
                                     );
                                 }
                             }
@@ -786,7 +790,10 @@ mod tests {
                 B,
                 1,
                 Int,
-            >::from_data(burn::tensor::TensorData::from([shape_in[0]]), &self.device);
+            >::from_data(
+                burn::tensor::TensorData::from([shape_in[0]]),
+                (&self.device, burn::tensor::DType::I64),
+            );
             output
         }
         ");

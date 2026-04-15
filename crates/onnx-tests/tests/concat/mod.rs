@@ -161,8 +161,14 @@ mod tests {
         // Run the model - extracts batch dim via Gather and concats with constant
         let output = model.forward(input1);
 
-        // The output should be [2, 64] (batch=2 from input shape, 64 from constant)
-        let expected = Tensor::<TestBackend, 1, burn::prelude::Int>::from_ints([2, 64], &device);
+        // The output should be [2, 64] (batch=2 from input shape, 64 from constant).
+        // Shape values in ONNX are int64, so the model's codegen emits an I64 tensor.
+        // Construct the expected tensor with explicit I64 dtype so `equal` doesn't hit
+        // a dtype-mismatch assertion in the backend.
+        let expected = Tensor::<TestBackend, 1, burn::prelude::Int>::from_data(
+            burn::tensor::TensorData::from([2i64, 64]),
+            (&device, burn::tensor::DType::I64),
+        );
         assert!(output.equal(expected).all().into_scalar());
     }
 

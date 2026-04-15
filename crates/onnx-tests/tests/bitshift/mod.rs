@@ -27,7 +27,7 @@ mod tests {
         let input1 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
         let input2 = Tensor::<TestBackend, 1, Int>::from_ints([1, 1, 2, 2], &device);
         let output = model.forward(input1, input2);
-        let expected = TensorData::from([2i64, 4, 12, 16]);
+        let expected = TensorData::from([2i32, 4, 12, 16]);
 
         output.to_data().assert_eq(&expected, true);
     }
@@ -42,7 +42,7 @@ mod tests {
         let input1 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
         let scalar = 2;
         let output = model.forward(input1, scalar);
-        let expected = TensorData::from([4i64, 8, 12, 16]);
+        let expected = TensorData::from([4i32, 8, 12, 16]);
 
         output.to_data().assert_eq(&expected, true);
     }
@@ -56,7 +56,7 @@ mod tests {
         let input1 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
         let input2 = Tensor::<TestBackend, 1, Int>::from_ints([1, 1, 2, 2], &device);
         let output = model.forward(input1, input2);
-        let expected = TensorData::from([0i64, 1, 0, 1]);
+        let expected = TensorData::from([0i32, 1, 0, 1]);
 
         output.to_data().assert_eq(&expected, true);
     }
@@ -71,7 +71,7 @@ mod tests {
         let input1 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
         let scalar = 2;
         let output = model.forward(input1, scalar);
-        let expected = TensorData::from([0i64, 0, 0, 1]);
+        let expected = TensorData::from([0i32, 0, 0, 1]);
 
         output.to_data().assert_eq(&expected, true);
     }
@@ -86,7 +86,7 @@ mod tests {
         let shift_amounts = Tensor::<TestBackend, 1, Int>::from_ints([1, 1, 2, 2], &device);
         let output = model.forward(scalar, shift_amounts);
         // 4 << 1 = 8, 4 << 1 = 8, 4 << 2 = 16, 4 << 2 = 16
-        let expected = TensorData::from([8i64, 8, 16, 16]);
+        let expected = TensorData::from([8i32, 8, 16, 16]);
 
         output.to_data().assert_eq(&expected, true);
     }
@@ -101,7 +101,7 @@ mod tests {
         let shift_amounts = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
         let output = model.forward(scalar, shift_amounts);
         // 8 >> 1 = 4, 8 >> 2 = 2, 8 >> 3 = 1, 8 >> 4 = 0
-        let expected = TensorData::from([4i64, 2, 1, 0]);
+        let expected = TensorData::from([4i32, 2, 1, 0]);
 
         output.to_data().assert_eq(&expected, true);
     }

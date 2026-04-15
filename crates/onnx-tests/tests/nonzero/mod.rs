@@ -11,7 +11,7 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Bool, Int, Tensor};
+    use burn::tensor::{Bool, DType, Int, Tensor, TensorData};
 
     use crate::backend::TestBackend;
 
@@ -34,15 +34,13 @@ mod tests {
         let output = model.forward(input);
 
         // Expected indices in ONNX format [rank, num_nonzero]: [[0,1,2,2], [1,2,0,3]]
-        let expected = Tensor::<TestBackend, 2, Int>::from_ints(
-            [
-                [0, 1, 2, 2], // Row indices of non-zero elements
-                [1, 2, 0, 3], // Column indices of non-zero elements
-            ],
-            &device,
-        );
+        // ONNX NonZero spec: output is always int64.
+        let expected = TensorData::from([
+            [0i64, 1, 2, 2], // Row indices of non-zero elements
+            [1, 2, 0, 3],    // Column indices of non-zero elements
+        ]);
 
-        output.to_data().assert_eq(&expected.to_data(), true);
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]
@@ -50,22 +48,23 @@ mod tests {
         let device = Default::default();
         let model = nonzero_int64::Model::<TestBackend>::new(&device);
 
-        // Create a 2x3 int tensor with some non-zero values
+        // Create a 2x3 int tensor with some non-zero values (ONNX model declares int64).
         // Expected nonzero indices: (0,0), (1,2)
-        let input = Tensor::<TestBackend, 2, Int>::from_ints([[5, 0, 0], [0, 0, -3]], &device);
+        let input = Tensor::<TestBackend, 2, Int>::from_data(
+            TensorData::from([[5i64, 0, 0], [0, 0, -3]]),
+            (&device, DType::I64),
+        );
 
         let output = model.forward(input);
 
         // Expected indices in ONNX format [rank, num_nonzero]: [[0,1], [0,2]]
-        let expected = Tensor::<TestBackend, 2, Int>::from_ints(
-            [
-                [0, 1], // Row indices of non-zero elements
-                [0, 2], // Column indices of non-zero elements
-            ],
-            &device,
-        );
+        // ONNX NonZero spec: output is always int64.
+        let expected = TensorData::from([
+            [0i64, 1], // Row indices of non-zero elements
+            [0, 2],    // Column indices of non-zero elements
+        ]);
 
-        output.to_data().assert_eq(&expected.to_data(), true);
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]
@@ -83,15 +82,13 @@ mod tests {
         let output = model.forward(input);
 
         // Expected indices in ONNX format [rank, num_nonzero]: [[0,1], [1,0]]
-        let expected = Tensor::<TestBackend, 2, Int>::from_ints(
-            [
-                [0, 1], // Row indices of non-zero elements
-                [1, 0], // Column indices of non-zero elements
-            ],
-            &device,
-        );
+        // ONNX NonZero spec: output is always int64.
+        let expected = TensorData::from([
+            [0i64, 1], // Row indices of non-zero elements
+            [1, 0],    // Column indices of non-zero elements
+        ]);
 
-        output.to_data().assert_eq(&expected.to_data(), true);
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]
@@ -106,9 +103,10 @@ mod tests {
         let output = model.forward(input);
 
         // Expected indices in ONNX format [rank, num_nonzero]: [[1, 3, 5]]
-        let expected = Tensor::<TestBackend, 2, Int>::from_ints([[1, 3, 5]], &device);
+        // ONNX NonZero spec: output is always int64.
+        let expected = TensorData::from([[1i64, 3, 5]]);
 
-        output.to_data().assert_eq(&expected.to_data(), true);
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]
@@ -129,16 +127,14 @@ mod tests {
         let output = model.forward(input);
 
         // Expected indices in ONNX format [rank, num_nonzero]: [[0,1], [0,1], [1,2]]
-        let expected = Tensor::<TestBackend, 2, Int>::from_ints(
-            [
-                [0, 1], // Dimension 0 indices of non-zero elements
-                [0, 1], // Dimension 1 indices of non-zero elements
-                [1, 2], // Dimension 2 indices of non-zero elements
-            ],
-            &device,
-        );
+        // ONNX NonZero spec: output is always int64.
+        let expected = TensorData::from([
+            [0i64, 1], // Dimension 0 indices of non-zero elements
+            [0, 1],    // Dimension 1 indices of non-zero elements
+            [1, 2],    // Dimension 2 indices of non-zero elements
+        ]);
 
-        output.to_data().assert_eq(&expected.to_data(), true);
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]
@@ -152,8 +148,9 @@ mod tests {
 
         let output = model.forward(input);
 
-        // Empty tensor: [2, 0] - 2 dimensions, 0 non-zero elements
-        let expected = Tensor::<TestBackend, 2, Int>::empty([2, 0], &device);
+        // Empty tensor: [2, 0] - 2 dimensions, 0 non-zero elements.
+        // ONNX NonZero spec: output is always int64.
+        let expected = Tensor::<TestBackend, 2, Int>::empty([2, 0], (&device, DType::I64));
 
         output.to_data().assert_eq(&expected.to_data(), true);
     }

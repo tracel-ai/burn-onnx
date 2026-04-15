@@ -14,7 +14,7 @@ mod tests {
 
     // Helper to create i32 tensor from nested arrays
     // The ONNX MatMulInteger model uses I32 constants, so we need i32 tensors.
-    // We use from_data with dtype to preserve I32 dtype (from_data without dtype converts to backend's IntElem which is i64).
+    // We use from_data with dtype to preserve I32 dtype (from_data without dtype converts to the backend's default IntElem).
     fn tensor_2d_i32<const R: usize, const C: usize>(
         data: [[i32; C]; R],
         device: &<TestBackend as burn::tensor::backend::Backend>::Device,
@@ -63,7 +63,6 @@ mod tests {
         // Forward now takes 6 args and returns 3 outputs (YA, YB, YC)
         let (ya, yb, yc) = model.forward(a, b, c, d, e, f);
 
-        // NdArray backend with i32: Int => i32
         // YA: Computes (A - 0) @ (B - 0) since a0=0 and b0=0
         let expected_ya = TensorData::from([[70i32, 80, 90], [700, 800, 900]]);
         ya.to_data().assert_eq(&expected_ya, true);

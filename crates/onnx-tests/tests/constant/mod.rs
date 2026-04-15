@@ -36,10 +36,13 @@ mod tests {
 
     #[test]
     fn add_constant_f64() {
+        use burn::tensor::DType;
         let device = Default::default();
         let model = constant_f64::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 3>::zeros(Shape::from([2, 3, 4]), &device);
-        let expected = Tensor::<TestBackend, 3>::full([2, 3, 4], 2, &device).to_data();
+        // The model's constant is f64; pass an f64 input so the dtype-preserving
+        // Add doesn't hit an F32/F64 mismatch inside the backend.
+        let input = Tensor::<TestBackend, 3>::zeros(Shape::from([2, 3, 4]), (&device, DType::F64));
+        let expected = TensorData::from([[[2.0f64; 4]; 3]; 2]);
 
         let output = model.forward(input);
 
@@ -60,10 +63,14 @@ mod tests {
 
     #[test]
     fn add_constant_i64() {
+        use burn::tensor::DType;
         let device = Default::default();
         let model = constant_i64::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 3, Int>::zeros(Shape::from([2, 3, 4]), &device);
-        let expected = Tensor::<TestBackend, 3, Int>::full([2, 3, 4], 2, &device).to_data();
+        // The model's constant is i64; pass an i64 input so the dtype-preserving
+        // Add doesn't hit an I32/I64 mismatch inside the backend.
+        let input =
+            Tensor::<TestBackend, 3, Int>::zeros(Shape::from([2, 3, 4]), (&device, DType::I64));
+        let expected = TensorData::from([[[2i64; 4]; 3]; 2]);
 
         let output = model.forward(input);
 
@@ -108,9 +115,9 @@ mod tests {
     #[test]
     fn constant_tensor_i32_test() {
         // Test that multidimensional i32 tensor constants are properly loaded with correct dtype
-        // Note: The ONNX model has I32 constants, but NdArray<f32> defaults to i64 for Int tensors.
+        // Note: The ONNX model has I32 constants, but the backend's default IntElem may differ.
         // We use from_data with explicit I32 dtype to create tensors that match the model's dtype.
-        // Using from_data() without dtype would convert to the backend's IntElem (i64), causing dtype mismatch.
+        // Using from_data() without dtype would convert to the backend's IntElem, causing a dtype mismatch.
         use burn::tensor::DType;
 
         let device = Default::default();

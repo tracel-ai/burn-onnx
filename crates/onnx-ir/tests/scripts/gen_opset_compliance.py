@@ -202,6 +202,10 @@ SUPPORTED_OPS = {
     "If": "if_op",
     # DeformConv
     "DeformConv": "deform_conv",
+    # Signal processing
+    "DFT": "dft",
+    "HammingWindow": "hamming_window",
+    "HannWindow": "hann_window",
 }
 
 
@@ -887,6 +891,42 @@ def make_deform_conv(op_name: str, opset: int):
     return [node], [inp, offset], [out], [w_init]
 
 
+def make_dft(op_name: str, opset: int):
+    # Real input [batch, signal_length, 1] with power-of-2 signal dim
+    inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [1, 8, 1])
+    out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.FLOAT, None)
+    kwargs = {"onesided": 1}
+    if opset < 20:
+        # Opset 17-19: axis is an attribute
+        kwargs["axis"] = 1
+        inputs = [_p(op_name, "input")]
+    else:
+        # Opset 20+: axis is an input (omit for default)
+        inputs = [_p(op_name, "input")]
+    node = helper.make_node(op_name, inputs, [_p(op_name, "output")], name=_p(op_name, "node"), **kwargs)
+    return [node], [inp], [out], []
+
+
+def make_hamming_window(op_name: str, opset: int):
+    out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.FLOAT, [10])
+    size_init = numpy_helper.from_array(np.array(10, dtype=np.int64), name=_p(op_name, "size"))
+    node = helper.make_node(
+        op_name, [_p(op_name, "size")], [_p(op_name, "output")],
+        name=_p(op_name, "node"), periodic=1, output_datatype=TensorProto.FLOAT,
+    )
+    return [node], [], [out], [size_init]
+
+
+def make_hann_window(op_name: str, opset: int):
+    out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.FLOAT, [10])
+    size_init = numpy_helper.from_array(np.array(10, dtype=np.int64), name=_p(op_name, "size"))
+    node = helper.make_node(
+        op_name, [_p(op_name, "size")], [_p(op_name, "output")],
+        name=_p(op_name, "node"), periodic=1, output_datatype=TensorProto.FLOAT,
+    )
+    return [node], [], [out], [size_init]
+
+
 def make_softmax(op_name: str, opset: int):
     inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [2, 3, 4])
     out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.FLOAT, [2, 3, 4])
@@ -1041,6 +1081,9 @@ GENERATORS = {
     "gru": make_gru,
     "if_op": make_if_op,
     "deform_conv": make_deform_conv,
+    "dft": make_dft,
+    "hamming_window": make_hamming_window,
+    "hann_window": make_hann_window,
     "softmax": make_softmax,
     "log_softmax": make_log_softmax,
     "hardmax": make_hardmax,

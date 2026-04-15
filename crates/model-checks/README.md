@@ -104,16 +104,28 @@ Other backends (wgpu, metal) already select the best GPU by default; ndarray is 
 | Directory                  | Model                               | Source              |
 | -------------------------- | ----------------------------------- | ------------------- |
 | `albert/`                  | ALBERT                              | HuggingFace         |
-| `all-minilm-l6-v2/`        | all-MiniLM-L6-v2                    | HuggingFace         |
-| `clip-vit-b-32-text/`      | CLIP ViT-B-32 (text)                | HuggingFace         |
-| `clip-vit-b-32-vision/`    | CLIP ViT-B-32 (vision)              | HuggingFace         |
-| `depth-anything-v2/`       | Depth-Anything-v2-Small             | HuggingFace         |
-| `depth-pro/`               | Apple Depth Pro                     | Apple / HuggingFace |
+| `alexnet/`                 | AlexNet                             | ONNX Model Zoo      |
+| `all-minilm-l6-v2/`       | all-MiniLM-L6-v2                    | HuggingFace         |
+| `arcface/`                 | ArcFace (LResNet100E-IR)            | ONNX Model Zoo      |
+| `clip-vit-b-32-text/`     | CLIP ViT-B-32 (text)                | HuggingFace         |
+| `clip-vit-b-32-vision/`   | CLIP ViT-B-32 (vision)              | HuggingFace         |
+| `densenet121/`             | DenseNet-121                        | ONNX Model Zoo      |
+| `depth-anything-v2/`      | Depth-Anything-v2-Small             | HuggingFace         |
+| `depth-pro/`              | Apple Depth Pro                     | Apple / HuggingFace |
+| `inception-v1/`           | Inception v1 (GoogLeNet)            | ONNX Model Zoo      |
+| `inception-v2/`           | Inception v2                        | ONNX Model Zoo      |
 | `mediapipe-face-detector/` | MediaPipe Face Detector (BlazeFace) | Google MediaPipe    |
-| `modernbert-base/`         | ModernBERT-base                     | HuggingFace         |
-| `qwen/`                    | Qwen 1.5/2.5/3 (0.5B-0.6B)         | HuggingFace         |
-| `rf-detr/`                 | RF-DETR Small                       | Roboflow            |
-| `silero-vad/`              | Silero VAD                          | Silero              |
-| `smollm/`                  | SmolLM / SmolLM2 (135M)             | HuggingFace         |
-| `stable-diffusion-xl/`     | Stable Diffusion XL 1.0 (UNet)      | Stability AI        |
-| `yolo/`                    | YOLO (v5/v8/v10/v11/v12)            | Ultralytics         |
+| `mobilenet-v2/`           | MobileNet v2                        | ONNX Model Zoo      |
+| `modernbert-base/`        | ModernBERT-base                     | HuggingFace         |
+| `qwen/`                   | Qwen 1.5/2.5/3 (0.5B-0.6B)         | HuggingFace         |
+| `resnet50/`               | ResNet-50                           | ONNX Model Zoo      |
+| `rf-detr/`                | RF-DETR Small                       | Roboflow            |
+| `rtmw3d/`                 | RTMW3D-x                            | MMPose              |
+| `shufflenet/`             | ShuffleNet v2                       | ONNX Model Zoo      |
+| `silero-vad/`             | Silero VAD                          | Silero              |
+| `smollm/`                 | SmolLM / SmolLM2 (135M)             | HuggingFace         |
+| `squeezenet/`             | SqueezeNet 1.0                      | ONNX Model Zoo      |
+| `stable-diffusion-xl/`    | Stable Diffusion XL 1.0 (UNet)      | Stability AI        |
+| `vgg19/`                  | VGG-19                              | ONNX Model Zoo      |
+| `yolo/`                   | YOLO (v5/v8/v10/v11/v12/v26)        | Ultralytics         |
+| `zfnet512/`               | ZFNet-512                           | ONNX Model Zoo      |

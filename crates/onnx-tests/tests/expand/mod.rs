@@ -14,7 +14,7 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Shape, Tensor};
+    use burn::tensor::{Int, Shape, Tensor, TensorData};
 
     use crate::backend::TestBackend;
 
@@ -58,9 +58,11 @@ mod tests {
 
         assert_eq!(output.shape(), expected_shape);
 
-        // Verify values: all elements should be 5
-        let expected = Tensor::<TestBackend, 2, Int>::from_ints([[5, 5], [5, 5]], &device);
-        output.into_data().assert_eq(&expected.into_data(), true);
+        // Verify values: all elements should be 5. The ONNX model's source constant is
+        // int64, so the generated Expand output is I64. Compare via an explicit I64
+        // TensorData rather than Tensor::from_ints (which defaults to the backend's int).
+        let expected = TensorData::from([[5i64, 5], [5, 5]]);
+        output.into_data().assert_eq(&expected, true);
     }
 
     #[test]
@@ -128,8 +130,9 @@ mod tests {
         let output = model.forward(input);
 
         assert_eq!(output.shape(), Shape::from([2, 2]));
-        let expected = Tensor::<TestBackend, 2, Int>::from_ints([[3, 4], [3, 4]], &device);
-        output.into_data().assert_eq(&expected.into_data(), true);
+        // Shape values in ONNX are int64; the generated Expand output preserves that dtype.
+        let expected = TensorData::from([[3i64, 4], [3, 4]]);
+        output.into_data().assert_eq(&expected, true);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use std::env::args;
 
 use burn::{
-    backend::ndarray::NdArray,
+    backend::Flex,
     data::dataset::{Dataset, vision::MnistDataset},
     tensor::Tensor,
 };
@@ -25,7 +25,7 @@ fn main() {
 
     assert!(image_index < 10000, "Image index must be less than 10000");
 
-    type Backend = NdArray<f32>;
+    type Backend = Flex;
 
     // Get a default device for the backend
     let device = <Backend as burn::tensor::backend::Backend>::Device::default();

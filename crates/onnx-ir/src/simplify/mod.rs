@@ -30,7 +30,7 @@
 //! on these scalar/array constants (e.g., `Cast(const_3)`, `Sqrt(const_3.0)`).
 
 mod coalesce_attention;
-mod constant_fold;
+pub(crate) mod constant_fold;
 mod constant_shape;
 mod dead_nodes;
 mod idempotent;

@@ -26,3 +26,7 @@ uv.lock
 .envrc
 .direnv
 /crates/onnx-ir/tests/scripts/__pycache__
+/scoreboard/__pycache__
+/scoreboard/.pytest_cache
+/scoreboard/.venv
+/scoreboard/runner/target

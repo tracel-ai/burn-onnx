@@ -1,0 +1,34 @@
+[package]
+name = "onnx-official-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Native regression gate against the upstream ONNX backend test suite"
+
+[features]
+default = ["test-flex"]
+test-flex = ["burn/flex"]
+test-wgpu = ["burn/wgpu"]
+test-tch = ["burn/tch"]
+test-metal = ["burn/metal"]
+test-candle = ["burn/candle"]
+
+[dependencies]
+onnx-ir = { path = "../onnx-ir" }
+protobuf = { workspace = true }
+serde = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+burn = { workspace = true }
+burn-store = { workspace = true, features = ["std", "burnpack"] }
+float-cmp = { workspace = true }
+
+[build-dependencies]
+burn-onnx = { path = "../burn-onnx" }
+onnx-ir = { path = "../onnx-ir" }
+protobuf = { workspace = true }
+serde = { workspace = true, features = ["std", "derive"] }
+toml = { workspace = true }

@@ -747,7 +747,7 @@ pub mod my_new_op;
 #### Running Tests
 
 ```sh
-# Default backend (NdArray)
+# Default backend (Flex)
 cargo test
 
 # WGPU backend
@@ -836,7 +836,7 @@ correctness.
 Use the `model-check` xtask command:
 
 ```sh
-# Run all models (download + build + run, ndarray backend, release mode)
+# Run all models (download + build + run, flex backend, release mode)
 cargo xtask model-check
 
 # Single model

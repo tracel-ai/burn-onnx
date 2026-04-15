@@ -50,12 +50,10 @@ define_placeholder_node! {
     ConvNode,
     ConvIntegerNode,
     ConvTransposeNode,
-    DftNode,
+
     DequantizeLinearNode,
     DynamicQuantizeLinearNode,
     GlobalMaxPoolNode,
-    HammingWindowNode,
-    HannWindowNode,
     HardmaxNode,
     ImNode,
     ImageDecoderNode,

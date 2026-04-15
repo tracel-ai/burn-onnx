@@ -1,6 +1,6 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(matmul, matmul_ranks);
+include_models!(matmul, matmul_ranks, matmul_scalar_add);
 
 #[cfg(test)]
 mod tests {
@@ -109,5 +109,46 @@ mod tests {
         output_3d_1d.to_data().assert_eq(&expected_3d_1d, true);
         output_1d_3d.to_data().assert_eq(&expected_1d_3d, true);
         output_2d_2d.to_data().assert_eq(&expected_2d_2d, true);
+    }
+
+    /// Regression test for https://github.com/tracel-ai/burn-onnx/issues/308
+    /// MatMul + Add with scalar bias [1] should NOT be fused into Linear.
+    #[test]
+    fn matmul_scalar_add() {
+        let model: matmul_scalar_add::Model<TestBackend> = matmul_scalar_add::Model::default();
+
+        let device = Default::default();
+        // x = [[0,1,2,3],[4,5,6,7]] matching the Python script
+        let x = Tensor::<TestBackend, 1, Int>::arange(0..8, &device)
+            .reshape([2, 4])
+            .float();
+
+        let output = model.forward(x);
+
+        let expected = TensorData::from([
+            [
+                -3.628285_f32,
+                2.003_822_3,
+                -5.232_446_7,
+                -1.663_243,
+                1.871_343_6,
+                -2.739_914_2,
+                -2.894_981_4,
+                2.645_050_8,
+            ],
+            [
+                -9.748_181,
+                5.321_685_3,
+                -12.731_434,
+                -1.580_465_8,
+                5.362_619_4,
+                -13.399_463,
+                -5.614_515_3,
+                5.175_76,
+            ],
+        ]);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
     }
 }

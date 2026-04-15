@@ -58,7 +58,7 @@ jobs:
 
       - name: Update lockfile
         if: steps.check.outputs.skip == 'false'
-        run: cargo update -p burn -p burn-ndarray -p burn-store -p burn-tensor
+        run: cargo update -p burn -p burn-flex -p burn-store -p burn-tensor
 
       - name: Create pull request
         if: steps.check.outputs.skip == 'false'

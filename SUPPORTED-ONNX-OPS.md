@@ -58,7 +58,7 @@ functionality.
 | [DepthToSpace][42]               | ✅             | ✅           |
 | [DequantizeLinear][43]           | ✅             | ✅           |
 | [Det][44]                        | ✅             | ✅           |
-| [DFT][45]                        | ❌             | ❌           |
+| [DFT][45]                        | ✅             | ✅           |
 | [Div][46]                        | ✅             | ✅           |
 | [Dropout][47]                    | ✅             | ✅           |
 | [DynamicQuantizeLinear][48]      | ❌             | ❌           |
@@ -84,8 +84,8 @@ functionality.
 | [GridSample][68]                 | ✅             | ✅           |
 | [GroupNormalization][69]         | ✅             | ✅           |
 | [GRU][70]                        | ✅             | ✅           |
-| [HammingWindow][71]              | ❌             | ❌           |
-| [HannWindow][72]                 | ❌             | ❌           |
+| [HammingWindow][71]              | ✅             | ✅           |
+| [HannWindow][72]                 | ✅             | ✅           |
 | [Hardmax][73]                    | ✅             | ✅           |
 | [HardSigmoid][74]                | ✅             | ✅           |
 | [HardSwish][75]                  | ✅             | ✅           |
