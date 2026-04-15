@@ -23,16 +23,17 @@ impl NodeCodegen for onnx_ir::node::det::DetNode {
         match input_rank {
             2 => {
                 // 2D non-batched: compute determinant via LU decomposition with partial pivoting
-                // det(A) = sign(P) * product_of_diagonal(U), where PA = LU
+                // det(A) = sign(P) * product_of_diagonal(U), where A = P L U
                 quote! {
                     let #output = {
-                        let (lu_mat, permutations) =
-                            burn::tensor::linalg::lu_decomposition(#input);
+                        let (p, _l, u) =
+                            burn::tensor::linalg::lu::<B, 2usize, 1usize>(#input);
                         let det_u =
-                            burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(lu_mat)
+                            burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(u)
                                 .prod();
-                        let n = permutations.dims()[0];
-                        let perm_f = permutations.float().cast(burn::tensor::DType::F32);
+                        let n = p.dims()[0];
+                        let perm_vec = p.argmax(1).reshape([n]);
+                        let perm_f = perm_vec.float().cast(burn::tensor::DType::F32);
                         let perm_col = perm_f.clone().reshape([n, 1]);
                         let perm_row = perm_f.reshape([1, n]);
                         let inv_count = (perm_row - perm_col)
@@ -70,13 +71,14 @@ impl NodeCodegen for onnx_ir::node::det::DetNode {
                         for i in 0..batch_size {
                             let matrix: Tensor<B, 2, Float> =
                                 flat.clone().slice([i..(i + 1), 0..m, 0..m]).squeeze_dims::<2>(&[0]);
-                            let (lu_mat, permutations) =
-                                burn::tensor::linalg::lu_decomposition(matrix);
+                            let (p, _l, u) =
+                                burn::tensor::linalg::lu::<B, 2usize, 1usize>(matrix);
                             let det_u =
-                                burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(lu_mat)
+                                burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(u)
                                     .prod();
-                            let n = permutations.dims()[0];
-                            let perm_f = permutations.float().cast(burn::tensor::DType::F32);
+                            let n = p.dims()[0];
+                            let perm_vec = p.argmax(1).reshape([n]);
+                            let perm_f = perm_vec.float().cast(burn::tensor::DType::F32);
                             let perm_col = perm_f.clone().reshape([n, 1]);
                             let perm_row = perm_f.reshape([1, n]);
                             let inv_count = (perm_row - perm_col)
@@ -121,11 +123,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 1> {
             let output = {
-                let (lu_mat, permutations) = burn::tensor::linalg::lu_decomposition(input);
-                let det_u = burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(lu_mat)
-                    .prod();
-                let n = permutations.dims()[0];
-                let perm_f = permutations.float().cast(burn::tensor::DType::F32);
+                let (p, _l, u) = burn::tensor::linalg::lu::<B, 2usize, 1usize>(input);
+                let det_u = burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(u).prod();
+                let n = p.dims()[0];
+                let perm_vec = p.argmax(1).reshape([n]);
+                let perm_f = perm_vec.float().cast(burn::tensor::DType::F32);
                 let perm_col = perm_f.clone().reshape([n, 1]);
                 let perm_row = perm_f.reshape([1, n]);
                 let inv_count = (perm_row - perm_col)
@@ -168,11 +170,11 @@ mod tests {
                         .clone()
                         .slice([i..(i + 1), 0..m, 0..m])
                         .squeeze_dims::<2>(&[0]);
-                    let (lu_mat, permutations) = burn::tensor::linalg::lu_decomposition(matrix);
-                    let det_u = burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(lu_mat)
-                        .prod();
-                    let n = permutations.dims()[0];
-                    let perm_f = permutations.float().cast(burn::tensor::DType::F32);
+                    let (p, _l, u) = burn::tensor::linalg::lu::<B, 2usize, 1usize>(matrix);
+                    let det_u = burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(u).prod();
+                    let n = p.dims()[0];
+                    let perm_vec = p.argmax(1).reshape([n]);
+                    let perm_f = perm_vec.float().cast(burn::tensor::DType::F32);
                     let perm_col = perm_f.clone().reshape([n, 1]);
                     let perm_row = perm_f.reshape([1, n]);
                     let inv_count = (perm_row - perm_col)
