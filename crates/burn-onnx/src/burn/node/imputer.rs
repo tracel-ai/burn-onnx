@@ -259,7 +259,7 @@ mod tests {
                             (1f32) as f64,
                             (2f32) as f64,
                         ]),
-                        (&*self.device, burn::tensor::DType::F32),
+                        (&self.device, burn::tensor::DType::F32),
                     )
                     .reshape([1usize, 3usize])
                     .expand(input.dims());
