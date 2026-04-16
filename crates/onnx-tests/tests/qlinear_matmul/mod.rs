@@ -3,7 +3,9 @@ include_models!(
     qlinear_matmul_scalar,
     qlinear_matmul_vector,
     qlinear_matmul_nd,
-    qlinear_matmul_saturate
+    qlinear_matmul_u8_saturate,
+    qlinear_matmul_i8_saturate,
+    qlinear_matmul_opset_10
 );
 
 #[cfg(test)]
@@ -161,19 +163,19 @@ mod tests {
         output.to_data().assert_eq(&expected, true);
     }
 
-    // Case 4: Saturation test — verifies upper (255) and lower (0) U8 clamp fires correctly.
+    // Case 4: U8 saturation test — verifies upper (255) and lower (0) U8 clamp fires correctly.
     // Inputs are engineered so that two output positions overflow the U8 range before clamping:
     //   [0,0]: round(4×118×117×0.02/0.3)+4 = 3686 → 255  (upper saturation)
     //   [0,1]: round(4×118×2×0.02/0.3)+4   =   67        (in range)
     //   [1,0]: round(4×-2×117×0.02/0.3)+4  =  -58 →   0  (lower saturation)
     //   [1,1]: round(4×-2×2×0.02/0.3)+4    =    3        (in range)
     // Expected values are hand-computed with explicit clip — NOT from the ONNX ReferenceEvaluator,
-    // which wraps on overflow rather than saturating.
+    // which wraps on overflow rather than saturating (see https://github.com/onnx/onnx/issues/7835).
     #[test]
-    fn qlinear_matmul_saturate() {
+    fn qlinear_matmul_u8_saturate() {
         let device = Default::default();
-        let model: qlinear_matmul_saturate::Model<TestBackend> =
-            qlinear_matmul_saturate::Model::new(&device);
+        let model: qlinear_matmul_u8_saturate::Model<TestBackend> =
+            qlinear_matmul_u8_saturate::Model::new(&device);
 
         let a = Tensor::<TestBackend, 2, Int>::from_data(
             TensorData::from([[120u8, 120, 120, 120], [0, 0, 0, 0]]),
@@ -187,6 +189,66 @@ mod tests {
         let output = model.forward(a, 0.1f32, 2u8, b, 0.2f32, 3u8, 0.3f32, 4u8);
 
         let expected = TensorData::from([[255u8, 67], [0, 3]]);
+        output.to_data().assert_eq(&expected, true);
+    }
+
+    // Case 5: I8 saturation test — exercises clamp(-128, 127) and the I8 cast.
+    // Uses symmetric quantization (zero_point=0) with large positive and large negative values.
+    //   [0,0]: round(4×100×100×0.1×0.2/0.1)+0 = 8000 → 127   (upper saturation)
+    //   [0,1]: round(4×100×1×0.1×0.2/0.1)+0   =   80          (no saturation)
+    //   [1,0]: round(4×-100×100×0.1×0.2/0.1)+0 = -8000 → -128 (lower saturation)
+    //   [1,1]: round(4×-100×1×0.1×0.2/0.1)+0   =  -80          (no saturation)
+    // Expected values are hand-computed with explicit clip — NOT from the ONNX ReferenceEvaluator,
+    // which wraps on overflow rather than saturating (see https://github.com/onnx/onnx/issues/7835).
+    #[test]
+    fn qlinear_matmul_i8_saturate() {
+        let device = Default::default();
+        let model: qlinear_matmul_i8_saturate::Model<TestBackend> =
+            qlinear_matmul_i8_saturate::Model::new(&device);
+
+        let a = Tensor::<TestBackend, 2, Int>::from_data(
+            TensorData::from([[100i8, 100, 100, 100], [-100, -100, -100, -100]]),
+            (&device, DType::I8),
+        );
+        let b = Tensor::<TestBackend, 2, Int>::from_data(
+            TensorData::from([[100i8, 1], [100, 1], [100, 1], [100, 1]]),
+            (&device, DType::I8),
+        );
+
+        let output = model.forward(a, 0.1f32, 0, b, 0.2f32, 0, 0.1f32, 0);
+
+        let expected = TensorData::from([[127i8, 80], [-128, -80]]);
+        output.to_data().assert_eq(&expected, true);
+    }
+
+    // Case 6: opset-10 model (2D operands, U8 scalar, F16 scales)
+    #[test]
+    fn qlinear_matmul_opset_10() {
+        let device = Default::default();
+        let model: qlinear_matmul_opset_10::Model<TestBackend> =
+            qlinear_matmul_opset_10::Model::new(&device);
+
+        let a = Tensor::<TestBackend, 2, Int>::from_data(
+            TensorData::from([[6u8, 1, 19, 10], [11, 3, 2, 19]]),
+            (&device, DType::U8),
+        );
+        let b = Tensor::<TestBackend, 2, Int>::from_data(
+            TensorData::from([[14u8, 14, 10], [3, 7, 7], [14, 1, 12], [11, 6, 16]]),
+            (&device, DType::U8),
+        );
+
+        let output = model.forward(
+            a,
+            0.0999755859375f32,
+            2u8,
+            b,
+            0.199951171875f32,
+            3u8,
+            0.300048828125f32,
+            4u8,
+        );
+
+        let expected = TensorData::from([[24u8, 6, 23], [20, 14, 23]]);
         output.to_data().assert_eq(&expected, true);
     }
 }
