@@ -127,9 +127,10 @@ fn reshape_scale_and_zp(
     } else if scale_arg.ty.rank() == 1 {
         // Case 2: Scale and zero point are vectors. Infer whether they are row or column vectors and expand appropriate.
         quote! {
-            let expansion_dim = if #scale.dims()[0] == #tensor.dims()[0] { 1 } else { 0 };
-            let #scale = #scale.unsqueeze_dim(expansion_dim);
-            let #zero_point = #zero_point.unsqueeze_dim(expansion_dim);
+            let (#scale, #zero_point) = {
+                let expansion_dim = if #scale.dims()[0] == #tensor.dims()[0] { 1 } else { 0 };
+                (#scale.unsqueeze_dim(expansion_dim), #zero_point.unsqueeze_dim(expansion_dim))
+            };
         }
     } else {
         // Case 3: Scale and zero_point have the same rank as their operands. Either the last or second-to-last dimension has a size of 1.
@@ -292,18 +293,25 @@ mod tests {
             y_scale: Tensor<B, 1>,
             y_zero_point: Tensor<B, 1, Int>,
         ) -> Tensor<B, 2, Int> {
-            let expansion_dim = if a_scale.dims()[0] == a.dims()[0] { 1 } else { 0 };
-            let a_scale = a_scale.unsqueeze_dim(expansion_dim);
-            let a_zero_point = a_zero_point.unsqueeze_dim(expansion_dim);
-            let expansion_dim = if b_scale.dims()[0] == b.dims()[0] { 1 } else { 0 };
-            let b_scale = b_scale.unsqueeze_dim(expansion_dim);
-            let b_zero_point = b_zero_point.unsqueeze_dim(expansion_dim);
+            let (a_scale, a_zero_point) = {
+                let expansion_dim = if a_scale.dims()[0] == a.dims()[0] { 1 } else { 0 };
+                (a_scale.unsqueeze_dim(expansion_dim), a_zero_point.unsqueeze_dim(expansion_dim))
+            };
+            let (b_scale, b_zero_point) = {
+                let expansion_dim = if b_scale.dims()[0] == b.dims()[0] { 1 } else { 0 };
+                (b_scale.unsqueeze_dim(expansion_dim), b_zero_point.unsqueeze_dim(expansion_dim))
+            };
             let a_dequantized = a_scale * (a.float() - a_zero_point.float());
             let b_dequantized = b_scale * (b.float() - b_zero_point.float());
             let output_tensor = a_dequantized.matmul(b_dequantized);
-            let expansion_dim = if y_scale.dims()[0] == output_tensor.dims()[0] { 1 } else { 0 };
-            let y_scale = y_scale.unsqueeze_dim(expansion_dim);
-            let y_zero_point = y_zero_point.unsqueeze_dim(expansion_dim);
+            let (y_scale, y_zero_point) = {
+                let expansion_dim = if y_scale.dims()[0] == output_tensor.dims()[0] {
+                    1
+                } else {
+                    0
+                };
+                (y_scale.unsqueeze_dim(expansion_dim), y_zero_point.unsqueeze_dim(expansion_dim))
+            };
             let y = (output_tensor / y_scale).round();
             let y = (y + y_zero_point.float())
                 .clamp(-128f32, 127f32)
