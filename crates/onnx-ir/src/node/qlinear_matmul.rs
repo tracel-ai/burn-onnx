@@ -30,6 +30,40 @@ pub struct QLinearMatMulNode {
     pub outputs: Vec<Argument>,
 }
 
+impl QLinearMatMulNode {
+    pub fn a(&self) -> &Argument {
+        &self.inputs[0]
+    }
+
+    pub fn a_scale(&self) -> &Argument {
+        &self.inputs[1]
+    }
+
+    pub fn a_zero_point(&self) -> &Argument {
+        &self.inputs[2]
+    }
+
+    pub fn b(&self) -> &Argument {
+        &self.inputs[3]
+    }
+
+    pub fn b_scale(&self) -> &Argument {
+        &self.inputs[4]
+    }
+
+    pub fn b_zero_point(&self) -> &Argument {
+        &self.inputs[5]
+    }
+
+    pub fn y_scale(&self) -> &Argument {
+        &self.inputs[6]
+    }
+
+    pub fn y_zero_point(&self) -> &Argument {
+        &self.inputs[7]
+    }
+}
+
 pub(crate) struct QLinearMatMulProcessor;
 
 impl NodeProcessor for QLinearMatMulProcessor {
@@ -68,7 +102,7 @@ impl NodeProcessor for QLinearMatMulProcessor {
             let dtype = input.ty.elem_type();
             match dtype {
                 DType::I8 | DType::U8 => {}
-                // FIXME: Support unsized F8 types (F85ME2UZ and F8M5E2UZ) as required by the spec
+                // FIXME: Support unsized F8 types (FLOAT8E4M3FNUZ and FLOAT8E5M2FNUZ) as required by the spec
                 DType::QFloat(quant_scheme)
                     if opset >= 21
                         && matches!(quant_scheme.value, QuantValue::E5M2 | QuantValue::E4M3) =>
@@ -83,11 +117,9 @@ impl NodeProcessor for QLinearMatMulProcessor {
                 }
                 _ => {
                     return Err(ProcessError::TypeMismatch {
-                        expected: if opset >= 21 {
-                            "Only I8, U8, F8M5E2, F8M4E3 tensor dtypes are supported".to_string()
-                        } else {
-                            "Only I8, U8 tensor dtypes are supported".to_string()
-                        },
+                        // FIXME: Update the message in `expected` to include FLOAT8E5M2 and FLOAT8E4M3FN
+                        // for opset 21+ once F8 qfloats are supported in codegen.
+                        expected: "Only I8, U8 tensor dtypes are supported".to_string(),
                         actual: format!("{name}: {dtype:?}"),
                     });
                 }
