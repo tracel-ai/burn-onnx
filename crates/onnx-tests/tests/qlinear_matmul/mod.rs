@@ -5,13 +5,16 @@ include_models!(
     qlinear_matmul_nd,
     qlinear_matmul_u8_saturate,
     qlinear_matmul_i8_saturate,
-    qlinear_matmul_opset_10
+    qlinear_matmul_opset_10,
+    qlinear_matmul_scalar_f16_scale,
+    qlinear_matmul_vector_bf16_scale
 );
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use burn::tensor::{DType, Int, Tensor, TensorData};
+    use half::{bf16, f16};
 
     use crate::backend::TestBackend;
 
@@ -249,6 +252,103 @@ mod tests {
         );
 
         let expected = TensorData::from([[24u8, 6, 23], [20, 14, 23]]);
+        output.to_data().assert_eq(&expected, true);
+    }
+
+    // Case 7: scalar F16 scales — verifies the `(scale as f32)` cast path for half-precision scalars.
+    // Same operand values as Case 6; scales are the nearest F16 representations of 0.1/0.2/0.3.
+    #[test]
+    fn qlinear_matmul_scalar_f16_scale() {
+        let device = Default::default();
+        let model: qlinear_matmul_scalar_f16_scale::Model<TestBackend> =
+            qlinear_matmul_scalar_f16_scale::Model::new(&device);
+
+        let a = Tensor::<TestBackend, 2, Int>::from_data(
+            TensorData::from([[6u8, 1, 19, 10], [11, 3, 2, 19]]),
+            (&device, DType::U8),
+        );
+        let b = Tensor::<TestBackend, 2, Int>::from_data(
+            TensorData::from([[14u8, 14, 10], [3, 7, 7], [14, 1, 12], [11, 6, 16]]),
+            (&device, DType::U8),
+        );
+
+        let output = model.forward(
+            a,
+            f16::from_f32(0.1),
+            2u8,
+            b,
+            f16::from_f32(0.2),
+            3u8,
+            f16::from_f32(0.3),
+            4u8,
+        );
+
+        let expected = TensorData::from([[24u8, 6, 23], [20, 14, 23]]);
+        output.to_data().assert_eq(&expected, true);
+    }
+
+    // Case 8: vector BF16 scales — verifies the `.cast(DType::F32)` path for half-precision tensors.
+    // Same operand values as Case 2; scales are the nearest BF16 representations of the F32 values.
+    #[test]
+    fn qlinear_matmul_vector_bf16_scale() {
+        let device = Default::default();
+        let model: qlinear_matmul_vector_bf16_scale::Model<TestBackend> =
+            qlinear_matmul_vector_bf16_scale::Model::new(&device);
+
+        let a = Tensor::<TestBackend, 2, Int>::from_data(
+            TensorData::from([[6u8, 1, 19, 10], [11, 3, 2, 19]]),
+            (&device, DType::U8),
+        );
+        let a_scale = Tensor::<TestBackend, 1>::from_data(
+            TensorData::from([bf16::from_f32(0.19160044), bf16::from_f32(0.7818941)]),
+            &device,
+        );
+        let a_zero_point = Tensor::<TestBackend, 1, Int>::from_data(
+            TensorData::from([4u8, 1]),
+            (&device, DType::U8),
+        );
+
+        let b = Tensor::<TestBackend, 2, Int>::from_data(
+            TensorData::from([[18u8, 1, 15], [7, 10, 17], [14, 10, 17], [13, 13, 3]]),
+            (&device, DType::U8),
+        );
+        let b_scale = Tensor::<TestBackend, 1>::from_data(
+            TensorData::from([
+                bf16::from_f32(0.15143815),
+                bf16::from_f32(0.6543796),
+                bf16::from_f32(0.06584746),
+            ]),
+            &device,
+        );
+        let b_zero_point = Tensor::<TestBackend, 1, Int>::from_data(
+            TensorData::from([3u8, 1, 3]),
+            (&device, DType::U8),
+        );
+
+        let y_scale = Tensor::<TestBackend, 1>::from_data(
+            TensorData::from([bf16::from_f32(1.0), bf16::from_f32(0.5)]),
+            &device,
+        );
+        let y_zero_point = Tensor::<TestBackend, 1, Int>::from_data(
+            TensorData::from([10u8, 5]),
+            (&device, DType::U8),
+        );
+
+        let output = model.forward(
+            a,
+            a_scale,
+            a_zero_point,
+            b,
+            b_scale,
+            b_zero_point,
+            y_scale,
+            y_zero_point,
+        );
+
+        // NOTE: The test expects [88, 254, 22] at row 1, not [87, ...] from Python's ReferenceEvaluator.
+        // The ReferenceEvaluator computes in BF16 throughout; Rust casts BF16→F32 then computes in
+        // F32. For [1,0]: BF16 intermediate product rounds to 0.11816 (→ 87), F32 gives 0.11825 (→ 88).
+        let expected = TensorData::from([[17u8, 33, 12], [88, 254, 22]]);
         output.to_data().assert_eq(&expected, true);
     }
 }

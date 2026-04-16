@@ -4,11 +4,13 @@
 # dependencies = [
 #   "onnx==1.19.0",
 #   "numpy",
+#   "ml_dtypes",
 # ]
 # ///
 
 # Generates qlinear_matmul.onnx and sanity-checks with ReferenceEvaluator.
 
+import ml_dtypes
 import numpy as np
 import onnx
 from onnx import TensorProto, helper
@@ -17,6 +19,9 @@ from onnx.reference import ReferenceEvaluator
 _NP_TO_PROTO = {
     "uint8": TensorProto.UINT8,
     "int8": TensorProto.INT8,
+    "float32": TensorProto.FLOAT,
+    "float16": TensorProto.FLOAT16,
+    "bfloat16": TensorProto.BFLOAT16,
 }
 
 
@@ -41,7 +46,12 @@ def build_model(
 
     print(f"\n--- QLinearMatMul ({suffix}) ---")
 
-    quant_proto = _NP_TO_PROTO[a.dtype.name]
+    a_proto = _NP_TO_PROTO[a.dtype.name]
+    b_proto = _NP_TO_PROTO[b.dtype.name]
+    y_zero_point_proto = _NP_TO_PROTO[y_zero_point.dtype.name]
+    a_scale_proto = _NP_TO_PROTO[a_scale.dtype.name]
+    b_scale_proto = _NP_TO_PROTO[b_scale.dtype.name]
+    y_scale_proto = _NP_TO_PROTO[y_scale.dtype.name]
     y_shape = list(a.shape[:-1]) + [b.shape[-1]]
 
     node = helper.make_node(
@@ -64,16 +74,16 @@ def build_model(
         [node],
         f"qlinear_matmul_{suffix}_graph",
         [
-            make_value_info("a", a, quant_proto),
-            make_value_info("a_scale", a_scale, TensorProto.FLOAT),
-            make_value_info("a_zero_point", a_zero_point, quant_proto),
-            make_value_info("b", b, quant_proto),
-            make_value_info("b_scale", b_scale, TensorProto.FLOAT),
-            make_value_info("b_zero_point", b_zero_point, quant_proto),
-            make_value_info("y_scale", y_scale, TensorProto.FLOAT),
-            make_value_info("y_zero_point", y_zero_point, quant_proto),
+            make_value_info("a", a, a_proto),
+            make_value_info("a_scale", a_scale, a_scale_proto),
+            make_value_info("a_zero_point", a_zero_point, a_proto),
+            make_value_info("b", b, b_proto),
+            make_value_info("b_scale", b_scale, b_scale_proto),
+            make_value_info("b_zero_point", b_zero_point, b_proto),
+            make_value_info("y_scale", y_scale, y_scale_proto),
+            make_value_info("y_zero_point", y_zero_point, y_zero_point_proto),
         ],
-        [helper.make_tensor_value_info("y", quant_proto, y_shape)],
+        [helper.make_tensor_value_info("y", y_zero_point_proto, y_shape)],
     )
 
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", opset)])
@@ -217,16 +227,48 @@ if __name__ == "__main__":
         y_zero_point=np.array(0, dtype=np.int8),
     )
 
-    # Case 6: opset-10 model (2D operands, U8 scalar, F16 scales)
+    # Case 6: opset-10 model (2D operands, U8 scalar, F32 scales)
+    # Opset-10 only supports FLOAT scales; the test verifies legacy model loading.
     build_model(
         "opset_10",
         a=np.random.randint(0, 20, size=[2, 4], dtype=np.uint8),
-        a_scale=np.array(0.1, dtype=np.float16),  # Use F16 for scales
+        a_scale=np.array(0.1, dtype=np.float32),
         a_zero_point=np.array(2, dtype=np.uint8),
         b=np.random.randint(0, 20, size=[4, 3], dtype=np.uint8),
+        b_scale=np.array(0.2, dtype=np.float32),
+        b_zero_point=np.array(3, dtype=np.uint8),
+        y_scale=np.array(0.3, dtype=np.float32),
+        y_zero_point=np.array(4, dtype=np.uint8),
+        opset=10,
+    )
+
+    # Case 7: scalar F16 scales — exercises the `(scale as f32)` cast path in generated code.
+    # Uses the same operand values as Case 6 for easy cross-reference.
+    build_model(
+        "scalar_f16_scale",
+        a=np.array([[6, 1, 19, 10], [11, 3, 2, 19]], dtype=np.uint8),
+        a_scale=np.array(0.1, dtype=np.float16),
+        a_zero_point=np.array(2, dtype=np.uint8),
+        b=np.array([[14, 14, 10], [3, 7, 7], [14, 1, 12], [11, 6, 16]], dtype=np.uint8),
         b_scale=np.array(0.2, dtype=np.float16),
         b_zero_point=np.array(3, dtype=np.uint8),
         y_scale=np.array(0.3, dtype=np.float16),
         y_zero_point=np.array(4, dtype=np.uint8),
-        opset=10,
+    )
+
+    # Case 8: vector BF16 scales — exercises the `.cast(DType::F32)` path for rank-1 scale tensors.
+    # Uses the same operand values as Case 2 for easy cross-reference.
+    # NOTE: The Rust test expects [88, 254, 22] at row 1, not [87, ...] from ReferenceEvaluator.
+    # The ReferenceEvaluator computes in BF16 throughout; Rust casts BF16→F32 then computes in
+    # F32. For [1,0]: BF16 intermediate product rounds to 0.11816 (→ 87), F32 gives 0.11825 (→ 88).
+    build_model(
+        "vector_bf16_scale",
+        a=np.array([[6, 1, 19, 10], [11, 3, 2, 19]], dtype=np.uint8),
+        a_scale=np.array([0.19160044, 0.7818941], dtype=ml_dtypes.bfloat16),
+        a_zero_point=np.array([4, 1], dtype=np.uint8),
+        b=np.array([[18, 1, 15], [7, 10, 17], [14, 10, 17], [13, 13, 3]], dtype=np.uint8),
+        b_scale=np.array([0.15143815, 0.6543796, 0.06584746], dtype=ml_dtypes.bfloat16),
+        b_zero_point=np.array([3, 1, 3], dtype=np.uint8),
+        y_scale=np.array([1.0, 0.5], dtype=ml_dtypes.bfloat16),
+        y_zero_point=np.array([10, 5], dtype=np.uint8),
     )

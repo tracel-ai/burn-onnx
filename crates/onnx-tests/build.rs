@@ -369,6 +369,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/qlinear_matmul/qlinear_matmul_u8_saturate.onnx")
         .input("tests/qlinear_matmul/qlinear_matmul_i8_saturate.onnx")
         .input("tests/qlinear_matmul/qlinear_matmul_opset_10.onnx")
+        .input("tests/qlinear_matmul/qlinear_matmul_scalar_f16_scale.onnx")
+        .input("tests/qlinear_matmul/qlinear_matmul_vector_bf16_scale.onnx")
         .input("tests/quantize_linear/quantize_linear.onnx")
         .input("tests/quantize_linear/quantize_linear_axis.onnx")
         .input("tests/random_normal/random_normal.onnx")
