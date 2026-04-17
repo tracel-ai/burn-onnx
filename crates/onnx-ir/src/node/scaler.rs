@@ -3,7 +3,7 @@
 //! Rescales input data by applying the formula: Y = (X - offset) * scale.
 //! The Scaler operator is part of the ONNX ML operators for preprocessing.
 //!
-//! **ONNX Spec**: <https://onnx.ai/onnx/operators/onnx_ml__Scaler.html>
+//! **ONNX Spec**: <https://onnx.ai/onnx/operators/onnx_aionnxml_Scaler.html>
 //!
 //! ## Type Constraints
 //!
@@ -61,8 +61,20 @@ impl NodeProcessor for ScalerProcessor {
     ) -> Result<(), ProcessError> {
         // Per ONNX spec the output Y is always tensor(float) regardless of input dtype.
         // Input T must be tensor(float), tensor(double), tensor(int32), or tensor(int64).
-        let rank = match &node.inputs[0].ty {
-            ArgType::Tensor(t) => t.rank,
+        // Scaler is shape-preserving, so copy rank and static_shape from the input.
+        let (rank, static_shape) = match &node.inputs[0].ty {
+            ArgType::Tensor(t) => {
+                match t.dtype {
+                    DType::F32 | DType::F64 | DType::I32 | DType::I64 => {}
+                    other => {
+                        return Err(ProcessError::TypeMismatch {
+                            expected: "tensor(float | double | int32 | int64)".to_string(),
+                            actual: format!("tensor({other:?})"),
+                        });
+                    }
+                }
+                (t.rank, t.static_shape.clone())
+            }
             other => {
                 return Err(ProcessError::TypeMismatch {
                     expected: "tensor(float | double | int32 | int64)".to_string(),
@@ -73,7 +85,7 @@ impl NodeProcessor for ScalerProcessor {
         node.outputs[0].ty = ArgType::Tensor(TensorType {
             dtype: DType::F32,
             rank,
-            static_shape: None,
+            static_shape,
         });
         Ok(())
     }
@@ -95,6 +107,19 @@ impl NodeProcessor for ScalerProcessor {
                     }
                 }
                 _ => {}
+            }
+        }
+
+        if let (Some(s), Some(o)) = (&scale, &offset) {
+            if s.len() != o.len() {
+                return Err(ProcessError::InvalidAttribute {
+                    name: "scale/offset".to_string(),
+                    reason: format!(
+                        "scale and offset must have the same length, got {} and {}",
+                        s.len(),
+                        o.len()
+                    ),
+                });
             }
         }
 

@@ -43,6 +43,13 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
                     (true, true) => {
                         let offset_values: Vec<_> = self.config.offset.as_ref().unwrap().to_vec();
                         let scale_values: Vec<_> = self.config.scale.as_ref().unwrap().to_vec();
+                        if offset_values.len() != scale_values.len() {
+                            panic!(
+                                "Scaler: offset and scale must have the same number of elements, got offset={}, scale={}",
+                                offset_values.len(),
+                                scale_values.len()
+                            );
+                        }
                         let num_features = offset_values.len();
                         let reshape_dims = create_reshape_dims(num_features);
 
