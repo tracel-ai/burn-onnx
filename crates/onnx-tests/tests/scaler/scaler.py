@@ -66,10 +66,6 @@ def main():
     print(result[0])
     print("\nExpected:")
     print((input_data - 1.0) * 2.0)
-    
-    # Save test data
-    np.save("input.npy", input_data)
-    np.save("output.npy", result[0])
 
 
 if __name__ == "__main__":
