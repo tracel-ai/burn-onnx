@@ -506,6 +506,11 @@ impl ProcessorRegistry {
             NodeType::Imputer,
             Box::new(crate::node::imputer::ImputerProcessor),
         );
+        registry.register(
+            NodeType::Scaler,
+            Box::new(crate::node::scaler::ScalerProcessor),
+        );
+
         // Special operations
         registry.register(NodeType::Cast, Box::new(crate::node::cast::CastProcessor));
         registry.register(

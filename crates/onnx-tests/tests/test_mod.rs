@@ -129,6 +129,7 @@ pub mod reshape;
 pub mod resize;
 pub mod rnn;
 pub mod round;
+pub mod scaler;
 pub mod scan;
 pub mod scatter_elements;
 pub mod scatter_nd;

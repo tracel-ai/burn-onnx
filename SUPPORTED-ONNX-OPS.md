@@ -166,6 +166,7 @@ functionality.
 | [RoiAlign][146]                  | ❌             | ❌           |
 | [RotaryEmbedding][200]           | ❌             | ❌           |
 | [Round][147]                     | ✅             | ✅           |
+| [Scaler][206]                    | ✅             | ✅           |
 | [Scan][148]                      | ✅             | ✅           |
 | [Scatter][149]                   | ❌             | ✅           |
 | [ScatterElements][150]           | ✅             | ✅           |
@@ -417,6 +418,7 @@ functionality.
 [203]: https://onnx.ai/onnx/operators/onnx__Swish.html "ONNX Swish"
 [204]: https://onnx.ai/onnx/operators/onnx__TensorScatter.html "ONNX TensorScatter"
 [205]: https://onnx.ai/onnx/operators/onnx_aionnxml_Imputer.html "ONNX Imputer"
+[206]: https://onnx.ai/onnx/operators/onnx_aionnxml_Scaler.html "ONNX Scaler"
 
 ## Pattern Coalescing
 

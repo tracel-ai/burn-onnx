@@ -390,6 +390,7 @@ define_node_enum! {
     ReverseSequence => unsupported::ReverseSequenceNode,
     RoiAlign => unsupported::RoiAlignNode,
     RotaryEmbedding => unsupported::RotaryEmbeddingNode,
+    Scaler => scaler::ScalerNode,
     SequenceAt => unsupported::SequenceAtNode,
     SequenceConstruct => unsupported::SequenceConstructNode,
     SequenceEmpty => unsupported::SequenceEmptyNode,
