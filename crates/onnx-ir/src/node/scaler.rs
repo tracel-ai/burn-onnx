@@ -110,17 +110,17 @@ impl NodeProcessor for ScalerProcessor {
             }
         }
 
-        if let (Some(s), Some(o)) = (&scale, &offset) {
-            if s.len() != o.len() {
-                return Err(ProcessError::InvalidAttribute {
-                    name: "scale/offset".to_string(),
-                    reason: format!(
-                        "scale and offset must have the same length, got {} and {}",
-                        s.len(),
-                        o.len()
-                    ),
-                });
-            }
+        if let (Some(s), Some(o)) = (&scale, &offset)
+            && s.len() != o.len()
+        {
+            return Err(ProcessError::InvalidAttribute {
+                name: "scale/offset".to_string(),
+                reason: format!(
+                    "scale and offset must have the same length, got {} and {}",
+                    s.len(),
+                    o.len()
+                ),
+            });
         }
 
         Ok(ScalerConfig::new(scale, offset))
