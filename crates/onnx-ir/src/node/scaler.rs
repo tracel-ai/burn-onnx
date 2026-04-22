@@ -99,11 +99,21 @@ impl NodeProcessor for ScalerProcessor {
                 "scale" => {
                     if let AttributeValue::Float32s(floats) = value {
                         scale = Some(floats.clone());
+                    } else {
+                        return Err(ProcessError::InvalidAttribute {
+                            name: "scale".to_string(),
+                            reason: format!("expected Float32s, got {value:?}"),
+                        });
                     }
                 }
                 "offset" => {
                     if let AttributeValue::Float32s(floats) = value {
                         offset = Some(floats.clone());
+                    } else {
+                        return Err(ProcessError::InvalidAttribute {
+                            name: "offset".to_string(),
+                            reason: format!("expected Float32s, got {value:?}"),
+                        });
                     }
                 }
                 _ => {}
@@ -127,6 +137,8 @@ impl NodeProcessor for ScalerProcessor {
     }
 
     fn build_node(&self, builder: RawNode, opset: usize) -> Node {
+        // extract_config is infallible here: any invalid attribute would have
+        // already caused extract_config to fail during the type-inference pass.
         let config = self
             .extract_config(&builder, opset)
             .expect("ScalerProcessor: config extraction failed");
@@ -142,6 +154,34 @@ impl NodeProcessor for ScalerProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use burn_tensor::BoolStore;
+    use crate::ir::NodeType;
+    use crate::node::test_utils::TestNodeBuilder;
+    use crate::processor::OutputPreferences;
+
+    fn make_node(scale: Option<Vec<f32>>, offset: Option<Vec<f32>>, dtype: DType) -> RawNode {
+        let mut builder = match dtype {
+            DType::F32 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
+                .input_tensor_f32("X", 2, None),
+            DType::F64 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
+                .input_tensor_f64("X", 2, None),
+            DType::I32 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
+                .input_tensor_i32("X", 2, None),
+            DType::I64 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
+                .input_tensor_i64("X", 2, None),
+            DType::Bool(_) => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
+                .input_tensor_bool("X", 2, None),
+            _ => panic!("unsupported dtype in test helper"),
+        }
+        .output_tensor_f32("Y", 2, None);
+        if let Some(s) = scale {
+            builder = builder.attr_floats("scale", s);
+        }
+        if let Some(o) = offset {
+            builder = builder.attr_floats("offset", o);
+        }
+        builder.build()
+    }
 
     #[test]
     fn test_scaler_config_extraction() {
@@ -162,5 +202,63 @@ mod tests {
         assert_eq!(node.outputs.len(), 0);
         assert!(node.config.scale.is_some());
         assert!(node.config.offset.is_some());
+    }
+
+    #[test]
+    fn test_infer_types_f32_preserves_shape() {
+        let mut node = make_node(Some(vec![2.0]), Some(vec![1.0]), DType::F32);
+        let processor = ScalerProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 1, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.dtype, DType::F32);
+                assert_eq!(t.rank, 2);
+            }
+            other => panic!("expected Tensor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_infer_types_int64_output_is_f32() {
+        let mut node = make_node(Some(vec![2.0]), None, DType::I64);
+        let processor = ScalerProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 1, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => assert_eq!(t.dtype, DType::F32),
+            other => panic!("expected Tensor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_infer_types_rejects_invalid_dtype() {
+        let mut node = make_node(None, None, DType::Bool(BoolStore::Native));
+        let processor = ScalerProcessor;
+        let prefs = OutputPreferences::new();
+        let err = processor.infer_types(&mut node, 1, &prefs).unwrap_err();
+        assert!(matches!(err, ProcessError::TypeMismatch { .. }));
+    }
+
+    #[test]
+    fn test_extract_config_both_attrs() {
+        let node = make_node(Some(vec![2.0, 3.0]), Some(vec![0.5, 1.0]), DType::F32);
+        let processor = ScalerProcessor;
+        let config = processor.extract_config(&node, 1).unwrap();
+        assert_eq!(config.scale.unwrap(), vec![2.0, 3.0]);
+        assert_eq!(config.offset.unwrap(), vec![0.5, 1.0]);
+    }
+
+    #[test]
+    fn test_extract_config_length_mismatch_error() {
+        let node = make_node(Some(vec![1.0, 2.0]), Some(vec![0.5]), DType::F32);
+        let processor = ScalerProcessor;
+        let err = processor.extract_config(&node, 1).unwrap_err();
+        assert!(matches!(
+            err,
+            ProcessError::InvalidAttribute { ref name, .. } if name == "scale/offset"
+        ));
     }
 }
