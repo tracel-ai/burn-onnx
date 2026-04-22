@@ -42,7 +42,10 @@ mod tests {
         let device = Default::default();
 
         let input = Tensor::<TestBackend, 3>::from_floats(
-            [[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]],
+            [
+                [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+                [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]],
+            ],
             &device,
         );
 
@@ -69,8 +72,7 @@ mod tests {
 
         let device = Default::default();
 
-        let input =
-            Tensor::<TestBackend, 2, Int>::from_ints([[2, 4, 6], [8, 10, 12]], &device);
+        let input = Tensor::<TestBackend, 2, Int>::from_ints([[2, 4, 6], [8, 10, 12]], &device);
 
         let output = model.forward(input);
 
