@@ -60,7 +60,7 @@ fn forward_rfft(
         let #output = {
             let signal = #input.squeeze_dims::<#signal_rank>(&[#squeeze_dim]);
             #dft_length_code
-            let (re, im) = rfft(signal, #axis);
+            let (re, im) = rfft(signal, #axis, None);
             // Stack re and im along new last dim: [.., K] + [.., K] -> [.., K, 2]
             Tensor::<B, #signal_rank>::stack::<#out_rank>(
                 [re, im].to_vec(),
@@ -95,7 +95,7 @@ fn forward_rfft_full(
             let signal = #input.squeeze_dims::<#signal_rank>(&[#squeeze_dim]);
             #dft_length_code
             let n = signal.dims()[#axis];
-            let (re_half, im_half) = rfft(signal, #axis);
+            let (re_half, im_half) = rfft(signal, #axis, None);
             let half_len = re_half.dims()[#axis];
             let mirror_len = n - half_len;
 
@@ -183,7 +183,7 @@ mod tests {
         pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
             let output = {
                 let signal = input.squeeze_dims::<2usize>(&[2isize]);
-                let (re, im) = rfft(signal, 1usize);
+                let (re, im) = rfft(signal, 1usize, None);
                 Tensor::<B, 2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
             };
             output
@@ -211,7 +211,7 @@ mod tests {
             let output = {
                 let signal = input.squeeze_dims::<2usize>(&[2isize]);
                 let n = signal.dims()[1usize];
-                let (re_half, im_half) = rfft(signal, 1usize);
+                let (re_half, im_half) = rfft(signal, 1usize, None);
                 let half_len = re_half.dims()[1usize];
                 let mirror_len = n - half_len;
                 if mirror_len == 0 {
@@ -271,7 +271,7 @@ mod tests {
                         signal
                     }
                 };
-                let (re, im) = rfft(signal, 1usize);
+                let (re, im) = rfft(signal, 1usize, None);
                 Tensor::<B, 2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
             };
             output
