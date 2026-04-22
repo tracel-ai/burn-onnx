@@ -427,6 +427,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/rnn/rnn_with_initial_state.onnx")
         .input("tests/round/round.onnx")
         .input("tests/scaler/scaler.onnx")
+        .input("tests/scaler/scaler_per_feature_3d.onnx")
+        .input("tests/scaler/scaler_i64.onnx")
         .input("tests/shape/shape.onnx")
         .input("tests/shape/shape_of_shape.onnx")
         .input("tests/shape/shape_slice.onnx")
