@@ -97,7 +97,9 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
                     }
                 }
             }
-            ty => unreachable!("Scaler input is always a tensor (validated in onnx-ir), got {ty:?}"),
+            ty => {
+                unreachable!("Scaler input is always a tensor (validated in onnx-ir), got {ty:?}")
+            }
         };
 
         quote! {

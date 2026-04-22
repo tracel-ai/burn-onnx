@@ -154,26 +154,27 @@ impl NodeProcessor for ScalerProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn_tensor::BoolStore;
     use crate::ir::NodeType;
     use crate::node::test_utils::TestNodeBuilder;
     use crate::processor::OutputPreferences;
+    use burn_tensor::BoolStore;
 
     fn make_node(scale: Option<Vec<f32>>, offset: Option<Vec<f32>>, dtype: DType) -> RawNode {
-        let mut builder = match dtype {
-            DType::F32 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
-                .input_tensor_f32("X", 2, None),
-            DType::F64 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
-                .input_tensor_f64("X", 2, None),
-            DType::I32 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
-                .input_tensor_i32("X", 2, None),
-            DType::I64 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
-                .input_tensor_i64("X", 2, None),
-            DType::Bool(_) => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
-                .input_tensor_bool("X", 2, None),
-            _ => panic!("unsupported dtype in test helper"),
-        }
-        .output_tensor_f32("Y", 2, None);
+        let mut builder =
+            match dtype {
+                DType::F32 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
+                    .input_tensor_f32("X", 2, None),
+                DType::F64 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
+                    .input_tensor_f64("X", 2, None),
+                DType::I32 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
+                    .input_tensor_i32("X", 2, None),
+                DType::I64 => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
+                    .input_tensor_i64("X", 2, None),
+                DType::Bool(_) => TestNodeBuilder::new(NodeType::Scaler, "test_scaler")
+                    .input_tensor_bool("X", 2, None),
+                _ => panic!("unsupported dtype in test helper"),
+            }
+            .output_tensor_f32("Y", 2, None);
         if let Some(s) = scale {
             builder = builder.attr_floats("scale", s);
         }
