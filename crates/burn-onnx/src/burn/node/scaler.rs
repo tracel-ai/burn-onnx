@@ -20,8 +20,6 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
             ArgType::Tensor(tensor_type) => {
                 // Output is always tensor(float) per ONNX spec; cast integer/double inputs to F32.
 
-                let has_offset = self.config.offset.is_some();
-                let has_scale = self.config.scale.is_some();
                 let input_rank = tensor_type.rank;
 
                 // Cast to F32 if input is not already F32 (integers or double)
@@ -39,17 +37,10 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
                         .collect()
                 };
 
-                match (has_offset, has_scale) {
-                    (true, true) => {
-                        let offset_values: Vec<_> = self.config.offset.as_ref().unwrap().to_vec();
-                        let scale_values: Vec<_> = self.config.scale.as_ref().unwrap().to_vec();
-                        if offset_values.len() != scale_values.len() {
-                            panic!(
-                                "Scaler: offset and scale must have the same number of elements, got offset={}, scale={}",
-                                offset_values.len(),
-                                scale_values.len()
-                            );
-                        }
+                match (&self.config.offset, &self.config.scale) {
+                    (Some(offset_values), Some(scale_values)) => {
+                        let offset_values: Vec<_> = offset_values.to_vec();
+                        let scale_values: Vec<_> = scale_values.to_vec();
                         let num_features = offset_values.len();
                         let reshape_dims = create_reshape_dims(num_features);
 
@@ -69,8 +60,8 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
                             }
                         }
                     }
-                    (true, false) => {
-                        let offset_values: Vec<_> = self.config.offset.as_ref().unwrap().to_vec();
+                    (Some(offset_values), None) => {
+                        let offset_values: Vec<_> = offset_values.to_vec();
                         let num_features = offset_values.len();
                         let reshape_dims = create_reshape_dims(num_features);
 
@@ -85,8 +76,8 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
                             }
                         }
                     }
-                    (false, true) => {
-                        let scale_values: Vec<_> = self.config.scale.as_ref().unwrap().to_vec();
+                    (None, Some(scale_values)) => {
+                        let scale_values: Vec<_> = scale_values.to_vec();
                         let num_features = scale_values.len();
                         let reshape_dims = create_reshape_dims(num_features);
 
@@ -101,12 +92,12 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
                             }
                         }
                     }
-                    (false, false) => {
+                    (None, None) => {
                         quote! { #input_expr }
                     }
                 }
             }
-            ty => panic!("Scaler: unexpected input type {ty:?}"),
+            ty => unreachable!("Scaler input is always a tensor (validated in onnx-ir), got {ty:?}"),
         };
 
         quote! {
