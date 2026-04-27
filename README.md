@@ -71,7 +71,7 @@ let output = model.forward(input_tensor);
 ```
 
 For detailed usage instructions, see the
-[ONNX Import Guide](https://burn.dev/books/burn/onnx-import.html) in the Burn Book.
+[ONNX Import Guide](https://burn.dev/books/burn/import/onnx-model.html) in the Burn Book.
 
 ## Examples
 
