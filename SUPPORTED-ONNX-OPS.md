@@ -202,6 +202,7 @@ functionality.
 | [StringSplit][202]               | ❌             | ❌           |
 | [Sub][179]                       | ✅             | ✅           |
 | [Sum][180]                       | ✅             | ✅           |
+| [SVMRegressor][207]              | ✅             | ✅           |
 | [Swish][203]                     | ✅             | ✅           |
 | [Tan][181]                       | ✅             | ✅           |
 | [Tanh][182]                      | ✅             | ✅           |
@@ -419,6 +420,7 @@ functionality.
 [204]: https://onnx.ai/onnx/operators/onnx__TensorScatter.html "ONNX TensorScatter"
 [205]: https://onnx.ai/onnx/operators/onnx_aionnxml_Imputer.html "ONNX Imputer"
 [206]: https://onnx.ai/onnx/operators/onnx_aionnxml_Scaler.html "ONNX Scaler"
+[207]: https://onnx.ai/onnx/operators/onnx_aionnxml_SVMRegressor.html "ONNX SVMRegressor"
 
 ## Pattern Coalescing
 

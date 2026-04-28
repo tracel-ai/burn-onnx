@@ -251,6 +251,7 @@ impl_node_codegen_dispatch! {
     // ML ops
     Imputer,
     Scaler,
+    SVMRegressor,
 
     // Special ops
     Attention,
