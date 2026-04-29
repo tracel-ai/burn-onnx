@@ -1,4 +1,5 @@
 use super::prelude::*;
+use onnx_ir::svmregressor::{SVMKernelType, SVMPostTransform};
 
 impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
     fn inputs(&self) -> &[Argument] {
@@ -14,12 +15,11 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
         let coefficients = self.config.coefficients.as_ref()?;
         let support_vectors = self.config.support_vectors.as_ref()?;
         let n_supports = self.config.n_supports.unwrap_or(0) as usize;
+        let n_features = self.config.n_features?;
 
         if coefficients.is_empty() || support_vectors.is_empty() || n_supports == 0 {
             return None;
         }
-
-        let n_features = support_vectors.len() / n_supports;
         let name = Ident::new(&self.name, Span::call_site());
 
         let coef_data: Vec<_> = coefficients.to_vec();
@@ -49,11 +49,19 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
         let input = scope.arg(&self.inputs[0]);
         let output = arg_to_ident(&self.outputs[0]);
 
-        // Extract configuration
-        let kernel_type = self.config.kernel_type.as_deref().unwrap_or("LINEAR");
-        let post_transform = self.config.post_transform.as_deref().unwrap_or("NONE");
-
-        let has_data = self.config.coefficients.is_some() && self.config.support_vectors.is_some();
+        // Extract configuration — mirrors the condition in field() exactly.
+        let n_supports = self.config.n_supports.unwrap_or(0) as usize;
+        let has_data = n_supports > 0
+            && self
+                .config
+                .coefficients
+                .as_ref()
+                .is_some_and(|v| !v.is_empty())
+            && self
+                .config
+                .support_vectors
+                .as_ref()
+                .is_some_and(|v| !v.is_empty());
         let rho = self
             .config
             .rho
@@ -61,8 +69,6 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
             .and_then(|r| r.first())
             .copied()
             .unwrap_or(0.0);
-        let n_supports = self.config.n_supports.unwrap_or(0) as usize;
-
         // Reference the stored tensors (tuple access .0 and .1)
         let field_name = Ident::new(&self.name, Span::call_site());
 
@@ -82,8 +88,8 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
         let kernel_computation = if !has_data {
             quote! { #cast_expr }
         } else {
-            match kernel_type {
-                "LINEAR" => {
+            match &self.config.kernel_type {
+                SVMKernelType::Linear => {
                     quote! {
                         {
                             let x = #cast_expr;
@@ -99,14 +105,14 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
                         }
                     }
                 }
-                "RBF" => {
+                SVMKernelType::Rbf => {
                     let gamma = self
                         .config
                         .kernel_params
                         .as_ref()
                         .and_then(|p| p.first())
                         .copied()
-                        .unwrap_or(0.1);
+                        .expect("kernel_params validated in extract_config");
 
                     quote! {
                         {
@@ -130,11 +136,15 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
                         }
                     }
                 }
-                "POLY" => {
-                    let params = self.config.kernel_params.as_ref();
-                    let gamma = params.and_then(|p| p.first()).copied().unwrap_or(1.0);
-                    let coef0 = params.and_then(|p| p.get(1)).copied().unwrap_or(0.0);
-                    let degree = params.and_then(|p| p.get(2)).copied().unwrap_or(3.0);
+                SVMKernelType::Poly => {
+                    let params = self
+                        .config
+                        .kernel_params
+                        .as_ref()
+                        .expect("kernel_params validated in extract_config");
+                    let gamma = params.first().copied().unwrap_or(0.0);
+                    let coef0 = params.get(1).copied().unwrap_or(0.0);
+                    let degree = params.get(2).copied().unwrap_or(0.0);
 
                     quote! {
                         {
@@ -153,10 +163,14 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
                         }
                     }
                 }
-                "SIGMOID" => {
-                    let params = self.config.kernel_params.as_ref();
-                    let gamma = params.and_then(|p| p.first()).copied().unwrap_or(1.0);
-                    let coef0 = params.and_then(|p| p.get(1)).copied().unwrap_or(0.0);
+                SVMKernelType::Sigmoid => {
+                    let params = self
+                        .config
+                        .kernel_params
+                        .as_ref()
+                        .expect("kernel_params validated in extract_config");
+                    let gamma = params.first().copied().unwrap_or(0.0);
+                    let coef0 = params.get(1).copied().unwrap_or(0.0);
 
                     quote! {
                         {
@@ -174,18 +188,19 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
                         }
                     }
                 }
-                _ => quote! { #cast_expr },
             }
         };
 
         // Apply post-transform if needed
-        let function = match post_transform {
-            "NONE" => kernel_computation,
-            "LOGISTIC" => quote! { { let y = #kernel_computation; (y.neg().exp() + 1.0).recip() } },
-            "SOFTMAX" => {
+        let function = match &self.config.post_transform {
+            SVMPostTransform::None => kernel_computation,
+            SVMPostTransform::Logistic => {
+                quote! { { let y = #kernel_computation; (y.neg().exp() + 1.0).recip() } }
+            }
+            SVMPostTransform::Softmax => {
                 quote! { { let y = #kernel_computation; let e = y.exp(); e.clone() / e.sum_dim(1) } }
             }
-            "SOFTMAX_ZERO" => quote! { {
+            SVMPostTransform::SoftmaxZero => quote! { {
                 let y = #kernel_computation;
                 // Append a zero logit column → [N, 2], softmax over targets, take first column.
                 let [batch, _] = y.dims();
@@ -197,14 +212,7 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
                 let e = combined.exp();
                 e.clone().narrow(1, 0, 1) / e.sum_dim(1)
             } },
-            "PROBIT" => quote! {
-                compile_error!(
-                    "SVMRegressor: PROBIT post_transform requires the inverse normal CDF (erfinv) \
-                     which is not available in Burn's tensor API. Use a different post_transform \
-                     or implement erfinv manually."
-                )
-            },
-            _ => kernel_computation,
+            SVMPostTransform::Probit => unreachable!("PROBIT is rejected in extract_config"),
         };
 
         quote! {
@@ -218,7 +226,9 @@ mod tests {
     use super::super::test_helpers::*;
     use burn::tensor::DType;
     use insta::assert_snapshot;
-    use onnx_ir::svmregressor::{SVMRegressorConfig, SVMRegressorNodeBuilder};
+    use onnx_ir::svmregressor::{
+        SVMKernelType, SVMPostTransform, SVMRegressorConfig, SVMRegressorNodeBuilder,
+    };
 
     fn make_node(
         kernel: &str,
@@ -232,10 +242,13 @@ mod tests {
             .config(SVMRegressorConfig::new(
                 Some(vec![1.0, -0.5]),
                 kernel_params,
-                Some(kernel.to_string()),
+                kernel.parse().unwrap(),
                 Some(n_supports),
+                Some(2), // n_features: 4 sv values / 2 supports
                 None,
-                post_transform.map(|s| s.to_string()),
+                post_transform
+                    .map(|s| s.parse().unwrap())
+                    .unwrap_or_default(),
                 Some(vec![0.5]),
                 Some(vec![1.0, 2.0, 3.0, 4.0]),
             ))
