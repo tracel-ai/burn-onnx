@@ -272,13 +272,7 @@ mod tests {
                     }
                     output
                 };
-                let constant1_out1 = 1i64;
-                let actual_idx = if constant1_out1 < 0 {
-                    (shape1_out1.len() as i64 + constant1_out1) as usize
-                } else {
-                    constant1_out1 as usize
-                };
-                let gather1_out1 = shape1_out1[actual_idx] as i64;
+                let gather1_out1 = shape1_out1[1] as i64;
                 gather1_out1
             }
         }
@@ -336,13 +330,7 @@ mod tests {
                     }
                     output
                 };
-                let constant1_out1 = 1i64;
-                let actual_idx = if constant1_out1 < 0 {
-                    (shape1_out1.len() as i64 + constant1_out1) as usize
-                } else {
-                    constant1_out1 as usize
-                };
-                let gather1_out1 = shape1_out1[actual_idx] as i64;
+                let gather1_out1 = shape1_out1[1] as i64;
                 let shape2_out1: [i64; 3] = {
                     let axes = &y.dims()[0..3];
                     let mut output = [0i64; 3];
@@ -409,34 +397,10 @@ mod tests {
                     }
                     output
                 };
-                let constant1_out1 = 0i64;
-                let constant2_out1 = 1i64;
-                let constant3_out1 = 3i64;
-                let constant4_out1 = 2i64;
-                let actual_idx = if constant1_out1 < 0 {
-                    (shape1_out1.len() as i64 + constant1_out1) as usize
-                } else {
-                    constant1_out1 as usize
-                };
-                let gather1_out1 = shape1_out1[actual_idx] as i64;
-                let actual_idx = if constant2_out1 < 0 {
-                    (shape2_out1.len() as i64 + constant2_out1) as usize
-                } else {
-                    constant2_out1 as usize
-                };
-                let gather2_out1 = shape2_out1[actual_idx] as i64;
-                let actual_idx = if constant3_out1 < 0 {
-                    (shape3_out1.len() as i64 + constant3_out1) as usize
-                } else {
-                    constant3_out1 as usize
-                };
-                let gather3_out1 = shape3_out1[actual_idx] as i64;
-                let actual_idx = if constant4_out1 < 0 {
-                    (shape4_out1.len() as i64 + constant4_out1) as usize
-                } else {
-                    constant4_out1 as usize
-                };
-                let gather4_out1 = shape4_out1[actual_idx] as i64;
+                let gather1_out1 = shape1_out1[0] as i64;
+                let gather2_out1 = shape2_out1[1] as i64;
+                let gather3_out1 = shape3_out1[3] as i64;
+                let gather4_out1 = shape4_out1[2] as i64;
                 let unsqueeze1_out1 = [gather1_out1 as i64];
                 let unsqueeze2_out1 = [gather2_out1 as i64];
                 let unsqueeze3_out1 = [gather3_out1 as i64];
@@ -496,20 +460,8 @@ mod tests {
                     }
                     output
                 };
-                let constant1_out1 = 1i64;
-                let constant2_out1 = 2i64;
-                let actual_idx = if constant1_out1 < 0 {
-                    (shape1_out1.len() as i64 + constant1_out1) as usize
-                } else {
-                    constant1_out1 as usize
-                };
-                let gather1_out1 = shape1_out1[actual_idx] as i64;
-                let actual_idx = if constant2_out1 < 0 {
-                    (shape2_out1.len() as i64 + constant2_out1) as usize
-                } else {
-                    constant2_out1 as usize
-                };
-                let gather2_out1 = shape2_out1[actual_idx] as i64;
+                let gather1_out1 = shape1_out1[1] as i64;
+                let gather2_out1 = shape2_out1[2] as i64;
                 let mul1_out1 = gather1_out1 * gather2_out1;
                 mul1_out1
             }

@@ -197,6 +197,18 @@ impl NodeProcessor for GatherProcessor {
             }
         }
 
+        // when index is a constant scalar, make it static so that it can be later eliminated
+        // should ideally be in lift_constants but at this point we don't know whether the index
+        // is scalar
+        let is_scalar_index = match &node.inputs[1].ty {
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => true,
+            ArgType::Tensor(t) => t.rank == 0,
+            _ => false,
+        };
+        if node.inputs.len() > 1 && node.inputs[1].is_constant() && is_scalar_index {
+            node.inputs[1].to_static()?;
+        }
+
         Ok(())
     }
 
@@ -245,6 +257,8 @@ impl NodeProcessor for GatherProcessor {
 
 #[cfg(test)]
 mod tests {
+    use burn_tensor::DType;
+
     use super::*;
     use crate::ir::NodeType;
     use crate::node::test_utils::TestNodeBuilder;
@@ -544,6 +558,100 @@ mod tests {
 
         // Gathering from a tensor is not a no-op
         assert!(!processor.is_noop(&node));
+    }
+
+    #[test]
+    fn test_gather_infer_types_lifts_constant_rank0_tensor_index() {
+        let mut node = TestNodeBuilder::new(NodeType::Gather, "test_gather_rank0_tensor")
+            .attr_int("axis", 0)
+            .input_tensor_f32("data", 3, None)
+            .input_scalar_tensor_i64("indices", Some(2))
+            .output_tensor_f32("output", 2, None)
+            .build_with_graph_data(16);
+
+        node.inputs[1].ty = ArgType::Tensor(TensorType::new(DType::I64, 0, None));
+
+        let processor = GatherProcessor;
+        let prefs = OutputPreferences::new();
+
+        assert!(node.inputs[1].is_constant()); // index is indeed constant
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        assert!(node.inputs[1].is_static()); // was converted to static, can be eliminated
+    }
+
+    #[test]
+    fn test_gather_infer_types_lifts_constant_scalar_tensor_index() {
+        let mut node = TestNodeBuilder::new(NodeType::Gather, "test_gather_scalar_tensor")
+            .attr_int("axis", 0)
+            .input_tensor_f32("data", 3, None)
+            .input_scalar_tensor_i64("indices", Some(2))
+            .output_tensor_f32("output", 2, None)
+            .build_with_graph_data(16);
+
+        node.inputs[1].ty = ArgType::ScalarTensor(DType::I64);
+
+        let processor = GatherProcessor;
+        let prefs = OutputPreferences::new();
+
+        assert!(node.inputs[1].is_constant()); // index is indeed constant
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        assert!(node.inputs[1].is_static()); // was converted to static, can be eliminated
+    }
+
+    #[test]
+    fn test_gather_infer_types_lifts_constant_scalar_index() {
+        let mut node = TestNodeBuilder::new(NodeType::Gather, "test_gather_scalar")
+            .attr_int("axis", 0)
+            .input_tensor_f32("data", 3, None)
+            .input_scalar_tensor_i64("indices", Some(2))
+            .output_tensor_f32("output", 2, None)
+            .build_with_graph_data(16);
+
+        node.inputs[1].ty = ArgType::ScalarNative(DType::I64);
+
+        let processor = GatherProcessor;
+        let prefs = OutputPreferences::new();
+
+        assert!(node.inputs[1].is_constant()); // index is indeed constant
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        assert!(node.inputs[1].is_static()); // was converted to static, can be eliminated
+    }
+
+    #[test]
+    fn test_gather_infer_types_dynamic_index() {
+        let mut node = TestNodeBuilder::new(NodeType::Gather, "test_gather_dynamic")
+            .attr_int("axis", 0)
+            .input_tensor_f32("data", 3, None)
+            .input_scalar_tensor_i64("indices", None)
+            .output_tensor_f32("output", 2, None)
+            .build_with_graph_data(16);
+
+        let processor = GatherProcessor;
+        let prefs = OutputPreferences::new();
+
+        assert!(!node.inputs[1].is_constant()); // index is not constant
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        assert!(!node.inputs[1].is_static()); // was not converted to static, can't be eliminated
+    }
+
+    #[test]
+    fn test_gather_infer_types_constant_2d_index() {
+        // 2d indexing is left as is for now
+        let mut node = TestNodeBuilder::new(NodeType::Gather, "test_gather_constant_2d")
+            .attr_int("axis", 0)
+            .input_tensor_f32("data", 3, None)
+            .input_scalar_tensor_i64("indices", Some(2))
+            .output_tensor_f32("output", 2, None)
+            .build_with_graph_data(16);
+
+        node.inputs[1].ty = ArgType::Tensor(TensorType::new(DType::I64, 2, None));
+
+        let processor = GatherProcessor;
+        let prefs = OutputPreferences::new();
+
+        assert!(node.inputs[1].is_constant()); // index is constant
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        assert!(!node.inputs[1].is_static()); // was not converted to static, won't be eliminated
     }
 
     // TODO: Add test for out-of-bounds indices - Per spec (opset 11+), out-of-bounds indices should raise error - Missing bounds checking test

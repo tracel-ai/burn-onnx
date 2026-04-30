@@ -68,15 +68,24 @@ fn forward_shape_gather(
             // Gathering a single element from a shape, keep on device as Tensor<B, 1, Int>
             match &index_arg.ty {
                 ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                    let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
-                    let index_resolve = gen_index_resolve(&index_ident);
-                    quote! {
-                        #pre_convert
-                        #index_resolve
-                        let #output = Tensor::<B, 1, Int>::from_data(
-                            burn::tensor::TensorData::from([#input_shape_name[actual_idx]]),
-                            &self.device,
-                        );
+                    if let Some(idx_lit) = resolve_constant_shape_index(input_arg, index_arg) {
+                        quote! {
+                            let #output = Tensor::<B, 1, Int>::from_data(
+                                burn::tensor::TensorData::from([#input_shape_name[#idx_lit]]),
+                                &self.device,
+                            );
+                        }
+                    } else {
+                        let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
+                        let index_resolve = gen_index_resolve(&index_ident);
+                        quote! {
+                            #pre_convert
+                            #index_resolve
+                            let #output = Tensor::<B, 1, Int>::from_data(
+                                burn::tensor::TensorData::from([#input_shape_name[actual_idx]]),
+                                &self.device,
+                            );
+                        }
                     }
                 }
                 _ => panic!(
@@ -90,12 +99,18 @@ fn forward_shape_gather(
             let scalar_ty = scalar_type_tokens(dtype);
             match &index_arg.ty {
                 ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                    let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
-                    let index_resolve = gen_index_resolve(&index_ident);
-                    quote! {
-                        #pre_convert
-                        #index_resolve
-                        let #output = #input_shape_name[actual_idx] as #scalar_ty;
+                    if let Some(idx_lit) = resolve_constant_shape_index(input_arg, index_arg) {
+                        quote! {
+                            let #output = #input_shape_name[#idx_lit] as #scalar_ty;
+                        }
+                    } else {
+                        let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
+                        let index_resolve = gen_index_resolve(&index_ident);
+                        quote! {
+                            #pre_convert
+                            #index_resolve
+                            let #output = #input_shape_name[actual_idx] as #scalar_ty;
+                        }
                     }
                 }
                 _ => panic!(
@@ -351,6 +366,27 @@ fn forward_tensor_gather(
     }
 }
 
+fn resolve_constant_shape_index(
+    input_arg: &Argument,
+    index_arg: &Argument,
+) -> Option<proc_macro2::Literal> {
+    index_arg
+        .value()
+        .and_then(|v| v.scalar_i64().ok())
+        .map(|resolved| {
+            let idx = if resolved < 0 {
+                let shape_rank = match &input_arg.ty {
+                    ArgType::Shape(r) => *r as i64,
+                    _ => unreachable!(),
+                };
+                (shape_rank + resolved) as usize
+            } else {
+                resolved as usize
+            };
+            proc_macro2::Literal::usize_unsuffixed(idx)
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::*;
@@ -524,6 +560,86 @@ mod tests {
                 .try_into()
                 .unwrap();
             transposed
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gather_shape_const_index_to_scalar() {
+        let config = GatherConfig { axis: 0 };
+        let node = GatherNodeBuilder::new("extract_dim")
+            .input_shape("input_shape", 4)
+            .input_const_i64("dim_idx", 1)
+            .output_scalar("dim_value", DType::I32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input_shape: [i64; 4]) -> i32 {
+            let dim_value = input_shape[1] as i32;
+            dim_value
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gather_shape_const_negative_index_to_scalar() {
+        let config = GatherConfig { axis: 0 };
+        let node = GatherNodeBuilder::new("extract_dim")
+            .input_shape("input_shape", 4)
+            .input_const_i64("dim_idx", -1)
+            .output_scalar("dim_value", DType::I32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input_shape: [i64; 4]) -> i32 {
+            let dim_value = input_shape[3] as i32;
+            dim_value
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gather_shape_const_index_to_scalar_tensor() {
+        let config = GatherConfig { axis: 0 };
+        let node = GatherNodeBuilder::new("extract_dim")
+            .input_shape("input_shape", 4)
+            .input_const_i64("dim_idx", 1)
+            .output_scalar_tensor("result", DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input_shape: [i64; 4]) -> Tensor<B, 1> {
+            let result = Tensor::<
+                B,
+                1,
+                Int,
+            >::from_data(burn::tensor::TensorData::from([input_shape[1]]), &self.device);
+            result
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gather_shape_const_negative_index_to_scalar_tensor() {
+        let config = GatherConfig { axis: 0 };
+        let node = GatherNodeBuilder::new("extract_dim")
+            .input_shape("input_shape", 4)
+            .input_const_i64("dim_idx", -1)
+            .output_scalar_tensor("result", DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input_shape: [i64; 4]) -> Tensor<B, 1> {
+            let result = Tensor::<
+                B,
+                1,
+                Int,
+            >::from_data(burn::tensor::TensorData::from([input_shape[3]]), &self.device);
+            result
         }
         ");
     }
