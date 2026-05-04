@@ -1102,14 +1102,9 @@ mod tests {
     #[test]
     fn test_tensor_static_shape_negative_step_typical() {
         // start=7, end=2, step=-1 over dim=10 -> indices 7,6,5,4,3 = 5 elements
-        let mut node = create_static_shape_slice_node(
-            vec![Some(10)],
-            vec![7],
-            vec![2],
-            vec![0],
-            vec![-1],
-        )
-        .build_with_graph_data(16);
+        let mut node =
+            create_static_shape_slice_node(vec![Some(10)], vec![7], vec![2], vec![0], vec![-1])
+                .build_with_graph_data(16);
 
         let processor = SliceProcessor;
         processor
@@ -1125,14 +1120,9 @@ mod tests {
     #[test]
     fn test_tensor_static_shape_negative_indices() {
         // start=-3, end=-1, step=1 over dim=10 -> indices 7,8 = 2 elements
-        let mut node = create_static_shape_slice_node(
-            vec![Some(10)],
-            vec![-3],
-            vec![-1],
-            vec![0],
-            vec![1],
-        )
-        .build_with_graph_data(16);
+        let mut node =
+            create_static_shape_slice_node(vec![Some(10)], vec![-3], vec![-1], vec![0], vec![1])
+                .build_with_graph_data(16);
 
         let processor = SliceProcessor;
         processor
