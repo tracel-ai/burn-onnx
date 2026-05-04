@@ -194,7 +194,7 @@ impl NodeProcessor for SliceProcessor {
         match input_ty {
             ArgType::Tensor(tensor_type) => {
                 // Slice changes dimension sizes along sliced axes. Initialize all dimensions
-                // with sizes from input, then fill in what we can compute statically.
+                // with sizes from input, then overwrite the axes we can compute statically.
                 let mut static_shape = tensor_type
                     .static_shape
                     .clone()

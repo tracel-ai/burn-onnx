@@ -473,6 +473,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/slice/slice_1d_tensor.onnx")
         .input("tests/slice/slice_shape_start_tensor_end.onnx")
         .input("tests/slice/slice_tensor_start_shape_end.onnx")
+        .input("tests/slice/slice_tensor_to_split.onnx")
         .input("tests/slice/slice_axes.onnx")
         .input("tests/slice/slice_with_steps.onnx")
         .input("tests/slice/slice_shape_with_steps.onnx")

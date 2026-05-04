@@ -17,6 +17,7 @@ include_models!(
     slice_1d_tensor,
     slice_shape_start_tensor_end,
     slice_tensor_start_shape_end,
+    slice_tensor_to_split,
     slice_axes,
     slice_with_steps,
     slice_shape_with_steps,
@@ -507,5 +508,43 @@ mod tests {
 
         // Empty slice [2:2] on dimension 0 should produce shape [0, 3]
         assert_eq!(output.dims(), [0, 3]);
+    }
+
+    #[test]
+    fn slice_tensor_to_split() {
+        // Regression test for Slice -> Split static shape propagation.
+        //
+        // The model does:
+        // input: [3, 6]
+        // Slice(axis=1, starts=[2], ends=[i64::MAX]) -> [3, 4]
+        // Split(axis=1, split=[2, 2]) -> two outputs of [3, 2]
+        //
+        // Before Slice updated tensor static_shape during type inference, Split
+        // still saw the sliced input as [3, 6] and rejected split=[2, 2] because
+        // 2 + 2 != 6.
+        let model: slice_tensor_to_split::Model<TestBackend> =
+            slice_tensor_to_split::Model::default();
+        let device = Default::default();
+
+        let input = Tensor::<TestBackend, 2>::from_floats(
+            [
+                [0., 1., 2., 3., 4., 5.],
+                [6., 7., 8., 9., 10., 11.],
+                [12., 13., 14., 15., 16., 17.],
+            ],
+            &device,
+        );
+
+        let (output_0, output_1) = model.forward(input);
+
+        assert_eq!(output_0.dims(), [3, 2]);
+        assert_eq!(output_1.dims(), [3, 2]);
+
+        let expected_0 = TensorData::from([[2f32, 3.], [8., 9.], [14., 15.]]);
+
+        let expected_1 = TensorData::from([[4f32, 5.], [10., 11.], [16., 17.]]);
+
+        output_0.to_data().assert_eq(&expected_0, true);
+        output_1.to_data().assert_eq(&expected_1, true);
     }
 }
