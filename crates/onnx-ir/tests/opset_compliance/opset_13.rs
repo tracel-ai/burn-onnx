@@ -1209,7 +1209,7 @@ fn slice(graph: &OnnxGraph) {
         _: I64[2] [static(20)]
         _: I64[2] [static(21)]
       Outputs:
-        slice1_out1: F32[4, 6]
+        slice1_out1: F32[2, 3]
       Config:
         SliceConfig {
             starts: Static(
