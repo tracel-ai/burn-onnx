@@ -24,20 +24,26 @@ impl NodeCodegen for onnx_ir::gather::GatherNode {
     }
 }
 
-/// Convert a scalar index argument to an Ident suitable for use in generated code.
-/// For ScalarTensor, generates a let-binding that converts to native, returning the
-/// conversion code and the ident. For ScalarNative, returns empty code and the arg ident.
-fn scalar_index_to_ident(
+/// Resolves a scalar index argument to a token stream suitable for use in slices.
+/// Tries to inline a constant value first, falls back to runtime variables:
+/// - for ScalarTensor, generates a let-binding that converts to native, returning the
+///   conversion code and the ident code
+/// - for ScalarNative, returns empty code and the arg ident code
+fn resolve_scalar_index_token(
     index_arg: &Argument,
-    scope: &mut super::super::scope::ScopeAtPosition<'_>,
-) -> (proc_macro2::TokenStream, proc_macro2::Ident) {
-    if index_arg.ty.is_scalar_tensor() {
+    scope: &mut ScopeAtPosition<'_>,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    if let Some(resolved) = index_arg.value().and_then(|v| v.scalar_i64().ok()) {
+        let lit = proc_macro2::Literal::i64_unsuffixed(resolved);
+        (quote! {}, quote! { #lit })
+    } else if index_arg.ty.is_scalar_tensor() {
         let tensor = scope.arg(index_arg);
         let native_expr = on_device_to_native(quote! { #tensor }, &index_arg.ty.elem_type());
         let temp = Ident::new("__scalar_idx", Span::call_site());
-        (quote! { let #temp = #native_expr; }, temp)
+        (quote! { let #temp = #native_expr; }, quote! { #temp })
     } else {
-        (quote! {}, arg_to_ident(index_arg))
+        let index = arg_to_ident(index_arg);
+        (quote! {}, quote! { #index })
     }
 }
 
@@ -53,7 +59,7 @@ fn forward_shape_gather(
     let output = arg_to_ident(output_arg);
 
     // Helper: generate index resolution code for shape gather
-    let gen_index_resolve = |index: &proc_macro2::Ident| {
+    let gen_index_resolve = |index: &proc_macro2::TokenStream| {
         quote! {
             let actual_idx = if #index < 0 {
                 (#input_shape_name.len() as i64 + #index) as usize
@@ -76,8 +82,9 @@ fn forward_shape_gather(
                             );
                         }
                     } else {
-                        let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
-                        let index_resolve = gen_index_resolve(&index_ident);
+                        let (pre_convert, index_token) =
+                            resolve_scalar_index_token(index_arg, scope);
+                        let index_resolve = gen_index_resolve(&index_token);
                         quote! {
                             #pre_convert
                             #index_resolve
@@ -104,8 +111,9 @@ fn forward_shape_gather(
                             let #output = #input_shape_name[#idx_lit] as #scalar_ty;
                         }
                     } else {
-                        let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
-                        let index_resolve = gen_index_resolve(&index_ident);
+                        let (pre_convert, index_token) =
+                            resolve_scalar_index_token(index_arg, scope);
+                        let index_resolve = gen_index_resolve(&index_token);
                         quote! {
                             #pre_convert
                             #index_resolve
@@ -230,12 +238,12 @@ fn forward_tensor_gather(
             // Gathering a single element, keep as Tensor<B, 1> on device (no GPU stall)
             match &index_arg.ty {
                 ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                    let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
+                    let (pre_convert, index_token) = resolve_scalar_index_token(index_arg, scope);
                     let axis = node.config.axis;
                     let slice_args = (0..input_rank)
                         .map(|i| {
                             if i == axis {
-                                quote! { #index_ident }
+                                index_token.clone()
                             } else {
                                 quote! { .. }
                             }
@@ -259,12 +267,12 @@ fn forward_tensor_gather(
             let scalar_ty = scalar_type_tokens(dtype);
             match &index_arg.ty {
                 ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                    let (pre_convert, index_ident) = scalar_index_to_ident(index_arg, scope);
+                    let (pre_convert, index_token) = resolve_scalar_index_token(index_arg, scope);
                     let axis = node.config.axis;
                     let slice_args = (0..input_rank)
                         .map(|i| {
                             if i == axis {
-                                quote! { #index_ident }
+                                index_token.clone()
                             } else {
                                 quote! { .. }
                             }
@@ -290,25 +298,8 @@ fn forward_tensor_gather(
                     // Use tensor.slice(...) for efficient gather operation
                     let output_rank = input_rank - 1;
                     let axis = node.config.axis;
-
                     // Either a resolved literal or the runtime variable
-                    let index_token = index_arg
-                        .value()
-                        .and_then(|v| v.scalar_i64().ok())
-                        .map(|resolved| {
-                            let lit = proc_macro2::Literal::i64_unsuffixed(resolved);
-                            quote! { #lit }
-                        })
-                        .unwrap_or_else(|| {
-                            if index_arg.ty.is_scalar_tensor() {
-                                let tensor = scope.arg(index_arg);
-                                on_device_to_native(quote! { #tensor }, &index_arg.ty.elem_type())
-                            } else {
-                                let index = arg_to_ident(index_arg);
-                                quote! { #index }
-                            }
-                        });
-
+                    let (pre_convert, index_token) = resolve_scalar_index_token(index_arg, scope);
                     let slice_args = (0..input_rank)
                         .map(|i| {
                             if i == axis {
@@ -318,8 +309,8 @@ fn forward_tensor_gather(
                             }
                         })
                         .collect::<Vec<_>>();
-
                     quote! {
+                        #pre_convert
                         let #output = {
                             let sliced = #input.slice(s![#(#slice_args),*]);
                             sliced.squeeze_dim::<#output_rank>(#dim)
@@ -1104,6 +1095,45 @@ mod tests {
                 let sliced = data.slice(s![- 2, ..]);
                 sliced.squeeze_dim::<1usize>(0)
             };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gather_const_index_to_scalar() {
+        let config = GatherConfig { axis: 0 };
+        let node = GatherNodeBuilder::new("get_row")
+            .input_tensor_shape("data", vec![10, 64], DType::F32)
+            .input_const_i64("idx", 2)
+            .output_scalar("output", DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, data: Tensor<B, 2>) -> f32 {
+            let output = {
+                let selected = data.slice(s![2, ..]);
+                selected.into_scalar().elem::<f32>()
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gather_const_index_to_scalar_tensor() {
+        let config = GatherConfig { axis: 0 };
+        let node = GatherNodeBuilder::new("get_row")
+            .input_tensor_shape("data", vec![10, 64], DType::F32)
+            .input_const_i64("idx", 2)
+            .output_scalar_tensor("output", DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, data: Tensor<B, 2>) -> Tensor<B, 1> {
+            let output = { data.slice(s![2, ..]) };
             output
         }
         ");
