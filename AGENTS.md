@@ -100,6 +100,23 @@ Key principles:
 - Python test scripts use `uv` inline script format with `onnx.reference.ReferenceEvaluator` as
   ground truth
 
+### Consuming a generated model
+
+- **Do NOT use `Model::new(&device)`** to run a generated model. `new` calls
+  `Param::uninitialized` for every constant/weight, leaving them zeroed. Graphs whose forward
+  uses `self.<param>.val()` (anything with ONNX Constant/Initializer nodes — including all
+  attention `_expanded` variants and many normal models) then run with all-zero constants and
+  produce wrong output, often as bizarre downstream shape errors (e.g. `repeat([0, 0, 0])`
+  collapsing a tensor to `[0, 0, 0, 0]`)
+- Use `Model::from_file(bpk_path, &device)` instead — it constructs via `new` then runs
+  `load_from(BurnpackStore)`, which is a no-op when there are no `Param` fields, so it is safe
+  for graphs without constants too
+- `Model::default()` works but pins the device to `B::Device::default()` and embeds the absolute
+  bpk path captured at codegen time; prefer the explicit `from_file` form
+- Test harnesses and demo binaries that construct generated models must follow this rule. The
+  symptom of getting it wrong is "compare passes for ops that touch no constants, fails for
+  anything reshape/tile/scatter-shaped"
+
 ## Adding a New Operator
 
 Read `DEVELOPMENT-GUIDE.md` for the full walkthrough with code examples. Checklist:

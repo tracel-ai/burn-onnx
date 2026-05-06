@@ -320,9 +320,7 @@ reason = "attention op family comparison failure"
 tracking = "#311"
 
 [test_attention_3d_causal_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_diff_heads_sizes]
 status = "pass"
@@ -341,30 +339,22 @@ reason = "attention op family comparison failure"
 tracking = "#311"
 
 [test_attention_3d_diff_heads_sizes_causal_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_diff_heads_sizes_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_diff_heads_sizes_scaled]
 status = "pass"
 
 [test_attention_3d_diff_heads_sizes_scaled_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_diff_heads_sizes_softcap]
 status = "pass"
 
 [test_attention_3d_diff_heads_sizes_softcap_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_diff_heads_with_past_and_present]
 status = "pass"
@@ -375,9 +365,7 @@ reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
 tracking = "#314"
 
 [test_attention_3d_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_gqa]
 status = "fail-compare"
@@ -400,14 +388,10 @@ reason = "comparison against reference tensor fails (classified by M2 first-run 
 tracking = "#311"
 
 [test_attention_3d_gqa_causal_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_gqa_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_gqa_scaled]
 status = "fail-compare"
@@ -415,9 +399,7 @@ reason = "comparison against reference tensor fails (classified by M2 first-run 
 tracking = "#311"
 
 [test_attention_3d_gqa_scaled_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_gqa_softcap]
 status = "fail-compare"
@@ -425,9 +407,7 @@ reason = "comparison against reference tensor fails (classified by M2 first-run 
 tracking = "#311"
 
 [test_attention_3d_gqa_softcap_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_gqa_with_past_and_present]
 status = "fail-compare"
@@ -443,25 +423,19 @@ tracking = "#314"
 status = "pass"
 
 [test_attention_3d_scaled_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_softcap]
 status = "pass"
 
 [test_attention_3d_softcap_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_transpose_verification]
 status = "pass"
 
 [test_attention_3d_transpose_verification_expanded]
-status = "skip-codegen"
-reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
-tracking = "#314"
+status = "pass"
 
 [test_attention_3d_with_past_and_present]
 status = "pass"
@@ -572,9 +546,7 @@ reason = "attention op family comparison failure"
 tracking = "#311"
 
 [test_attention_4d_causal_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_diff_heads_mask4d_padded_kv]
 status = "skip-codegen"
@@ -603,30 +575,22 @@ reason = "attention op family comparison failure"
 tracking = "#311"
 
 [test_attention_4d_diff_heads_sizes_causal_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_diff_heads_sizes_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_diff_heads_sizes_scaled]
 status = "pass"
 
 [test_attention_4d_diff_heads_sizes_scaled_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_diff_heads_sizes_softcap]
 status = "pass"
 
 [test_attention_4d_diff_heads_sizes_softcap_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_diff_heads_with_past_and_present]
 status = "pass"
@@ -653,17 +617,13 @@ reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
 tracking = "#314"
 
 [test_attention_4d_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_fp16]
 status = "pass"
 
 [test_attention_4d_fp16_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_gqa]
 status = "fail-compare"
@@ -686,14 +646,10 @@ reason = "comparison against reference tensor fails (classified by M2 first-run 
 tracking = "#311"
 
 [test_attention_4d_gqa_causal_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_gqa_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_gqa_scaled]
 status = "fail-compare"
@@ -701,9 +657,7 @@ reason = "comparison against reference tensor fails (classified by M2 first-run 
 tracking = "#311"
 
 [test_attention_4d_gqa_scaled_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_gqa_softcap]
 status = "fail-compare"
@@ -711,9 +665,7 @@ reason = "comparison against reference tensor fails (classified by M2 first-run 
 tracking = "#311"
 
 [test_attention_4d_gqa_softcap_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_gqa_with_past_and_present]
 status = "fail-compare"
@@ -737,17 +689,13 @@ tracking = "#314"
 status = "pass"
 
 [test_attention_4d_scaled_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_softcap]
 status = "pass"
 
 [test_attention_4d_softcap_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_with_past_and_present]
 status = "pass"
@@ -825,9 +773,7 @@ reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
 tracking = "#314"
 
 [test_attention_4d_with_qk_matmul_expanded]
-status = "skip-compile"
-reason = "burn-onnx attention codegen emits bool_not on Shape array and tril on Bool tensor; pre-existing bug"
-tracking = "#314"
+status = "pass"
 
 [test_attention_4d_with_qk_matmul_softcap]
 status = "skip-codegen"
@@ -1780,9 +1726,7 @@ status = "pass"
 status = "pass"
 
 [test_celu_expanded]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_center_crop_pad_crop]
 status = "skip-codegen"
@@ -2762,9 +2706,7 @@ reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: Da
 tracking = "#314"
 
 [test_group_normalization_epsilon_expanded]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_group_normalization_example]
 status = "skip-codegen"
@@ -3944,9 +3886,7 @@ reason = "Unsupported ONNX operation(s): NegativeLogLikelihoodLoss (node 'negati
 tracking = "#314"
 
 [test_nllloss_NCd1d2d3_none_no_weight_negative_ii_expanded]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_nllloss_NCd1d2d3_sum_weight_high_ii]
 status = "skip-codegen"

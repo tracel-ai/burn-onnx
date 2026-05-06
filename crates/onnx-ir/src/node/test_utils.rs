@@ -213,6 +213,24 @@ impl TestNodeBuilder {
         self.add_input(name, ArgType::Shape(rank))
     }
 
+    /// Add a shape input that carries a static value (i64 vector). Mirrors
+    /// `input_tensor_with_data` for the ArgType::Shape case: the argument is
+    /// flagged as a constant and the data is registered in GraphState so
+    /// `arg.value()` resolves once `build_with_graph_data` runs.
+    pub fn input_shape_with_data(mut self, name: &str, data: Vec<i64>) -> Self {
+        let len = data.len();
+        let arg = Argument {
+            name: name.to_string(),
+            ty: ArgType::Shape(len),
+            value_source: crate::ir::ValueSource::Constant,
+            value_store: None,
+        };
+        self.inputs.push(arg);
+        self.constant_data
+            .insert(name.to_string(), TensorData::new(data, vec![len]));
+        self
+    }
+
     /// Add a tensor input with data value
     ///
     /// Note: In the new design, constant values are stored in GraphState, not in Arguments.

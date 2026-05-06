@@ -515,8 +515,15 @@ impl NodeProcessor for ReshapeProcessor {
                 }
             }
             ArgType::Shape(_) => {
-                // Runtime input - store reference instead of cloning the argument
-                ReshapeInput::Runtime(RuntimeInputRef::new(node.inputs[1].name.clone(), 1))
+                // Shape input may carry a static value (e.g. after constant lifting,
+                // which can clear the input name). Prefer the static value when present
+                // so codegen does not need to refer to an empty ident.
+                match node.inputs[1].value() {
+                    Some(tensor_data) => ReshapeInput::Static(tensor_data.to_vec::<i64>().unwrap()),
+                    None => {
+                        ReshapeInput::Runtime(RuntimeInputRef::new(node.inputs[1].name.clone(), 1))
+                    }
+                }
             }
             ArgType::ScalarTensor(_) => {
                 // ScalarTensor is rank 1 with a single element
@@ -655,6 +662,25 @@ mod tests {
         match &config.shape {
             ReshapeInput::Runtime(runtime_ref) => assert_eq!(runtime_ref.name, "shape"),
             _ => panic!("Expected runtime shape"),
+        }
+    }
+
+    #[test]
+    fn test_reshape_config_with_shape_type_static_value() {
+        // Constant lifting can clear an ArgType::Shape input's name while
+        // populating its value, so extract_config must prefer Static when a
+        // value is available rather than emitting a Runtime ref to ""
+        let node = TestNodeBuilder::new(NodeType::Reshape, "test_reshape_shape_static")
+            .input_tensor_f32("data", 4, None)
+            .input_shape_with_data("shape", vec![2, 3, -1])
+            .output_tensor_f32("reshaped", 3, None)
+            .process(ReshapeProcessor, 16);
+
+        let processor = ReshapeProcessor;
+        let config = processor.extract_config(&node, 16).unwrap();
+        match &config.shape {
+            ReshapeInput::Static(shape) => assert_eq!(shape, &vec![2, 3, -1]),
+            other => panic!("Expected static shape, got {:?}", other),
         }
     }
 

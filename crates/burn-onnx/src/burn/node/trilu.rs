@@ -11,17 +11,28 @@ impl NodeCodegen for onnx_ir::trilu::TriluNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
-        let input = scope.arg(self.inputs.first().unwrap());
+        let input_arg = self.inputs.first().unwrap();
+        let input = scope.arg(input_arg);
         let output = arg_to_ident(self.outputs.first().unwrap());
         let diagonal = self.config.diagonal.to_tokens();
 
-        if self.config.upper {
+        // burn-flex's Bool tensor doesn't satisfy the trait bounds for tril/triu,
+        // so round-trip Bool through Int.
+        let is_bool = matches!(&input_arg.ty, ArgType::Tensor(t) if t.dtype.is_bool());
+
+        let body = if self.config.upper {
+            quote! { triu(#diagonal) }
+        } else {
+            quote! { tril(#diagonal) }
+        };
+
+        if is_bool {
             quote! {
-                let #output = #input.triu(#diagonal);
+                let #output = #input.int().#body.bool();
             }
         } else {
             quote! {
-                let #output = #input.tril(#diagonal);
+                let #output = #input.#body;
             }
         }
     }
@@ -30,7 +41,7 @@ impl NodeCodegen for onnx_ir::trilu::TriluNode {
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::*;
-    use burn::tensor::DType;
+    use burn::tensor::{BoolStore, DType};
     use insta::assert_snapshot;
     use onnx_ir::trilu::{TriluConfig, TriluNodeBuilder};
 
@@ -64,6 +75,40 @@ mod tests {
         pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
             let output = input.tril(1);
             output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_trilu_bool_input_lower() {
+        let config = TriluConfig::new(false, 0);
+        let node = TriluNodeBuilder::new("tril1")
+            .input_tensor("mask", 2, DType::Bool(BoolStore::Native))
+            .output_tensor("masked", 2, DType::Bool(BoolStore::Native))
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, mask: Tensor<B, 2, Bool>) -> Tensor<B, 2, Bool> {
+            let masked = mask.int().tril(0).bool();
+            masked
+        }
+        ");
+    }
+
+    #[test]
+    fn test_trilu_bool_input_upper() {
+        let config = TriluConfig::new(true, -1);
+        let node = TriluNodeBuilder::new("triu1")
+            .input_tensor("mask", 3, DType::Bool(BoolStore::Native))
+            .output_tensor("masked", 3, DType::Bool(BoolStore::Native))
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, mask: Tensor<B, 3, Bool>) -> Tensor<B, 3, Bool> {
+            let masked = mask.int().triu(-1).bool();
+            masked
         }
         ");
     }

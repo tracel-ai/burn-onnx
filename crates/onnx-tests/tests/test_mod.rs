@@ -157,6 +157,7 @@ pub mod stft;
 pub mod sub;
 pub mod subgraph;
 pub mod sum;
+pub mod svmregressor;
 pub mod swish;
 pub mod tan;
 pub mod tanh;

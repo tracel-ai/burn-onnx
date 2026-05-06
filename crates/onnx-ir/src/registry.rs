@@ -527,6 +527,10 @@ impl ProcessorRegistry {
             NodeType::Scaler,
             Box::new(crate::node::scaler::ScalerProcessor),
         );
+        registry.register(
+            NodeType::SVMRegressor,
+            Box::new(crate::node::svmregressor::SVMRegressorProcessor),
+        );
 
         // Special operations
         registry.register(NodeType::Cast, Box::new(crate::node::cast::CastProcessor));

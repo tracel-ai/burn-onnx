@@ -162,6 +162,7 @@ pub(crate) mod squeeze;
 pub(crate) mod stft;
 pub(crate) mod sub;
 pub(crate) mod sum;
+pub(crate) mod svmregressor;
 pub(crate) mod swish;
 pub(crate) mod tan;
 pub(crate) mod tanh;

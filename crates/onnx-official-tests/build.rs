@@ -782,9 +782,21 @@ fn emit_single_test(buf: &mut String, name: &str, meta: &TestMeta, mode: TestMod
         }
     }
     writeln!(buf, "    let device = Default::default();").unwrap();
+    // Load weights/constants from bpk on the test's chosen device. `Model::new`
+    // leaves `Param::uninitialized` fields zeroed; that's fine for graphs whose
+    // forward uses no `self.<param>.val()` calls but breaks for graphs with
+    // baked-in Constant nodes (e.g. attention's _expanded variants emit
+    // `Param<Tensor<...>>` for shape-constant tensors). `from_file` handles
+    // both: it constructs via `new` then runs `load_from`, which is a no-op
+    // when there are no module fields to populate.
     writeln!(
         buf,
-        "    let model = generated::{name}::Model::<TestBackend>::new(&device);"
+        "    let bpk_path = concat!(env!(\"OUT_DIR\"), \"/model/{name}.bpk\");"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "    let model = generated::{name}::Model::<TestBackend>::from_file(bpk_path, &device);"
     )
     .unwrap();
 

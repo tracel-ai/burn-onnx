@@ -162,6 +162,7 @@ pub mod split;
 pub mod squeeze;
 pub mod stft;
 pub mod sum;
+pub mod svmregressor;
 pub mod tile;
 pub mod topk;
 pub mod transpose;
