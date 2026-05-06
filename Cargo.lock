@@ -766,7 +766,7 @@ dependencies = [
 
 [[package]]
 name = "burn-import"
-version = "0.21.0-pre.4"
+version = "0.21.0-pre.5"
 dependencies = [
  "burn-onnx",
 ]
@@ -817,7 +817,7 @@ dependencies = [
 
 [[package]]
 name = "burn-onnx"
-version = "0.21.0-pre.4"
+version = "0.21.0-pre.5"
 dependencies = [
  "burn",
  "burn-store",
@@ -4244,7 +4244,7 @@ dependencies = [
 
 [[package]]
 name = "image-classification-web"
-version = "0.21.0-pre.4"
+version = "0.21.0-pre.5"
 dependencies = [
  "burn",
  "burn-onnx",
@@ -5298,7 +5298,7 @@ dependencies = [
 
 [[package]]
 name = "onnx-inference"
-version = "0.21.0-pre.4"
+version = "0.21.0-pre.5"
 dependencies = [
  "burn",
  "burn-onnx",
@@ -5308,7 +5308,7 @@ dependencies = [
 
 [[package]]
 name = "onnx-ir"
-version = "0.21.0-pre.4"
+version = "0.21.0-pre.5"
 dependencies = [
  "burn-tensor",
  "bytemuck",
@@ -5330,7 +5330,7 @@ dependencies = [
 
 [[package]]
 name = "onnx-ir-derive"
-version = "0.21.0-pre.4"
+version = "0.21.0-pre.5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5339,7 +5339,7 @@ dependencies = [
 
 [[package]]
 name = "onnx-official-tests"
-version = "0.21.0-pre.4"
+version = "0.21.0-pre.5"
 dependencies = [
  "burn",
  "burn-onnx",
@@ -5354,7 +5354,7 @@ dependencies = [
 
 [[package]]
 name = "onnx-tests"
-version = "0.21.0-pre.4"
+version = "0.21.0-pre.5"
 dependencies = [
  "burn",
  "burn-onnx",
