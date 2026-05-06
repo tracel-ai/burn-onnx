@@ -5,7 +5,8 @@ include_models!(
     svmregressor_rbf,
     svmregressor_poly,
     svmregressor_sigmoid,
-    svmregressor_logistic
+    svmregressor_logistic,
+    svmregressor_softmax_zero
 );
 
 #[cfg(test)]
@@ -93,6 +94,21 @@ mod tests {
         // Expected: sigmoid(LINEAR output) = 1/(1+exp(-y))
         let expected =
             Tensor::<TestBackend, 1>::from_floats([0.56258082f32, 0.54392546, 0.64955342], &device);
+        output
+            .to_data()
+            .assert_approx_eq::<FT>(&expected.to_data(), Tolerance::default());
+    }
+
+    #[test]
+    fn svmregressor_softmax_zero() {
+        let device = Default::default();
+        let model: svmregressor_softmax_zero::Model<TestBackend> =
+            svmregressor_softmax_zero::Model::new(&device);
+        let output = model.forward(test_input(&device));
+        // SOFTMAX_ZERO appends an implicit zero class. For single-target output y
+        // this is exp(y)/(exp(y)+1) = sigmoid(y), so values match LOGISTIC.
+        let expected =
+            Tensor::<TestBackend, 1>::from_floats([0.56258088f32, 0.54392540, 0.64955342], &device);
         output
             .to_data()
             .assert_approx_eq::<FT>(&expected.to_data(), Tolerance::default());

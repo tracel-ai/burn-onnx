@@ -197,9 +197,9 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
             SVMPostTransform::Logistic => {
                 quote! { { let y = #kernel_computation; (y.neg().exp() + 1.0).recip() } }
             }
-            SVMPostTransform::Softmax => {
-                quote! { { let y = #kernel_computation; let e = y.exp(); e.clone() / e.sum_dim(1) } }
-            }
+            SVMPostTransform::Softmax => unreachable!(
+                "SOFTMAX is rejected in extract_config (degenerate for single-target [N, 1])"
+            ),
             SVMPostTransform::SoftmaxZero => quote! { {
                 let y = #kernel_computation;
                 // Append a zero logit column → [N, 2], softmax over targets, take first column.
@@ -367,30 +367,6 @@ mod tests {
                         kernel_values.matmul(coef.clone()) + rho
                     };
                     (y.neg().exp() + 1.0).recip()
-                }
-            }
-                .squeeze_dim::<1>(1);
-            output
-        }
-        ");
-    }
-
-    #[test]
-    fn test_svm_linear_softmax() {
-        let code = codegen_forward_default(&make_node("LINEAR", Some("SOFTMAX"), 2, None));
-        assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 1> {
-            let output = {
-                {
-                    let y = {
-                        let x = input;
-                        let rho = 0.5f32;
-                        let (coef, sv) = &self.svm1;
-                        let kernel_values = x.matmul(sv.clone().transpose());
-                        kernel_values.matmul(coef.clone()) + rho
-                    };
-                    let e = y.exp();
-                    e.clone() / e.sum_dim(1)
                 }
             }
                 .squeeze_dim::<1>(1);

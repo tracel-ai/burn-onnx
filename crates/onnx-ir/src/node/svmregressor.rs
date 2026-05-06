@@ -295,6 +295,22 @@ impl NodeProcessor for SVMRegressorProcessor {
             });
         }
 
+        // SOFTMAX over a single-target output ([N, 1]) reduces to a tensor of ones,
+        // because softmax(x) over a size-1 dim is always 1. Until multi-target
+        // SVMRegressor is supported, reject SOFTMAX here so users get a clear error
+        // instead of silently-broken predictions. SOFTMAX_ZERO is still meaningful
+        // (it appends an implicit zero class), so we don't reject it.
+        if post_transform == SVMPostTransform::Softmax {
+            return Err(ProcessError::InvalidAttribute {
+                name: "post_transform".to_string(),
+                reason: "SOFTMAX post_transform is degenerate for single-target SVMRegressor \
+                         (softmax over a size-1 dim is always 1); \
+                         multi-target output is not yet supported. \
+                         Use NONE, LOGISTIC, or SOFTMAX_ZERO instead"
+                    .to_string(),
+            });
+        }
+
         // RBF, POLY, and SIGMOID all require kernel_params [gamma, coef0, degree].
         // A missing or empty kernel_params for these kernels indicates a malformed model.
         match kernel_type {

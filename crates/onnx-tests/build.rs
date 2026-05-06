@@ -305,6 +305,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/svmregressor/svmregressor_poly.onnx")
         .input("tests/svmregressor/svmregressor_sigmoid.onnx")
         .input("tests/svmregressor/svmregressor_logistic.onnx")
+        .input("tests/svmregressor/svmregressor_softmax_zero.onnx")
         .input("tests/less/less_broadcast.onnx")
         .input("tests/less_or_equal/less_or_equal.onnx")
         .input("tests/less_or_equal/less_or_equal_scalar.onnx")

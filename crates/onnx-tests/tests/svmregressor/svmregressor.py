@@ -5,12 +5,13 @@
 """
 ONNX SVMRegressor operator test model generator.
 
-Generates five SVMRegressor models:
-  - svmregressor.onnx          : LINEAR kernel
-  - svmregressor_rbf.onnx      : RBF kernel (gamma=0.5)
-  - svmregressor_poly.onnx     : POLY kernel (gamma=1, coef0=1, degree=2)
-  - svmregressor_sigmoid.onnx  : SIGMOID kernel (gamma=0.5, coef0=0.1)
-  - svmregressor_logistic.onnx : LINEAR kernel + LOGISTIC post-transform
+Generates six SVMRegressor models:
+  - svmregressor.onnx              : LINEAR kernel
+  - svmregressor_rbf.onnx          : RBF kernel (gamma=0.5)
+  - svmregressor_poly.onnx         : POLY kernel (gamma=1, coef0=1, degree=2)
+  - svmregressor_sigmoid.onnx      : SIGMOID kernel (gamma=0.5, coef0=0.1)
+  - svmregressor_logistic.onnx     : LINEAR kernel + LOGISTIC post-transform
+  - svmregressor_softmax_zero.onnx : LINEAR kernel + SOFTMAX_ZERO post-transform
 
 Expected outputs are computed with onnx.reference.ReferenceEvaluator.
 """
@@ -113,6 +114,18 @@ def main():
     # ReferenceEvaluator doesn't implement LOGISTIC; compute sigmoid of LINEAR output manually.
     output_logistic = (1.0 / (1.0 + np.exp(-output_linear))).flatten()
     print(f"LOGISTIC output: {output_logistic.tolist()}")
+
+    # ── Model 6: LINEAR + SOFTMAX_ZERO post-transform ────────────────────────
+    # SOFTMAX_ZERO appends an implicit zero class, so for single-target output y
+    # the result is exp(y) / (exp(y) + 1) = sigmoid(y). Hand-compute since
+    # ReferenceEvaluator doesn't implement SOFTMAX_ZERO either.
+    model_softmax_zero = make_model('LINEAR', sv, coef, rho,
+                                    post_transform='SOFTMAX_ZERO',
+                                    n_features=n_features, batch_size=batch_size,
+                                    name="svmregressor_softmax_zero_test")
+    onnx.save(model_softmax_zero, 'svmregressor_softmax_zero.onnx')
+    output_softmax_zero = (np.exp(output_linear) / (np.exp(output_linear) + 1.0)).flatten()
+    print(f"SOFTMAX_ZERO output: {output_softmax_zero.tolist()}")
 
 
 if __name__ == '__main__':
