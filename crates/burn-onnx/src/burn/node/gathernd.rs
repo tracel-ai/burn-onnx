@@ -1,4 +1,5 @@
 use super::prelude::*;
+use crate::burn::TensorKind;
 
 impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
     fn inputs(&self) -> &[Argument] {
@@ -10,145 +11,115 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
-        let data = scope.arg(self.inputs.first().unwrap());
-        let indices = scope.arg(&self.inputs[1]);
-        let output = arg_to_ident(self.outputs.first().unwrap());
+        let data_arg = self.inputs.first().unwrap();
+        let indices_arg = &self.inputs[1];
+        let output_arg = self.outputs.first().unwrap();
+        let output = arg_to_ident(output_arg);
 
-        let batch_dims_lit = proc_macro2::Literal::usize_unsuffixed(self.config.batch_dims);
+        let data = scope.arg(data_arg);
+        let indices = scope.arg(indices_arg);
 
-        let is_scalar = self.outputs[0].ty.is_scalar();
+        let (data_tensor, indices_tensor) = match (&data_arg.ty, &indices_arg.ty) {
+            (ArgType::Tensor(d), ArgType::Tensor(i)) => (d, i),
+            _ => {
+                let msg = format!(
+                    "GatherND node '{}': data and indices inputs must be tensors",
+                    self.name
+                );
+                return quote! { let #output = { compile_error!(#msg); unreachable!() }; };
+            }
+        };
+        let data_kind = TensorKind::from(data_tensor.dtype);
+        let indices_rank = indices_tensor.rank;
 
-        if is_scalar {
-            let is_native = matches!(&self.outputs[0].ty, ArgType::ScalarNative(_));
-            // Scalar output: k == r, each index tuple fully specifies a single element
-            let extract_expr = if is_native {
-                let dtype = match &self.outputs[0].ty {
-                    ArgType::ScalarNative(d) => d,
-                    _ => unreachable!(),
+        let batch_dims = self.config.batch_dims;
+        let indices_rank_lit = indices_rank.to_tokens();
+        let batch_dims_lit = batch_dims.to_tokens();
+
+        let normalize =
+            indexing_helpers::negative_index_normalize(&data, &indices, indices_rank, batch_dims);
+
+        // For batch_dims > 0, prepend per-batch coords to the K-axis so the
+        // native (batch-less) gather_nd matches ONNX's batched semantics.
+        let augment_indices = if batch_dims == 0 {
+            quote! {
+                let __gather_nd_aug = __nd_indices_norm;
+            }
+        } else {
+            quote! {
+                let __gather_nd_aug = {
+                    let mut __gather_nd_target_shape = __nd_idx_dims;
+                    __gather_nd_target_shape[#indices_rank_lit - 1] = 1;
+                    let mut __gather_nd_components:
+                        alloc::vec::Vec<Tensor<B, #indices_rank_lit, Int>> =
+                        alloc::vec::Vec::with_capacity(#batch_dims_lit + 1);
+                    for __gather_nd_bk in 0..#batch_dims_lit {
+                        let __gather_nd_dk = __nd_data_dims[__gather_nd_bk];
+                        let __gather_nd_arange = Tensor::<B, 1, Int>::arange(
+                            0i64..__gather_nd_dk as i64,
+                            (&self.device, burn::tensor::DType::I64),
+                        );
+                        let mut __gather_nd_init_shape = [1usize; #indices_rank_lit];
+                        __gather_nd_init_shape[__gather_nd_bk] = __gather_nd_dk;
+                        let __gather_nd_part: Tensor<B, #indices_rank_lit, Int> =
+                            __gather_nd_arange
+                                .reshape(__gather_nd_init_shape)
+                                .expand(__gather_nd_target_shape);
+                        __gather_nd_components.push(__gather_nd_part);
+                    }
+                    __gather_nd_components.push(__nd_indices_norm);
+                    Tensor::cat(__gather_nd_components, #indices_rank_lit - 1)
                 };
-                let select_expr = quote! {
-                    data_flat.select(0, Tensor::<B, 1, Int>::from_data(
-                        burn::tensor::TensorData::from([offset as i64].as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
-                    ))
-                };
-                on_device_to_native(select_expr, dtype)
-            } else {
-                // ScalarTensor: keep as Tensor<B, 1> on device
+            }
+        };
+
+        // Native gather_nd panics for bool data; round-trip through i64.
+        let is_bool = matches!(data_kind, TensorKind::Bool);
+        let gather_call = |indices_var: TokenStream| -> TokenStream {
+            if is_bool {
                 quote! {
-                    data_flat.select(0, Tensor::<B, 1, Int>::from_data(
-                        burn::tensor::TensorData::from([offset as i64].as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
-                    ))
+                    #data.int()
+                        .cast(burn::tensor::DType::I64)
+                        .gather_nd(#indices_var)
+                        .bool()
                 }
+            } else {
+                quote! { #data.gather_nd(#indices_var) }
+            }
+        };
+
+        if output_arg.ty.is_scalar() {
+            // Native gather_nd with output rank 0 would produce a rank-0 tensor,
+            // which burn does not represent. Reshape indices to add a leading 1
+            // so the result is a rank-1 size-1 tensor.
+            let inner_rank_lit = (indices_rank + 1).to_tokens();
+
+            let scalar_tail = match &output_arg.ty {
+                ArgType::ScalarNative(d) => on_device_to_native(quote! { __gather_nd_result }, d),
+                ArgType::ScalarTensor(_) => quote! { __gather_nd_result },
+                _ => unreachable!("is_scalar guard"),
             };
+
+            let gather = gather_call(quote! { __gather_nd_aug });
 
             quote! {
                 let #output = {
-                    let data_dims = #data.dims();
-                    let indices_data = #indices.to_data().convert::<i64>();
-                    let indices_values: alloc::vec::Vec<i64> = indices_data.into_vec::<i64>().unwrap();
-
-                    let r = data_dims.len();
-                    let b = #batch_dims_lit;
-
-                    let mut data_strides = alloc::vec![1usize; r];
-                    for i in (0..r.saturating_sub(1)).rev() {
-                        data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
-                    }
-
-                    let mut offset = 0usize;
-                    for j in b..r {
-                        let mut idx = indices_values[j - b];
-                        if idx < 0 { idx += data_dims[j] as i64; }
-                        offset += idx as usize * data_strides[j];
-                    }
-
-                    let data_flat = #data.reshape([data_dims.iter().product::<usize>()]);
-                    #extract_expr
+                    #normalize
+                    let mut __gather_nd_aug_shape = [1usize; #inner_rank_lit];
+                    __gather_nd_aug_shape[#inner_rank_lit - 1] = __nd_k;
+                    let __gather_nd_aug: Tensor<B, #inner_rank_lit, Int> =
+                        __nd_indices_norm.reshape(__gather_nd_aug_shape);
+                    let __gather_nd_result = #gather;
+                    #scalar_tail
                 };
             }
         } else {
-            let output_rank = match &self.outputs[0].ty {
-                ArgType::Tensor(t) => t.rank,
-                _ => unreachable!(),
-            };
-            let output_rank_lit = proc_macro2::Literal::usize_unsuffixed(output_rank);
-
+            let gather = gather_call(quote! { __gather_nd_aug });
             quote! {
                 let #output = {
-                    let data_dims = #data.dims();
-                    let indices_dims = #indices.dims();
-                    let indices_data = #indices.to_data().convert::<i64>();
-                    let indices_values: alloc::vec::Vec<i64> = indices_data.into_vec::<i64>().unwrap();
-
-                    let r = data_dims.len();
-                    let q = indices_dims.len();
-                    let b = #batch_dims_lit;
-                    let k = indices_dims[q - 1];
-
-                    // Compute data strides
-                    let mut data_strides = alloc::vec![1usize; r];
-                    for i in (0..r.saturating_sub(1)).rev() {
-                        data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
-                    }
-
-                    let batch_count: usize = if b > 0 { data_dims[..b].iter().product() } else { 1 };
-                    let lookups_per_batch: usize = indices_dims[b..q - 1].iter().product();
-                    let slice_size: usize = if b + k < r { data_dims[b + k..].iter().product() } else { 1 };
-                    let total_data_size: usize = data_dims.iter().product();
-                    let batch_data_stride: usize = if b > 0 {
-                        data_dims[b..].iter().product()
-                    } else {
-                        total_data_size
-                    };
-                    let total_slices = batch_count * lookups_per_batch;
-                    let output_size = total_slices * slice_size;
-
-                    // Compute flat indices for all output elements on CPU,
-                    // then do a single select() on the GPU. Indices are i64 to
-                    // avoid truncation on tensors with > 2^31 total elements
-                    // (large embedding tables, high-res feature maps).
-                    let mut flat_indices: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(output_size);
-                    for bi in 0..batch_count {
-                        for li in 0..lookups_per_batch {
-                            let lookup_idx = bi * lookups_per_batch + li;
-                            let mut offset = bi * batch_data_stride;
-                            for j in 0..k {
-                                let mut idx = indices_values[lookup_idx * k + j];
-                                if idx < 0 { idx += data_dims[b + j] as i64; }
-                                offset += idx as usize * data_strides[b + j];
-                            }
-                            for s in 0..slice_size {
-                                flat_indices.push((offset + s) as i64);
-                            }
-                        }
-                    }
-
-                    let data_flat = #data.reshape([total_data_size]);
-                    let indices_tensor = Tensor::<B, 1, Int>::from_data(
-                        burn::tensor::TensorData::from(flat_indices.as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
-                    );
-                    let output_flat = data_flat.select(0, indices_tensor);
-
-                    // Compute output shape: data_dims[:b] + indices_dims[b:q-1] + data_dims[b+k:]
-                    let mut output_shape = [0usize; #output_rank_lit];
-                    let mut si = 0;
-                    for i in 0..b {
-                        output_shape[si] = data_dims[i];
-                        si += 1;
-                    }
-                    for i in b..q - 1 {
-                        output_shape[si] = indices_dims[i];
-                        si += 1;
-                    }
-                    for i in b + k..r {
-                        output_shape[si] = data_dims[i];
-                        si += 1;
-                    }
-
-                    output_flat.reshape(output_shape)
+                    #normalize
+                    #augment_indices
+                    #gather
                 };
             }
         }
@@ -175,79 +146,32 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, data: Tensor<B, 2>, indices: Tensor<B, 2, Int>) -> Tensor<B, 1> {
             let output = {
-                let data_dims = data.dims();
-                let indices_dims = indices.dims();
-                let indices_data = indices.to_data().convert::<i64>();
-                let indices_values: alloc::vec::Vec<i64> = indices_data
-                    .into_vec::<i64>()
-                    .unwrap();
-                let r = data_dims.len();
-                let q = indices_dims.len();
-                let b = 0;
-                let k = indices_dims[q - 1];
-                let mut data_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
-                }
-                let batch_count: usize = if b > 0 { data_dims[..b].iter().product() } else { 1 };
-                let lookups_per_batch: usize = indices_dims[b..q - 1].iter().product();
-                let slice_size: usize = if b + k < r {
-                    data_dims[b + k..].iter().product()
-                } else {
-                    1
-                };
-                let total_data_size: usize = data_dims.iter().product();
-                let batch_data_stride: usize = if b > 0 {
-                    data_dims[b..].iter().product()
-                } else {
-                    total_data_size
-                };
-                let total_slices = batch_count * lookups_per_batch;
-                let output_size = total_slices * slice_size;
-                let mut flat_indices: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    output_size,
+                let __nd_data_dims = data.dims();
+                let __nd_indices = indices.cast(burn::tensor::DType::I64);
+                let __nd_idx_dims = __nd_indices.dims();
+                let __nd_k = __nd_idx_dims[2 - 1];
+                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
+                    __nd_k,
                 );
-                for bi in 0..batch_count {
-                    for li in 0..lookups_per_batch {
-                        let lookup_idx = bi * lookups_per_batch + li;
-                        let mut offset = bi * batch_data_stride;
-                        for j in 0..k {
-                            let mut idx = indices_values[lookup_idx * k + j];
-                            if idx < 0 {
-                                idx += data_dims[b + j] as i64;
-                            }
-                            offset += idx as usize * data_strides[b + j];
-                        }
-                        for s in 0..slice_size {
-                            flat_indices.push((offset + s) as i64);
-                        }
-                    }
+                for __nd_i in 0..__nd_k {
+                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
                 }
-                let data_flat = data.reshape([total_data_size]);
-                let indices_tensor = Tensor::<
+                let mut __nd_bcast_shape = [1usize; 2];
+                __nd_bcast_shape[2 - 1] = __nd_k;
+                let __nd_dims_tensor = Tensor::<
                     B,
                     1,
                     Int,
                 >::from_data(
-                    burn::tensor::TensorData::from(flat_indices.as_slice()),
-                    (&self.device, burn::tensor::DType::I64),
-                );
-                let output_flat = data_flat.select(0, indices_tensor);
-                let mut output_shape = [0usize; 1];
-                let mut si = 0;
-                for i in 0..b {
-                    output_shape[si] = data_dims[i];
-                    si += 1;
-                }
-                for i in b..q - 1 {
-                    output_shape[si] = indices_dims[i];
-                    si += 1;
-                }
-                for i in b + k..r {
-                    output_shape[si] = data_dims[i];
-                    si += 1;
-                }
-                output_flat.reshape(output_shape)
+                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        (&self.device, burn::tensor::DType::I64),
+                    )
+                    .reshape(__nd_bcast_shape);
+                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
+                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
+                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
+                let __gather_nd_aug = __nd_indices_norm;
+                data.gather_nd(__gather_nd_aug)
             };
             output
         }
@@ -267,79 +191,32 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, data: Tensor<B, 2>, indices: Tensor<B, 2, Int>) -> Tensor<B, 2> {
             let output = {
-                let data_dims = data.dims();
-                let indices_dims = indices.dims();
-                let indices_data = indices.to_data().convert::<i64>();
-                let indices_values: alloc::vec::Vec<i64> = indices_data
-                    .into_vec::<i64>()
-                    .unwrap();
-                let r = data_dims.len();
-                let q = indices_dims.len();
-                let b = 0;
-                let k = indices_dims[q - 1];
-                let mut data_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
-                }
-                let batch_count: usize = if b > 0 { data_dims[..b].iter().product() } else { 1 };
-                let lookups_per_batch: usize = indices_dims[b..q - 1].iter().product();
-                let slice_size: usize = if b + k < r {
-                    data_dims[b + k..].iter().product()
-                } else {
-                    1
-                };
-                let total_data_size: usize = data_dims.iter().product();
-                let batch_data_stride: usize = if b > 0 {
-                    data_dims[b..].iter().product()
-                } else {
-                    total_data_size
-                };
-                let total_slices = batch_count * lookups_per_batch;
-                let output_size = total_slices * slice_size;
-                let mut flat_indices: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    output_size,
+                let __nd_data_dims = data.dims();
+                let __nd_indices = indices.cast(burn::tensor::DType::I64);
+                let __nd_idx_dims = __nd_indices.dims();
+                let __nd_k = __nd_idx_dims[2 - 1];
+                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
+                    __nd_k,
                 );
-                for bi in 0..batch_count {
-                    for li in 0..lookups_per_batch {
-                        let lookup_idx = bi * lookups_per_batch + li;
-                        let mut offset = bi * batch_data_stride;
-                        for j in 0..k {
-                            let mut idx = indices_values[lookup_idx * k + j];
-                            if idx < 0 {
-                                idx += data_dims[b + j] as i64;
-                            }
-                            offset += idx as usize * data_strides[b + j];
-                        }
-                        for s in 0..slice_size {
-                            flat_indices.push((offset + s) as i64);
-                        }
-                    }
+                for __nd_i in 0..__nd_k {
+                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
                 }
-                let data_flat = data.reshape([total_data_size]);
-                let indices_tensor = Tensor::<
+                let mut __nd_bcast_shape = [1usize; 2];
+                __nd_bcast_shape[2 - 1] = __nd_k;
+                let __nd_dims_tensor = Tensor::<
                     B,
                     1,
                     Int,
                 >::from_data(
-                    burn::tensor::TensorData::from(flat_indices.as_slice()),
-                    (&self.device, burn::tensor::DType::I64),
-                );
-                let output_flat = data_flat.select(0, indices_tensor);
-                let mut output_shape = [0usize; 2];
-                let mut si = 0;
-                for i in 0..b {
-                    output_shape[si] = data_dims[i];
-                    si += 1;
-                }
-                for i in b..q - 1 {
-                    output_shape[si] = indices_dims[i];
-                    si += 1;
-                }
-                for i in b + k..r {
-                    output_shape[si] = data_dims[i];
-                    si += 1;
-                }
-                output_flat.reshape(output_shape)
+                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        (&self.device, burn::tensor::DType::I64),
+                    )
+                    .reshape(__nd_bcast_shape);
+                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
+                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
+                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
+                let __gather_nd_aug = __nd_indices_norm;
+                data.gather_nd(__gather_nd_aug)
             };
             output
         }
@@ -359,79 +236,129 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, data: Tensor<B, 3>, indices: Tensor<B, 2, Int>) -> Tensor<B, 2> {
             let output = {
-                let data_dims = data.dims();
-                let indices_dims = indices.dims();
-                let indices_data = indices.to_data().convert::<i64>();
-                let indices_values: alloc::vec::Vec<i64> = indices_data
-                    .into_vec::<i64>()
-                    .unwrap();
-                let r = data_dims.len();
-                let q = indices_dims.len();
-                let b = 1;
-                let k = indices_dims[q - 1];
-                let mut data_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
-                }
-                let batch_count: usize = if b > 0 { data_dims[..b].iter().product() } else { 1 };
-                let lookups_per_batch: usize = indices_dims[b..q - 1].iter().product();
-                let slice_size: usize = if b + k < r {
-                    data_dims[b + k..].iter().product()
-                } else {
-                    1
-                };
-                let total_data_size: usize = data_dims.iter().product();
-                let batch_data_stride: usize = if b > 0 {
-                    data_dims[b..].iter().product()
-                } else {
-                    total_data_size
-                };
-                let total_slices = batch_count * lookups_per_batch;
-                let output_size = total_slices * slice_size;
-                let mut flat_indices: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    output_size,
+                let __nd_data_dims = data.dims();
+                let __nd_indices = indices.cast(burn::tensor::DType::I64);
+                let __nd_idx_dims = __nd_indices.dims();
+                let __nd_k = __nd_idx_dims[2 - 1];
+                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
+                    __nd_k,
                 );
-                for bi in 0..batch_count {
-                    for li in 0..lookups_per_batch {
-                        let lookup_idx = bi * lookups_per_batch + li;
-                        let mut offset = bi * batch_data_stride;
-                        for j in 0..k {
-                            let mut idx = indices_values[lookup_idx * k + j];
-                            if idx < 0 {
-                                idx += data_dims[b + j] as i64;
-                            }
-                            offset += idx as usize * data_strides[b + j];
-                        }
-                        for s in 0..slice_size {
-                            flat_indices.push((offset + s) as i64);
-                        }
-                    }
+                for __nd_i in 0..__nd_k {
+                    __nd_dim_sizes.push(__nd_data_dims[1 + __nd_i] as i64);
                 }
-                let data_flat = data.reshape([total_data_size]);
-                let indices_tensor = Tensor::<
+                let mut __nd_bcast_shape = [1usize; 2];
+                __nd_bcast_shape[2 - 1] = __nd_k;
+                let __nd_dims_tensor = Tensor::<
                     B,
                     1,
                     Int,
                 >::from_data(
-                    burn::tensor::TensorData::from(flat_indices.as_slice()),
-                    (&self.device, burn::tensor::DType::I64),
+                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        (&self.device, burn::tensor::DType::I64),
+                    )
+                    .reshape(__nd_bcast_shape);
+                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
+                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
+                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
+                let __gather_nd_aug = {
+                    let mut __gather_nd_target_shape = __nd_idx_dims;
+                    __gather_nd_target_shape[2 - 1] = 1;
+                    let mut __gather_nd_components: alloc::vec::Vec<Tensor<B, 2, Int>> = alloc::vec::Vec::with_capacity(
+                        1 + 1,
+                    );
+                    for __gather_nd_bk in 0..1 {
+                        let __gather_nd_dk = __nd_data_dims[__gather_nd_bk];
+                        let __gather_nd_arange = Tensor::<
+                            B,
+                            1,
+                            Int,
+                        >::arange(
+                            0i64..__gather_nd_dk as i64,
+                            (&self.device, burn::tensor::DType::I64),
+                        );
+                        let mut __gather_nd_init_shape = [1usize; 2];
+                        __gather_nd_init_shape[__gather_nd_bk] = __gather_nd_dk;
+                        let __gather_nd_part: Tensor<B, 2, Int> = __gather_nd_arange
+                            .reshape(__gather_nd_init_shape)
+                            .expand(__gather_nd_target_shape);
+                        __gather_nd_components.push(__gather_nd_part);
+                    }
+                    __gather_nd_components.push(__nd_indices_norm);
+                    Tensor::cat(__gather_nd_components, 2 - 1)
+                };
+                data.gather_nd(__gather_nd_aug)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gathernd_batch2() {
+        // batch_dims=2 exercises the augment loop more than once: one arange/expand
+        // per leading data dim is concatenated onto the K-axis.
+        let config = GatherNDConfig::new(2);
+        let node = GatherNDNodeBuilder::new("gathernd_b2")
+            .input_tensor("data", 4, DType::F32)
+            .input_tensor("indices", 3, DType::I64)
+            .output_tensor("output", 3, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, data: Tensor<B, 4>, indices: Tensor<B, 3, Int>) -> Tensor<B, 3> {
+            let output = {
+                let __nd_data_dims = data.dims();
+                let __nd_indices = indices.cast(burn::tensor::DType::I64);
+                let __nd_idx_dims = __nd_indices.dims();
+                let __nd_k = __nd_idx_dims[3 - 1];
+                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
+                    __nd_k,
                 );
-                let output_flat = data_flat.select(0, indices_tensor);
-                let mut output_shape = [0usize; 2];
-                let mut si = 0;
-                for i in 0..b {
-                    output_shape[si] = data_dims[i];
-                    si += 1;
+                for __nd_i in 0..__nd_k {
+                    __nd_dim_sizes.push(__nd_data_dims[2 + __nd_i] as i64);
                 }
-                for i in b..q - 1 {
-                    output_shape[si] = indices_dims[i];
-                    si += 1;
-                }
-                for i in b + k..r {
-                    output_shape[si] = data_dims[i];
-                    si += 1;
-                }
-                output_flat.reshape(output_shape)
+                let mut __nd_bcast_shape = [1usize; 3];
+                __nd_bcast_shape[3 - 1] = __nd_k;
+                let __nd_dims_tensor = Tensor::<
+                    B,
+                    1,
+                    Int,
+                >::from_data(
+                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        (&self.device, burn::tensor::DType::I64),
+                    )
+                    .reshape(__nd_bcast_shape);
+                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
+                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
+                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
+                let __gather_nd_aug = {
+                    let mut __gather_nd_target_shape = __nd_idx_dims;
+                    __gather_nd_target_shape[3 - 1] = 1;
+                    let mut __gather_nd_components: alloc::vec::Vec<Tensor<B, 3, Int>> = alloc::vec::Vec::with_capacity(
+                        2 + 1,
+                    );
+                    for __gather_nd_bk in 0..2 {
+                        let __gather_nd_dk = __nd_data_dims[__gather_nd_bk];
+                        let __gather_nd_arange = Tensor::<
+                            B,
+                            1,
+                            Int,
+                        >::arange(
+                            0i64..__gather_nd_dk as i64,
+                            (&self.device, burn::tensor::DType::I64),
+                        );
+                        let mut __gather_nd_init_shape = [1usize; 3];
+                        __gather_nd_init_shape[__gather_nd_bk] = __gather_nd_dk;
+                        let __gather_nd_part: Tensor<B, 3, Int> = __gather_nd_arange
+                            .reshape(__gather_nd_init_shape)
+                            .expand(__gather_nd_target_shape);
+                        __gather_nd_components.push(__gather_nd_part);
+                    }
+                    __gather_nd_components.push(__nd_indices_norm);
+                    Tensor::cat(__gather_nd_components, 3 - 1)
+                };
+                data.gather_nd(__gather_nd_aug)
             };
             output
         }
@@ -455,79 +382,32 @@ mod tests {
             indices: Tensor<B, 2, Int>,
         ) -> Tensor<B, 1, Int> {
             let output = {
-                let data_dims = data.dims();
-                let indices_dims = indices.dims();
-                let indices_data = indices.to_data().convert::<i64>();
-                let indices_values: alloc::vec::Vec<i64> = indices_data
-                    .into_vec::<i64>()
-                    .unwrap();
-                let r = data_dims.len();
-                let q = indices_dims.len();
-                let b = 0;
-                let k = indices_dims[q - 1];
-                let mut data_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
-                }
-                let batch_count: usize = if b > 0 { data_dims[..b].iter().product() } else { 1 };
-                let lookups_per_batch: usize = indices_dims[b..q - 1].iter().product();
-                let slice_size: usize = if b + k < r {
-                    data_dims[b + k..].iter().product()
-                } else {
-                    1
-                };
-                let total_data_size: usize = data_dims.iter().product();
-                let batch_data_stride: usize = if b > 0 {
-                    data_dims[b..].iter().product()
-                } else {
-                    total_data_size
-                };
-                let total_slices = batch_count * lookups_per_batch;
-                let output_size = total_slices * slice_size;
-                let mut flat_indices: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    output_size,
+                let __nd_data_dims = data.dims();
+                let __nd_indices = indices.cast(burn::tensor::DType::I64);
+                let __nd_idx_dims = __nd_indices.dims();
+                let __nd_k = __nd_idx_dims[2 - 1];
+                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
+                    __nd_k,
                 );
-                for bi in 0..batch_count {
-                    for li in 0..lookups_per_batch {
-                        let lookup_idx = bi * lookups_per_batch + li;
-                        let mut offset = bi * batch_data_stride;
-                        for j in 0..k {
-                            let mut idx = indices_values[lookup_idx * k + j];
-                            if idx < 0 {
-                                idx += data_dims[b + j] as i64;
-                            }
-                            offset += idx as usize * data_strides[b + j];
-                        }
-                        for s in 0..slice_size {
-                            flat_indices.push((offset + s) as i64);
-                        }
-                    }
+                for __nd_i in 0..__nd_k {
+                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
                 }
-                let data_flat = data.reshape([total_data_size]);
-                let indices_tensor = Tensor::<
+                let mut __nd_bcast_shape = [1usize; 2];
+                __nd_bcast_shape[2 - 1] = __nd_k;
+                let __nd_dims_tensor = Tensor::<
                     B,
                     1,
                     Int,
                 >::from_data(
-                    burn::tensor::TensorData::from(flat_indices.as_slice()),
-                    (&self.device, burn::tensor::DType::I64),
-                );
-                let output_flat = data_flat.select(0, indices_tensor);
-                let mut output_shape = [0usize; 1];
-                let mut si = 0;
-                for i in 0..b {
-                    output_shape[si] = data_dims[i];
-                    si += 1;
-                }
-                for i in b..q - 1 {
-                    output_shape[si] = indices_dims[i];
-                    si += 1;
-                }
-                for i in b + k..r {
-                    output_shape[si] = data_dims[i];
-                    si += 1;
-                }
-                output_flat.reshape(output_shape)
+                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        (&self.device, burn::tensor::DType::I64),
+                    )
+                    .reshape(__nd_bcast_shape);
+                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
+                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
+                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
+                let __gather_nd_aug = __nd_indices_norm;
+                data.gather_nd(__gather_nd_aug)
             };
             output
         }
@@ -536,7 +416,6 @@ mod tests {
 
     #[test]
     fn test_gathernd_scalar_output() {
-        // data rank=1, indices rank=1, k=1: output_rank = 1+1-1-1-0 = 0 -> scalar
         let config = GatherNDConfig::new(0);
         let node = GatherNDNodeBuilder::new("gathernd_scalar")
             .input_tensor("data", 1, DType::F32)
@@ -548,40 +427,36 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, data: Tensor<B, 1>, indices: Tensor<B, 1, Int>) -> f32 {
             let output = {
-                let data_dims = data.dims();
-                let indices_data = indices.to_data().convert::<i64>();
-                let indices_values: alloc::vec::Vec<i64> = indices_data
-                    .into_vec::<i64>()
-                    .unwrap();
-                let r = data_dims.len();
-                let b = 0;
-                let mut data_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
+                let __nd_data_dims = data.dims();
+                let __nd_indices = indices.cast(burn::tensor::DType::I64);
+                let __nd_idx_dims = __nd_indices.dims();
+                let __nd_k = __nd_idx_dims[1 - 1];
+                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
+                    __nd_k,
+                );
+                for __nd_i in 0..__nd_k {
+                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
                 }
-                let mut offset = 0usize;
-                for j in b..r {
-                    let mut idx = indices_values[j - b];
-                    if idx < 0 {
-                        idx += data_dims[j] as i64;
-                    }
-                    offset += idx as usize * data_strides[j];
-                }
-                let data_flat = data.reshape([data_dims.iter().product::<usize>()]);
-                data_flat
-                    .select(
-                        0,
-                        Tensor::<
-                            B,
-                            1,
-                            Int,
-                        >::from_data(
-                            burn::tensor::TensorData::from([offset as i64].as_slice()),
-                            (&self.device, burn::tensor::DType::I64),
-                        ),
+                let mut __nd_bcast_shape = [1usize; 1];
+                __nd_bcast_shape[1 - 1] = __nd_k;
+                let __nd_dims_tensor = Tensor::<
+                    B,
+                    1,
+                    Int,
+                >::from_data(
+                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        (&self.device, burn::tensor::DType::I64),
                     )
-                    .into_scalar()
-                    .elem::<f32>()
+                    .reshape(__nd_bcast_shape);
+                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
+                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
+                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
+                let mut __gather_nd_aug_shape = [1usize; 2];
+                __gather_nd_aug_shape[2 - 1] = __nd_k;
+                let __gather_nd_aug: Tensor<B, 2, Int> = __nd_indices_norm
+                    .reshape(__gather_nd_aug_shape);
+                let __gather_nd_result = data.gather_nd(__gather_nd_aug);
+                __gather_nd_result.into_scalar().elem::<f32>()
             };
             output
         }
@@ -601,79 +476,32 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, data: Tensor<B, 3>, indices: Tensor<B, 2, Int>) -> Tensor<B, 2> {
             let output = {
-                let data_dims = data.dims();
-                let indices_dims = indices.dims();
-                let indices_data = indices.to_data().convert::<i64>();
-                let indices_values: alloc::vec::Vec<i64> = indices_data
-                    .into_vec::<i64>()
-                    .unwrap();
-                let r = data_dims.len();
-                let q = indices_dims.len();
-                let b = 0;
-                let k = indices_dims[q - 1];
-                let mut data_strides = alloc::vec![1usize; r];
-                for i in (0..r.saturating_sub(1)).rev() {
-                    data_strides[i] = data_strides[i + 1] * data_dims[i + 1];
-                }
-                let batch_count: usize = if b > 0 { data_dims[..b].iter().product() } else { 1 };
-                let lookups_per_batch: usize = indices_dims[b..q - 1].iter().product();
-                let slice_size: usize = if b + k < r {
-                    data_dims[b + k..].iter().product()
-                } else {
-                    1
-                };
-                let total_data_size: usize = data_dims.iter().product();
-                let batch_data_stride: usize = if b > 0 {
-                    data_dims[b..].iter().product()
-                } else {
-                    total_data_size
-                };
-                let total_slices = batch_count * lookups_per_batch;
-                let output_size = total_slices * slice_size;
-                let mut flat_indices: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    output_size,
+                let __nd_data_dims = data.dims();
+                let __nd_indices = indices.cast(burn::tensor::DType::I64);
+                let __nd_idx_dims = __nd_indices.dims();
+                let __nd_k = __nd_idx_dims[2 - 1];
+                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
+                    __nd_k,
                 );
-                for bi in 0..batch_count {
-                    for li in 0..lookups_per_batch {
-                        let lookup_idx = bi * lookups_per_batch + li;
-                        let mut offset = bi * batch_data_stride;
-                        for j in 0..k {
-                            let mut idx = indices_values[lookup_idx * k + j];
-                            if idx < 0 {
-                                idx += data_dims[b + j] as i64;
-                            }
-                            offset += idx as usize * data_strides[b + j];
-                        }
-                        for s in 0..slice_size {
-                            flat_indices.push((offset + s) as i64);
-                        }
-                    }
+                for __nd_i in 0..__nd_k {
+                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
                 }
-                let data_flat = data.reshape([total_data_size]);
-                let indices_tensor = Tensor::<
+                let mut __nd_bcast_shape = [1usize; 2];
+                __nd_bcast_shape[2 - 1] = __nd_k;
+                let __nd_dims_tensor = Tensor::<
                     B,
                     1,
                     Int,
                 >::from_data(
-                    burn::tensor::TensorData::from(flat_indices.as_slice()),
-                    (&self.device, burn::tensor::DType::I64),
-                );
-                let output_flat = data_flat.select(0, indices_tensor);
-                let mut output_shape = [0usize; 2];
-                let mut si = 0;
-                for i in 0..b {
-                    output_shape[si] = data_dims[i];
-                    si += 1;
-                }
-                for i in b..q - 1 {
-                    output_shape[si] = indices_dims[i];
-                    si += 1;
-                }
-                for i in b + k..r {
-                    output_shape[si] = data_dims[i];
-                    si += 1;
-                }
-                output_flat.reshape(output_shape)
+                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        (&self.device, burn::tensor::DType::I64),
+                    )
+                    .reshape(__nd_bcast_shape);
+                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
+                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
+                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
+                let __gather_nd_aug = __nd_indices_norm;
+                data.gather_nd(__gather_nd_aug)
             };
             output
         }

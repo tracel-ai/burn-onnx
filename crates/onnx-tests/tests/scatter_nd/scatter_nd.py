@@ -160,6 +160,20 @@ def main():
     # Expected: [F, T, F, T, F, T]
     print("Test 7 (bool) - expected: [False, True, False, True, False, True]")
 
+    # Test 8: negative indices (-1 means last). Exercises on-device normalization.
+    model8, indices8 = make_scatter_nd_model(
+        "scatter_nd_neg_idx",
+        data_shape=[8],
+        indices=[[-1], [-3], [1]],
+        updates_shape=[3],
+    )
+    data8 = np.array([1, 2, 3, 4, 5, 6, 7, 8], dtype=np.float32)
+    updates8 = np.array([99, 88, 77], dtype=np.float32)
+    output8 = verify_model(model8, data8, indices8, updates8)
+    print(f"Test 8 (neg idx) - output: {output8}")
+    # -1 -> 7, -3 -> 5, 1 stays. Expected: [1, 77, 3, 4, 5, 88, 7, 99]
+    assert output8.tolist() == [1.0, 77.0, 3.0, 4.0, 5.0, 88.0, 7.0, 99.0]
+
 
 if __name__ == "__main__":
     main()

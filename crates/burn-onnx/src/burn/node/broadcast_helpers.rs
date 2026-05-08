@@ -1,6 +1,22 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
+/// Build the shape literal `[1, channels, 1, ..., 1]` of length `rank` used to
+/// broadcast a per-channel `[C]` tensor (gamma/beta/scale/bias) against an
+/// activation tensor whose channel axis is at index 1.
+pub(crate) fn channel_broadcast_shape(rank: usize, channels: TokenStream) -> TokenStream {
+    let dims: Vec<TokenStream> = (0..rank)
+        .map(|i| {
+            if i == 1 {
+                channels.clone()
+            } else {
+                quote! { 1usize }
+            }
+        })
+        .collect();
+    quote! { [#(#dims),*] }
+}
+
 /// Prepend leading unsqueeze dimensions to `expr` so its rank matches `target_rank`.
 /// Returns `expr` unchanged when `expr_rank >= target_rank`.
 pub(crate) fn leading_broadcast(

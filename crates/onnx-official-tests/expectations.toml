@@ -678,7 +678,9 @@ reason = "Unsupported Mod input types: lhs=Shape(1), rhs=Shape(1)"
 tracking = "#314"
 
 [test_attention_4d_gqa_with_past_and_present_fp16]
-status = "pass"
+status = "fail-compare"
+reason = "burn-flex attention_naive panics on GQA: key heads (3) != query heads (9) at burn-flex/src/ops/attention.rs:658. Surfaced after #393 wired f16 comparison through the harness; not a burn-onnx codegen bug."
+tracking = "https://github.com/tracel-ai/burn/issues/4930"
 
 [test_attention_4d_gqa_with_past_and_present_fp16_expanded]
 status = "skip-codegen"
@@ -886,14 +888,10 @@ reason = "Custom(\"Conv2d: weight tensor must be present\")"
 tracking = "#314"
 
 [test_basic_deform_conv_with_padding]
-status = "skip-codegen"
-reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: DataError(\\\"Failed to extract tensor data for 'w'\\..."
-tracking = "#314"
+status = "pass"
 
 [test_basic_deform_conv_without_padding]
-status = "skip-codegen"
-reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: DataError(\\\"Failed to extract tensor data for 'w'\\..."
-tracking = "#314"
+status = "pass"
 
 [test_batchnorm_epsilon]
 status = "pass"
@@ -2103,14 +2101,10 @@ status = "pass"
 status = "pass"
 
 [test_deform_conv_with_mask_bias]
-status = "skip-codegen"
-reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: DataError(\\\"Failed to extract tensor data for 'w'\\..."
-tracking = "#314"
+status = "pass"
 
 [test_deform_conv_with_multiple_offset_groups]
-status = "skip-codegen"
-reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: DataError(\\\"Failed to extract tensor data for 'w'\\..."
-tracking = "#314"
+status = "pass"
 
 [test_depthtospace_crd_mode_example]
 status = "pass"
@@ -2461,19 +2455,13 @@ reason = "comparison against reference tensor fails (classified by M2 first-run 
 tracking = "#311"
 
 [test_gathernd_example_float32]
-status = "skip-compile"
-reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
-tracking = "tracel-ai/burn-onnx"
+status = "pass"
 
 [test_gathernd_example_int32]
-status = "skip-compile"
-reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
-tracking = "tracel-ai/burn-onnx"
+status = "pass"
 
 [test_gathernd_example_int32_batch_dim1]
-status = "skip-compile"
-reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
-tracking = "tracel-ai/burn-onnx"
+status = "pass"
 
 [test_gelu_default_1]
 status = "pass"
@@ -2701,17 +2689,13 @@ tracking = "#311"
 status = "pass"
 
 [test_group_normalization_epsilon]
-status = "skip-codegen"
-reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: DataError(\\\"Failed to extract tensor data for 'sca..."
-tracking = "#314"
+status = "pass"
 
 [test_group_normalization_epsilon_expanded]
 status = "pass"
 
 [test_group_normalization_example]
-status = "skip-codegen"
-reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: DataError(\\\"Failed to extract tensor data for 'sca..."
-tracking = "#314"
+status = "pass"
 
 [test_group_normalization_example_expanded]
 status = "pass"
@@ -2885,14 +2869,10 @@ reason = "Unsupported ONNX operation(s): ImageDecoder (node 'imagedecoder1')"
 tracking = "#314"
 
 [test_instancenorm_epsilon]
-status = "skip-codegen"
-reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: DataError(\\\"Failed to extract tensor data for 's'\\..."
-tracking = "#314"
+status = "pass"
 
 [test_instancenorm_example]
-status = "skip-codegen"
-reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: DataError(\\\"Failed to extract tensor data for 's'\\..."
-tracking = "#314"
+status = "pass"
 
 [test_isinf]
 status = "pass"
@@ -4111,17 +4091,13 @@ tracking = "tracel-ai/burn-onnx"
 status = "pass"
 
 [test_prelu_broadcast]
-status = "skip-codegen"
-reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: DataError(\\\"Failed to extract tensor data for 'slo..."
-tracking = "#314"
+status = "pass"
 
 [test_prelu_broadcast_expanded]
 status = "pass"
 
 [test_prelu_example]
-status = "skip-codegen"
-reason = "Failed to write burnpack file: IoError(\"Failed to get tensor data: DataError(\\\"Failed to extract tensor data for 'slo..."
-tracking = "#314"
+status = "pass"
 
 [test_prelu_example_expanded]
 status = "pass"
@@ -5474,29 +5450,19 @@ reason = "unknown"
 tracking = "#314"
 
 [test_scatternd]
-status = "skip-compile"
-reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
-tracking = "tracel-ai/burn-onnx"
+status = "pass"
 
 [test_scatternd_add]
-status = "skip-compile"
-reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
-tracking = "tracel-ai/burn-onnx"
+status = "pass"
 
 [test_scatternd_max]
-status = "skip-compile"
-reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
-tracking = "tracel-ai/burn-onnx"
+status = "pass"
 
 [test_scatternd_min]
-status = "skip-compile"
-reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
-tracking = "tracel-ai/burn-onnx"
+status = "pass"
 
 [test_scatternd_multiply]
-status = "skip-compile"
-reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
-tracking = "tracel-ai/burn-onnx"
+status = "pass"
 
 [test_sce_NCd1_mean_weight_negative_ii]
 status = "skip-codegen"

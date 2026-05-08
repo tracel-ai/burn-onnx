@@ -102,6 +102,8 @@ fn load_expectations(path: &Path) -> BTreeMap<String, String> {
 
 #[derive(Clone, Copy, Debug)]
 enum Dtype {
+    F16,
+    BF16,
     F32,
     F64,
     I8,
@@ -117,21 +119,23 @@ enum Dtype {
 
 impl Dtype {
     /// Map an `onnx.TensorProto.DataType` i32 to our narrowed enum.
-    /// Returns `None` for dtypes the harness can't load (FLOAT16,
-    /// BFLOAT16, FLOAT8*, INT4, UINT4, FLOAT4E2M1, STRING, COMPLEX*).
+    /// Returns `None` for dtypes the harness can't load (FLOAT8*,
+    /// INT4, UINT4, FLOAT4E2M1, STRING, COMPLEX*).
     fn from_elem_type(t: i32) -> Option<Self> {
         match t {
-            1 => Some(Self::F32),  // FLOAT
-            2 => Some(Self::U8),   // UINT8
-            3 => Some(Self::I8),   // INT8
-            4 => Some(Self::U16),  // UINT16
-            5 => Some(Self::I16),  // INT16
-            6 => Some(Self::I32),  // INT32
-            7 => Some(Self::I64),  // INT64
-            9 => Some(Self::Bool), // BOOL
-            11 => Some(Self::F64), // DOUBLE
-            12 => Some(Self::U32), // UINT32
-            13 => Some(Self::U64), // UINT64
+            1 => Some(Self::F32),   // FLOAT
+            2 => Some(Self::U8),    // UINT8
+            3 => Some(Self::I8),    // INT8
+            4 => Some(Self::U16),   // UINT16
+            5 => Some(Self::I16),   // INT16
+            6 => Some(Self::I32),   // INT32
+            7 => Some(Self::I64),   // INT64
+            9 => Some(Self::Bool),  // BOOL
+            10 => Some(Self::F16),  // FLOAT16
+            11 => Some(Self::F64),  // DOUBLE
+            12 => Some(Self::U32),  // UINT32
+            13 => Some(Self::U64),  // UINT64
+            16 => Some(Self::BF16), // BFLOAT16
             _ => None,
         }
     }
@@ -140,6 +144,8 @@ impl Dtype {
     /// loaded `ReferenceTensor` in the harness.
     fn values_variant(self) -> &'static str {
         match self {
+            Self::F16 => "F16",
+            Self::BF16 => "BF16",
             Self::F32 => "F32",
             Self::F64 => "F64",
             Self::I8 => "I8",
@@ -157,6 +163,8 @@ impl Dtype {
     /// ONNX dtype display name for diagnostic messages.
     fn onnx_name(self) -> &'static str {
         match self {
+            Self::F16 => "FLOAT16",
+            Self::BF16 => "BFLOAT16",
             Self::F32 => "FLOAT",
             Self::F64 => "DOUBLE",
             Self::I8 => "INT8",
@@ -175,9 +183,11 @@ impl Dtype {
     /// default `Float` kind, explicit for `Int` / `Bool`. Burn groups
     /// every integer dtype under the `Int` tensor kind and uses a
     /// runtime `.cast(DType::…)` to preserve the ONNX bit width.
+    /// f16/bf16 use the default Float kind; the runtime dtype is pinned
+    /// via the `DType::F16`/`DType::BF16` argument to `from_data`.
     fn tensor_kind_suffix(self) -> &'static str {
         match self {
-            Self::F32 | Self::F64 => "",
+            Self::F16 | Self::BF16 | Self::F32 | Self::F64 => "",
             Self::Bool => ", burn::tensor::Bool",
             _ => ", burn::tensor::Int",
         }
@@ -194,6 +204,8 @@ impl Dtype {
     /// the later `assert_eq` against the I64 expected-value TensorData.
     fn burn_dtype_tokens(self) -> &'static str {
         match self {
+            Self::F16 => "burn::tensor::DType::F16",
+            Self::BF16 => "burn::tensor::DType::BF16",
             Self::F32 => "burn::tensor::DType::F32",
             Self::F64 => "burn::tensor::DType::F64",
             Self::I8 => "burn::tensor::DType::I8",
@@ -209,13 +221,18 @@ impl Dtype {
     }
 
     /// The concrete Rust element type to use as the type parameter for
-    /// `TensorData::assert_approx_eq::<T>`. Using `f32` for FLOAT and
-    /// `f64` for DOUBLE avoids two problems: (a) a backend default
-    /// `FloatElem<TestBackend>` that differs from the TensorData dtype
-    /// would cause a type mismatch, and (b) using a narrower type than
-    /// the decoded values would compare at reduced precision.
+    /// `TensorData::assert_approx_eq::<T>`. Matching the source dtype
+    /// avoids two problems: (a) a backend default `FloatElem<TestBackend>`
+    /// that differs from the TensorData dtype would cause a type mismatch,
+    /// and (b) using a narrower type than the decoded values would
+    /// compare at reduced precision.
     fn assert_elem_type(self) -> &'static str {
         match self {
+            // burn-tensor re-exports `half::f16` / `half::bf16` at its
+            // crate root, so the harness can stay self-contained against
+            // its existing `burn` dev-dependency.
+            Self::F16 => "burn::tensor::f16",
+            Self::BF16 => "burn::tensor::bf16",
             Self::F32 => "f32",
             Self::F64 => "f64",
             _ => "f32", // unreachable for non-float; caller guards with is_float()
@@ -225,7 +242,7 @@ impl Dtype {
     /// Whether output comparison should use an approximate float
     /// tolerance (`assert_approx_eq`) or exact equality (`assert_eq`).
     fn is_float(self) -> bool {
-        matches!(self, Self::F32 | Self::F64)
+        matches!(self, Self::F16 | Self::BF16 | Self::F32 | Self::F64)
     }
 }
 

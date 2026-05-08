@@ -6,7 +6,8 @@ include_models!(
     scatter_nd_mul,
     scatter_nd_max,
     scatter_nd_min,
-    scatter_nd_bool
+    scatter_nd_bool,
+    scatter_nd_neg_idx
 );
 
 #[cfg(test)]
@@ -105,6 +106,20 @@ mod tests {
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([1f32, 2., 3., 4., 5., 6., 7., 8.]);
+        assert_eq!(output.to_data(), expected);
+    }
+
+    #[test]
+    fn scatter_nd_negative_indices() {
+        // -1 means last; -3 means third-from-last. Exercises on-device normalization.
+        let model: scatter_nd_neg_idx::Model<TestBackend> = scatter_nd_neg_idx::Model::default();
+        let device = Default::default();
+
+        let data = Tensor::<TestBackend, 1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
+        let updates = Tensor::<TestBackend, 1>::from_floats([99., 88., 77.], &device);
+        let output = model.forward(data, updates);
+
+        let expected = TensorData::from([1f32, 77., 3., 4., 5., 88., 7., 99.]);
         assert_eq!(output.to_data(), expected);
     }
 

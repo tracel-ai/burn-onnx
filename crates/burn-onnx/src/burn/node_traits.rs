@@ -213,6 +213,14 @@ pub fn create_lazy_snapshot(
     use burn::tensor::TensorData;
     use onnx_ir::ir::ArgType;
 
+    // Skip Dynamic and Optional inputs: there is no static data to snapshot.
+    // Constant inputs are intentionally let through so an unlifted constant
+    // fails loudly here rather than being silently dropped (which would
+    // produce a model with zero-initialized weights at load time).
+    if input.is_dynamic() || input.is_optional() {
+        return None;
+    }
+
     // Get tensor metadata without loading data
     let (dtype, shape, is_scalar) = match &input.ty {
         ArgType::Tensor(tensor_type) => {
@@ -291,5 +299,38 @@ mod tests {
             TensorKind::from(DType::Bool(BoolStore::Native)),
             TensorKind::Bool
         );
+    }
+
+    #[test]
+    fn create_lazy_snapshot_skips_dynamic_input() {
+        use onnx_ir::ir::{ArgType, Argument, TensorType, ValueSource};
+
+        let arg = Argument::new(
+            "slope",
+            ArgType::Tensor(TensorType {
+                dtype: DType::F32,
+                rank: 1,
+                static_shape: Some(vec![Some(3)]),
+            }),
+        );
+        assert_eq!(arg.value_source, ValueSource::Dynamic);
+        assert!(create_lazy_snapshot(&arg, "prelu1.alpha", "PRelu").is_none());
+    }
+
+    #[test]
+    fn create_lazy_snapshot_skips_optional_input() {
+        use onnx_ir::ir::{ArgType, Argument, TensorType, ValueSource};
+
+        let arg = Argument::new(
+            "",
+            ArgType::Tensor(TensorType {
+                dtype: DType::F32,
+                rank: 1,
+                static_shape: None,
+            }),
+        );
+        assert_eq!(arg.value_source, ValueSource::Optional);
+
+        assert!(create_lazy_snapshot(&arg, "deform_conv1.bias", "DeformConv").is_none());
     }
 }

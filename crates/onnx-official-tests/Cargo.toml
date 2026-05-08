@@ -15,6 +15,7 @@ test-metal = ["burn/metal"]
 test-candle = ["burn/candle"]
 
 [dependencies]
+half = { workspace = true }
 onnx-ir = { workspace = true, features = ["default"] }
 protobuf = { workspace = true }
 serde = { workspace = true, features = ["std"] }

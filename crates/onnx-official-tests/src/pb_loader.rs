@@ -8,13 +8,13 @@
 //! The dtype coverage is:
 //!
 //! * Integer: INT8, INT16, INT32, INT64, UINT8, UINT16, UINT32, UINT64
-//! * Float:   FLOAT (f32), DOUBLE (f64)
+//! * Float:   FLOAT (f32), DOUBLE (f64), FLOAT16 (half::f16), BFLOAT16 (half::bf16)
 //! * Other:   BOOL
 //!
-//! Exotic dtypes (FLOAT16, BFLOAT16, FLOAT8*, INT4/UINT4, FLOAT4E2M1,
-//! STRING, COMPLEX*) surface as [`LoadError::UnsupportedDataType`]. Every
-//! upstream node test that uses them is `skip-codegen` or `fail-compare`
-//! in `expectations.toml`, so the harness never tries to load them.
+//! Exotic dtypes (FLOAT8*, INT4/UINT4, FLOAT4E2M1, STRING, COMPLEX*)
+//! surface as [`LoadError::UnsupportedDataType`]. Every upstream node
+//! test that uses them is `skip-codegen` or `fail-compare` in
+//! `expectations.toml`, so the harness never tries to load them.
 //!
 //! ONNX stores values in one of two mutually exclusive places:
 //!
@@ -28,6 +28,7 @@
 //!   lives in `int32_data` as i32 values but must be truncated back to
 //!   i8 on read).
 
+use half::{bf16, f16};
 use onnx_ir::TensorProto;
 use protobuf::Message;
 use std::path::{Path, PathBuf};
@@ -48,9 +49,11 @@ const DATA_TYPE_INT16: i32 = 5;
 const DATA_TYPE_INT32: i32 = 6;
 const DATA_TYPE_INT64: i32 = 7;
 const DATA_TYPE_BOOL: i32 = 9;
+const DATA_TYPE_FLOAT16: i32 = 10;
 const DATA_TYPE_DOUBLE: i32 = 11;
 const DATA_TYPE_UINT32: i32 = 12;
 const DATA_TYPE_UINT64: i32 = 13;
+const DATA_TYPE_BFLOAT16: i32 = 16;
 
 /// A decoded upstream reference tensor. The shape is stored once and
 /// shared across every dtype variant so callers can do shape-only checks
@@ -88,6 +91,8 @@ pub enum TensorValues {
     U32(Vec<u32>),
     U64(Vec<u64>),
     Bool(Vec<bool>),
+    F16(Vec<f16>),
+    BF16(Vec<bf16>),
     F32(Vec<f32>),
     F64(Vec<f64>),
 }
@@ -105,6 +110,8 @@ impl TensorValues {
             Self::U32(_) => "UINT32",
             Self::U64(_) => "UINT64",
             Self::Bool(_) => "BOOL",
+            Self::F16(_) => "FLOAT16",
+            Self::BF16(_) => "BFLOAT16",
             Self::F32(_) => "FLOAT",
             Self::F64(_) => "DOUBLE",
         }
@@ -123,6 +130,8 @@ impl TensorValues {
             Self::U32(v) => v.len(),
             Self::U64(v) => v.len(),
             Self::Bool(v) => v.len(),
+            Self::F16(v) => v.len(),
+            Self::BF16(v) => v.len(),
             Self::F32(v) => v.len(),
             Self::F64(v) => v.len(),
         }
@@ -168,7 +177,7 @@ pub enum LoadError {
     UndefinedDataType { path: PathBuf },
     #[error(
         "{path:?}: unsupported TensorProto data_type {data_type} \
-         (not decoded: FLOAT16, BFLOAT16, FLOAT8*, INT4/UINT4, FLOAT4E2M1, STRING, COMPLEX*)"
+         (not decoded: FLOAT8*, INT4/UINT4, FLOAT4E2M1, STRING, COMPLEX*)"
     )]
     UnsupportedDataType { path: PathBuf, data_type: i32 },
     #[error("{path:?}: loaded dtype {actual} does not match caller's expected dtype {expected}")]
@@ -305,6 +314,8 @@ fn decode_values(
         }),
         DATA_TYPE_FLOAT => decode_f32(path, proto).map(TensorValues::F32),
         DATA_TYPE_DOUBLE => decode_f64(path, proto).map(TensorValues::F64),
+        DATA_TYPE_FLOAT16 => decode_f16(path, proto).map(TensorValues::F16),
+        DATA_TYPE_BFLOAT16 => decode_bf16(path, proto).map(TensorValues::BF16),
         DATA_TYPE_INT8 => decode_i8(path, proto, expected).map(TensorValues::I8),
         DATA_TYPE_INT16 => decode_i16(path, proto, expected).map(TensorValues::I16),
         DATA_TYPE_INT32 => decode_i32(path, proto).map(TensorValues::I32),
@@ -356,6 +367,43 @@ fn decode_f64(path: &Path, proto: &TensorProto) -> Result<Vec<f64>, LoadError> {
             .collect())
     } else {
         Ok(proto.double_data.clone())
+    }
+}
+
+// ONNX stores FLOAT16 / BFLOAT16 either packed in `raw_data` (2 bytes per
+// element, little-endian) or bit-cast into the lower 16 bits of each i32
+// element of `int32_data` (upper 16 bits zero per spec).
+fn decode_f16(path: &Path, proto: &TensorProto) -> Result<Vec<f16>, LoadError> {
+    if !proto.raw_data.is_empty() {
+        check_raw_alignment(path, &proto.raw_data, 2, "FLOAT16")?;
+        Ok(proto
+            .raw_data
+            .chunks_exact(2)
+            .map(|c| f16::from_le_bytes([c[0], c[1]]))
+            .collect())
+    } else {
+        Ok(proto
+            .int32_data
+            .iter()
+            .map(|&v| f16::from_bits((v as u32 & 0xFFFF) as u16))
+            .collect())
+    }
+}
+
+fn decode_bf16(path: &Path, proto: &TensorProto) -> Result<Vec<bf16>, LoadError> {
+    if !proto.raw_data.is_empty() {
+        check_raw_alignment(path, &proto.raw_data, 2, "BFLOAT16")?;
+        Ok(proto
+            .raw_data
+            .chunks_exact(2)
+            .map(|c| bf16::from_le_bytes([c[0], c[1]]))
+            .collect())
+    } else {
+        Ok(proto
+            .int32_data
+            .iter()
+            .map(|&v| bf16::from_bits((v as u32 & 0xFFFF) as u16))
+            .collect())
     }
 }
 

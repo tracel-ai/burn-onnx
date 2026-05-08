@@ -557,6 +557,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/scatter_nd/scatter_nd_max.onnx")
         .input("tests/scatter_nd/scatter_nd_min.onnx")
         .input("tests/scatter_nd/scatter_nd_bool.onnx")
+        .input("tests/scatter_nd/scatter_nd_neg_idx.onnx")
         // Scan operator tests
         .input("tests/scan/scan_cumsum.onnx")
         .input("tests/scan/scan_reverse.onnx")
