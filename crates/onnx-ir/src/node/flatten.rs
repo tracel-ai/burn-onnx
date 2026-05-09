@@ -391,10 +391,7 @@ mod tests {
         assert!(!FlattenProcessor.is_noop(&node));
     }
 
-    // TODO: Add test for axis out of range - Test axis >= rank should return error - Missing constraint validation test
     // TODO: Add test for negative axis with opset < 11 - Should fail per spec, negative axis added in opset 11 - Missing opset validation test
-    // TODO: Add test for axis=0 edge case - Flattens entire tensor to 1D then reshapes to (1, N) - Missing edge case test
-    // TODO: Add test for axis=rank edge case - Should produce (N, 1) output - Missing edge case test
     // TODO: Add test for different data types - Spec supports all data types, not just f32 - Missing type coverage
     // TODO: Add test for unexpected attributes - Should reject unknown attributes per implementation - Missing attribute validation test
 
