@@ -67,18 +67,16 @@ impl NodeProcessor for FlattenProcessor {
             }
         };
 
-        // Per ONNX spec, Flatten accepts any rank >= 0 (though rank-0 scalars are
-        // unusual).  Rank-1 input with axis=0 produces [1, d] and axis=1 produces [d, 1].
+        // Burn cannot represent Tensor<B, 0>, so reject rank-0 scalars.
+        // Rank-1 is valid per ONNX spec: axis=0 -> [1, d], axis=1 -> [d, 1].
         if tensor.rank == 0 {
             return Err(ProcessError::Custom(
-                "Flatten: input tensor must have at least 1 dimension (got 0)".to_string(),
+                "Flatten: Burn requires input rank >= 1 (got 0)".to_string(),
             ));
         }
 
         // Get reference to config for type inference
-        let config = self
-            .extract_config(node, opset)
-            .expect("Config extraction failed");
+        let config = self.extract_config(node, opset)?;
 
         // Compute output static_shape: [product(dims[..axis]), product(dims[axis..])]
         let static_shape = if let Some(input_shape) = &tensor.static_shape {
@@ -154,7 +152,15 @@ impl NodeProcessor for FlattenProcessor {
             axis += tensor.rank as i64;
         }
 
-        // TODO: Validate axis is within valid range [0, rank) after normalization - Invalid axis values should return error - Missing range validation
+        // Validate axis is within valid range [0, rank] after normalization.
+        // ONNX spec allows axis in [-r, r] inclusive; after normalization that's [0, rank].
+        if axis < 0 || axis as usize > tensor.rank {
+            return Err(ProcessError::Custom(format!(
+                "Flatten: axis {} out of range for input rank {} (valid range: [0, {}])",
+                axis, tensor.rank, tensor.rank
+            )));
+        }
+
         // TODO: Validate negative axis support for opset < 11 - Negative axis added in opset 11, should error for earlier opsets - Missing opset-specific validation
 
         let config = FlattenConfig {
@@ -224,7 +230,35 @@ mod tests {
         let processor = FlattenProcessor;
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::Custom(_))));
+        assert!(matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("rank >= 1")));
+    }
+
+    #[test]
+    fn test_flatten_rank1_invalid_axis_too_large() {
+        // axis=2 is out of range for rank-1 input (valid: 0, 1)
+        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 1, Some(vec![5]))
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 2)
+            .build();
+
+        let processor = FlattenProcessor;
+        let result = processor.extract_config(&node, 16);
+        assert!(matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("out of range")));
+    }
+
+    #[test]
+    fn test_flatten_rank1_invalid_axis_too_negative() {
+        // axis=-2 is out of range for rank-1 input (valid: -1, 0, 1)
+        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 1, Some(vec![5]))
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", -2)
+            .build();
+
+        let processor = FlattenProcessor;
+        let result = processor.extract_config(&node, 16);
+        assert!(matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("out of range")));
     }
 
     #[test]
