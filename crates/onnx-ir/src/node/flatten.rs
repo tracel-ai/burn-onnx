@@ -67,12 +67,12 @@ impl NodeProcessor for FlattenProcessor {
             }
         };
 
-        // check if the input tensor has at least 2 dimensions
-        if tensor.rank < 2 {
-            return Err(ProcessError::Custom(format!(
-                "Flatten: input tensor must have at least 2 dimensions (got {})",
-                tensor.rank
-            )));
+        // Per ONNX spec, Flatten accepts any rank >= 0 (though rank-0 scalars are
+        // unusual).  Rank-1 input with axis=0 produces [1, d] and axis=1 produces [d, 1].
+        if tensor.rank == 0 {
+            return Err(ProcessError::Custom(
+                "Flatten: input tensor must have at least 1 dimension (got 0)".to_string(),
+            ));
         }
 
         // Get reference to config for type inference
@@ -207,22 +207,90 @@ mod tests {
     }
 
     #[test]
-    fn test_flatten_config_with_low_rank() {
-        let mut node = create_test_node(1).build();
-        // Replace the input with one that has lower rank
-        let input = TestNodeBuilder::new(NodeType::Identity, "temp")
-            .input_tensor_f32("x", 1, None)
-            .build()
-            .inputs
-            .pop()
-            .unwrap();
-        node.inputs[0] = input;
+    fn test_flatten_config_with_rank0_rejected() {
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test_flatten")
+            .add_input(
+                "x",
+                ArgType::Tensor(TensorType {
+                    dtype: crate::ir::DType::F32,
+                    rank: 0,
+                    static_shape: Some(vec![]),
+                }),
+            )
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 0)
+            .build();
 
         let processor = FlattenProcessor;
         let prefs = OutputPreferences::new();
-        let _config = processor.extract_config(&node, 16).unwrap();
         let result = processor.infer_types(&mut node, 16, &prefs);
         assert!(matches!(result, Err(ProcessError::Custom(_))));
+    }
+
+    #[test]
+    fn test_flatten_rank1_axis0() {
+        // Input [5], axis=0 -> output [1, 5]
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 1, Some(vec![5]))
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 0)
+            .build();
+
+        let processor = FlattenProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![Some(1), Some(5)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_flatten_rank1_axis1() {
+        // Input [5], axis=1 -> output [5, 1]
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 1, Some(vec![5]))
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", 1)
+            .build();
+
+        let processor = FlattenProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![Some(5), Some(1)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_flatten_rank1_negative_axis() {
+        // Input [5], axis=-1 -> normalized axis=0 -> output [1, 5]
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 1, Some(vec![5]))
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", -1)
+            .build();
+
+        let processor = FlattenProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.rank, 2);
+                assert_eq!(t.static_shape, Some(vec![Some(1), Some(5)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
     }
 
     #[test]
