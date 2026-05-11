@@ -49,10 +49,10 @@ invalid_html_tags = "deny"
 # (Cargo forbids consumers from overriding default-features when inheriting via
 # `workspace = true`); consumers that previously had defaults ON now opt in via
 # `features = ["default"]`.
-burn-import = { path = "crates/burn-import", version = "=0.21.0", default-features = false }
-burn-onnx = { path = "crates/burn-onnx", version = "=0.21.0", default-features = false }
-onnx-ir = { path = "crates/onnx-ir", version = "=0.21.0", default-features = false }
-onnx-ir-derive = { path = "crates/onnx-ir-derive", version = "=0.21.0" }
+burn-import = { path = "crates/burn-import", version = "0.21.0", default-features = false }
+burn-onnx = { path = "crates/burn-onnx", version = "0.21.0", default-features = false }
+onnx-ir = { path = "crates/onnx-ir", version = "0.21.0", default-features = false }
+onnx-ir-derive = { path = "crates/onnx-ir-derive", version = "0.21.0" }
 model-checks-common = { path = "crates/model-checks/common" }
 
 bytemuck = "1.25.0"
