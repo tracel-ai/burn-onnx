@@ -256,7 +256,9 @@ mod tests {
         let processor = FlattenProcessor;
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("out of range")));
+        assert!(
+            matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("out of range"))
+        );
     }
 
     #[test]
@@ -271,7 +273,9 @@ mod tests {
         let processor = FlattenProcessor;
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("out of range")));
+        assert!(
+            matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("out of range"))
+        );
     }
 
     #[test]
@@ -415,7 +419,9 @@ mod tests {
         let processor = FlattenProcessor;
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 10, &prefs);
-        assert!(matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("opset >= 11")));
+        assert!(
+            matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("opset >= 11"))
+        );
     }
 
     #[test]
