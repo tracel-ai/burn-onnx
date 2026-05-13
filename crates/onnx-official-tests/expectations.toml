@@ -2929,13 +2929,13 @@ tracking = "#314"
 
 [test_layer_normalization_2d_axis1_expanded]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_2d_axis1_expanded_ver18]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_2d_axis_negative_1]
 status = "skip-codegen"
@@ -2944,13 +2944,13 @@ tracking = "#314"
 
 [test_layer_normalization_2d_axis_negative_1_expanded]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_2d_axis_negative_1_expanded_ver18]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_2d_axis_negative_2]
 status = "skip-codegen"
@@ -3004,13 +3004,13 @@ tracking = "#314"
 
 [test_layer_normalization_3d_axis2_epsilon_expanded]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_3d_axis2_epsilon_expanded_ver18]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_3d_axis_negative_1_epsilon]
 status = "skip-codegen"
@@ -3019,13 +3019,13 @@ tracking = "#314"
 
 [test_layer_normalization_3d_axis_negative_1_epsilon_expanded]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_3d_axis_negative_1_epsilon_expanded_ver18]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_3d_axis_negative_2_epsilon]
 status = "skip-codegen"
@@ -3109,13 +3109,13 @@ tracking = "#314"
 
 [test_layer_normalization_4d_axis3_expanded]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_4d_axis3_expanded_ver18]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_4d_axis_negative_1]
 status = "skip-codegen"
@@ -3124,13 +3124,13 @@ tracking = "#314"
 
 [test_layer_normalization_4d_axis_negative_1_expanded]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_4d_axis_negative_1_expanded_ver18]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_4d_axis_negative_2]
 status = "skip-codegen"
@@ -3184,13 +3184,13 @@ tracking = "#314"
 
 [test_layer_normalization_default_axis_expanded]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_layer_normalization_default_axis_expanded_ver18]
 status = "skip-compile"
-reason = "Flatten rank-1 codegen OK, but expanded LayerNorm uses Shape/Size patterns that produce uncompilable code"
-tracking = "#349"
+reason = "burn-onnx emits uncompilable generated code (references alloc::* from no_std, or emits unresolved variable bindings)"
+tracking = "tracel-ai/burn-onnx"
 
 [test_leakyrelu]
 status = "pass"

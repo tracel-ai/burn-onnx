@@ -10,7 +10,7 @@
 //! - **Opset 11**: Added support for negative axis values.
 //! - **Opset 13**: Extended type constraints (added bfloat16 support).
 //!
-//! **Implementation Note**: This implementation validates opset 9+ (see FIXME at line 49).
+//! **Implementation Note**: Negative axis is rejected for opset < 11.
 
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
@@ -75,8 +75,30 @@ impl NodeProcessor for FlattenProcessor {
             ));
         }
 
-        // Get reference to config for type inference
+        // Reject negative axis for opset < 11 (negative axis was added in opset 11).
+        let raw_axis: i64 = node
+            .attrs
+            .get("axis")
+            .map(|v| v.clone().into_i64())
+            .unwrap_or(1);
+        if raw_axis < 0 && opset < 11 {
+            return Err(ProcessError::Custom(format!(
+                "Flatten: negative axis ({}) requires opset >= 11, got opset {}",
+                raw_axis, opset
+            )));
+        }
+
+        // Get reference to config for type inference (normalizes axis).
         let config = self.extract_config(node, opset)?;
+
+        // Validate axis is within valid range [0, rank] after normalization.
+        // ONNX spec allows axis in [-r, r] inclusive; after normalization that is [0, rank].
+        if config.axis > tensor.rank {
+            return Err(ProcessError::Custom(format!(
+                "Flatten: axis {} (raw: {}) out of range for input rank {} (valid range: [0, {}])",
+                config.axis, raw_axis, tensor.rank, tensor.rank
+            )));
+        }
 
         // Compute output static_shape: [product(dims[..axis]), product(dims[axis..])]
         let static_shape = if let Some(input_shape) = &tensor.static_shape {
@@ -152,17 +174,6 @@ impl NodeProcessor for FlattenProcessor {
             axis += tensor.rank as i64;
         }
 
-        // Validate axis is within valid range [0, rank] after normalization.
-        // ONNX spec allows axis in [-r, r] inclusive; after normalization that's [0, rank].
-        if axis < 0 || axis as usize > tensor.rank {
-            return Err(ProcessError::Custom(format!(
-                "Flatten: axis {} out of range for input rank {} (valid range: [0, {}])",
-                axis, tensor.rank, tensor.rank
-            )));
-        }
-
-        // TODO: Validate negative axis support for opset < 11 - Negative axis added in opset 11, should error for earlier opsets - Missing opset-specific validation
-
         let config = FlattenConfig {
             axis: axis as usize,
         };
@@ -236,28 +247,30 @@ mod tests {
     #[test]
     fn test_flatten_rank1_invalid_axis_too_large() {
         // axis=2 is out of range for rank-1 input (valid: 0, 1)
-        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test")
             .input_tensor_f32("data", 1, Some(vec![5]))
             .output_tensor_f32("output", 2, None)
             .attr_int("axis", 2)
             .build();
 
         let processor = FlattenProcessor;
-        let result = processor.extract_config(&node, 16);
+        let prefs = OutputPreferences::new();
+        let result = processor.infer_types(&mut node, 16, &prefs);
         assert!(matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("out of range")));
     }
 
     #[test]
     fn test_flatten_rank1_invalid_axis_too_negative() {
         // axis=-2 is out of range for rank-1 input (valid: -1, 0, 1)
-        let node = TestNodeBuilder::new(NodeType::Flatten, "test")
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test")
             .input_tensor_f32("data", 1, Some(vec![5]))
             .output_tensor_f32("output", 2, None)
             .attr_int("axis", -2)
             .build();
 
         let processor = FlattenProcessor;
-        let result = processor.extract_config(&node, 16);
+        let prefs = OutputPreferences::new();
+        let result = processor.infer_types(&mut node, 16, &prefs);
         assert!(matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("out of range")));
     }
 
@@ -391,9 +404,32 @@ mod tests {
         assert!(!FlattenProcessor.is_noop(&node));
     }
 
-    // TODO: Add test for negative axis with opset < 11 - Should fail per spec, negative axis added in opset 11 - Missing opset validation test
-    // TODO: Add test for different data types - Spec supports all data types, not just f32 - Missing type coverage
-    // TODO: Add test for unexpected attributes - Should reject unknown attributes per implementation - Missing attribute validation test
+    #[test]
+    fn test_flatten_negative_axis_rejected_before_opset_11() {
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 4, None)
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", -1)
+            .build();
+
+        let processor = FlattenProcessor;
+        let prefs = OutputPreferences::new();
+        let result = processor.infer_types(&mut node, 10, &prefs);
+        assert!(matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("opset >= 11")));
+    }
+
+    #[test]
+    fn test_flatten_negative_axis_accepted_at_opset_11() {
+        let mut node = TestNodeBuilder::new(NodeType::Flatten, "test")
+            .input_tensor_f32("data", 4, None)
+            .output_tensor_f32("output", 2, None)
+            .attr_int("axis", -1)
+            .build();
+
+        let processor = FlattenProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 11, &prefs).unwrap();
+    }
 
     #[test]
     fn test_flatten_static_shape_known() {

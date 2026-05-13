@@ -235,6 +235,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/nonzero/nonzero_empty.onnx")
         .input("tests/flatten/flatten.onnx")
         .input("tests/flatten/flatten_2d.onnx")
+        .input("tests/flatten/flatten_rank1.onnx")
         .input("tests/floor/floor.onnx")
         .input("tests/gather/gather_1d_idx.onnx")
         .input("tests/gather/gather_2d_idx.onnx")

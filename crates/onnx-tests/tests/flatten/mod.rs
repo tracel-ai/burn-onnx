@@ -1,5 +1,5 @@
 use crate::include_models;
-include_models!(flatten, flatten_2d);
+include_models!(flatten, flatten_2d, flatten_rank1);
 
 #[cfg(test)]
 mod tests {
@@ -19,6 +19,19 @@ mod tests {
         let output = model.forward(input);
 
         let expected_shape = Shape::from([1, 75]);
+        assert_eq!(expected_shape, output.shape());
+    }
+
+    #[test]
+    fn flatten_rank1() {
+        // Rank-1 input [5] with axis=0 -> output [1, 5]
+        let device = Default::default();
+        let model: flatten_rank1::Model<TestBackend> = flatten_rank1::Model::new(&device);
+
+        let input = Tensor::<TestBackend, 1>::ones([5], &device);
+        let output = model.forward(input);
+
+        let expected_shape = Shape::from([1, 5]);
         assert_eq!(expected_shape, output.shape());
     }
 

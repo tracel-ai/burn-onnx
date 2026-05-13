@@ -15,7 +15,7 @@ impl NodeCodegen for onnx_ir::flatten::FlattenNode {
 
         if self.config.axis == 0 {
             quote! {
-                let #output = #input.reshape::<2>([1, -1]);
+                let #output = #input.reshape::<2, _>([1, -1]);
             }
         } else {
             let axis = self.config.axis.to_tokens();
@@ -56,7 +56,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 2> {
-            let output = input.reshape::<2>([1, -1]);
+            let output = input.reshape::<2, _>([1, -1]);
             output
         }
         ");
@@ -98,7 +98,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<B, 1>) -> Tensor<B, 2> {
-            let output = input.reshape::<2>([1, -1]);
+            let output = input.reshape::<2, _>([1, -1]);
             output
         }
         ");
