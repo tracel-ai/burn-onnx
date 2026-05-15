@@ -16,9 +16,9 @@ use crate::burn::ToTokens;
 pub fn tensor_type_tokens(rank: usize, dtype: &DType) -> TokenStream {
     let rank = rank.to_tokens();
     match dtype {
-        dtype if dtype.is_float() => quote! { Tensor<B, #rank> },
-        dtype if dtype.is_int() || dtype.is_uint() => quote! { Tensor<B, #rank, Int> },
-        dtype if dtype.is_bool() => quote! { Tensor<B, #rank, Bool> },
+        dtype if dtype.is_float() => quote! { Tensor<#rank> },
+        dtype if dtype.is_int() || dtype.is_uint() => quote! { Tensor<#rank, Int> },
+        dtype if dtype.is_bool() => quote! { Tensor<#rank, Bool> },
         _ => panic!("Unsupported tensor dtype: {:?}", dtype),
     }
 }
@@ -29,9 +29,9 @@ pub fn arg_type_tokens(arg: &Argument) -> TokenStream {
         ArgType::Tensor(tensor) => tensor_type_tokens(tensor.rank, &tensor.dtype),
         ArgType::ScalarNative(dtype) => scalar_type_tokens(dtype),
         ArgType::ScalarTensor(dtype) => match dtype {
-            d if d.is_float() => quote! { Tensor<B, 1> },
-            d if d.is_int() || d.is_uint() => quote! { Tensor<B, 1, Int> },
-            d if d.is_bool() => quote! { Tensor<B, 1, Bool> },
+            d if d.is_float() => quote! { Tensor<1> },
+            d if d.is_int() || d.is_uint() => quote! { Tensor<1, Int> },
+            d if d.is_bool() => quote! { Tensor<1, Bool> },
             _ => panic!("Unsupported scalar tensor dtype: {:?}", dtype),
         },
         ArgType::Shape(rank) => {
@@ -61,31 +61,33 @@ pub fn scalar_type_tokens(dtype: &DType) -> TokenStream {
     }
 }
 
-/// Generate `.elem::<T>()` cast for extracting a native scalar from `into_scalar()`.
+/// Generate the `.into_scalar::<T>()` call fragment for extracting a native
+/// scalar from a tensor.
 ///
-/// Used after `.into_scalar()` to cast from the backend's native element type
-/// to the desired Rust type.
+/// Since burn made `Tensor::into_scalar` generic over the element type
+/// (`fn into_scalar<E: Element>(self) -> E`), the element type must be supplied
+/// at the call site rather than via a chained `.elem::<T>()`.
 pub fn elem_cast_tokens(dtype: &DType) -> TokenStream {
     let ty = scalar_type_tokens(dtype);
-    quote! { .elem::<#ty>() }
+    quote! { .into_scalar::<#ty>() }
 }
 
 /// Generate code to extract a native scalar from a on-device tensor.
 ///
-/// Produces: `<input>.into_scalar().elem::<T>()`
+/// Produces: `<input>.into_scalar::<T>()`
 pub fn on_device_to_native(input: TokenStream, dtype: &DType) -> TokenStream {
     let cast = elem_cast_tokens(dtype);
-    quote! { #input.into_scalar()#cast }
+    quote! { (#input)#cast }
 }
 
-/// Generate code to convert a ScalarTensor (Tensor<B,1>) to a Shape([i64; 1]).
+/// Generate code to convert a ScalarTensor (Tensor<1>) to a Shape([i64; 1]).
 ///
-/// Produces: `{ let __v: T = <input>.into_scalar().elem(); [__v as i64] }`
+/// Produces: `{ let __v: T = <input>.into_scalar::<T>(); [__v as i64] }`
 pub fn scalar_tensor_to_shape(input: TokenStream, dtype: &DType) -> TokenStream {
     let ty = scalar_type_tokens(dtype);
     quote! {
         {
-            let __v: #ty = #input.into_scalar().elem();
+            let __v: #ty = #input.into_scalar::<#ty>();
             [__v as i64]
         }
     }
@@ -163,15 +165,15 @@ mod tests {
     fn tensor_type_tokens_preserves_tensor_kind() {
         assert_eq!(
             tensor_type_tokens(3, &DType::F32).to_string(),
-            quote!(Tensor<B, 3>).to_string()
+            quote!(Tensor<3>).to_string()
         );
         assert_eq!(
             tensor_type_tokens(3, &DType::I32).to_string(),
-            quote!(Tensor<B, 3, Int>).to_string()
+            quote!(Tensor<3, Int>).to_string()
         );
         assert_eq!(
             tensor_type_tokens(3, &DType::Bool(BoolStore::Native)).to_string(),
-            quote!(Tensor<B, 3, Bool>).to_string()
+            quote!(Tensor<3, Bool>).to_string()
         );
     }
 

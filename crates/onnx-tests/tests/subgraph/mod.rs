@@ -18,8 +18,7 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::TestBackend;
-    use burn::tensor::{Tensor, TensorData};
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn test_nested_if_loop_if_c1_true_c2_true() {
@@ -27,9 +26,9 @@ mod tests {
         // Path: Outer Then -> Loop(3x) -> Inner Then (x+1 each iteration)
         // Expected: x + 3
         let device = Default::default();
-        let model: nested_if_loop_if::Model<TestBackend> = Default::default();
+        let model: nested_if_loop_if::Model = Default::default();
 
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([
                 [0.8520069718360901, 1.4743412733078003, -0.3827274441719055],
                 [0.473310261964798, 1.878186821937561, -1.341393232345581],
@@ -60,9 +59,9 @@ mod tests {
         // Path: Outer Then -> Loop(3x) -> Inner Else (x-1 each iteration)
         // Expected: x - 3
         let device = Default::default();
-        let model: nested_if_loop_if::Model<TestBackend> = Default::default();
+        let model: nested_if_loop_if::Model = Default::default();
 
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([
                 [0.8520069718360901, 1.4743412733078003, -0.3827274441719055],
                 [0.473310261964798, 1.878186821937561, -1.341393232345581],
@@ -97,9 +96,9 @@ mod tests {
         // Path: Outer Else (x*2)
         // Expected: x * 2
         let device = Default::default();
-        let model: nested_if_loop_if::Model<TestBackend> = Default::default();
+        let model: nested_if_loop_if::Model = Default::default();
 
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([
                 [0.8520069718360901, 1.4743412733078003, -0.3827274441719055],
                 [0.473310261964798, 1.878186821937561, -1.341393232345581],
@@ -129,9 +128,9 @@ mod tests {
         // Test 1: condition1=True, condition2=True
         // Path: Outer Then -> Loop(2x) -> Inner Then -> Scan (cumsum)
         let device = Default::default();
-        let model: nested_if_loop_if_scan::Model<TestBackend> = Default::default();
+        let model: nested_if_loop_if_scan::Model = Default::default();
 
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([
                 [-0.6080955266952515, 2.022130012512207, -0.14551113545894623],
                 [-0.5326734781265259, 0.9188717007637024, -1.9797388315200806],
@@ -161,9 +160,9 @@ mod tests {
         // Test 2: condition1=True, condition2=False
         // Path: Outer Then -> Loop(2x) -> Inner Else (sum(x-1))
         let device = Default::default();
-        let model: nested_if_loop_if_scan::Model<TestBackend> = Default::default();
+        let model: nested_if_loop_if_scan::Model = Default::default();
 
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([
                 [-0.6080955266952515, 2.022130012512207, -0.14551113545894623],
                 [-0.5326734781265259, 0.9188717007637024, -1.9797388315200806],
@@ -202,9 +201,9 @@ mod tests {
         // Path: Outer Else (x*2)
         // Expected: x * 2
         let device = Default::default();
-        let model: nested_if_loop_if_scan::Model<TestBackend> = Default::default();
+        let model: nested_if_loop_if_scan::Model = Default::default();
 
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([
                 [-0.6080955266952515, 2.022130012512207, -0.14551113545894623],
                 [-0.5326734781265259, 0.9188717007637024, -1.9797388315200806],
@@ -248,10 +247,10 @@ mod tests {
     fn test_outer_scope_ref_then_branch() {
         // condition=True -> then branch -> Relu(x) + 10
         let device = Default::default();
-        let model: outer_scope_ref::Model<TestBackend> = Default::default();
+        let model: outer_scope_ref::Model = Default::default();
 
         // Input with some negative values (to test Relu)
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([[-1.5_f32, 2.0, -0.5], [3.0, -2.0, 1.0]]),
             &device,
         );
@@ -272,10 +271,10 @@ mod tests {
     fn test_outer_scope_ref_else_branch() {
         // condition=False -> else branch -> Relu(x) * 2
         let device = Default::default();
-        let model: outer_scope_ref::Model<TestBackend> = Default::default();
+        let model: outer_scope_ref::Model = Default::default();
 
         // Input with some negative values (to test Relu)
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([[-1.5_f32, 2.0, -0.5], [3.0, -2.0, 1.0]]),
             &device,
         );
@@ -310,9 +309,9 @@ mod tests {
     fn test_outer_scope_multi_var_then_branch() {
         // condition=True -> then branch -> y1 + y2 + y3
         let device = Default::default();
-        let model: outer_scope_multi_var::Model<TestBackend> = Default::default();
+        let model: outer_scope_multi_var::Model = Default::default();
 
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([[-1.5_f32, 2.0, -0.5], [3.0, -2.0, 1.0]]),
             &device,
         );
@@ -342,9 +341,9 @@ mod tests {
     fn test_outer_scope_multi_var_else_branch() {
         // condition=False -> else branch -> y1 * y2 * y3
         let device = Default::default();
-        let model: outer_scope_multi_var::Model<TestBackend> = Default::default();
+        let model: outer_scope_multi_var::Model = Default::default();
 
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([[-1.5_f32, 2.0, -0.5], [3.0, -2.0, 1.0]]),
             &device,
         );
@@ -381,15 +380,15 @@ mod tests {
     #[test]
     fn test_outer_scope_loop() {
         let device = Default::default();
-        let model: outer_scope_loop::Model<TestBackend> = Default::default();
+        let model: outer_scope_loop::Model = Default::default();
 
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([[-1.5_f32, 2.0, -0.5], [3.0, -2.0, 1.0]]),
             &device,
         );
         let max_iter = 3i64;
         let cond_init = true;
-        let accum_init = Tensor::<TestBackend, 2>::from_data(
+        let accum_init = Tensor::<2>::from_data(
             TensorData::from([[0.0_f32, 0.0, 0.0], [0.0, 0.0, 0.0]]),
             &device,
         );
@@ -419,11 +418,10 @@ mod tests {
     #[test]
     fn test_outer_scope_scan() {
         let device = Default::default();
-        let model: outer_scope_scan::Model<TestBackend> = Default::default();
+        let model: outer_scope_scan::Model = Default::default();
 
-        let x =
-            Tensor::<TestBackend, 1>::from_data(TensorData::from([-1.0_f32, 2.0, 0.5]), &device);
-        let sequence = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<1>::from_data(TensorData::from([-1.0_f32, 2.0, 0.5]), &device);
+        let sequence = Tensor::<2>::from_data(
             TensorData::from([
                 [1.0_f32, 2.0, 3.0],
                 [4.0, 5.0, 6.0],
@@ -473,10 +471,9 @@ mod tests {
         // condition=True -> then branch -> MatMul(x, weight) + bias
         // Uses weight and bias initializers from parent graph
         let device = Default::default();
-        let model: outer_scope_constant::Model<TestBackend> = Default::default();
+        let model: outer_scope_constant::Model = Default::default();
 
-        let x =
-            Tensor::<TestBackend, 2>::from_data(TensorData::from([[1.0_f32, 2.0, 3.0]]), &device);
+        let x = Tensor::<2>::from_data(TensorData::from([[1.0_f32, 2.0, 3.0]]), &device);
 
         let condition = true;
         let output = model.forward(x, condition);
@@ -496,10 +493,9 @@ mod tests {
     fn test_outer_scope_constant_else_branch() {
         // condition=False -> else branch -> x[:, :2] * 2
         let device = Default::default();
-        let model: outer_scope_constant::Model<TestBackend> = Default::default();
+        let model: outer_scope_constant::Model = Default::default();
 
-        let x =
-            Tensor::<TestBackend, 2>::from_data(TensorData::from([[1.0_f32, 2.0, 3.0]]), &device);
+        let x = Tensor::<2>::from_data(TensorData::from([[1.0_f32, 2.0, 3.0]]), &device);
 
         let condition = false;
         let output = model.forward(x, condition);

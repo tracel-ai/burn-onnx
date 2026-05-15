@@ -110,7 +110,7 @@ mod tests {
         let node = create_gemm_node_ab("gemm1", 1.0, 1.0, 0, 0, false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<2>) -> Tensor<2> {
             let output = a.matmul(b);
             output
         }
@@ -122,7 +122,7 @@ mod tests {
         let node = create_gemm_node_ab("gemm1", 2.5, 1.0, 0, 0, false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<2>) -> Tensor<2> {
             let output = a.matmul(b) * 2.5f32;
             output
         }
@@ -134,12 +134,7 @@ mod tests {
         let node = create_gemm_node_ab("gemm1", 2.5, 1.0, 0, 0, true);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            a: Tensor<B, 2>,
-            b: Tensor<B, 2>,
-            c: Tensor<B, 2>,
-        ) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<2>, c: Tensor<2>) -> Tensor<2> {
             let output = a.matmul(b) * 2.5f32 + c.unsqueeze();
             output
         }
@@ -151,12 +146,7 @@ mod tests {
         let node = create_gemm_node_ab("gemm1", 2.0, 3.0, 0, 0, true);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            a: Tensor<B, 2>,
-            b: Tensor<B, 2>,
-            c: Tensor<B, 2>,
-        ) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<2>, c: Tensor<2>) -> Tensor<2> {
             let output = a.matmul(b) * 2f32 + (c.unsqueeze()) * 3f32;
             output
         }
@@ -168,7 +158,7 @@ mod tests {
         let node = create_gemm_node_ab("gemm1", 1.0, 1.0, 1, 0, false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<2>) -> Tensor<2> {
             let output = a.transpose().matmul(b);
             output
         }
@@ -180,7 +170,7 @@ mod tests {
         let node = create_gemm_node_ab("gemm1", 1.0, 1.0, 0, 1, false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<2>) -> Tensor<2> {
             let output = a.matmul(b.transpose());
             output
         }
@@ -192,7 +182,7 @@ mod tests {
         let node = create_gemm_node_ab("gemm1", 1.0, 1.0, 1, 1, false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<2>) -> Tensor<2> {
             let output = a.transpose().matmul(b.transpose());
             output
         }

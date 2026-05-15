@@ -27,7 +27,7 @@ pub struct BurnGraph {
     cached_partition: Option<Option<Partition>>,
     /// Graph I/O args that were converted from ScalarTensor to ScalarNative at the
     /// boundary. Maps arg name -> DType. Used to insert conversion code:
-    /// - Outputs: `.into_scalar().elem::<T>()` before the return
+    /// - Outputs: `.into_scalar::<T>()` before the return
     /// - Inputs: `Tensor::from_data([name as T], &self.device)` after the params
     boundary_output_conversions: HashMap<String, onnx_ir::ir::DType>,
     boundary_input_conversions: HashMap<String, onnx_ir::ir::DType>,
@@ -225,7 +225,7 @@ impl BurnGraph {
 
             #codegen_default
 
-            impl<B: Backend> Model<B> {
+            impl Model {
                 #codegen_new
 
                 #maybe_blank
@@ -280,7 +280,7 @@ impl BurnGraph {
             // Register chunk inputs as variables at position 0.
             // Mirror build_scope: also register boundary-converted inputs (ScalarNative
             // that were originally ScalarTensor) as tensor variables, since the top-level
-            // forward converts them to Tensor<B, 1> before calling submodule.forward().
+            // forward converts them to Tensor<1> before calling submodule.forward().
             for arg in chunk_inputs {
                 if matches!(arg.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_))
                     || self.boundary_input_conversions.contains_key(&arg.name)
@@ -346,20 +346,18 @@ impl BurnGraph {
 
             let submodule_def = quote! {
                 #[derive(Module, Debug)]
-                pub struct #struct_name<B: Backend> {
+                pub struct #struct_name {
                     #(#struct_fields)*
-                    phantom: core::marker::PhantomData<B>,
                     #[module(skip)]
-                    device: B::Device,
+                    device: Device,
                 }
 
-                impl<B: Backend> #struct_name<B> {
+                impl #struct_name {
                     #[allow(unused_variables)]
-                    pub fn new(device: &B::Device) -> Self {
+                    pub fn new(device: &Device) -> Self {
                         #field_init_code
                         Self {
                             #(#field_names_for_init,)*
-                            phantom: core::marker::PhantomData,
                             device: device.clone(),
                         }
                     }
@@ -374,7 +372,7 @@ impl BurnGraph {
             submodule_defs.push(submodule_def);
 
             // Top-level Model field for this submodule
-            submodule_field_decls.push(quote! { #field_name: #struct_name<B>, });
+            submodule_field_decls.push(quote! { #field_name: #struct_name, });
             submodule_field_inits.push(quote! { let #field_name = #struct_name::new(device); });
             submodule_field_names.push(field_name.clone());
 
@@ -438,23 +436,21 @@ impl BurnGraph {
             #maybe_blank
 
             #[derive(Module, Debug)]
-            pub struct Model<B: Backend> {
+            pub struct Model {
                 #(#submodule_field_decls)*
-                phantom: core::marker::PhantomData<B>,
                 #[module(skip)]
-                device: B::Device,
+                device: Device,
             }
             #maybe_blank
 
             #codegen_default
 
-            impl<B: Backend> Model<B> {
+            impl Model {
                 #[allow(unused_variables)]
-                pub fn new(device: &B::Device) -> Self {
+                pub fn new(device: &Device) -> Self {
                     #(#submodule_field_inits)*
                     Self {
                         #(#submodule_field_names,)*
-                        phantom: core::marker::PhantomData,
                         device: device.clone(),
                     }
                 }
@@ -543,7 +539,7 @@ impl BurnGraph {
                     _blank_!();
                 };
                 default_impl = quote! {
-                    impl<B: Backend> Default for Model<B> {
+                    impl Default for Model {
                         fn default() -> Self {
                             Self::from_file(#file, &Default::default())
                         }
@@ -552,7 +548,7 @@ impl BurnGraph {
                 };
                 extra_loaders = quote! {
                     /// Load model weights from a burnpack file.
-                    pub fn from_file<P: AsRef<std::path::Path>>(file: P, device: &B::Device) -> Self {
+                    pub fn from_file<P: AsRef<std::path::Path>>(file: P, device: &Device) -> Self {
                         let mut model = Self::new(device);
                         let mut store = BurnpackStore::from_file(file);
                         model.load_from(&mut store).expect("Failed to load burnpack file");
@@ -577,7 +573,7 @@ impl BurnGraph {
                     _blank_!();
                 };
                 default_impl = quote! {
-                    impl<B: Backend> Default for Model<B> {
+                    impl Default for Model {
                         fn default() -> Self {
                             Self::from_embedded(&Default::default())
                         }
@@ -594,7 +590,7 @@ impl BurnGraph {
                     /// See <https://github.com/tracel-ai/burn/issues/4153> for true backend zero-copy.
                     ///
                     /// See <https://github.com/tracel-ai/burn/issues/4123>
-                    pub fn from_embedded(device: &B::Device) -> Self {
+                    pub fn from_embedded(device: &Device) -> Self {
                         let mut model = Self::new(device);
                         let mut store = BurnpackStore::from_static(EMBEDDED_STATES);
                         model.load_from(&mut store).expect("Failed to load embedded burnpack");
@@ -610,12 +606,12 @@ impl BurnGraph {
             _blank_!();
             #statics
             #default_impl
-            impl<B: Backend> Model<B> {
+            impl Model {
                 #extra_loaders
                 /// Load model weights from in-memory bytes.
                 ///
                 /// The bytes must be the contents of a `.bpk` file.
-                pub fn from_bytes(bytes: Bytes, device: &B::Device) -> Self {
+                pub fn from_bytes(bytes: Bytes, device: &Device) -> Self {
                     let mut model = Self::new(device);
                     let mut store = BurnpackStore::from_bytes(Some(bytes));
                     model.load_from(&mut store).expect("Failed to load burnpack bytes");
@@ -641,16 +637,14 @@ impl BurnGraph {
             })
             .for_each(|code| body.extend(code));
 
-        // Extend with phantom data to avoid unused generic type.
         body.extend(quote! {
-            phantom: core::marker::PhantomData<B>,
             #[module(skip)]
-            device: B::Device,
+            device: Device,
         });
 
         quote! {
             #[derive(Module, Debug)]
-            pub struct Model<B: Backend> {
+            pub struct Model {
                 #body
             }
         }
@@ -670,12 +664,11 @@ impl BurnGraph {
 
         quote! {
             #[allow(unused_variables)]
-            pub fn new(device: &B::Device) -> Self {
+            pub fn new(device: &Device) -> Self {
                 #body
 
                 Self {
                     #(#field_names,)*
-                    phantom: core::marker::PhantomData,
                     device: device.clone(),
                 }
             }
@@ -794,7 +787,7 @@ impl BurnGraph {
         }
 
         // Convert ScalarTensor to ScalarNative at graph boundary so user-facing
-        // forward() signatures use native types (f32, i64, etc.) not Tensor<B, 1>
+        // forward() signatures use native types (f32, i64, etc.) not Tensor<1>
         self.convert_graph_boundary_scalars();
     }
 
@@ -807,21 +800,21 @@ impl BurnGraph {
                 let dtype_tokens = dtype.to_tokens();
                 if dtype.is_float() {
                     tokens.extend(quote! {
-                        let #name = Tensor::<B, 1>::from_data(
+                        let #name = Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#name]),
                             (&self.device, #dtype_tokens)
                         );
                     });
                 } else if dtype.is_int() || dtype.is_uint() {
                     tokens.extend(quote! {
-                        let #name = Tensor::<B, 1, Int>::from_data(
+                        let #name = Tensor::<1, Int>::from_data(
                             burn::tensor::TensorData::from([#name]),
                             (&self.device, #dtype_tokens)
                         );
                     });
                 } else if dtype.is_bool() {
                     tokens.extend(quote! {
-                        let #name = Tensor::<B, 1, Bool>::from_data(
+                        let #name = Tensor::<1, Bool>::from_data(
                             burn::tensor::TensorData::from([#name]),
                             (&self.device, #dtype_tokens)
                         );
@@ -1259,7 +1252,7 @@ mod tests {
         let code = format_tokens(graph.codegen());
 
         // Should have a single Model struct, no Submodule structs
-        assert!(code.contains("pub struct Model<B: Backend>"));
+        assert!(code.contains("pub struct Model"));
         assert!(!code.contains("Submodule"));
     }
 
@@ -1269,15 +1262,15 @@ mod tests {
         let code = format_tokens(graph.codegen());
 
         // Should have Submodule structs and a Model that delegates
-        assert!(code.contains("pub struct Submodule1<B: Backend>"));
-        assert!(code.contains("pub struct Model<B: Backend>"));
-        assert!(code.contains("submodule1: Submodule1<B>"));
+        assert!(code.contains("pub struct Submodule1"));
+        assert!(code.contains("pub struct Model"));
+        assert!(code.contains("submodule1: Submodule1"));
 
         // Submodules should have their own forward methods
         assert!(code.contains("self.submodule1.forward("));
 
         // The Model forward should still take `input` and return the final tensor
-        assert!(code.contains("pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2>"));
+        assert!(code.contains("pub fn forward(&self, input: Tensor<2>) -> Tensor<2>"));
     }
 
     #[test]
@@ -1286,14 +1279,14 @@ mod tests {
         let code = format_tokens(graph.with_partition(false).codegen());
 
         // Should use flat codegen despite exceeding MIN_GRAPH_SIZE
-        assert!(code.contains("pub struct Model<B: Backend>"));
+        assert!(code.contains("pub struct Model"));
         assert!(
             !code.contains("Submodule"),
             "partition(false) should prevent submodules"
         );
 
         // Forward should be directly on Model, not delegated
-        assert!(code.contains("pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2>"));
+        assert!(code.contains("pub fn forward(&self, input: Tensor<2>) -> Tensor<2>"));
     }
 
     #[test]
@@ -1346,12 +1339,10 @@ mod tests {
         let _ = std::fs::remove_file(bpk);
 
         assert!(
-            code.contains(
-                "pub fn from_file<P: AsRef<std::path::Path>>(file: P, device: &B::Device)"
-            )
+            code.contains("pub fn from_file<P: AsRef<std::path::Path>>(file: P, device: &Device)")
         );
         assert!(code.contains("pub fn from_bytes(bytes: Bytes"));
-        assert!(code.contains("impl<B: Backend> Default for Model<B>"));
+        assert!(code.contains("impl Default for Model"));
         assert!(code.contains("Self::from_file("));
         assert!(!code.contains("from_embedded"));
         // `from_file` references `std::path::Path`, which is not resolvable from
@@ -1368,7 +1359,7 @@ mod tests {
 
         assert!(code.contains("pub fn from_embedded("));
         assert!(code.contains("pub fn from_bytes(bytes: Bytes"));
-        assert!(code.contains("impl<B: Backend> Default for Model<B>"));
+        assert!(code.contains("impl Default for Model"));
         assert!(code.contains("Self::from_embedded("));
         assert!(code.contains("include_bytes!"));
         assert!(!code.contains("from_file"));
@@ -1385,7 +1376,7 @@ mod tests {
         assert!(code.contains("pub fn from_bytes(bytes: Bytes"));
         assert!(!code.contains("from_file"));
         assert!(!code.contains("from_embedded"));
-        assert!(!code.contains("impl<B: Backend> Default for Model<B>"));
+        assert!(!code.contains("impl Default for Model"));
         assert!(!code.contains("extern crate std"));
     }
 
@@ -1399,7 +1390,7 @@ mod tests {
         assert!(!code.contains("from_file"));
         assert!(!code.contains("from_bytes"));
         assert!(!code.contains("from_embedded"));
-        assert!(!code.contains("impl<B: Backend> Default for Model<B>"));
+        assert!(!code.contains("impl Default for Model"));
         assert!(!code.contains("extern crate std"));
     }
 }

@@ -51,17 +51,17 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
                     let mut __gather_nd_target_shape = __nd_idx_dims;
                     __gather_nd_target_shape[#indices_rank_lit - 1] = 1;
                     let mut __gather_nd_components:
-                        alloc::vec::Vec<Tensor<B, #indices_rank_lit, Int>> =
+                        alloc::vec::Vec<Tensor<#indices_rank_lit, Int>> =
                         alloc::vec::Vec::with_capacity(#batch_dims_lit + 1);
                     for __gather_nd_bk in 0..#batch_dims_lit {
                         let __gather_nd_dk = __nd_data_dims[__gather_nd_bk];
-                        let __gather_nd_arange = Tensor::<B, 1, Int>::arange(
+                        let __gather_nd_arange = Tensor::<1, Int>::arange(
                             0i64..__gather_nd_dk as i64,
                             (&self.device, burn::tensor::DType::I64),
                         );
                         let mut __gather_nd_init_shape = [1usize; #indices_rank_lit];
                         __gather_nd_init_shape[__gather_nd_bk] = __gather_nd_dk;
-                        let __gather_nd_part: Tensor<B, #indices_rank_lit, Int> =
+                        let __gather_nd_part: Tensor<#indices_rank_lit, Int> =
                             __gather_nd_arange
                                 .reshape(__gather_nd_init_shape)
                                 .expand(__gather_nd_target_shape);
@@ -107,7 +107,7 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
                     #normalize
                     let mut __gather_nd_aug_shape = [1usize; #inner_rank_lit];
                     __gather_nd_aug_shape[#inner_rank_lit - 1] = __nd_k;
-                    let __gather_nd_aug: Tensor<B, #inner_rank_lit, Int> =
+                    let __gather_nd_aug: Tensor<#inner_rank_lit, Int> =
                         __nd_indices_norm.reshape(__gather_nd_aug_shape);
                     let __gather_nd_result = #gather;
                     #scalar_tail
@@ -144,7 +144,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 2>, indices: Tensor<B, 2, Int>) -> Tensor<B, 1> {
+        pub fn forward(&self, data: Tensor<2>, indices: Tensor<2, Int>) -> Tensor<1> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -159,7 +159,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -189,7 +188,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 2>, indices: Tensor<B, 2, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, data: Tensor<2>, indices: Tensor<2, Int>) -> Tensor<2> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -204,7 +203,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -234,7 +232,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 3>, indices: Tensor<B, 2, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, data: Tensor<3>, indices: Tensor<2, Int>) -> Tensor<2> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -249,7 +247,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -263,13 +260,12 @@ mod tests {
                 let __gather_nd_aug = {
                     let mut __gather_nd_target_shape = __nd_idx_dims;
                     __gather_nd_target_shape[2 - 1] = 1;
-                    let mut __gather_nd_components: alloc::vec::Vec<Tensor<B, 2, Int>> = alloc::vec::Vec::with_capacity(
+                    let mut __gather_nd_components: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
                         1 + 1,
                     );
                     for __gather_nd_bk in 0..1 {
                         let __gather_nd_dk = __nd_data_dims[__gather_nd_bk];
                         let __gather_nd_arange = Tensor::<
-                            B,
                             1,
                             Int,
                         >::arange(
@@ -278,7 +274,7 @@ mod tests {
                         );
                         let mut __gather_nd_init_shape = [1usize; 2];
                         __gather_nd_init_shape[__gather_nd_bk] = __gather_nd_dk;
-                        let __gather_nd_part: Tensor<B, 2, Int> = __gather_nd_arange
+                        let __gather_nd_part: Tensor<2, Int> = __gather_nd_arange
                             .reshape(__gather_nd_init_shape)
                             .expand(__gather_nd_target_shape);
                         __gather_nd_components.push(__gather_nd_part);
@@ -306,7 +302,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 4>, indices: Tensor<B, 3, Int>) -> Tensor<B, 3> {
+        pub fn forward(&self, data: Tensor<4>, indices: Tensor<3, Int>) -> Tensor<3> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -321,7 +317,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 3];
                 __nd_bcast_shape[3 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -335,13 +330,12 @@ mod tests {
                 let __gather_nd_aug = {
                     let mut __gather_nd_target_shape = __nd_idx_dims;
                     __gather_nd_target_shape[3 - 1] = 1;
-                    let mut __gather_nd_components: alloc::vec::Vec<Tensor<B, 3, Int>> = alloc::vec::Vec::with_capacity(
+                    let mut __gather_nd_components: alloc::vec::Vec<Tensor<3, Int>> = alloc::vec::Vec::with_capacity(
                         2 + 1,
                     );
                     for __gather_nd_bk in 0..2 {
                         let __gather_nd_dk = __nd_data_dims[__gather_nd_bk];
                         let __gather_nd_arange = Tensor::<
-                            B,
                             1,
                             Int,
                         >::arange(
@@ -350,7 +344,7 @@ mod tests {
                         );
                         let mut __gather_nd_init_shape = [1usize; 3];
                         __gather_nd_init_shape[__gather_nd_bk] = __gather_nd_dk;
-                        let __gather_nd_part: Tensor<B, 3, Int> = __gather_nd_arange
+                        let __gather_nd_part: Tensor<3, Int> = __gather_nd_arange
                             .reshape(__gather_nd_init_shape)
                             .expand(__gather_nd_target_shape);
                         __gather_nd_components.push(__gather_nd_part);
@@ -376,11 +370,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            data: Tensor<B, 2, Int>,
-            indices: Tensor<B, 2, Int>,
-        ) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, data: Tensor<2, Int>, indices: Tensor<2, Int>) -> Tensor<1, Int> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -395,7 +385,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -425,7 +414,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 1>, indices: Tensor<B, 1, Int>) -> f32 {
+        pub fn forward(&self, data: Tensor<1>, indices: Tensor<1, Int>) -> f32 {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -440,7 +429,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 1];
                 __nd_bcast_shape[1 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -453,10 +441,10 @@ mod tests {
                 let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
                 let mut __gather_nd_aug_shape = [1usize; 2];
                 __gather_nd_aug_shape[2 - 1] = __nd_k;
-                let __gather_nd_aug: Tensor<B, 2, Int> = __nd_indices_norm
+                let __gather_nd_aug: Tensor<2, Int> = __nd_indices_norm
                     .reshape(__gather_nd_aug_shape);
                 let __gather_nd_result = data.gather_nd(__gather_nd_aug);
-                __gather_nd_result.into_scalar().elem::<f32>()
+                (__gather_nd_result).into_scalar::<f32>()
             };
             output
         }
@@ -474,7 +462,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 3>, indices: Tensor<B, 2, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, data: Tensor<3>, indices: Tensor<2, Int>) -> Tensor<2> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -489,7 +477,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(

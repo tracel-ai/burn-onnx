@@ -10,18 +10,16 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn argmin() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: argmin::Model<TestBackend> = argmin::Model::default();
+        let model: argmin::Model = argmin::Model::default();
 
         let device = Default::default();
         // Run the model
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [[1.6124, 1.0463, -1.3808], [-0.3852, 0.1301, 0.9780]],
             &device,
         );
@@ -34,13 +32,11 @@ mod tests {
     #[test]
     fn argmin_both_keepdims() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: argmin_both_keepdims::Model<TestBackend> =
-            argmin_both_keepdims::Model::default();
+        let model: argmin_both_keepdims::Model = argmin_both_keepdims::Model::default();
 
         let device = Default::default();
         // Run the model with test input: [[3.0, 1.0, 2.0], [2.0, 4.0, 1.0]]
-        let input =
-            Tensor::<TestBackend, 2>::from_floats([[3.0, 1.0, 2.0], [2.0, 4.0, 1.0]], &device);
+        let input = Tensor::<2>::from_floats([[3.0, 1.0, 2.0], [2.0, 4.0, 1.0]], &device);
         let (output_keepdims_true, output_keepdims_false) = model.forward(input);
 
         // Expected: argmin along dim=1
@@ -61,16 +57,12 @@ mod tests {
     fn argmin_select_last_index() {
         // select_last_index=1: returns the index of the LAST occurrence of
         // the minimum along the axis (not the first).
-        let model: argmin_select_last_index::Model<TestBackend> =
-            argmin_select_last_index::Model::default();
+        let model: argmin_select_last_index::Model = argmin_select_last_index::Model::default();
 
         let device = Default::default();
         // Row 0: min is 1.0 at indices 1 and 2 -> last is 2
         // Row 1: all tied at 2.0 -> last is 3
-        let input = Tensor::<TestBackend, 2>::from_floats(
-            [[5.0, 1.0, 1.0, 4.0], [2.0, 2.0, 2.0, 2.0]],
-            &device,
-        );
+        let input = Tensor::<2>::from_floats([[5.0, 1.0, 1.0, 4.0], [2.0, 2.0, 2.0, 2.0]], &device);
         let output = model.forward(input);
 
         let expected = TensorData::from([[2i64], [3]]);
@@ -80,12 +72,12 @@ mod tests {
     #[test]
     fn argmin_1d() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: argmin_1d::Model<TestBackend> = argmin_1d::Model::default();
+        let model: argmin_1d::Model = argmin_1d::Model::default();
 
         let device = Default::default();
         // Run the model with test input [5.0, 3.0, 2.0, 1.0, 4.0]
         // Expected output: 3 (index of min value 1.0)
-        let input = Tensor::<TestBackend, 1>::from_floats([5.0, 3.0, 2.0, 1.0, 4.0], &device);
+        let input = Tensor::<1>::from_floats([5.0, 3.0, 2.0, 1.0, 4.0], &device);
         let output = model.forward(input);
 
         // Output should be scalar value 3

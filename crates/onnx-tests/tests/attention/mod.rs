@@ -19,140 +19,132 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::TestBackend;
-    use burn::tensor::{Bool, Int, Tensor, TensorData, Tolerance, ops::FloatElem};
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Bool, Device, Int, Tensor, TensorData, Tolerance};
 
     #[test]
     fn simple_4d() {
         let device = Default::default();
-        let model: attention_4d::Model<TestBackend> = attention_4d::Model::new(&device);
+        let model: attention_4d::Model = attention_4d::Model::new(&device);
 
-        let q = Tensor::<TestBackend, 4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
-        let k = Tensor::<TestBackend, 4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
-        let v = Tensor::<TestBackend, 4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
+        let q = Tensor::<4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
+        let k = Tensor::<4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
+        let v = Tensor::<4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
 
         let output = model.forward(q, k, v);
         let expected = TensorData::from([[[[0.283488f32, 0.566976], [0.266511, 0.533023]]]]);
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn simple_3d() {
         let device = Default::default();
-        let model: attention_3d::Model<TestBackend> = attention_3d::Model::new(&device);
+        let model: attention_3d::Model = attention_3d::Model::new(&device);
 
-        let q = Tensor::<TestBackend, 3>::from_floats([[[1.0, 0.0], [0.0, 1.0]]], &device);
-        let k = Tensor::<TestBackend, 3>::from_floats([[[0.0, 1.0], [1.0, 0.0]]], &device);
-        let v = Tensor::<TestBackend, 3>::from_floats([[[0.25, 0.5], [0.3, 0.6]]], &device);
+        let q = Tensor::<3>::from_floats([[[1.0, 0.0], [0.0, 1.0]]], &device);
+        let k = Tensor::<3>::from_floats([[[0.0, 1.0], [1.0, 0.0]]], &device);
+        let v = Tensor::<3>::from_floats([[[0.25, 0.5], [0.3, 0.6]]], &device);
 
         let output = model.forward(q, k, v);
         let expected = TensorData::from([[[0.283488f32, 0.566976], [0.266511, 0.533023]]]);
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn attn_mask_bool() {
         let device = Default::default();
-        let model: attention_attn_mask_bool::Model<TestBackend> =
-            attention_attn_mask_bool::Model::new(&device);
+        let model: attention_attn_mask_bool::Model = attention_attn_mask_bool::Model::new(&device);
 
-        let q = Tensor::<TestBackend, 4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
-        let k = Tensor::<TestBackend, 4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
-        let v = Tensor::<TestBackend, 4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
-        let attn_mask = Tensor::<TestBackend, 2, Bool>::from_bool(
-            TensorData::from([[true, false], [false, true]]),
-            &device,
-        );
+        let q = Tensor::<4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
+        let k = Tensor::<4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
+        let v = Tensor::<4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
+        let attn_mask =
+            Tensor::<2, Bool>::from_bool(TensorData::from([[true, false], [false, true]]), &device);
 
         let output = model.forward(q, k, v, attn_mask);
         let expected = TensorData::from([[[[0.25f32, 0.5], [0.3, 0.6]]]]);
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn attn_mask_int() {
         let device = Default::default();
-        let model: attention_attn_mask_int::Model<TestBackend> =
-            attention_attn_mask_int::Model::new(&device);
+        let model: attention_attn_mask_int::Model = attention_attn_mask_int::Model::new(&device);
 
-        let q = Tensor::<TestBackend, 4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
-        let k = Tensor::<TestBackend, 4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
-        let v = Tensor::<TestBackend, 4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
-        let attn_mask = Tensor::<TestBackend, 2, Int>::from_ints([[2, 0], [0, 3]], &device);
+        let q = Tensor::<4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
+        let k = Tensor::<4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
+        let v = Tensor::<4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
+        let attn_mask = Tensor::<2, Int>::from_ints([[2, 0], [0, 3]], &device);
 
         let output = model.forward(q, k, v, attn_mask);
         let expected = TensorData::from([[[[0.260768f32, 0.521536], [0.295414, 0.590828]]]]);
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn attn_mask_float() {
         let device = Default::default();
-        let model: attention_attn_mask_float::Model<TestBackend> =
+        let model: attention_attn_mask_float::Model =
             attention_attn_mask_float::Model::new(&device);
 
-        let q = Tensor::<TestBackend, 4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
-        let k = Tensor::<TestBackend, 4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
-        let v = Tensor::<TestBackend, 4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
-        let attn_mask = Tensor::<TestBackend, 2>::from_floats([[2.0, 0.0], [0.0, 3.0]], &device);
+        let q = Tensor::<4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
+        let k = Tensor::<4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
+        let v = Tensor::<4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
+        let attn_mask = Tensor::<2>::from_floats([[2.0, 0.0], [0.0, 3.0]], &device);
 
         let output = model.forward(q, k, v, attn_mask);
         let expected = TensorData::from([[[[0.260768f32, 0.521536], [0.295414, 0.590828]]]]);
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn softcap() {
         let device = Default::default();
-        let model: attention_softcap::Model<TestBackend> = attention_softcap::Model::new(&device);
+        let model: attention_softcap::Model = attention_softcap::Model::new(&device);
 
-        let q = Tensor::<TestBackend, 4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
-        let k = Tensor::<TestBackend, 4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
-        let v = Tensor::<TestBackend, 4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
+        let q = Tensor::<4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
+        let k = Tensor::<4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
+        let v = Tensor::<4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
 
         let output = model.forward(q, k, v);
         let expected = TensorData::from([[[[0.283176f32, 0.566352], [0.266823, 0.533647]]]]);
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[allow(clippy::type_complexity)]
     fn cached_attn_inputs() -> (
-        Tensor<TestBackend, 4>,
-        Tensor<TestBackend, 4>,
-        Tensor<TestBackend, 4>,
-        Tensor<TestBackend, 2, Bool>,
-        Tensor<TestBackend, 4>,
-        Tensor<TestBackend, 4>,
+        Tensor<4>,
+        Tensor<4>,
+        Tensor<4>,
+        Tensor<2, Bool>,
+        Tensor<4>,
+        Tensor<4>,
     ) {
         let device = &Default::default();
-        let q = Tensor::<TestBackend, 4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], device);
-        let k = Tensor::<TestBackend, 4>::from_floats([[[[1.0, 0.0]]]], device);
-        let v = Tensor::<TestBackend, 4>::from_floats([[[[0.3, 0.6]]]], device);
-        let attn_mask = Tensor::<TestBackend, 2, Bool>::from_bool(
-            TensorData::from([[true, true], [true, true]]),
-            device,
-        );
-        let past_k = Tensor::<TestBackend, 4>::from_floats([[[[0.0, 1.0]]]], device);
-        let past_v = Tensor::<TestBackend, 4>::from_floats([[[[0.25, 0.5]]]], device);
+        let q = Tensor::<4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], device);
+        let k = Tensor::<4>::from_floats([[[[1.0, 0.0]]]], device);
+        let v = Tensor::<4>::from_floats([[[[0.3, 0.6]]]], device);
+        let attn_mask =
+            Tensor::<2, Bool>::from_bool(TensorData::from([[true, true], [true, true]]), device);
+        let past_k = Tensor::<4>::from_floats([[[[0.0, 1.0]]]], device);
+        let past_v = Tensor::<4>::from_floats([[[[0.25, 0.5]]]], device);
 
         (q, k, v, attn_mask, past_k, past_v)
     }
@@ -160,7 +152,7 @@ mod tests {
     #[test]
     fn cache() {
         let device = Default::default();
-        let model: attention_cache::Model<TestBackend> = attention_cache::Model::new(&device);
+        let model: attention_cache::Model = attention_cache::Model::new(&device);
 
         let (q, k, v, attn_mask, past_k, past_v) = cached_attn_inputs();
 
@@ -171,56 +163,53 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
         present_k
             .to_data()
-            .assert_approx_eq::<FT>(&expected_k, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected_k, Tolerance::default());
         present_v
             .to_data()
-            .assert_approx_eq::<FT>(&expected_v, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected_v, Tolerance::default());
     }
 
     #[test]
     fn custom_scale() {
         let device = Default::default();
-        let model: attention_custom_scale::Model<TestBackend> =
-            attention_custom_scale::Model::new(&device);
+        let model: attention_custom_scale::Model = attention_custom_scale::Model::new(&device);
 
-        let q = Tensor::<TestBackend, 4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
-        let k = Tensor::<TestBackend, 4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
-        let v = Tensor::<TestBackend, 4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
+        let q = Tensor::<4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
+        let k = Tensor::<4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
+        let v = Tensor::<4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
 
         let output = model.forward(q, k, v);
         let expected = TensorData::from([[[[0.294039f32, 0.588079], [0.255960, 0.511920]]]]);
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn is_causal() {
         let device = Default::default();
-        let model: attention_is_causal::Model<TestBackend> =
-            attention_is_causal::Model::new(&device);
+        let model: attention_is_causal::Model = attention_is_causal::Model::new(&device);
 
-        let q = Tensor::<TestBackend, 4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
-        let k = Tensor::<TestBackend, 4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
-        let v = Tensor::<TestBackend, 4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
+        let q = Tensor::<4>::from_floats([[[[1.0, 0.0], [0.0, 1.0]]]], &device);
+        let k = Tensor::<4>::from_floats([[[[0.0, 1.0], [1.0, 0.0]]]], &device);
+        let v = Tensor::<4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
 
         let output = model.forward(q, k, v);
         let expected = TensorData::from([[[[0.25f32, 0.5], [0.266511, 0.533023]]]]);
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn qk_matmul_output_0() {
         let device = Default::default();
-        let model: attention_qk_output_0::Model<TestBackend> =
-            attention_qk_output_0::Model::new(&device);
+        let model: attention_qk_output_0::Model = attention_qk_output_0::Model::new(&device);
 
         let (q, k, v, attn_mask, past_k, past_v) = cached_attn_inputs();
 
@@ -230,14 +219,13 @@ mod tests {
 
         qk_output
             .to_data()
-            .assert_approx_eq::<FT>(&expected_qk, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected_qk, Tolerance::default());
     }
 
     #[test]
     fn qk_matmul_output_1() {
         let device = Default::default();
-        let model: attention_qk_output_1::Model<TestBackend> =
-            attention_qk_output_1::Model::new(&device);
+        let model: attention_qk_output_1::Model = attention_qk_output_1::Model::new(&device);
 
         let (q, k, v, attn_mask, past_k, past_v) = cached_attn_inputs();
 
@@ -247,14 +235,13 @@ mod tests {
 
         qk_output
             .to_data()
-            .assert_approx_eq::<FT>(&expected_qk, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected_qk, Tolerance::default());
     }
 
     #[test]
     fn qk_matmul_output_2() {
         let device = Default::default();
-        let model: attention_qk_output_2::Model<TestBackend> =
-            attention_qk_output_2::Model::new(&device);
+        let model: attention_qk_output_2::Model = attention_qk_output_2::Model::new(&device);
 
         let (q, k, v, attn_mask, past_k, past_v) = cached_attn_inputs();
 
@@ -264,14 +251,13 @@ mod tests {
 
         qk_output
             .to_data()
-            .assert_approx_eq::<FT>(&expected_qk, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected_qk, Tolerance::default());
     }
 
     #[test]
     fn qk_matmul_output_3() {
         let device = Default::default();
-        let model: attention_qk_output_3::Model<TestBackend> =
-            attention_qk_output_3::Model::new(&device);
+        let model: attention_qk_output_3::Model = attention_qk_output_3::Model::new(&device);
 
         let (q, k, v, attn_mask, past_k, past_v) = cached_attn_inputs();
 
@@ -281,6 +267,6 @@ mod tests {
 
         qk_output
             .to_data()
-            .assert_approx_eq::<FT>(&expected_qk, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected_qk, Tolerance::default());
     }
 }

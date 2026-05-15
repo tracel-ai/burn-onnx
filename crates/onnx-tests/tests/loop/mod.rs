@@ -12,21 +12,20 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::TestBackend;
-    use burn::tensor::{Tensor, TensorData};
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn loop_simple_3_iterations() {
         // Test with M=3 iterations
         let device = Default::default();
-        let model: loop_simple::Model<TestBackend> = Default::default();
+        let model: loop_simple::Model = Default::default();
 
         // M = 3
         let m = 3i64;
         let cond = true;
 
         // Initial accumulator
-        let initial_accum = Tensor::<TestBackend, 2>::from_data(
+        let initial_accum = Tensor::<2>::from_data(
             TensorData::from([
                 [1.5427501201629639, 0.01986491121351719, 0.6051717400550842],
                 [-0.1073952168226242, 1.2809762954711914, -1.9534032344818115],
@@ -35,7 +34,7 @@ mod tests {
         );
 
         // X tensor
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([
                 [1.571418046951294, 2.1232078075408936, 0.008226290345191956],
                 [0.16664840281009674, -0.9279910326004028, 0.4096680283546448],
@@ -59,14 +58,14 @@ mod tests {
     fn loop_simple_5_iterations() {
         // Test with M=5 iterations
         let device = Default::default();
-        let model: loop_simple::Model<TestBackend> = Default::default();
+        let model: loop_simple::Model = Default::default();
 
         // M = 5
         let m = 5i64;
         let cond = true;
 
         // Initial accumulator
-        let initial_accum = Tensor::<TestBackend, 2>::from_data(
+        let initial_accum = Tensor::<2>::from_data(
             TensorData::from([
                 [1.1227790117263794, 0.9607051610946655, -1.2476868629455566],
                 [0.0905989333987236, 0.4496997892856598, -0.4249286651611328],
@@ -75,7 +74,7 @@ mod tests {
         );
 
         // X tensor
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([
                 [
                     -1.5024702548980713,
@@ -103,14 +102,14 @@ mod tests {
     fn loop_simple_0_iterations() {
         // Test with M=0 (no iterations - should return initial accumulator unchanged)
         let device = Default::default();
-        let model: loop_simple::Model<TestBackend> = Default::default();
+        let model: loop_simple::Model = Default::default();
 
         // M = 0
         let m = 0i64;
         let cond = true;
 
         // Initial accumulator
-        let initial_accum = Tensor::<TestBackend, 2>::from_data(
+        let initial_accum = Tensor::<2>::from_data(
             TensorData::from([
                 [0.08663585782051086, -1.081067442893982, -1.0119551420211792],
                 [0.35541200637817383, 0.308596134185791, 0.8396860361099243],
@@ -119,7 +118,7 @@ mod tests {
         );
 
         // X tensor (won't be used but needed as input)
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([
                 [0.9175063967704773, -2.750408411026001, 0.5216607451438904],
                 [
@@ -144,14 +143,14 @@ mod tests {
         // Test with counter starting at 5.0
         // Loop decrements counter until it reaches 0 (dynamic condition)
         let device = Default::default();
-        let model: loop_dynamic_cond::Model<TestBackend> = Default::default();
+        let model: loop_dynamic_cond::Model = Default::default();
 
         // M = 100 (max iterations, but loop will stop early)
         let m = 100i64;
         let cond_init = true;
 
         // Counter starts at 5.0
-        let counter_init = Tensor::<TestBackend, 1>::from_data(TensorData::from([5.0]), &device);
+        let counter_init = Tensor::<1>::from_data(TensorData::from([5.0]), &device);
 
         let output = model.forward(m, cond_init, counter_init);
 
@@ -167,13 +166,13 @@ mod tests {
     fn loop_dynamic_cond_counter_3() {
         // Test with counter starting at 3.0
         let device = Default::default();
-        let model: loop_dynamic_cond::Model<TestBackend> = Default::default();
+        let model: loop_dynamic_cond::Model = Default::default();
 
         let m = 100i64;
         let cond_init = true;
 
         // Counter starts at 3.0
-        let counter_init = Tensor::<TestBackend, 1>::from_data(TensorData::from([3.0]), &device);
+        let counter_init = Tensor::<1>::from_data(TensorData::from([3.0]), &device);
 
         let output = model.forward(m, cond_init, counter_init);
 
@@ -189,14 +188,14 @@ mod tests {
     fn loop_multi_deps_4_iterations() {
         // Test with 3 loop-carried dependencies and 4 iterations
         let device = Default::default();
-        let model: loop_multi_deps::Model<TestBackend> = Default::default();
+        let model: loop_multi_deps::Model = Default::default();
 
         // M = 4
         let m = 4i64;
         let cond = true;
 
         // accum1: adds x each iteration
-        let accum1_init = Tensor::<TestBackend, 2>::from_data(
+        let accum1_init = Tensor::<2>::from_data(
             TensorData::from([
                 [
                     -0.9759665131568909,
@@ -213,7 +212,7 @@ mod tests {
         );
 
         // accum2: multiplies by 2 each iteration
-        let accum2_init = Tensor::<TestBackend, 2>::from_data(
+        let accum2_init = Tensor::<2>::from_data(
             TensorData::from([
                 [1.0530825853347778, 1.3591053485870361, 1.4057459831237793],
                 [2.684823989868164, -1.2770761251449585, 1.3482451438903809],
@@ -222,7 +221,7 @@ mod tests {
         );
 
         // accum3: subtracts 0.5 each iteration
-        let accum3_init = Tensor::<TestBackend, 2>::from_data(
+        let accum3_init = Tensor::<2>::from_data(
             TensorData::from([
                 [
                     0.3927198052406311,
@@ -235,7 +234,7 @@ mod tests {
         );
 
         // x: read-only input used in accum1 calculation
-        let x = Tensor::<TestBackend, 2>::from_data(
+        let x = Tensor::<2>::from_data(
             TensorData::from([
                 [
                     -0.2069942057132721,
@@ -280,12 +279,12 @@ mod tests {
         // Test nested loops: outer=2, inner=3
         // Outer loop runs 2 times, inner loop runs 3 times per outer iteration
         let device = Default::default();
-        let model: loop_nested::Model<TestBackend> = Default::default();
+        let model: loop_nested::Model = Default::default();
 
         let m_outer = 2i64;
         let m_inner = 3i64;
         let cond_init = true;
-        let sum_init = Tensor::<TestBackend, 1>::from_data(TensorData::from([0.0]), &device);
+        let sum_init = Tensor::<1>::from_data(TensorData::from([0.0]), &device);
 
         let (sum_output, _m_inner_output) = model.forward(m_outer, m_inner, cond_init, sum_init);
 
@@ -303,12 +302,12 @@ mod tests {
     fn loop_nested_test2() {
         // Test nested loops: outer=3, inner=2, starting sum=5.0
         let device = Default::default();
-        let model: loop_nested::Model<TestBackend> = Default::default();
+        let model: loop_nested::Model = Default::default();
 
         let m_outer = 3i64;
         let m_inner = 2i64;
         let cond_init = true;
-        let sum_init = Tensor::<TestBackend, 1>::from_data(TensorData::from([5.0]), &device);
+        let sum_init = Tensor::<1>::from_data(TensorData::from([5.0]), &device);
 
         let (sum_output, _m_inner_output) = model.forward(m_outer, m_inner, cond_init, sum_init);
 
@@ -328,13 +327,13 @@ mod tests {
         // Test loop with scan outputs (M=3 iterations)
         // Collects intermediate accumulator values and iteration numbers
         let device = Default::default();
-        let model: loop_scan_outputs::Model<TestBackend> = Default::default();
+        let model: loop_scan_outputs::Model = Default::default();
 
         let m = 3i64;
         let cond = true;
 
         // Initial accumulator [2, 3]
-        let initial_accum = Tensor::<TestBackend, 2>::from_data(
+        let initial_accum = Tensor::<2>::from_data(
             TensorData::from([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );
@@ -378,13 +377,13 @@ mod tests {
     fn loop_scan_outputs_1_iteration() {
         // Test loop with scan outputs (M=1 iteration - edge case)
         let device = Default::default();
-        let model: loop_scan_outputs::Model<TestBackend> = Default::default();
+        let model: loop_scan_outputs::Model = Default::default();
 
         let m = 1i64;
         let cond = true;
 
         // Initial accumulator [2, 3]
-        let initial_accum = Tensor::<TestBackend, 2>::from_data(
+        let initial_accum = Tensor::<2>::from_data(
             TensorData::from([[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]]),
             &device,
         );

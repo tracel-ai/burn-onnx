@@ -97,7 +97,7 @@ mod tests {
         };
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> [i64; 3] {
+        pub fn forward(&self, input: Tensor<3>) -> [i64; 3] {
             let output: [i64; 3] = {
                 let axes = &input.dims()[0..3];
                 let mut output = [0i64; 3];
@@ -127,7 +127,7 @@ mod tests {
         };
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> [i64; 2] {
+        pub fn forward(&self, input: Tensor<4>) -> [i64; 2] {
             let output: [i64; 2] = {
                 let axes = &input.dims()[1..3];
                 let mut output = [0i64; 2];
@@ -174,7 +174,7 @@ mod tests {
         };
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1, Int>) -> [i64; 1] {
+        pub fn forward(&self, input: Tensor<1, Int>) -> [i64; 1] {
             let output: [i64; 1] = {
                 let axes = &input.dims()[0..1];
                 let mut output = [0i64; 1];

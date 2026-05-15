@@ -108,7 +108,7 @@ mod tests {
         let node = create_pad_node("pad1", vec![(1, 1), (1, 1)], 0.0, PadMode::Constant);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input
                 .pad(
                     [(1usize, 1usize), (1usize, 1usize)],
@@ -124,7 +124,7 @@ mod tests {
         let node = create_pad_node("pad1", vec![(0, 1), (2, 0)], 5.5, PadMode::Constant);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input
                 .pad(
                     [(0usize, 1usize), (2usize, 0usize)],
@@ -140,7 +140,7 @@ mod tests {
         let node = create_pad_node("pad1", vec![(1, 1), (1, 1)], 0.0, PadMode::Reflect);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input
                 .pad([(1usize, 1usize), (1usize, 1usize)], burn::tensor::ops::PadMode::Reflect);
             output
@@ -153,7 +153,7 @@ mod tests {
         let node = create_pad_node("pad1", vec![(1, 1), (1, 1)], 0.0, PadMode::Edge);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input
                 .pad([(1usize, 1usize), (1usize, 1usize)], burn::tensor::ops::PadMode::Edge);
             output
@@ -179,11 +179,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<B, 2>,
-            constant_value: Tensor<B, 0>,
-        ) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>, constant_value: Tensor<0>) -> Tensor<2> {
             let output = input
                 .pad(
                     [(1usize, 1usize), (1usize, 1usize)],
@@ -212,7 +208,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>, constant_value: f32) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>, constant_value: f32) -> Tensor<2> {
             let output = input
                 .pad(
                     [(1usize, 1usize), (1usize, 1usize)],
@@ -237,7 +233,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = input
                 .pad(
                     [(1usize, 2usize), (0usize, 0usize), (3usize, 4usize), (5usize, 6usize)],

@@ -29,14 +29,14 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
         // Store coefficients as [n_supports, 1] for direct matmul compatibility
         Some(Field::new(
             &self.name,
-            quote! { (Tensor<B, 2>, Tensor<B, 2>) },
+            quote! { (Tensor<2>, Tensor<2>) },
             quote! {
                 let #name = (
-                    Tensor::<B, 2>::from_data(
+                    Tensor::<2>::from_data(
                         burn::tensor::TensorData::new(alloc::vec![#(#coef_data),*], [#n_supports, 1]),
                         (device, burn::tensor::DType::F32),
                     ),
-                    Tensor::<B, 2>::from_data(
+                    Tensor::<2>::from_data(
                         burn::tensor::TensorData::new(alloc::vec![#(#sv_data),*], [#n_supports, #n_features]),
                         (device, burn::tensor::DType::F32),
                     )
@@ -204,7 +204,7 @@ impl NodeCodegen for onnx_ir::svmregressor::SVMRegressorNode {
                 let y = #kernel_computation;
                 // Append a zero logit column → [N, 2], softmax over targets, take first column.
                 let [batch, _] = y.dims();
-                let zero_col = burn::tensor::Tensor::<B, 2>::zeros(
+                let zero_col = burn::tensor::Tensor::<2>::zeros(
                     burn::tensor::Shape::new([batch, 1usize]),
                     &y.device(),
                 );
@@ -259,7 +259,7 @@ mod tests {
     fn test_svm_linear() {
         let code = codegen_forward_default(&make_node("LINEAR", None, 2, None));
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<1> {
             let output = {
                 {
                     let x = input;
@@ -279,7 +279,7 @@ mod tests {
     fn test_svm_rbf() {
         let code = codegen_forward_default(&make_node("RBF", None, 2, Some(vec![0.1])));
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<1> {
             let output = {
                 {
                     let x = input;
@@ -309,7 +309,7 @@ mod tests {
     fn test_svm_poly() {
         let code = codegen_forward_default(&make_node("POLY", None, 2, Some(vec![1.0, 0.0, 3.0])));
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<1> {
             let output = {
                 {
                     let x = input;
@@ -333,7 +333,7 @@ mod tests {
     fn test_svm_sigmoid() {
         let code = codegen_forward_default(&make_node("SIGMOID", None, 2, Some(vec![0.5, 1.0])));
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<1> {
             let output = {
                 {
                     let x = input;
@@ -356,7 +356,7 @@ mod tests {
     fn test_svm_linear_logistic() {
         let code = codegen_forward_default(&make_node("LINEAR", Some("LOGISTIC"), 2, None));
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<1> {
             let output = {
                 {
                     let y = {
@@ -378,8 +378,8 @@ mod tests {
     #[test]
     fn test_svm_linear_softmax_zero() {
         let code = codegen_forward_default(&make_node("LINEAR", Some("SOFTMAX_ZERO"), 2, None));
-        assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 1> {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<1> {
             let output = {
                 {
                     let y = {
@@ -391,7 +391,6 @@ mod tests {
                     };
                     let [batch, _] = y.dims();
                     let zero_col = burn::tensor::Tensor::<
-                        B,
                         2,
                     >::zeros(burn::tensor::Shape::new([batch, 1usize]), &y.device());
                     let combined = burn::tensor::Tensor::cat(alloc::vec![y, zero_col], 1);

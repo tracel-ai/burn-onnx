@@ -174,15 +174,15 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            a: Tensor<B, 2, Int>,
+            a: Tensor<2, Int>,
             a_scale: f32,
             a_zero_point: i8,
-            b: Tensor<B, 2, Int>,
+            b: Tensor<2, Int>,
             b_scale: f32,
             b_zero_point: i8,
             y_scale: f32,
             y_zero_point: i8,
-        ) -> Tensor<B, 2, Int> {
+        ) -> Tensor<2, Int> {
             let a_dequantized = a_scale
                 * (a.float().cast(burn::tensor::DType::F32) - f32::from(a_zero_point));
             let b_dequantized = b_scale
@@ -215,15 +215,15 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            a: Tensor<B, 2, Int>,
+            a: Tensor<2, Int>,
             a_scale: f32,
             a_zero_point: i8,
-            b: Tensor<B, 2, Int>,
+            b: Tensor<2, Int>,
             b_scale: f32,
             b_zero_point: i8,
             y_scale: f32,
             y_zero_point: u8,
-        ) -> Tensor<B, 2, Int> {
+        ) -> Tensor<2, Int> {
             let a_dequantized = a_scale
                 * (a.float().cast(burn::tensor::DType::F32) - f32::from(a_zero_point));
             let b_dequantized = b_scale
@@ -256,15 +256,15 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            a: Tensor<B, 2, Int>,
+            a: Tensor<2, Int>,
             a_scale: half::f16,
             a_zero_point: i8,
-            b: Tensor<B, 2, Int>,
+            b: Tensor<2, Int>,
             b_scale: half::f16,
             b_zero_point: i8,
             y_scale: half::bf16,
             y_zero_point: u8,
-        ) -> Tensor<B, 2, Int> {
+        ) -> Tensor<2, Int> {
             let a_dequantized = f32::from(a_scale)
                 * (a.float().cast(burn::tensor::DType::F32) - f32::from(a_zero_point));
             let b_dequantized = f32::from(b_scale)
@@ -298,15 +298,15 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            a: Tensor<B, 2, Int>,
+            a: Tensor<2, Int>,
             a_scale: f32,
             a_zero_point: i8,
-            b: Tensor<B, 1, Int>,
+            b: Tensor<1, Int>,
             b_scale: f32,
             b_zero_point: i8,
             y_scale: f32,
             y_zero_point: u8,
-        ) -> Tensor<B, 1, Int> {
+        ) -> Tensor<1, Int> {
             let a_dequantized = a_scale
                 * (a.float().cast(burn::tensor::DType::F32) - f32::from(a_zero_point));
             let b_dequantized = b_scale
@@ -343,15 +343,15 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            a: Tensor<B, 2, Int>,
-            a_scale: Tensor<B, 1>,
-            a_zero_point: Tensor<B, 1, Int>,
-            b: Tensor<B, 2, Int>,
-            b_scale: Tensor<B, 1>,
-            b_zero_point: Tensor<B, 1, Int>,
-            y_scale: Tensor<B, 1>,
-            y_zero_point: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 2, Int> {
+            a: Tensor<2, Int>,
+            a_scale: Tensor<1>,
+            a_zero_point: Tensor<1, Int>,
+            b: Tensor<2, Int>,
+            b_scale: Tensor<1>,
+            b_zero_point: Tensor<1, Int>,
+            y_scale: Tensor<1>,
+            y_zero_point: Tensor<1, Int>,
+        ) -> Tensor<2, Int> {
             let (a_scale, a_zero_point) = {
                 let expansion_dim = if a_scale.dims()[0] == a.dims()[0] { 1 } else { 0 };
                 (a_scale.unsqueeze_dim(expansion_dim), a_zero_point.unsqueeze_dim(expansion_dim))
@@ -404,15 +404,15 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            a: Tensor<B, 2, Int>,
-            a_scale: Tensor<B, 1>,
-            a_zero_point: Tensor<B, 1, Int>,
-            b: Tensor<B, 2, Int>,
-            b_scale: Tensor<B, 1>,
-            b_zero_point: Tensor<B, 1, Int>,
-            y_scale: Tensor<B, 1>,
-            y_zero_point: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 2, Int> {
+            a: Tensor<2, Int>,
+            a_scale: Tensor<1>,
+            a_zero_point: Tensor<1, Int>,
+            b: Tensor<2, Int>,
+            b_scale: Tensor<1>,
+            b_zero_point: Tensor<1, Int>,
+            y_scale: Tensor<1>,
+            y_zero_point: Tensor<1, Int>,
+        ) -> Tensor<2, Int> {
             let (a_scale, a_zero_point) = {
                 let expansion_dim = if a_scale.dims()[0] == a.dims()[0] { 1 } else { 0 };
                 (a_scale.unsqueeze_dim(expansion_dim), a_zero_point.unsqueeze_dim(expansion_dim))
@@ -465,15 +465,15 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            a: Tensor<B, 3, Int>,
-            a_scale: Tensor<B, 3>,
-            a_zero_point: Tensor<B, 3, Int>,
-            b: Tensor<B, 3, Int>,
-            b_scale: Tensor<B, 3>,
-            b_zero_point: Tensor<B, 3, Int>,
-            y_scale: Tensor<B, 3>,
-            y_zero_point: Tensor<B, 3, Int>,
-        ) -> Tensor<B, 3, Int> {
+            a: Tensor<3, Int>,
+            a_scale: Tensor<3>,
+            a_zero_point: Tensor<3, Int>,
+            b: Tensor<3, Int>,
+            b_scale: Tensor<3>,
+            b_zero_point: Tensor<3, Int>,
+            y_scale: Tensor<3>,
+            y_zero_point: Tensor<3, Int>,
+        ) -> Tensor<3, Int> {
             let a_dequantized = a_scale
                 * (a.float().cast(burn::tensor::DType::F32)
                     - a_zero_point.float().cast(burn::tensor::DType::F32));

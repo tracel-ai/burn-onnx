@@ -34,7 +34,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> i64 {
+        pub fn forward(&self, input: Tensor<2>) -> i64 {
             let output = input.shape.num_elements();
             output
         }

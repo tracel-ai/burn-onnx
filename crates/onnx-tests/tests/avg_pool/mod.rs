@@ -12,19 +12,16 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor, TensorData, Tolerance, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Shape, Tensor, TensorData, Tolerance};
 
     #[test]
     fn avg_pool1d() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: avg_pool1d::Model<TestBackend> = avg_pool1d::Model::new(&device);
+        let model: avg_pool1d::Model = avg_pool1d::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [[
                 [-1.526, -0.750, -0.654, -1.609, -0.100],
                 [-0.609, -0.980, -1.609, -0.712, 1.171],
@@ -62,23 +59,23 @@ mod tests {
         let tolerance = Tolerance::default();
         output1
             .to_data()
-            .assert_approx_eq::<FT>(&expected1, tolerance);
+            .assert_approx_eq::<f32>(&expected1, tolerance);
         output2
             .to_data()
-            .assert_approx_eq::<FT>(&expected2, tolerance);
+            .assert_approx_eq::<f32>(&expected2, tolerance);
         output3
             .to_data()
-            .assert_approx_eq::<FT>(&expected3, tolerance);
+            .assert_approx_eq::<f32>(&expected3, tolerance);
     }
 
     #[test]
     fn avg_pool2d() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: avg_pool2d::Model<TestBackend> = avg_pool2d::Model::new(&device);
+        let model: avg_pool2d::Model = avg_pool2d::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [-0.077, 0.360, -0.782, 0.072, 0.665],
                 [-0.287, 1.621, -1.597, -0.052, 0.611],
@@ -112,13 +109,13 @@ mod tests {
         let tolerance = Tolerance::rel_abs(0.01, 0.001);
         output1
             .to_data()
-            .assert_approx_eq::<FT>(&expected1, tolerance);
+            .assert_approx_eq::<f32>(&expected1, tolerance);
         output2
             .to_data()
-            .assert_approx_eq::<FT>(&expected2, tolerance);
+            .assert_approx_eq::<f32>(&expected2, tolerance);
         output3
             .to_data()
-            .assert_approx_eq::<FT>(&expected3, tolerance);
+            .assert_approx_eq::<f32>(&expected3, tolerance);
     }
 
     #[test]
@@ -127,11 +124,9 @@ mod tests {
         // Input: 1x1x6 (values 0-5), kernel: 3, stride: 2, padding: 0
         // With ceil_mode=True: output = ceil((6-3)/2)+1 = 3 elements
         let device = Default::default();
-        let model: avg_pool1d_ceil_mode::Model<TestBackend> =
-            avg_pool1d_ceil_mode::Model::new(&device);
+        let model: avg_pool1d_ceil_mode::Model = avg_pool1d_ceil_mode::Model::new(&device);
 
-        let input =
-            Tensor::<TestBackend, 3>::from_floats([[[0.0, 1.0, 2.0, 3.0, 4.0, 5.0]]], &device);
+        let input = Tensor::<3>::from_floats([[[0.0, 1.0, 2.0, 3.0, 4.0, 5.0]]], &device);
         let output = model.forward(input);
 
         // Window 0: avg(0,1,2) = 1
@@ -141,7 +136,7 @@ mod tests {
         let tolerance = Tolerance::rel_abs(0.01, 0.001);
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, tolerance);
+            .assert_approx_eq::<f32>(&expected, tolerance);
     }
 
     #[test]
@@ -150,10 +145,9 @@ mod tests {
         // Input: 1x1x6x6 (values 0-35), kernel: 3x3, stride: 2x2, padding: 0
         // With ceil_mode=True: output = 3x3
         let device = Default::default();
-        let model: avg_pool2d_ceil_mode::Model<TestBackend> =
-            avg_pool2d_ceil_mode::Model::new(&device);
+        let model: avg_pool2d_ceil_mode::Model = avg_pool2d_ceil_mode::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
                 [6.0, 7.0, 8.0, 9.0, 10.0, 11.0],
@@ -181,18 +175,18 @@ mod tests {
         let tolerance = Tolerance::rel_abs(0.01, 0.001);
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, tolerance);
+            .assert_approx_eq::<f32>(&expected, tolerance);
     }
 
     #[test]
     fn avg_pool1d_asymmetric_padding() {
         // Test asymmetric padding (left=1, right=2) for AvgPool1d
         let device = Default::default();
-        let model: avg_pool1d_asymmetric_padding::Model<TestBackend> =
+        let model: avg_pool1d_asymmetric_padding::Model =
             avg_pool1d_asymmetric_padding::Model::new(&device);
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 3>::ones([2, 4, 10], &device);
+        let input = Tensor::<3>::ones([2, 4, 10], &device);
         let output = model.forward(input);
 
         // With asymmetric padding (1, 2), input length 10 becomes 10+1+2=13
@@ -201,7 +195,7 @@ mod tests {
         assert_eq!(output.shape(), expected_shape);
 
         // Verify the sum matches PyTorch output
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
         let expected_sum = 77.333_33; // from pytorch
         assert!(
             (output_sum - expected_sum).abs() < 0.1,
@@ -215,11 +209,11 @@ mod tests {
     fn avg_pool2d_asymmetric_padding() {
         // Test asymmetric padding: top=1, left=1, bottom=2, right=2 (ONNX pads: [1,1,2,2])
         let device = Default::default();
-        let model: avg_pool2d_asymmetric_padding::Model<TestBackend> =
+        let model: avg_pool2d_asymmetric_padding::Model =
             avg_pool2d_asymmetric_padding::Model::new(&device);
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 4>::ones([2, 4, 10, 15], &device);
+        let input = Tensor::<4>::ones([2, 4, 10, 15], &device);
         let output = model.forward(input);
 
         // With asymmetric padding (1, 1, 2, 2), input (10, 15) becomes (13, 18)
@@ -228,7 +222,7 @@ mod tests {
         assert_eq!(output.shape(), expected_shape);
 
         // Verify the sum matches ReferenceEvaluator output
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
         let expected_sum = 1134.222; // from ReferenceEvaluator
         assert!(
             (output_sum - expected_sum).abs() < 1.0,

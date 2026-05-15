@@ -47,35 +47,35 @@ fn scalar_native_to_tensor(expr: TokenStream, dtype: DType) -> TokenStream {
     // Promote through a wide host literal and let Burn cast to the requested dtype.
     if matches!(dtype, DType::F16 | DType::BF16) {
         quote! {
-            Tensor::<B, 1>::from_data(
+            Tensor::<1>::from_data(
                 burn::tensor::TensorData::from([(#expr).to_f64()]),
                 (&self.device, #dtype_tokens)
             )
         }
     } else if matches!(dtype, DType::F32) {
         quote! {
-            Tensor::<B, 1>::from_data(
+            Tensor::<1>::from_data(
                 burn::tensor::TensorData::from([f64::from(#expr)]),
                 (&self.device, #dtype_tokens)
             )
         }
     } else if matches!(dtype, DType::F64) {
         quote! {
-            Tensor::<B, 1>::from_data(
+            Tensor::<1>::from_data(
                 burn::tensor::TensorData::from([#expr]),
                 (&self.device, #dtype_tokens)
             )
         }
     } else if dtype.is_int() || dtype.is_uint() {
         quote! {
-            Tensor::<B, 1, burn::tensor::Int>::from_data(
+            Tensor::<1, burn::tensor::Int>::from_data(
                 burn::tensor::TensorData::from([#expr as i64]),
                 (&self.device, #dtype_tokens)
             )
         }
     } else if dtype.is_bool() {
         quote! {
-            Tensor::<B, 1, burn::tensor::Bool>::from_data(
+            Tensor::<1, burn::tensor::Bool>::from_data(
                 burn::tensor::TensorData::from([#expr]),
                 (&self.device, #dtype_tokens)
             )
@@ -507,7 +507,7 @@ impl NodeCodegen for onnx_ir::node::einsum::EinsumNode {
                     ));
                 }
                 let cast = elem_cast_tokens(dtype);
-                quote! { (#result_expr).into_scalar()#cast }
+                quote! { (#result_expr)#cast }
             }
             _ => {
                 return compile_error_tokens(format!(
@@ -572,7 +572,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 2>, rhs: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, lhs: Tensor<2>, rhs: Tensor<2>) -> Tensor<2> {
             let output = lhs.matmul(rhs);
             output
         }
@@ -591,7 +591,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 3>, rhs: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, lhs: Tensor<3>, rhs: Tensor<3>) -> Tensor<3> {
             let output = lhs.matmul(rhs);
             output
         }
@@ -610,11 +610,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            lhs: Tensor<B, 2, Int>,
-            rhs: Tensor<B, 2, Int>,
-        ) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, lhs: Tensor<2, Int>, rhs: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = lhs.matmul(rhs);
             output
         }
@@ -633,25 +629,25 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r#"
-        pub fn forward(&self, r_q: Tensor<B, 4>, r_h: Tensor<B, 3>) -> Tensor<B, 4> {
+        pub fn forward(&self, r_q: Tensor<4>, r_h: Tensor<3>) -> Tensor<4> {
             let output = {
                 let einsum_lhs = r_q.permute([1usize, 0usize, 2usize, 3usize]);
                 let einsum_rhs = r_h.permute([0usize, 2usize, 1usize]);
                 let einsum_lhs_shape = einsum_lhs.dims();
                 let einsum_rhs_shape = einsum_rhs.dims();
-                let einsum_lhs_3d: Tensor<B, 3> = einsum_lhs
+                let einsum_lhs_3d: Tensor<3> = einsum_lhs
                     .reshape([
                         einsum_lhs_shape[0usize],
                         einsum_lhs_shape[1usize] * einsum_lhs_shape[2usize],
                         einsum_lhs_shape[3usize],
                     ]);
-                let einsum_rhs_3d: Tensor<B, 3> = einsum_rhs
+                let einsum_rhs_3d: Tensor<3> = einsum_rhs
                     .reshape([
                         einsum_lhs_shape[0usize],
                         einsum_lhs_shape[3usize],
                         einsum_rhs_shape[2usize],
                     ]);
-                let einsum_result: Tensor<B, 4> = einsum_lhs_3d
+                let einsum_result: Tensor<4> = einsum_lhs_3d
                     .matmul(einsum_rhs_3d)
                     .reshape([
                         einsum_lhs_shape[0usize],
@@ -678,17 +674,17 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r#"
-        pub fn forward(&self, a: Tensor<B, 1>, b: Tensor<B, 1>) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<1>, b: Tensor<1>) -> Tensor<2> {
             let output = {
                 let einsum_lhs = a;
                 let einsum_rhs = b;
                 let einsum_lhs_shape = einsum_lhs.dims();
                 let einsum_rhs_shape = einsum_rhs.dims();
-                let einsum_lhs_3d: Tensor<B, 3> = einsum_lhs
+                let einsum_lhs_3d: Tensor<3> = einsum_lhs
                     .reshape([1usize, einsum_lhs_shape[0usize], 1usize]);
-                let einsum_rhs_3d: Tensor<B, 3> = einsum_rhs
+                let einsum_rhs_3d: Tensor<3> = einsum_rhs
                     .reshape([1usize, 1usize, einsum_rhs_shape[0usize]]);
-                let einsum_result: Tensor<B, 2> = einsum_lhs_3d
+                let einsum_result: Tensor<2> = einsum_lhs_3d
                     .matmul(einsum_rhs_3d)
                     .reshape([einsum_lhs_shape[0usize], einsum_rhs_shape[0usize]]);
                 einsum_result
@@ -710,17 +706,17 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r#"
-        pub fn forward(&self, a: Tensor<B, 1, Int>, b: Tensor<B, 1, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, a: Tensor<1, Int>, b: Tensor<1, Int>) -> Tensor<2, Int> {
             let output = {
                 let einsum_lhs = a;
                 let einsum_rhs = b;
                 let einsum_lhs_shape = einsum_lhs.dims();
                 let einsum_rhs_shape = einsum_rhs.dims();
-                let einsum_lhs_3d: Tensor<B, 3, Int> = einsum_lhs
+                let einsum_lhs_3d: Tensor<3, Int> = einsum_lhs
                     .reshape([1usize, einsum_lhs_shape[0usize], 1usize]);
-                let einsum_rhs_3d: Tensor<B, 3, Int> = einsum_rhs
+                let einsum_rhs_3d: Tensor<3, Int> = einsum_rhs
                     .reshape([1usize, 1usize, einsum_rhs_shape[0usize]]);
-                let einsum_result: Tensor<B, 2, Int> = einsum_lhs_3d
+                let einsum_result: Tensor<2, Int> = einsum_lhs_3d
                     .matmul(einsum_rhs_3d)
                     .reshape([einsum_lhs_shape[0usize], einsum_rhs_shape[0usize]]);
                 einsum_result
@@ -792,11 +788,11 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
 
-        assert!(code.contains("-> Tensor<B, 1>"));
+        assert!(code.contains("-> Tensor<1>"));
         assert!(code.contains("let einsum_lhs ="));
         assert!(code.contains("from_data("));
         assert!(code.contains("let einsum_rhs = rhs;"));
-        assert!(code.contains("let einsum_result: Tensor<B, 1>"));
+        assert!(code.contains("let einsum_result: Tensor<1>"));
         assert!(code.contains(".reshape([1usize])"));
     }
 
@@ -815,9 +811,9 @@ mod tests {
         assert!(code.contains("-> f32"));
         assert!(code.contains("TensorData::from([f64::from(lhs)])"));
         assert!(code.contains("TensorData::from([f64::from(rhs)])"));
-        assert!(code.contains("let einsum_result: Tensor<B, 1>"));
+        assert!(code.contains("let einsum_result: Tensor<1>"));
         assert!(code.contains(".reshape([1usize])"));
-        assert!(code.contains("(einsum_result).into_scalar().elem::<f32>()"));
+        assert!(code.contains("(einsum_result).into_scalar::<f32>()"));
     }
 
     #[test]
@@ -832,7 +828,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 2>, einsum_rhs: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, lhs: Tensor<2>, einsum_rhs: Tensor<2>) -> Tensor<2> {
             let output = lhs.matmul(einsum_rhs.swap_dims(0usize, 1usize));
             output
         }
@@ -851,7 +847,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, q: Tensor<B, 3>, k: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, q: Tensor<3>, k: Tensor<3>) -> Tensor<3> {
             let output = q.matmul(k.swap_dims(1usize, 2usize));
             output
         }
@@ -870,25 +866,25 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r#"
-        pub fn forward(&self, r_q: Tensor<B, 4>, r_w: Tensor<B, 3>) -> Tensor<B, 4> {
+        pub fn forward(&self, r_q: Tensor<4>, r_w: Tensor<3>) -> Tensor<4> {
             let output = {
                 let einsum_lhs = r_q.permute([2usize, 0usize, 1usize, 3usize]);
                 let einsum_rhs = r_w.permute([0usize, 2usize, 1usize]);
                 let einsum_lhs_shape = einsum_lhs.dims();
                 let einsum_rhs_shape = einsum_rhs.dims();
-                let einsum_lhs_3d: Tensor<B, 3> = einsum_lhs
+                let einsum_lhs_3d: Tensor<3> = einsum_lhs
                     .reshape([
                         einsum_lhs_shape[0usize],
                         einsum_lhs_shape[1usize] * einsum_lhs_shape[2usize],
                         einsum_lhs_shape[3usize],
                     ]);
-                let einsum_rhs_3d: Tensor<B, 3> = einsum_rhs
+                let einsum_rhs_3d: Tensor<3> = einsum_rhs
                     .reshape([
                         einsum_lhs_shape[0usize],
                         einsum_lhs_shape[3usize],
                         einsum_rhs_shape[2usize],
                     ]);
-                let einsum_result: Tensor<B, 4> = einsum_lhs_3d
+                let einsum_result: Tensor<4> = einsum_lhs_3d
                     .matmul(einsum_rhs_3d)
                     .reshape([
                         einsum_lhs_shape[0usize],
@@ -915,27 +911,27 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r#"
-        pub fn forward(&self, lhs: Tensor<B, 2>, rhs: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, lhs: Tensor<2>, rhs: Tensor<2>) -> Tensor<2> {
             let output = {
                 let einsum_lhs_pre = lhs;
                 let einsum_lhs_pre_s = einsum_lhs_pre.dims();
-                let einsum_lhs_r: Tensor<B, 1> = einsum_lhs_pre
+                let einsum_lhs_r: Tensor<1> = einsum_lhs_pre
                     .sum_dim(1usize)
                     .reshape([einsum_lhs_pre_s[0usize]]);
                 let einsum_rhs_pre = rhs;
                 let einsum_rhs_pre_s = einsum_rhs_pre.dims();
-                let einsum_rhs_r: Tensor<B, 1> = einsum_rhs_pre
+                let einsum_rhs_r: Tensor<1> = einsum_rhs_pre
                     .sum_dim(0usize)
                     .reshape([einsum_rhs_pre_s[1usize]]);
                 let einsum_lhs = einsum_lhs_r;
                 let einsum_rhs = einsum_rhs_r;
                 let einsum_lhs_shape = einsum_lhs.dims();
                 let einsum_rhs_shape = einsum_rhs.dims();
-                let einsum_lhs_3d: Tensor<B, 3> = einsum_lhs
+                let einsum_lhs_3d: Tensor<3> = einsum_lhs
                     .reshape([1usize, einsum_lhs_shape[0usize], 1usize]);
-                let einsum_rhs_3d: Tensor<B, 3> = einsum_rhs
+                let einsum_rhs_3d: Tensor<3> = einsum_rhs
                     .reshape([1usize, 1usize, einsum_rhs_shape[0usize]]);
-                let einsum_result: Tensor<B, 2> = einsum_lhs_3d
+                let einsum_result: Tensor<2> = einsum_lhs_3d
                     .matmul(einsum_rhs_3d)
                     .reshape([einsum_lhs_shape[0usize], einsum_rhs_shape[0usize]]);
                 einsum_result
@@ -957,11 +953,11 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r#"
-        pub fn forward(&self, a: Tensor<B, 3>, b: Tensor<B, 1>) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<3>, b: Tensor<1>) -> Tensor<2> {
             let output = {
                 let einsum_lhs_pre = a;
                 let einsum_lhs_pre_s = einsum_lhs_pre.dims();
-                let einsum_lhs_r: Tensor<B, 1> = einsum_lhs_pre
+                let einsum_lhs_r: Tensor<1> = einsum_lhs_pre
                     .sum_dim(1usize)
                     .sum_dim(2usize)
                     .reshape([einsum_lhs_pre_s[0usize]]);
@@ -969,11 +965,11 @@ mod tests {
                 let einsum_rhs = b;
                 let einsum_lhs_shape = einsum_lhs.dims();
                 let einsum_rhs_shape = einsum_rhs.dims();
-                let einsum_lhs_3d: Tensor<B, 3> = einsum_lhs
+                let einsum_lhs_3d: Tensor<3> = einsum_lhs
                     .reshape([1usize, einsum_lhs_shape[0usize], 1usize]);
-                let einsum_rhs_3d: Tensor<B, 3> = einsum_rhs
+                let einsum_rhs_3d: Tensor<3> = einsum_rhs
                     .reshape([1usize, 1usize, einsum_rhs_shape[0usize]]);
-                let einsum_result: Tensor<B, 2> = einsum_lhs_3d
+                let einsum_result: Tensor<2> = einsum_lhs_3d
                     .matmul(einsum_rhs_3d)
                     .reshape([einsum_lhs_shape[0usize], einsum_rhs_shape[0usize]]);
                 einsum_result

@@ -5,18 +5,16 @@ include_models!(conv_transpose1d, conv_transpose2d, conv_transpose3d);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor};
+    use burn::tensor::{Device, Shape, Tensor};
     use float_cmp::ApproxEq;
-
-    use crate::backend::TestBackend;
 
     #[test]
     fn conv_transpose1d() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: conv_transpose1d::Model<TestBackend> = conv_transpose1d::Model::default();
+        let model: conv_transpose1d::Model = conv_transpose1d::Model::default();
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 3>::ones([2, 4, 10], &Default::default());
+        let input = Tensor::<3>::ones([2, 4, 10], &Default::default());
 
         let output = model.forward(input);
 
@@ -25,9 +23,9 @@ mod tests {
 
         // We are using the sum of the output tensor to test the correctness of the conv_transpose1d node
         // because the output tensor is too large to compare with the expected tensor.
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
 
-        let expected_sum = 33.810_33; // example result running the corresponding PyTorch model (conv_transpose1d.py)
+        let expected_sum: f32 = 33.810_33; // example result running the corresponding PyTorch model (conv_transpose1d.py)
 
         assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));
     }
@@ -35,10 +33,10 @@ mod tests {
     #[test]
     fn conv_transpose2d() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: conv_transpose2d::Model<TestBackend> = conv_transpose2d::Model::default();
+        let model: conv_transpose2d::Model = conv_transpose2d::Model::default();
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 4>::ones([2, 4, 10, 15], &Default::default());
+        let input = Tensor::<4>::ones([2, 4, 10, 15], &Default::default());
 
         let output = model.forward(input);
 
@@ -47,7 +45,7 @@ mod tests {
 
         // We are using the sum of the output tensor to test the correctness of the conv_transpose2d node
         // because the output tensor is too large to compare with the expected tensor.
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
 
         // PyTorch f32 ground truth (from conv_transpose2d/conv_transpose2d.py, torch 2.10.0
         // CPU). Tolerance accommodates gemm-order accumulation drift; burn-flex matches
@@ -59,10 +57,10 @@ mod tests {
     #[test]
     fn conv_transpose3d() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: conv_transpose3d::Model<TestBackend> = conv_transpose3d::Model::default();
+        let model: conv_transpose3d::Model = conv_transpose3d::Model::default();
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 5>::ones([2, 4, 4, 5, 7], &Default::default());
+        let input = Tensor::<5>::ones([2, 4, 4, 5, 7], &Default::default());
 
         let output = model.forward(input);
 
@@ -71,9 +69,9 @@ mod tests {
 
         // We are using the sum of the output tensor to test the correctness of the conv_transpose3d node
         // because the output tensor is too large to compare with the expected tensor.
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
 
-        let expected_sum = -105.69771; // result running pytorch model (conv_transpose3d.py)
+        let expected_sum: f32 = -105.69771; // result running pytorch model (conv_transpose3d.py)
 
         assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));
     }

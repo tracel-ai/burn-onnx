@@ -133,7 +133,7 @@ impl NodeCodegen for onnx_ir::node::mel_weight_matrix::MelWeightMatrixNode {
                     }
                 }
 
-                Tensor::<B, 1>::from_floats(data.as_slice(), &self.device)
+                Tensor::<1>::from_floats(data.as_slice(), &self.device)
                     .reshape([num_spectrogram_bins, num_mel_bins])
                     .cast(#output_dtype)
             };
@@ -175,7 +175,7 @@ mod tests {
             sample_rate: i64,
             lower_edge_hertz: f32,
             upper_edge_hertz: f32,
-        ) -> Tensor<B, 2> {
+        ) -> Tensor<2> {
             let output = {
                 let num_mel_bins_i = num_mel_bins as i64;
                 let dft_length_i = (dft_length) as i64;
@@ -254,7 +254,7 @@ mod tests {
                         }
                     }
                 }
-                Tensor::<B, 1>::from_floats(data.as_slice(), &self.device)
+                Tensor::<1>::from_floats(data.as_slice(), &self.device)
                     .reshape([num_spectrogram_bins, num_mel_bins])
                     .cast(burn::tensor::DType::F32)
             };

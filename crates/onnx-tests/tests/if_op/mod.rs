@@ -11,18 +11,17 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::TestBackend;
-    use burn::tensor::{Tensor, TensorData};
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn test_if_conv2d_then_branch() {
         // Test If operator with Conv2d - then branch (condition=true)
         // Values generated from if_conv2d.py using ONNX ReferenceEvaluator
         let device = Default::default();
-        let model: if_conv2d::Model<TestBackend> = Default::default();
+        let model: if_conv2d::Model = Default::default();
 
         // Input shape: [1, 2, 4, 4] (batch=1, channels=2, height=4, width=4)
-        let input = Tensor::<TestBackend, 4>::from_data(
+        let input = Tensor::<4>::from_data(
             TensorData::from([[
                 [
                     [
@@ -201,10 +200,10 @@ mod tests {
         // Test If operator with Conv2d - else branch (condition=false)
         // Values generated from if_conv2d.py using ONNX ReferenceEvaluator
         let device = Default::default();
-        let model: if_conv2d::Model<TestBackend> = Default::default();
+        let model: if_conv2d::Model = Default::default();
 
         // Input shape: [1, 2, 4, 4] (batch=1, channels=2, height=4, width=4)
-        let input = Tensor::<TestBackend, 4>::from_data(
+        let input = Tensor::<4>::from_data(
             TensorData::from([[
                 [
                     [
@@ -357,10 +356,10 @@ mod tests {
         // Test If operator with Linear - then branch (condition=true)
         // Values generated from if_linear.py using ONNX ReferenceEvaluator
         let device = Default::default();
-        let model: if_linear::Model<TestBackend> = Default::default();
+        let model: if_linear::Model = Default::default();
 
         // Input shape: [2, 5] (batch=2, features=5)
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([
                 [
                     -2.178354501724243,
@@ -417,10 +416,10 @@ mod tests {
         // Test If operator with Linear - else branch (condition=false)
         // Values generated from if_linear.py using ONNX ReferenceEvaluator
         let device = Default::default();
-        let model: if_linear::Model<TestBackend> = Default::default();
+        let model: if_linear::Model = Default::default();
 
         // Input shape: [2, 5] (batch=2, features=5)
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([
                 [
                     -2.178354501724243,
@@ -472,9 +471,9 @@ mod tests {
         // Test nested If with scoped variables: then->then->then
         // Path: ((x + 10) - 0.5) + 1.0
         let device = Default::default();
-        let model: nested_if::Model<TestBackend> = Default::default();
+        let model: nested_if::Model = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );
@@ -493,9 +492,9 @@ mod tests {
         // Test nested If with scoped variables: then->then->else
         // Path: ((x + 10) - 0.5) * 2.0
         let device = Default::default();
-        let model: nested_if::Model<TestBackend> = Default::default();
+        let model: nested_if::Model = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );
@@ -514,9 +513,9 @@ mod tests {
         // Test nested If with scoped variables: then->else->then
         // Path: ((x + 10) / 3.0) + 1.0
         let device = Default::default();
-        let model: nested_if::Model<TestBackend> = Default::default();
+        let model: nested_if::Model = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );
@@ -538,9 +537,9 @@ mod tests {
         // Test nested If with scoped variables: then->else->else
         // Path: ((x + 10) / 3.0) * 2.0
         let device = Default::default();
-        let model: nested_if::Model<TestBackend> = Default::default();
+        let model: nested_if::Model = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );
@@ -562,9 +561,9 @@ mod tests {
         // Test nested If with scoped variables: else->then->then
         // Path: ((-x) - 0.5) + 1.0
         let device = Default::default();
-        let model: nested_if::Model<TestBackend> = Default::default();
+        let model: nested_if::Model = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );
@@ -583,9 +582,9 @@ mod tests {
         // Test nested If with scoped variables: else->then->else
         // Path: ((-x) - 0.5) * 2.0
         let device = Default::default();
-        let model: nested_if::Model<TestBackend> = Default::default();
+        let model: nested_if::Model = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );
@@ -604,9 +603,9 @@ mod tests {
         // Test nested If with scoped variables: else->else->then
         // Path: ((-x) / 3.0) + 1.0
         let device = Default::default();
-        let model: nested_if::Model<TestBackend> = Default::default();
+        let model: nested_if::Model = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );
@@ -628,9 +627,9 @@ mod tests {
         // Test nested If with scoped variables: else->else->else
         // Path: ((-x) / 3.0) * 2.0
         let device = Default::default();
-        let model: nested_if::Model<TestBackend> = Default::default();
+        let model: nested_if::Model = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );

@@ -86,7 +86,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
                 }
                 ArgType::Tensor(_) => {
                     let tensor = scope.arg(max_trip_count_arg);
-                    quote! { #tensor.into_scalar().elem::<i64>() }
+                    quote! { #tensor.into_scalar::<i64>() }
                 }
                 _ => panic!("Loop max_trip_count must be scalar i64"),
             }
@@ -107,7 +107,7 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
                 }
                 ArgType::Tensor(_) => {
                     let tensor = scope.arg(init_cond_arg);
-                    quote! { #tensor.into_scalar().elem::<bool>() }
+                    quote! { #tensor.into_scalar::<bool>() }
                 }
                 _ => panic!("Loop condition must be scalar bool"),
             }
@@ -295,16 +295,16 @@ impl NodeCodegen for onnx_ir::node::loop_node::LoopNode {
 
                     let tensor_creation = if dtype.is_float() {
                         quote! {
-                            Tensor::<B, 1>::from_data(data, (&self.device, #dtype_tokens))
+                            Tensor::<1>::from_data(data, (&self.device, #dtype_tokens))
                         }
                     } else if dtype.is_int() || dtype.is_uint() {
                         quote! {
-                            Tensor::<B, 1, Int>::from_data(data, (&self.device, #dtype_tokens))
+                            Tensor::<1, Int>::from_data(data, (&self.device, #dtype_tokens))
                         }
                     } else {
                         // Bool
                         quote! {
-                            Tensor::<B, 1, Bool>::from_data(data, (&self.device, #dtype_tokens))
+                            Tensor::<1, Bool>::from_data(data, (&self.device, #dtype_tokens))
                         }
                     };
 

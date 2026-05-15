@@ -6,23 +6,22 @@ include_models!(scan_cumsum, scan_reverse, scan_multi_state, scan_axis1);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::TestBackend;
-    use burn::tensor::{Tensor, TensorData};
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn scan_cumsum_basic() {
         // Test cumulative sum with 1 state variable
         let device = Default::default();
-        let model: scan_cumsum::Model<TestBackend> = Default::default();
+        let model: scan_cumsum::Model = Default::default();
 
         // Initial sum state [2, 3]
-        let initial_sum = Tensor::<TestBackend, 2>::from_data(
+        let initial_sum = Tensor::<2>::from_data(
             TensorData::from([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]),
             &device,
         );
 
         // Input sequence [4, 2, 3] - 4 timesteps
-        let input_sequence = Tensor::<TestBackend, 3>::from_data(
+        let input_sequence = Tensor::<3>::from_data(
             TensorData::from([
                 [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
                 [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
@@ -48,22 +47,22 @@ mod tests {
     fn scan_multi_state_lstm_like() {
         // Test with 2 state variables (hidden + cell)
         let device = Default::default();
-        let model: scan_multi_state::Model<TestBackend> = Default::default();
+        let model: scan_multi_state::Model = Default::default();
 
         // Initial hidden state [2, 3]
-        let initial_hidden = Tensor::<TestBackend, 2>::from_data(
+        let initial_hidden = Tensor::<2>::from_data(
             TensorData::from([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]),
             &device,
         );
 
         // Initial cell state [2, 3]
-        let initial_cell = Tensor::<TestBackend, 2>::from_data(
+        let initial_cell = Tensor::<2>::from_data(
             TensorData::from([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]),
             &device,
         );
 
         // Input sequence [4, 2, 3]
-        let input_sequence = Tensor::<TestBackend, 3>::from_data(
+        let input_sequence = Tensor::<3>::from_data(
             TensorData::from([
                 [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
                 [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
@@ -96,16 +95,16 @@ mod tests {
     fn scan_reverse_direction() {
         // Test reverse scanning with scan_input_directions=[1]
         let device = Default::default();
-        let model: scan_reverse::Model<TestBackend> = Default::default();
+        let model: scan_reverse::Model = Default::default();
 
         // Initial sum state [2, 3]
-        let initial_sum = Tensor::<TestBackend, 2>::from_data(
+        let initial_sum = Tensor::<2>::from_data(
             TensorData::from([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]),
             &device,
         );
 
         // Input sequence [4, 2, 3] - will be processed in reverse (3→2→1→0)
-        let input_sequence = Tensor::<TestBackend, 3>::from_data(
+        let input_sequence = Tensor::<3>::from_data(
             TensorData::from([
                 [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
                 [[0.0, 2.0, 0.0], [0.0, 0.0, 0.0]],
@@ -133,18 +132,16 @@ mod tests {
         // NOTE: Expected values are manually computed because ONNX ReferenceEvaluator
         // doesn't support scan_input_axes != [0]
         let device = Default::default();
-        let model: scan_axis1::Model<TestBackend> = Default::default();
+        let model: scan_axis1::Model = Default::default();
 
         // Initial sum state [2, 2]
-        let initial_sum = Tensor::<TestBackend, 2>::from_data(
-            TensorData::from([[0.0, 0.0], [0.0, 0.0]]),
-            &device,
-        );
+        let initial_sum =
+            Tensor::<2>::from_data(TensorData::from([[0.0, 0.0], [0.0, 0.0]]), &device);
 
         // Input sequence [2, 3, 2] (batch=2, seq=3, features=2)
         // Batch 0: [[1, 2], [3, 4], [5, 6]]
         // Batch 1: [[10, 20], [30, 40], [50, 60]]
-        let input_sequence = Tensor::<TestBackend, 3>::from_data(
+        let input_sequence = Tensor::<3>::from_data(
             TensorData::from([
                 [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
                 [[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]],

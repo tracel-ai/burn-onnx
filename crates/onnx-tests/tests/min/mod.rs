@@ -5,17 +5,15 @@ include_models!(min, min_broadcast);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn min() {
         let device = Default::default();
 
-        let model: min::Model<TestBackend> = min::Model::new(&device);
-        let input1 = Tensor::<TestBackend, 2>::from_floats([[-1.0, 42.0, 0.0, 42.0]], &device);
-        let input2 = Tensor::<TestBackend, 2>::from_floats([[2.0, 4.0, 42.0, 25.0]], &device);
+        let model: min::Model = min::Model::new(&device);
+        let input1 = Tensor::<2>::from_floats([[-1.0, 42.0, 0.0, 42.0]], &device);
+        let input2 = Tensor::<2>::from_floats([[2.0, 4.0, 42.0, 25.0]], &device);
 
         let output = model.forward(input1, input2);
         let expected = TensorData::from([[-1.0f32, 4.0, 0.0, 25.0]]);
@@ -27,9 +25,9 @@ mod tests {
     fn min_broadcast() {
         let device = Default::default();
 
-        let model: min_broadcast::Model<TestBackend> = min_broadcast::Model::new(&device);
+        let model: min_broadcast::Model = min_broadcast::Model::new(&device);
 
-        let x_3d = Tensor::<TestBackend, 3>::from_floats(
+        let x_3d = Tensor::<3>::from_floats(
             [
                 [
                     [1.0, 2.0, 3.0, 4.0],
@@ -44,7 +42,7 @@ mod tests {
             ],
             &device,
         );
-        let y_2d = Tensor::<TestBackend, 2>::from_floats(
+        let y_2d = Tensor::<2>::from_floats(
             [
                 [10.0, 10.0, 10.0, 10.0],
                 [10.0, 10.0, 10.0, 10.0],

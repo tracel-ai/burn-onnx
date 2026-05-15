@@ -34,7 +34,7 @@ impl NodeCodegen for InstanceNormalizationNode {
 
         Some(Field::new(
             self.name.clone(),
-            quote! { InstanceNorm<B> },
+            quote! { InstanceNorm },
             quote! {
                 let #name = InstanceNormConfig::new(#num_features)
                     .with_epsilon(#epsilon)
@@ -152,7 +152,7 @@ mod tests {
         let node = create_static_instance_norm_node("instance_norm1");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self.instance_norm1.forward(input);
             output
         }
@@ -164,7 +164,7 @@ mod tests {
         let node = create_static_instance_norm_node("instance_norm1");
         let code = codegen_forward_with_clone(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self.instance_norm1.forward(input.clone());
             output
         }
@@ -176,12 +176,7 @@ mod tests {
         let node = create_dynamic_instance_norm_node("instance_norm1");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<B, 4>,
-            scale: Tensor<B, 1>,
-            bias: Tensor<B, 1>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, scale: Tensor<1>, bias: Tensor<1>) -> Tensor<4> {
             let output = {
                 let __x = input;
                 let __dims = __x.dims();

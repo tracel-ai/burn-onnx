@@ -4,18 +4,16 @@ include_models!(flatten, flatten_2d, flatten_rank1);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Shape, Tensor};
 
     #[test]
     fn flatten() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: flatten::Model<TestBackend> = flatten::Model::new(&device);
+        let model: flatten::Model = flatten::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 3>::ones([1, 5, 15], &device);
+        let input = Tensor::<3>::ones([1, 5, 15], &device);
         let output = model.forward(input);
 
         let expected_shape = Shape::from([1, 75]);
@@ -26,9 +24,9 @@ mod tests {
     fn flatten_rank1() {
         // Rank-1 input [5] with axis=0 -> output [1, 5]
         let device = Default::default();
-        let model: flatten_rank1::Model<TestBackend> = flatten_rank1::Model::new(&device);
+        let model: flatten_rank1::Model = flatten_rank1::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 1>::ones([5], &device);
+        let input = Tensor::<1>::ones([5], &device);
         let output = model.forward(input);
 
         let expected_shape = Shape::from([1, 5]);
@@ -39,10 +37,10 @@ mod tests {
     fn flatten_2d() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: flatten_2d::Model<TestBackend> = flatten_2d::Model::new(&device);
+        let model: flatten_2d::Model = flatten_2d::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::ones([2, 3, 4, 5], &device);
+        let input = Tensor::<4>::ones([2, 3, 4, 5], &device);
         let output = model.forward(input);
 
         // Flatten leading and trailing dimensions (axis = 2) and returns a 2D tensor

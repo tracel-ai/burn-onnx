@@ -44,7 +44,7 @@ mod tests {
         let node = create_softmax_node("softmax1", 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = burn::tensor::activation::softmax(input, 2);
             output
         }
@@ -56,7 +56,7 @@ mod tests {
         let node = create_softmax_node("softmax1", 0);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = burn::tensor::activation::softmax(input, 0);
             output
         }
@@ -68,7 +68,7 @@ mod tests {
         let node = create_softmax_node("softmax1", 1);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = burn::tensor::activation::softmax(input, 1);
             output
         }

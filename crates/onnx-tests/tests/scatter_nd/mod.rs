@@ -13,17 +13,15 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Bool, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Bool, Device, Tensor, TensorData};
 
     #[test]
     fn scatter_nd_1d() {
-        let model: scatter_nd::Model<TestBackend> = scatter_nd::Model::default();
+        let model: scatter_nd::Model = scatter_nd::Model::default();
         let device = Default::default();
 
-        let data = Tensor::<TestBackend, 1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
-        let updates = Tensor::<TestBackend, 1>::from_floats([9., 10., 11., 12.], &device);
+        let data = Tensor::<1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
+        let updates = Tensor::<1>::from_floats([9., 10., 11., 12.], &device);
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([1f32, 11., 3., 10., 9., 6., 7., 12.]);
@@ -32,10 +30,10 @@ mod tests {
 
     #[test]
     fn scatter_nd_2d_slice() {
-        let model: scatter_nd_2d::Model<TestBackend> = scatter_nd_2d::Model::default();
+        let model: scatter_nd_2d::Model = scatter_nd_2d::Model::default();
         let device = Default::default();
 
-        let data = Tensor::<TestBackend, 2>::from_floats(
+        let data = Tensor::<2>::from_floats(
             [
                 [1., 1., 1., 1.],
                 [1., 1., 1., 1.],
@@ -44,8 +42,7 @@ mod tests {
             ],
             &device,
         );
-        let updates =
-            Tensor::<TestBackend, 2>::from_floats([[5., 5., 5., 5.], [6., 6., 6., 6.]], &device);
+        let updates = Tensor::<2>::from_floats([[5., 5., 5., 5.], [6., 6., 6., 6.]], &device);
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([
@@ -59,11 +56,11 @@ mod tests {
 
     #[test]
     fn scatter_nd_add_reduction() {
-        let model: scatter_nd_add::Model<TestBackend> = scatter_nd_add::Model::default();
+        let model: scatter_nd_add::Model = scatter_nd_add::Model::default();
         let device = Default::default();
 
-        let data = Tensor::<TestBackend, 1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
-        let updates = Tensor::<TestBackend, 1>::from_floats([9., 10., 11., 12.], &device);
+        let data = Tensor::<1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
+        let updates = Tensor::<1>::from_floats([9., 10., 11., 12.], &device);
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([1f32, 13., 3., 14., 14., 6., 7., 20.]);
@@ -72,11 +69,11 @@ mod tests {
 
     #[test]
     fn scatter_nd_mul_reduction() {
-        let model: scatter_nd_mul::Model<TestBackend> = scatter_nd_mul::Model::default();
+        let model: scatter_nd_mul::Model = scatter_nd_mul::Model::default();
         let device = Default::default();
 
-        let data = Tensor::<TestBackend, 1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
-        let updates = Tensor::<TestBackend, 1>::from_floats([9., 10., 11., 12.], &device);
+        let data = Tensor::<1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
+        let updates = Tensor::<1>::from_floats([9., 10., 11., 12.], &device);
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([1f32, 22., 3., 40., 45., 6., 7., 96.]);
@@ -85,11 +82,11 @@ mod tests {
 
     #[test]
     fn scatter_nd_max_reduction() {
-        let model: scatter_nd_max::Model<TestBackend> = scatter_nd_max::Model::default();
+        let model: scatter_nd_max::Model = scatter_nd_max::Model::default();
         let device = Default::default();
 
-        let data = Tensor::<TestBackend, 1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
-        let updates = Tensor::<TestBackend, 1>::from_floats([9., 10., 11., 12.], &device);
+        let data = Tensor::<1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
+        let updates = Tensor::<1>::from_floats([9., 10., 11., 12.], &device);
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([1f32, 11., 3., 10., 9., 6., 7., 12.]);
@@ -98,11 +95,11 @@ mod tests {
 
     #[test]
     fn scatter_nd_min_reduction() {
-        let model: scatter_nd_min::Model<TestBackend> = scatter_nd_min::Model::default();
+        let model: scatter_nd_min::Model = scatter_nd_min::Model::default();
         let device = Default::default();
 
-        let data = Tensor::<TestBackend, 1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
-        let updates = Tensor::<TestBackend, 1>::from_floats([9., 10., 11., 12.], &device);
+        let data = Tensor::<1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
+        let updates = Tensor::<1>::from_floats([9., 10., 11., 12.], &device);
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([1f32, 2., 3., 4., 5., 6., 7., 8.]);
@@ -112,11 +109,11 @@ mod tests {
     #[test]
     fn scatter_nd_negative_indices() {
         // -1 means last; -3 means third-from-last. Exercises on-device normalization.
-        let model: scatter_nd_neg_idx::Model<TestBackend> = scatter_nd_neg_idx::Model::default();
+        let model: scatter_nd_neg_idx::Model = scatter_nd_neg_idx::Model::default();
         let device = Default::default();
 
-        let data = Tensor::<TestBackend, 1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
-        let updates = Tensor::<TestBackend, 1>::from_floats([99., 88., 77.], &device);
+        let data = Tensor::<1>::from_floats([1., 2., 3., 4., 5., 6., 7., 8.], &device);
+        let updates = Tensor::<1>::from_floats([99., 88., 77.], &device);
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([1f32, 77., 3., 4., 5., 88., 7., 99.]);
@@ -125,17 +122,14 @@ mod tests {
 
     #[test]
     fn scatter_nd_bool_none() {
-        let model: scatter_nd_bool::Model<TestBackend> = scatter_nd_bool::Model::default();
+        let model: scatter_nd_bool::Model = scatter_nd_bool::Model::default();
         let device = Default::default();
 
-        let data = Tensor::<TestBackend, 1, Bool>::from_bool(
+        let data = Tensor::<1, Bool>::from_bool(
             TensorData::from([false, false, false, false, false, false]),
             &device,
         );
-        let updates = Tensor::<TestBackend, 1, Bool>::from_bool(
-            TensorData::from([true, true, true]),
-            &device,
-        );
+        let updates = Tensor::<1, Bool>::from_bool(TensorData::from([true, true, true]), &device);
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([false, true, false, true, false, true]);

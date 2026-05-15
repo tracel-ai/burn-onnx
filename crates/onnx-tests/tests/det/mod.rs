@@ -5,18 +5,13 @@ include_models!(det, det_batched);
 mod tests {
     use super::*;
 
-    use crate::backend::TestBackend;
-
     #[test]
     fn det_2x2() {
         // det([[1, 2], [3, 4]]) = 1*4 - 2*3 = -2
         let device = Default::default();
-        let model: det::Model<TestBackend> = det::Model::new(&device);
+        let model: det::Model = det::Model::new(&device);
 
-        let input = burn::tensor::Tensor::<TestBackend, 2>::from_floats(
-            [[1.0f32, 2.0], [3.0, 4.0]],
-            &device,
-        );
+        let input = burn::tensor::Tensor::<2>::from_floats([[1.0f32, 2.0], [3.0, 4.0]], &device);
 
         let output: f32 = model.forward(input);
         let expected = -2.0f32;
@@ -34,9 +29,9 @@ mod tests {
         // Matrix 0: [[1,2,3],[0,1,4],[5,6,0]] -> det = 1
         // Matrix 1: [[2,0,0],[0,3,0],[0,0,4]] -> det = 24
         let device = Default::default();
-        let model: det_batched::Model<TestBackend> = det_batched::Model::new(&device);
+        let model: det_batched::Model = det_batched::Model::new(&device);
 
-        let input = burn::tensor::Tensor::<TestBackend, 3>::from_floats(
+        let input = burn::tensor::Tensor::<3>::from_floats(
             [
                 [[1.0f32, 2.0, 3.0], [0.0, 1.0, 4.0], [5.0, 6.0, 0.0]],
                 [[2.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 4.0]],
@@ -45,7 +40,7 @@ mod tests {
         );
 
         let output = model.forward(input);
-        let expected = burn::tensor::Tensor::<TestBackend, 1>::from_floats([1.0f32, 24.0], &device);
+        let expected = burn::tensor::Tensor::<1>::from_floats([1.0f32, 24.0], &device);
 
         output
             .to_data()

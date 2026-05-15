@@ -99,7 +99,7 @@ mod tests {
         let node = create_lp_pool2d_node("pool1", 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self
                 .pool1
                 .forward(input.abs().powf_scalar(2f32))
@@ -115,7 +115,7 @@ mod tests {
         let node = create_lp_pool2d_node("pool1", 2);
         let code = codegen_forward_with_clone(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self
                 .pool1
                 .forward(input.clone().abs().powf_scalar(2f32))

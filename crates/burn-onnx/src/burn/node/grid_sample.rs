@@ -87,7 +87,7 @@ mod tests {
         );
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, grid: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, grid: Tensor<4>) -> Tensor<4> {
             let output = input
                 .grid_sample_2d(
                     grid,
@@ -111,7 +111,7 @@ mod tests {
         );
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, grid: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, grid: Tensor<4>) -> Tensor<4> {
             let output = input
                 .grid_sample_2d(
                     grid,
@@ -132,7 +132,7 @@ mod tests {
             create_grid_sample_node(GridSampleMode::Nearest, GridSamplePaddingMode::Zeros, false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, grid: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, grid: Tensor<4>) -> Tensor<4> {
             let output = input
                 .grid_sample_2d(
                     grid,
@@ -153,7 +153,7 @@ mod tests {
             create_grid_sample_node(GridSampleMode::Bicubic, GridSamplePaddingMode::Zeros, false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, grid: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, grid: Tensor<4>) -> Tensor<4> {
             let output = input
                 .grid_sample_2d(
                     grid,
@@ -177,7 +177,7 @@ mod tests {
         );
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, grid: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, grid: Tensor<4>) -> Tensor<4> {
             let output = input
                 .grid_sample_2d(
                     grid,

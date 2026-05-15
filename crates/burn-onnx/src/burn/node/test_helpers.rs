@@ -24,7 +24,7 @@ use quote::quote;
 /// let node = create_my_node("test");
 /// let code = codegen_forward(&node, 0, false, 1);
 /// assert_snapshot!(code, @r#"
-///     pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+///     pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
 ///         let output = input.abs();
 ///         output
 ///     }
@@ -114,7 +114,7 @@ where
 /// let node = create_my_node("test");
 /// let code = codegen_forward_default(&node);
 /// assert_snapshot!(code, @r#"
-///     pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+///     pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
 ///         let output = input.abs();
 ///         output
 ///     }

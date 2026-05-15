@@ -4,14 +4,12 @@ include_models!(split, split_uneven, split_axis1);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Shape, Tensor, TensorData};
 
     #[test]
     fn split() {
         let device = Default::default();
-        let model = split::Model::<TestBackend>::new(&device);
+        let model = split::Model::new(&device);
         let shape = [5, 2];
         let input = Tensor::ones(shape, &device);
 
@@ -27,10 +25,10 @@ mod tests {
         // num_outputs=3 on dim=10 (not evenly divisible)
         // ONNX spec: ceil(10/3) = 4, splits are [4, 4, 2]
         let device = Default::default();
-        let model = split_uneven::Model::<TestBackend>::new(&device);
+        let model = split_uneven::Model::new(&device);
 
         // np.random.seed(42); np.random.randn(10, 3).astype(np.float32)
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [
                 [0.49671414, -0.1382643, 0.64768857],
                 [1.5230298, -0.23415338, -0.23413695],
@@ -70,10 +68,10 @@ mod tests {
     fn split_axis1() {
         // Explicit split sizes [2, 3] on axis=1
         let device = Default::default();
-        let model = split_axis1::Model::<TestBackend>::new(&device);
+        let model = split_axis1::Model::new(&device);
 
         // np.random.seed(42); np.random.randn(3, 5).astype(np.float32)
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [
                 [0.49671414, -0.1382643, 0.64768857, 1.5230298, -0.23415338],
                 [-0.23413695, 1.5792128, 0.7674347, -0.46947438, 0.54256004],

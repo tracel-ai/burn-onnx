@@ -17,13 +17,13 @@ pub mod depth_anything_v2 {
 }
 
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    pixel_values: Param<Tensor<B, 4>>,
-    predicted_depth: Param<Tensor<B, 3>>,
+struct TestData {
+    pixel_values: Param<Tensor<4>>,
+    predicted_depth: Param<Tensor<3>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         // Depth-Anything-v2 Small: input 518x518, output depth map 518x518
         Self {
             pixel_values: Initializer::Zeros.init([1, 3, 518, 518], device),
@@ -54,7 +54,7 @@ fn main() {
     let start = Instant::now();
     let device = model_checks_common::best_device!();
     let weights_path = concat!(env!("OUT_DIR"), "/model/depth-anything-v2_opset16.bpk");
-    let model: depth_anything_v2::Model<MyBackend> =
+    let model: depth_anything_v2::Model =
         depth_anything_v2::Model::from_file(weights_path, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
@@ -73,7 +73,7 @@ fn main() {
     let test_data_path = artifacts_dir.join("test_data.pt");
     println!("\nLoading test data from {}...", test_data_path.display());
     let start = Instant::now();
-    let mut test_data = TestData::<MyBackend>::new(&device);
+    let mut test_data = TestData::new(&device);
     let mut store = PytorchStore::from_file(&test_data_path);
     test_data
         .load_from(&mut store)
@@ -127,8 +127,8 @@ fn main() {
 
     let diff = predicted_depth - reference_depth;
     let abs_diff = diff.abs();
-    let max_diff: f32 = abs_diff.clone().max().into_scalar();
-    let mean_diff: f32 = abs_diff.mean().into_scalar();
+    let max_diff: f32 = abs_diff.clone().max().into_scalar::<f32>();
+    let mean_diff: f32 = abs_diff.mean().into_scalar::<f32>();
 
     println!("  Maximum absolute difference: {:.6}", max_diff);
     println!("  Mean absolute difference: {:.6}", mean_diff);

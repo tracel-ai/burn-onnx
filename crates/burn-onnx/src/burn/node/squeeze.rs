@@ -109,7 +109,7 @@ impl NodeCodegen for onnx_ir::squeeze::SqueezeNode {
                 }
             }
             (ArgType::Tensor(_), ArgType::ScalarTensor(_)) => {
-                // Keep as Tensor<B, 1> on device (no GPU stall)
+                // Keep as Tensor<1> on device (no GPU stall)
                 let input = scope.arg(input_arg);
                 quote! {
                     let #output = #input.reshape([1]);
@@ -154,7 +154,7 @@ mod tests {
         let node = create_squeeze_node_static("squeeze1", vec![1]);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<2> {
             let output = input.squeeze_dims::<2>(&[1]);
             output
         }
@@ -166,7 +166,7 @@ mod tests {
         let node = create_squeeze_node_static("squeeze1", vec![0, 2]);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<2> {
             let output = input.squeeze_dims::<2>(&[0, 2]);
             output
         }
@@ -183,7 +183,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<1> {
             let output = input.squeeze::<1>();
             output
         }
@@ -207,7 +207,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>, axes: Tensor<B, 1, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<3>, axes: Tensor<1, Int>) -> Tensor<2> {
             let output = {
                 let __raw_axes: alloc::vec::Vec<i64> = axes
                     .to_data()
@@ -243,7 +243,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>, axes: [i64; 1]) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<3>, axes: [i64; 1]) -> Tensor<2> {
             let output = {
                 let __raw_axes: alloc::vec::Vec<i64> = axes.iter().copied().collect();
                 let __rank: i64 = 3;

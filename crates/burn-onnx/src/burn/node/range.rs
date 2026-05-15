@@ -106,7 +106,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self) -> Tensor<B, 1, Int> {
+        pub fn forward(&self) -> Tensor<1, Int> {
             let output = Tensor::arange(0..5i64, &self.device)
                 .cast(burn::tensor::DType::I64)
                 .mul_scalar(2i64)
@@ -129,7 +129,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self) -> Tensor<B, 1, Int> {
+        pub fn forward(&self) -> Tensor<1, Int> {
             let output = Tensor::arange(0..5i64, &self.device)
                 .cast(burn::tensor::DType::I64)
                 .mul_scalar(-2i64)
@@ -164,7 +164,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, start: i64, limit: i64, delta: i64) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, start: i64, limit: i64, delta: i64) -> Tensor<1, Int> {
             let output = {
                 let __start = start;
                 let __limit = limit;
@@ -195,7 +195,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self) -> Tensor<B, 1, Int> {
+        pub fn forward(&self) -> Tensor<1, Int> {
             let output = Tensor::arange(0..0i64, &self.device)
                 .cast(burn::tensor::DType::I64)
                 .mul_scalar(2i64)

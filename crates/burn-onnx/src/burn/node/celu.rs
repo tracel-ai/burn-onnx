@@ -42,7 +42,7 @@ mod tests {
         let node = create_celu_node("celu1", 1.0);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = burn::tensor::activation::celu(input, 1.0);
             output
         }
@@ -54,7 +54,7 @@ mod tests {
         let node = create_celu_node("celu1", 2.5);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = burn::tensor::activation::celu(input, 2.5);
             output
         }

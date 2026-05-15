@@ -13,13 +13,13 @@ pub mod inception_v1 {
 }
 
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    input: Param<Tensor<B, 4>>,
-    output: Param<Tensor<B, 2>>,
+struct TestData {
+    input: Param<Tensor<4>>,
+    output: Param<Tensor<2>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         Self {
             input: Initializer::Zeros.init([1, 3, 224, 224], device),
             output: Initializer::Zeros.init([1, 1000], device),
@@ -48,15 +48,14 @@ fn main() {
     let start = Instant::now();
     let device = model_checks_common::best_device!();
     let weights_path = concat!(env!("OUT_DIR"), "/model/inception_v1.bpk");
-    let model: inception_v1::Model<MyBackend> =
-        inception_v1::Model::from_file(weights_path, &device);
+    let model: inception_v1::Model = inception_v1::Model::from_file(weights_path, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
 
     let test_data_path = artifacts_dir.join("test_data.pt");
     println!("\nLoading test data from {}...", test_data_path.display());
     let start = Instant::now();
-    let mut test_data = TestData::<MyBackend>::new(&device);
+    let mut test_data = TestData::new(&device);
     let mut store = PytorchStore::from_file(&test_data_path);
     test_data
         .load_from(&mut store)
@@ -98,8 +97,8 @@ fn main() {
     println!("\nComparing outputs with reference data...");
     let diff = output - reference_output;
     let abs_diff = diff.abs();
-    let max_diff: f32 = abs_diff.clone().max().into_scalar();
-    let mean_diff: f32 = abs_diff.mean().into_scalar();
+    let max_diff: f32 = abs_diff.clone().max().into_scalar::<f32>();
+    let mean_diff: f32 = abs_diff.mean().into_scalar::<f32>();
 
     println!("  Maximum absolute difference: {:.6}", max_diff);
     println!("  Mean absolute difference: {:.6}", mean_diff);

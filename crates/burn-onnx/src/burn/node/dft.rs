@@ -62,7 +62,7 @@ fn forward_rfft(
             #dft_length_code
             let (re, im) = rfft(signal, #axis, None);
             // Stack re and im along new last dim: [.., K] + [.., K] -> [.., K, 2]
-            Tensor::<B, #signal_rank>::stack::<#out_rank>(
+            Tensor::<#signal_rank>::stack::<#out_rank>(
                 [re, im].to_vec(),
                 #signal_rank,
             )
@@ -101,7 +101,7 @@ fn forward_rfft_full(
 
             if mirror_len == 0 {
                 // Degenerate case (n <= 1): no mirrored bins to reconstruct
-                Tensor::<B, #signal_rank>::stack::<#out_rank>(
+                Tensor::<#signal_rank>::stack::<#out_rank>(
                     [re_half, im_half].to_vec(),
                     #signal_rank,
                 )
@@ -117,14 +117,14 @@ fn forward_rfft_full(
                     .flip([#flip_axis])
                     .neg();
 
-                let re_full = Tensor::<B, #signal_rank>::cat(
+                let re_full = Tensor::<#signal_rank>::cat(
                     [re_half, mirror_re].to_vec(), #axis,
                 );
-                let im_full = Tensor::<B, #signal_rank>::cat(
+                let im_full = Tensor::<#signal_rank>::cat(
                     [im_half, mirror_im].to_vec(), #axis,
                 );
 
-                Tensor::<B, #signal_rank>::stack::<#out_rank>(
+                Tensor::<#signal_rank>::stack::<#out_rank>(
                     [re_full, im_full].to_vec(),
                     #signal_rank,
                 )
@@ -180,11 +180,11 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = {
                 let signal = input.squeeze_dims::<2usize>(&[2isize]);
                 let (re, im) = rfft(signal, 1usize, None);
-                Tensor::<B, 2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
+                Tensor::<2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
             };
             output
         }
@@ -207,7 +207,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = {
                 let signal = input.squeeze_dims::<2usize>(&[2isize]);
                 let n = signal.dims()[1usize];
@@ -215,7 +215,7 @@ mod tests {
                 let half_len = re_half.dims()[1usize];
                 let mirror_len = n - half_len;
                 if mirror_len == 0 {
-                    Tensor::<B, 2usize>::stack::<3usize>([re_half, im_half].to_vec(), 2usize)
+                    Tensor::<2usize>::stack::<3usize>([re_half, im_half].to_vec(), 2usize)
                 } else {
                     let mirror_re = re_half.clone().narrow(1usize, 1, mirror_len).flip([1isize]);
                     let mirror_im = im_half
@@ -223,15 +223,9 @@ mod tests {
                         .narrow(1usize, 1, mirror_len)
                         .flip([1isize])
                         .neg();
-                    let re_full = Tensor::<
-                        B,
-                        2usize,
-                    >::cat([re_half, mirror_re].to_vec(), 1usize);
-                    let im_full = Tensor::<
-                        B,
-                        2usize,
-                    >::cat([im_half, mirror_im].to_vec(), 1usize);
-                    Tensor::<B, 2usize>::stack::<3usize>([re_full, im_full].to_vec(), 2usize)
+                    let re_full = Tensor::<2usize>::cat([re_half, mirror_re].to_vec(), 1usize);
+                    let im_full = Tensor::<2usize>::cat([im_half, mirror_im].to_vec(), 1usize);
+                    Tensor::<2usize>::stack::<3usize>([re_full, im_full].to_vec(), 2usize)
                 }
             };
             output
@@ -255,7 +249,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = {
                 let signal = input.squeeze_dims::<2usize>(&[2isize]);
                 let signal = {
@@ -272,7 +266,7 @@ mod tests {
                     }
                 };
                 let (re, im) = rfft(signal, 1usize, None);
-                Tensor::<B, 2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
+                Tensor::<2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
             };
             output
         }

@@ -71,12 +71,12 @@ fn forward_shape_gather(
 
     match &output_arg.ty {
         ArgType::ScalarTensor(_) => {
-            // Gathering a single element from a shape, keep on device as Tensor<B, 1, Int>
+            // Gathering a single element from a shape, keep on device as Tensor<1, Int>
             match &index_arg.ty {
                 ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                     if let Some(idx_lit) = resolve_constant_shape_index(input_arg, index_arg) {
                         quote! {
-                            let #output = Tensor::<B, 1, Int>::from_data(
+                            let #output = Tensor::<1, Int>::from_data(
                                 burn::tensor::TensorData::from([#input_shape_name[#idx_lit]]),
                                 &self.device,
                             );
@@ -88,7 +88,7 @@ fn forward_shape_gather(
                         quote! {
                             #pre_convert
                             #index_resolve
-                            let #output = Tensor::<B, 1, Int>::from_data(
+                            let #output = Tensor::<1, Int>::from_data(
                                 burn::tensor::TensorData::from([#input_shape_name[actual_idx]]),
                                 &self.device,
                             );
@@ -235,7 +235,7 @@ fn forward_tensor_gather(
 
     match &output_arg.ty {
         ArgType::ScalarTensor(_) => {
-            // Gathering a single element, keep as Tensor<B, 1> on device (no GPU stall)
+            // Gathering a single element, keep as Tensor<1> on device (no GPU stall)
             match &index_arg.ty {
                 ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
                     let (pre_convert, index_token) = resolve_scalar_index_token(index_arg, scope);
@@ -282,7 +282,7 @@ fn forward_tensor_gather(
                         #pre_convert
                         let #output = {
                             let selected = #input.slice(s![#(#slice_args),*]);
-                            selected.into_scalar().elem::<#scalar_ty>()
+                            selected.into_scalar::<#scalar_ty>()
                         };
                     }
                 }
@@ -336,14 +336,14 @@ fn forward_tensor_gather(
 
                     // Shape array `[i64; N]` gets wrapped into a 1D Int tensor and then
                     // fed to `Tensor::select`. Pin the tensor dtype to I64 explicitly
-                    // rather than letting the `Tensor::<B, 1, _>` element type inference
+                    // rather than letting the `Tensor::<1, _>` element type inference
                     // pick up the backend default IntElem: burn-flex's `int_select`
                     // requires I64 indices (debug_assert enforced) and the bare-device
                     // overload would otherwise drop the I64 source into the backend
                     // default, which on Flex produces silently-wrong gather output.
                     quote! {
                         let #output = {
-                            let indices = Tensor::<B, 1, burn::tensor::Int>::from_data(
+                            let indices = Tensor::<1, burn::tensor::Int>::from_data(
                                 #shape_name,
                                 (&self.device, burn::tensor::DType::I64),
                             );
@@ -444,7 +444,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, full_shape: [i64; 4], dim_indices: Tensor<B, 1, Int>) -> [i64; 4] {
+        pub fn forward(&self, full_shape: [i64; 4], dim_indices: Tensor<1, Int>) -> [i64; 4] {
             let selected_shape: [i64; 4usize] = dim_indices
                 .to_data()
                 .iter::<i64>()
@@ -475,7 +475,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dimensions: [i64; 3], choices: Tensor<B, 1, Int>) -> [i64; 3] {
+        pub fn forward(&self, dimensions: [i64; 3], choices: Tensor<1, Int>) -> [i64; 3] {
             let result_dims: [i64; 3usize] = choices
                 .to_data()
                 .iter::<i64>()
@@ -602,9 +602,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input_shape: [i64; 4]) -> Tensor<B, 1> {
+        pub fn forward(&self, input_shape: [i64; 4]) -> Tensor<1> {
             let result = Tensor::<
-                B,
                 1,
                 Int,
             >::from_data(burn::tensor::TensorData::from([input_shape[1]]), &self.device);
@@ -624,9 +623,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input_shape: [i64; 4]) -> Tensor<B, 1> {
+        pub fn forward(&self, input_shape: [i64; 4]) -> Tensor<1> {
             let result = Tensor::<
-                B,
                 1,
                 Int,
             >::from_data(burn::tensor::TensorData::from([input_shape[3]]), &self.device);
@@ -648,10 +646,10 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, values: Tensor<B, 2>, idx: i32) -> f32 {
+        pub fn forward(&self, values: Tensor<2>, idx: i32) -> f32 {
             let elem = {
                 let selected = values.slice(s![idx, ..]);
-                selected.into_scalar().elem::<f32>()
+                selected.into_scalar::<f32>()
             };
             elem
         }
@@ -669,10 +667,10 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, matrix: Tensor<B, 3>, col_idx: i64) -> f64 {
+        pub fn forward(&self, matrix: Tensor<3>, col_idx: i64) -> f64 {
             let value = {
                 let selected = matrix.slice(s![.., col_idx, ..]);
-                selected.into_scalar().elem::<f64>()
+                selected.into_scalar::<f64>()
             };
             value
         }
@@ -690,10 +688,10 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, int_array: Tensor<B, 1, Int>, position: i32) -> i32 {
+        pub fn forward(&self, int_array: Tensor<1, Int>, position: i32) -> i32 {
             let result = {
                 let selected = int_array.slice(s![position]);
-                selected.into_scalar().elem::<i32>()
+                selected.into_scalar::<i32>()
             };
             result
         }
@@ -711,13 +709,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            values: Tensor<B, 1>,
-            position: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 1> {
+        pub fn forward(&self, values: Tensor<1>, position: Tensor<1, Int>) -> Tensor<1> {
             let result = {
-                let __scalar_idx = position.into_scalar().elem::<i64>();
+                let __scalar_idx = (position).into_scalar::<i64>();
                 values.slice(s![__scalar_idx])
             };
             result
@@ -738,7 +732,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, table: Tensor<B, 3>, row_idx: i32) -> Tensor<B, 2> {
+        pub fn forward(&self, table: Tensor<3>, row_idx: i32) -> Tensor<2> {
             let row = {
                 let sliced = table.slice(s![row_idx, .., ..]);
                 sliced.squeeze_dim::<2usize>(0)
@@ -759,7 +753,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 2>, col_num: i64) -> Tensor<B, 1> {
+        pub fn forward(&self, data: Tensor<2>, col_num: i64) -> Tensor<1> {
             let column = {
                 let sliced = data.slice(s![.., col_num]);
                 sliced.squeeze_dim::<1usize>(1)
@@ -780,7 +774,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, volume: Tensor<B, 4>, depth_idx: i32) -> Tensor<B, 3> {
+        pub fn forward(&self, volume: Tensor<4>, depth_idx: i32) -> Tensor<3> {
             let slice = {
                 let sliced = volume.slice(s![.., .., depth_idx, ..]);
                 sliced.squeeze_dim::<3usize>(2)
@@ -801,7 +795,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, features: Tensor<B, 4>, ch_idx: i64) -> Tensor<B, 3> {
+        pub fn forward(&self, features: Tensor<4>, ch_idx: i64) -> Tensor<3> {
             let channel = {
                 let sliced = features.slice(s![.., .., .., ch_idx]);
                 sliced.squeeze_dim::<3usize>(3)
@@ -824,11 +818,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            embedding: Tensor<B, 2>,
-            row_indices: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 2> {
+        pub fn forward(&self, embedding: Tensor<2>, row_indices: Tensor<1, Int>) -> Tensor<2> {
             let gathered = embedding.take::<1, 2>(0, row_indices);
             gathered
         }
@@ -846,11 +836,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            feature_map: Tensor<B, 3>,
-            feature_ids: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 3> {
+        pub fn forward(&self, feature_map: Tensor<3>, feature_ids: Tensor<1, Int>) -> Tensor<3> {
             let selected_features = feature_map.take::<1, 3>(1, feature_ids);
             selected_features
         }
@@ -868,11 +854,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            source: Tensor<B, 3>,
-            indices_2d: Tensor<B, 2, Int>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, source: Tensor<3>, indices_2d: Tensor<2, Int>) -> Tensor<4> {
             let result = source.take::<2, 4>(0, indices_2d);
             result
         }
@@ -890,11 +872,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input_data: Tensor<B, 4>,
-            index_tensor: Tensor<B, 3, Int>,
-        ) -> Tensor<B, 6> {
+        pub fn forward(&self, input_data: Tensor<4>, index_tensor: Tensor<3, Int>) -> Tensor<6> {
             let output_data = input_data.take::<3, 6>(1, index_tensor);
             output_data
         }
@@ -952,10 +930,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, weights: Tensor<B, 2>, positions: [i64; 2]) -> Tensor<B, 2> {
+        pub fn forward(&self, weights: Tensor<2>, positions: [i64; 2]) -> Tensor<2> {
             let selected_weights = {
                 let indices = Tensor::<
-                    B,
                     1,
                     burn::tensor::Int,
                 >::from_data(positions, (&self.device, burn::tensor::DType::I64));
@@ -977,10 +954,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, matrix_data: Tensor<B, 3>, col_indices: [i64; 3]) -> Tensor<B, 3> {
+        pub fn forward(&self, matrix_data: Tensor<3>, col_indices: [i64; 3]) -> Tensor<3> {
             let columns = {
                 let indices = Tensor::<
-                    B,
                     1,
                     burn::tensor::Int,
                 >::from_data(col_indices, (&self.device, burn::tensor::DType::I64));
@@ -1002,10 +978,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, tensor3d: Tensor<B, 4>, plane_ids: [i64; 4]) -> Tensor<B, 4> {
+        pub fn forward(&self, tensor3d: Tensor<4>, plane_ids: [i64; 4]) -> Tensor<4> {
             let planes = {
                 let indices = Tensor::<
-                    B,
                     1,
                     burn::tensor::Int,
                 >::from_data(plane_ids, (&self.device, burn::tensor::DType::I64));
@@ -1027,7 +1002,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, data: Tensor<2>) -> Tensor<1> {
             let output = {
                 let sliced = data.slice(s![2, ..]);
                 sliced.squeeze_dim::<1usize>(0)
@@ -1048,7 +1023,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, data: Tensor<2>) -> Tensor<1> {
             let output = {
                 let sliced = data.slice(s![- 1, ..]);
                 sliced.squeeze_dim::<1usize>(0)
@@ -1069,7 +1044,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, data: Tensor<2>) -> Tensor<1> {
             let output = {
                 let sliced = data.slice(s![.., - 1]);
                 sliced.squeeze_dim::<1usize>(1)
@@ -1090,7 +1065,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, data: Tensor<2>) -> Tensor<1> {
             let output = {
                 let sliced = data.slice(s![- 2, ..]);
                 sliced.squeeze_dim::<1usize>(0)
@@ -1111,10 +1086,10 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 2>) -> f32 {
+        pub fn forward(&self, data: Tensor<2>) -> f32 {
             let output = {
                 let selected = data.slice(s![2, ..]);
-                selected.into_scalar().elem::<f32>()
+                selected.into_scalar::<f32>()
             };
             output
         }
@@ -1132,7 +1107,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, data: Tensor<2>) -> Tensor<1> {
             let output = { data.slice(s![2, ..]) };
             output
         }

@@ -238,7 +238,7 @@ mod tests {
         let node = create_cumsum_node("cumsum1", 0, false, false, 1);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<1>) -> Tensor<1> {
             let output = input.cumsum(0);
             output
         }
@@ -250,7 +250,7 @@ mod tests {
         let node = create_cumsum_node("cumsum1", 1, false, false, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input.cumsum(1);
             output
         }
@@ -262,7 +262,7 @@ mod tests {
         let node = create_cumsum_node("cumsum1", 0, false, true, 1);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<1>) -> Tensor<1> {
             let output = input.flip([0]).cumsum(0).flip([0]);
             output
         }
@@ -274,7 +274,7 @@ mod tests {
         let node = create_cumsum_node("cumsum1", 0, true, false, 1);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<1>) -> Tensor<1> {
             let output = {
                 let cumsum_result = input.cumsum(0);
                 let shape = cumsum_result.shape();
@@ -297,7 +297,7 @@ mod tests {
         let node = create_cumsum_node("cumsum1", 0, true, true, 1);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<1>) -> Tensor<1> {
             let output = {
                 let flipped = input.flip([0]);
                 let cumsum_result = flipped.cumsum(0);
@@ -322,7 +322,7 @@ mod tests {
         let node = create_cumsum_node("cumsum1", 1, false, true, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input.flip([1]).cumsum(1).flip([1]);
             output
         }
@@ -334,7 +334,7 @@ mod tests {
         let node = create_cumsum_node("cumsum1", 1, true, false, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let cumsum_result = input.cumsum(1);
                 let shape = cumsum_result.shape();
@@ -357,7 +357,7 @@ mod tests {
         let node = create_runtime_cumsum_node("cumsum1", false, false, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>, axis: [i64; 1]) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>, axis: [i64; 1]) -> Tensor<2> {
             let output = input.cumsum(axis[0] as usize);
             output
         }
@@ -369,7 +369,7 @@ mod tests {
         let node = create_runtime_cumsum_node("cumsum1", false, false, 3);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>, axis: [i64; 1]) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>, axis: [i64; 1]) -> Tensor<3> {
             let output = input.cumsum(axis[0] as usize);
             output
         }
@@ -381,7 +381,7 @@ mod tests {
         let node = create_runtime_cumsum_node("cumsum1", true, false, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>, axis: [i64; 1]) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>, axis: [i64; 1]) -> Tensor<2> {
             let output = {
                 let axis = axis[0] as usize;
                 let cumsum_result = input.cumsum(axis);
@@ -405,7 +405,7 @@ mod tests {
         let node = create_runtime_cumsum_node("cumsum1", false, true, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>, axis: [i64; 1]) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>, axis: [i64; 1]) -> Tensor<2> {
             let output = {
                 let axis = axis[0] as usize;
                 input.flip([axis]).cumsum(axis).flip([axis])

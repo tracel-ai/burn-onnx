@@ -11,15 +11,12 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Shape, Tensor};
 
     #[test]
     fn unsqueeze_runtime_axes() {
         let device = Default::default();
-        let model: unsqueeze_runtime_axes::Model<TestBackend> =
-            unsqueeze_runtime_axes::Model::new(&device);
+        let model: unsqueeze_runtime_axes::Model = unsqueeze_runtime_axes::Model::new(&device);
         let input_shape = Shape::from([3, 4, 5]);
         let expected_shape = Shape::from([1, 3, 1, 4, 5, 1]);
         let input = Tensor::ones(input_shape, &device);
@@ -35,7 +32,7 @@ mod tests {
     #[test]
     fn unsqueeze_like() {
         let device = Default::default();
-        let model = unsqueeze_like::Model::<TestBackend>::new(&device);
+        let model = unsqueeze_like::Model::new(&device);
         let input_shape = Shape::from([3, 4, 5]);
         let expected_shape = Shape::from([3, 4, 5, 1]);
         let input = Tensor::ones(input_shape, &device);
@@ -51,7 +48,7 @@ mod tests {
         // rather than tensors, which is crucial for efficient dynamic shape operations
         // The generated model takes an i64 scalar and returns a Shape array [i64; 1]
         let device = Default::default();
-        let model = unsqueeze_int_to_shape::Model::<TestBackend>::new(&device);
+        let model = unsqueeze_int_to_shape::Model::new(&device);
 
         // Input: scalar int64 value
         let scalar_value = 42i64;
@@ -72,12 +69,11 @@ mod tests {
         // This verifies that the squeeze/unsqueeze operations are symmetric and maintain
         // type consistency for shape manipulation patterns common in ONNX models
         let device = Default::default();
-        let model = squeeze_unsqueeze_roundtrip::Model::<TestBackend>::new(&device);
+        let model = squeeze_unsqueeze_roundtrip::Model::new(&device);
 
         // Input: 1D tensor with a value
         let input_value = 256i64;
-        let input_tensor =
-            Tensor::<TestBackend, 1, burn::tensor::Int>::from_data([input_value], &device);
+        let input_tensor = Tensor::<1, burn::tensor::Int>::from_data([input_value], &device);
 
         // The roundtrip should preserve the value
         // Note: The output is a Shape type [i64; 1], not a Tensor
@@ -92,10 +88,10 @@ mod tests {
         // Test Unsqueeze where the data input is a Shape type (from Shape op)
         // Reproduces issue #258: bodyposenet fails because Shape -> Unsqueeze was rejected
         let device = Default::default();
-        let model = unsqueeze_shape_input::Model::<TestBackend>::new(&device);
+        let model = unsqueeze_shape_input::Model::new(&device);
 
         // Input: 2D float tensor [2, 3]
-        let input = Tensor::<TestBackend, 2>::ones([2, 3], &device);
+        let input = Tensor::<2>::ones([2, 3], &device);
 
         // Output should be the shape [2, 3] unsqueezed to [[2, 3]] (shape [1, 2])
         let output = model.forward(input);
@@ -113,10 +109,10 @@ mod tests {
         // Test Unsqueeze with scalar axes input (not 1D tensor)
         // This verifies the fix for scalar axes handling in extract_config
         let device = Default::default();
-        let model = unsqueeze_scalar_axes::Model::<TestBackend>::new(&device);
+        let model = unsqueeze_scalar_axes::Model::new(&device);
 
         // Input: 2D tensor [3, 4]
-        let input = Tensor::<TestBackend, 2>::ones([3, 4], &device);
+        let input = Tensor::<2>::ones([3, 4], &device);
 
         // Output should be 3D tensor [1, 3, 4] after unsqueeze at axis 0
         let output = model.forward(input);

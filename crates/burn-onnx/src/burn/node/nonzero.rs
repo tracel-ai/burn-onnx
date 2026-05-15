@@ -69,7 +69,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Int> {
             let output = input
                 .not_equal_elem(0.0)
                 .argwhere()
@@ -88,7 +88,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = input
                 .not_equal_elem(0)
                 .argwhere()
@@ -107,7 +107,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2, Bool>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2, Bool>) -> Tensor<2, Int> {
             let output = input.argwhere().transpose().cast(burn::tensor::DType::I64);
             output
         }

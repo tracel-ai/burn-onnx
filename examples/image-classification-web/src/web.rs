@@ -10,12 +10,9 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use crate::model::{label::LABELS, normalizer::Normalizer, squeezenet::Model as SqueezenetModel};
 
 use burn::{
-    backend::{Flex, wgpu::init_setup_async},
     prelude::*,
-    tensor::activation::softmax,
+    tensor::{FlexDevice, WgpuDevice, activation::softmax},
 };
-
-use burn::backend::wgpu::{WebGpu, WgpuDevice, graphics::AutoGraphicsApi};
 
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -31,16 +28,6 @@ pub fn start() {
     wasm_logger::init(wasm_logger::Config::default());
 }
 
-#[allow(clippy::large_enum_variant)]
-/// The model is loaded to a specific backend
-pub enum ModelType {
-    /// The model is loaded to the Flex CPU backend
-    WithFlexBackend(Model<Flex>),
-
-    /// The model is loaded to the WebGpu backend
-    WithWgpuBackend(Model<WebGpu<f32, i32>>),
-}
-
 /// The image is 224x224 pixels with 3 channels (RGB)
 const HEIGHT: usize = 224;
 const WIDTH: usize = 224;
@@ -49,7 +36,7 @@ const CHANNELS: usize = 3;
 /// The image classifier
 #[wasm_bindgen]
 pub struct ImageClassifier {
-    model: ModelType,
+    model: Model,
 }
 
 #[wasm_bindgen]
@@ -58,9 +45,9 @@ impl ImageClassifier {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         log::info!("Initializing the image classifier");
-        let device = Default::default();
+        let device: Device = FlexDevice.into();
         Self {
-            model: ModelType::WithFlexBackend(Model::new(&device)),
+            model: Model::new(&device),
         }
     }
 
@@ -69,12 +56,7 @@ impl ImageClassifier {
         log::info!("Running inference on the image");
 
         let start = Instant::now();
-
-        let result = match self.model {
-            ModelType::WithFlexBackend(ref model) => model.forward(input).await,
-            ModelType::WithWgpuBackend(ref model) => model.forward(input).await,
-        };
-
+        let result = self.model.forward(input).await;
         let duration = start.elapsed();
 
         log::debug!("Inference is completed in {duration:?}");
@@ -86,8 +68,8 @@ impl ImageClassifier {
     pub async fn set_backend_flex(&mut self) -> Result<(), JsValue> {
         log::info!("Loading the model to the Flex backend");
         let start = Instant::now();
-        let device = Default::default();
-        self.model = ModelType::WithFlexBackend(Model::new(&device));
+        let device: Device = FlexDevice.into();
+        self.model = Model::new(&device);
         let duration = start.elapsed();
         log::debug!("Model is loaded to the Flex backend in {duration:?}");
         Ok(())
@@ -97,14 +79,14 @@ impl ImageClassifier {
     pub async fn set_backend_wgpu(&mut self) -> Result<(), JsValue> {
         log::info!("Loading the model to the Wgpu backend");
         let start = Instant::now();
-        let device = WgpuDevice::default();
+        let wgpu_device = WgpuDevice::default();
 
-        if let Ok(_) =
-            WGPU_INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        {
-            init_setup_async::<AutoGraphicsApi>(&device, Default::default()).await;
-        }
-        self.model = ModelType::WithWgpuBackend(Model::new(&device));
+        // First-time wgpu device init is handled internally by the new burn dispatch.
+        // The compare_exchange guard keeps the original "init once" contract in case
+        // we need to add an explicit setup hook later.
+        let _ = WGPU_INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst);
+        let device: Device = wgpu_device.into();
+        self.model = Model::new(&device);
         let duration = start.elapsed();
         log::debug!("Model is loaded to the Wgpu backend in {duration:?}");
 
@@ -118,25 +100,27 @@ impl ImageClassifier {
 }
 
 /// The image classifier model
-pub struct Model<B: Backend> {
-    model: SqueezenetModel<B>,
-    normalizer: Normalizer<B>,
+pub struct Model {
+    model: SqueezenetModel,
+    normalizer: Normalizer,
+    device: Device,
 }
 
-impl<B: Backend> Model<B> {
+impl Model {
     /// Constructor
-    pub fn new(device: &B::Device) -> Self {
+    pub fn new(device: &Device) -> Self {
         Self {
             model: SqueezenetModel::from_embedded(device),
             normalizer: Normalizer::new(device),
+            device: device.clone(),
         }
     }
 
     /// Normalizes input and runs inference on the image
     pub async fn forward(&self, input: &[f32]) -> Vec<f32> {
         // Reshape from the 1D array to 3d tensor [ width, height, channels]
-        let input = Tensor::<B, 1>::from_floats(input, &B::Device::default())
-            .reshape([1, CHANNELS, HEIGHT, WIDTH]);
+        let input =
+            Tensor::<1>::from_floats(input, &self.device).reshape([1, CHANNELS, HEIGHT, WIDTH]);
 
         // Normalize input: make between [-1,1] and make the mean=0 and std=1
         let input = self.normalizer.normalize(input);

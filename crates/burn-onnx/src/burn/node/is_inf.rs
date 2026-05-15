@@ -67,7 +67,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Bool> {
             let output = input.is_inf();
             output
         }
@@ -84,7 +84,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Bool> {
             let output = input.clone().is_inf().bool_and(input.greater_elem(0.0));
             output
         }
@@ -101,7 +101,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Bool> {
             let output = input.clone().is_inf().bool_and(input.lower_elem(0.0));
             output
         }
@@ -118,7 +118,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Bool> {
             let output = input.zeros_like().bool();
             output
         }

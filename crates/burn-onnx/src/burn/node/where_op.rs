@@ -182,7 +182,7 @@ fn where_input_as_tensor(
             }
         }
         ArgType::ScalarTensor(_) => {
-            // ScalarTensor is already a Tensor<B, 1> on device, just reshape/unsqueeze
+            // ScalarTensor is already a Tensor<1> on device, just reshape/unsqueeze
             let tensor = scope.arg(arg);
             if broadcast_rank > 1 {
                 let dims_to_unsqueeze: Vec<isize> =
@@ -200,14 +200,14 @@ fn where_input_as_tensor(
 
             if target_dtype.is_float() {
                 quote! {
-                    Tensor::<B, 1>::from_data(
+                    Tensor::<1>::from_data(
                         burn::tensor::TensorData::from([#name as f64]),
                         (&self.device, #dtype_tokens)
                     ).reshape([#(#shape_vec),*])
                 }
             } else if target_dtype.is_int() || target_dtype.is_uint() {
                 quote! {
-                    Tensor::<B, 1, burn::tensor::Int>::from_data(
+                    Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from([#name as i64]),
                         (&self.device, #dtype_tokens)
                     ).reshape([#(#shape_vec),*])
@@ -220,7 +220,7 @@ fn where_input_as_tensor(
                     quote! { #name != 0 }
                 };
                 quote! {
-                    Tensor::<B, 1, burn::tensor::Bool>::from_data(
+                    Tensor::<1, burn::tensor::Bool>::from_data(
                         burn::tensor::TensorData::from([#bool_expr]),
                         (&self.device, #dtype_tokens)
                     ).reshape([#(#shape_vec),*])
@@ -232,7 +232,7 @@ fn where_input_as_tensor(
             let name = arg_to_ident(arg);
             let dtype_tokens = target_dtype.to_tokens();
             let tensor = quote! {
-                Tensor::<B, 1, burn::tensor::Int>::from_data(
+                Tensor::<1, burn::tensor::Int>::from_data(
                     burn::tensor::TensorData::from(&#name as &[i64]),
                     (&self.device, #dtype_tokens)
                 )
@@ -269,10 +269,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            condition: Tensor<B, 2, Bool>,
-            x: Tensor<B, 2>,
-            y: Tensor<B, 2>,
-        ) -> Tensor<B, 2> {
+            condition: Tensor<2, Bool>,
+            x: Tensor<2>,
+            y: Tensor<2>,
+        ) -> Tensor<2> {
             let output = y.mask_where(condition, x);
             output
         }
@@ -291,10 +291,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            condition: Tensor<B, 2, Bool>,
-            x: Tensor<B, 1>,
-            y: Tensor<B, 1>,
-        ) -> Tensor<B, 2> {
+            condition: Tensor<2, Bool>,
+            x: Tensor<1>,
+            y: Tensor<1>,
+        ) -> Tensor<2> {
             let output = y
                 .unsqueeze_dims(&[0isize])
                 .mask_where(condition, x.unsqueeze_dims(&[0isize]));
@@ -313,12 +313,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            condition: Tensor<B, 2, Bool>,
-            x: f32,
-            y: Tensor<B, 2>,
-        ) -> Tensor<B, 2> {
+        pub fn forward(&self, condition: Tensor<2, Bool>, x: f32, y: Tensor<2>) -> Tensor<2> {
             let output = y.mask_fill(condition, x);
             output
         }
@@ -335,11 +330,10 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, condition: Tensor<B, 2, Bool>, x: f32, y: f32) -> Tensor<B, 2> {
+        pub fn forward(&self, condition: Tensor<2, Bool>, x: f32, y: f32) -> Tensor<2> {
             let output = {
                 let cond = condition;
                 Tensor::<
-                    B,
                     1,
                 >::from_data(
                         burn::tensor::TensorData::from([y as f64]),

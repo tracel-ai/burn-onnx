@@ -39,7 +39,7 @@ impl NodeCodegen for onnx_ir::conv2d::Conv2dNode {
         Some(Field::new(
             self.name.clone(),
             quote! {
-                Conv2d<B>
+                Conv2d
             },
             quote! {
                 let #name = Conv2dConfig::new(#channels, #kernel_size)
@@ -148,7 +148,7 @@ mod tests {
         let node = create_conv2d_node("conv1");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self.conv1.forward(input);
             output
         }
@@ -160,7 +160,7 @@ mod tests {
         let node = create_conv2d_node("conv1");
         let code = codegen_forward_with_clone(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self.conv1.forward(input.clone());
             output
         }

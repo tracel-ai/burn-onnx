@@ -4,18 +4,16 @@ include_models!(transpose);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn transpose() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: transpose::Model<TestBackend> = transpose::Model::new(&device);
+        let model: transpose::Model = transpose::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [[0., 1., 2., 3.], [4., 5., 6., 7.], [8., 9., 10., 11.]],
                 [

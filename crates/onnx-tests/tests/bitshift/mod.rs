@@ -14,18 +14,16 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Int, Tensor, TensorData};
 
     #[test]
     fn bitshift_left_tensors() {
         // Initialize the model with weights (loaded from the exported file)
         let device = Default::default();
-        let model: bitshift_left::Model<TestBackend> = bitshift_left::Model::new(&device);
+        let model: bitshift_left::Model = bitshift_left::Model::new(&device);
         // Run the model
-        let input1 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
-        let input2 = Tensor::<TestBackend, 1, Int>::from_ints([1, 1, 2, 2], &device);
+        let input1 = Tensor::<1, Int>::from_ints([1, 2, 3, 4], &device);
+        let input2 = Tensor::<1, Int>::from_ints([1, 1, 2, 2], &device);
         let output = model.forward(input1, input2);
         let expected = TensorData::from([2i32, 4, 12, 16]);
 
@@ -36,10 +34,9 @@ mod tests {
     fn bitshift_left_scalar_tensor() {
         // Initialize the model with weights (loaded from the exported file)
         let device = Default::default();
-        let model: bitshift_left_scalar::Model<TestBackend> =
-            bitshift_left_scalar::Model::new(&device);
+        let model: bitshift_left_scalar::Model = bitshift_left_scalar::Model::new(&device);
         // Run the model
-        let input1 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
+        let input1 = Tensor::<1, Int>::from_ints([1, 2, 3, 4], &device);
         let scalar = 2;
         let output = model.forward(input1, scalar);
         let expected = TensorData::from([4i32, 8, 12, 16]);
@@ -50,11 +47,11 @@ mod tests {
     #[test]
     fn bitshift_right_tensors() {
         let device = Default::default();
-        let model: bitshift_right::Model<TestBackend> = bitshift_right::Model::new(&device);
+        let model: bitshift_right::Model = bitshift_right::Model::new(&device);
 
         // Run the model
-        let input1 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
-        let input2 = Tensor::<TestBackend, 1, Int>::from_ints([1, 1, 2, 2], &device);
+        let input1 = Tensor::<1, Int>::from_ints([1, 2, 3, 4], &device);
+        let input2 = Tensor::<1, Int>::from_ints([1, 1, 2, 2], &device);
         let output = model.forward(input1, input2);
         let expected = TensorData::from([0i32, 1, 0, 1]);
 
@@ -65,10 +62,9 @@ mod tests {
     fn bitshift_right_scalar_tensor() {
         // Initialize the model with weights (loaded from the exported file)
         let device = Default::default();
-        let model: bitshift_right_scalar::Model<TestBackend> =
-            bitshift_right_scalar::Model::new(&device);
+        let model: bitshift_right_scalar::Model = bitshift_right_scalar::Model::new(&device);
         // Run the model
-        let input1 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
+        let input1 = Tensor::<1, Int>::from_ints([1, 2, 3, 4], &device);
         let scalar = 2;
         let output = model.forward(input1, scalar);
         let expected = TensorData::from([0i32, 0, 0, 1]);
@@ -79,11 +75,10 @@ mod tests {
     #[test]
     fn scalar_bitshift_left_tensor() {
         let device = Default::default();
-        let model: scalar_bitshift_left::Model<TestBackend> =
-            scalar_bitshift_left::Model::new(&device);
+        let model: scalar_bitshift_left::Model = scalar_bitshift_left::Model::new(&device);
         // Run the model
         let scalar = 4;
-        let shift_amounts = Tensor::<TestBackend, 1, Int>::from_ints([1, 1, 2, 2], &device);
+        let shift_amounts = Tensor::<1, Int>::from_ints([1, 1, 2, 2], &device);
         let output = model.forward(scalar, shift_amounts);
         // 4 << 1 = 8, 4 << 1 = 8, 4 << 2 = 16, 4 << 2 = 16
         let expected = TensorData::from([8i32, 8, 16, 16]);
@@ -94,11 +89,10 @@ mod tests {
     #[test]
     fn scalar_bitshift_right_tensor() {
         let device = Default::default();
-        let model: scalar_bitshift_right::Model<TestBackend> =
-            scalar_bitshift_right::Model::new(&device);
+        let model: scalar_bitshift_right::Model = scalar_bitshift_right::Model::new(&device);
         // Run the model
         let scalar = 8;
-        let shift_amounts = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
+        let shift_amounts = Tensor::<1, Int>::from_ints([1, 2, 3, 4], &device);
         let output = model.forward(scalar, shift_amounts);
         // 8 >> 1 = 4, 8 >> 2 = 2, 8 >> 3 = 1, 8 >> 4 = 0
         let expected = TensorData::from([4i32, 2, 1, 0]);
@@ -109,7 +103,7 @@ mod tests {
     #[test]
     fn scalar_bitshift_left_scalar() {
         let device = Default::default();
-        let model: scalar_bitshift_left_scalar::Model<TestBackend> =
+        let model: scalar_bitshift_left_scalar::Model =
             scalar_bitshift_left_scalar::Model::new(&device);
         // Run the model
         let lhs = 4;
@@ -122,7 +116,7 @@ mod tests {
     #[test]
     fn scalar_bitshift_right_scalar() {
         let device = Default::default();
-        let model: scalar_bitshift_right_scalar::Model<TestBackend> =
+        let model: scalar_bitshift_right_scalar::Model =
             scalar_bitshift_right_scalar::Model::new(&device);
         // Run the model
         let lhs = 16;

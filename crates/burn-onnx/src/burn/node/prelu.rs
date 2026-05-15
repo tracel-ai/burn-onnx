@@ -44,7 +44,7 @@ impl NodeCodegen for PReluNode {
         let n = num_parameters(self).to_tokens();
         Some(Field::new(
             self.name.clone(),
-            quote! { PRelu<B> },
+            quote! { PRelu },
             quote! { let #name = PReluConfig::new().with_num_parameters(#n).init(device); },
         ))
     }
@@ -121,7 +121,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self.prelu1.forward(input);
             output
         }
@@ -159,7 +159,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, slope: Tensor<B, 3>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, slope: Tensor<3>) -> Tensor<4> {
             let output = {
                 let __x = input;
                 __x.clone()
@@ -181,7 +181,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>, slope: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>, slope: Tensor<3>) -> Tensor<3> {
             let output = {
                 let __x = input;
                 __x.clone().clamp_min(0_f64).add(slope.mul(__x.clamp_max(0_f64)))

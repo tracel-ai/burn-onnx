@@ -72,7 +72,7 @@ impl NodeCodegen for onnx_ir::node::argmin::ArgMinNode {
                 // Extracted to native scalar, no cast needed
                 quote! {
                     let argmin_result = #argmin_expr;
-                    let #output = argmin_result.into_scalar().elem::<i64>();
+                    let #output = argmin_result.into_scalar::<i64>();
                 }
             }
             _ => panic!("ArgMin output must be Tensor or Scalar"),
@@ -97,7 +97,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3, Int> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3, Int> {
             let output = input.argmin(1).cast(burn::tensor::DType::I64);
             output
         }
@@ -114,7 +114,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<1, Int> {
             let argmin_result = input.argmin(0);
             let output = argmin_result.squeeze_dim::<1usize>(0).cast(burn::tensor::DType::I64);
             output
@@ -132,7 +132,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1>) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, input: Tensor<1>) -> Tensor<1, Int> {
             let output = input.argmin(0).reshape([1]).cast(burn::tensor::DType::I64);
             output
         }
@@ -149,9 +149,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1>) -> i64 {
+        pub fn forward(&self, input: Tensor<1>) -> i64 {
             let argmin_result = input.argmin(0);
-            let output = argmin_result.into_scalar().elem::<i64>();
+            let output = argmin_result.into_scalar::<i64>();
             output
         }
         ");
@@ -167,7 +167,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3, Int> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3, Int> {
             let output = {
                 let __argmin_input = input;
                 let __argmin_axis_size = __argmin_input.shape()[1usize] as i64;

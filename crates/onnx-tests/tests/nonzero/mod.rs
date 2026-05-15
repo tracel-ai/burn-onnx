@@ -11,18 +11,16 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Bool, DType, Int, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Bool, DType, Device, Int, Tensor, TensorData};
 
     #[test]
     fn nonzero_float32_test() {
         let device = Default::default();
-        let model = nonzero_float32::Model::<TestBackend>::new(&device);
+        let model = nonzero_float32::Model::new(&device);
 
         // Create a 3x4 tensor with some non-zero values
         // Expected nonzero indices: (0,1), (1,2), (2,0), (2,3)
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 2.5, 0.0],
@@ -46,11 +44,11 @@ mod tests {
     #[test]
     fn nonzero_int64_test() {
         let device = Default::default();
-        let model = nonzero_int64::Model::<TestBackend>::new(&device);
+        let model = nonzero_int64::Model::new(&device);
 
         // Create a 2x3 int tensor with some non-zero values (ONNX model declares int64).
         // Expected nonzero indices: (0,0), (1,2)
-        let input = Tensor::<TestBackend, 2, Int>::from_data(
+        let input = Tensor::<2, Int>::from_data(
             TensorData::from([[5i64, 0, 0], [0, 0, -3]]),
             (&device, DType::I64),
         );
@@ -70,14 +68,11 @@ mod tests {
     #[test]
     fn nonzero_bool_test() {
         let device = Default::default();
-        let model = nonzero_bool::Model::<TestBackend>::new(&device);
+        let model = nonzero_bool::Model::new(&device);
 
         // Create a 2x2 bool tensor
         // Expected nonzero indices: (0,1), (1,0)
-        let input = Tensor::<TestBackend, 2, Bool>::from_bool(
-            [[false, true], [true, false]].into(),
-            &device,
-        );
+        let input = Tensor::<2, Bool>::from_bool([[false, true], [true, false]], &device);
 
         let output = model.forward(input);
 
@@ -94,11 +89,11 @@ mod tests {
     #[test]
     fn nonzero_1d_test() {
         let device = Default::default();
-        let model = nonzero_1d::Model::<TestBackend>::new(&device);
+        let model = nonzero_1d::Model::new(&device);
 
         // Create a 1D tensor with some non-zero values
         // Expected nonzero indices: 1, 3, 5
-        let input = Tensor::<TestBackend, 1>::from_floats([0.0, 2.0, 0.0, -1.0, 0.0, 3.5], &device);
+        let input = Tensor::<1>::from_floats([0.0, 2.0, 0.0, -1.0, 0.0, 3.5], &device);
 
         let output = model.forward(input);
 
@@ -112,11 +107,11 @@ mod tests {
     #[test]
     fn nonzero_3d_test() {
         let device = Default::default();
-        let model = nonzero_3d::Model::<TestBackend>::new(&device);
+        let model = nonzero_3d::Model::new(&device);
 
         // Create a 2x2x3 tensor with a few non-zero values
         // Expected nonzero indices: (0,0,1), (1,1,2)
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [[0.0, 1.0, 0.0], [0.0, 0.0, 0.0]],
                 [[0.0, 0.0, 0.0], [0.0, 0.0, 2.0]],
@@ -140,17 +135,16 @@ mod tests {
     #[test]
     fn nonzero_empty_test() {
         let device = Default::default();
-        let model = nonzero_empty::Model::<TestBackend>::new(&device);
+        let model = nonzero_empty::Model::new(&device);
 
         // Create a tensor with all zeros
-        let input =
-            Tensor::<TestBackend, 2>::from_floats([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], &device);
+        let input = Tensor::<2>::from_floats([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], &device);
 
         let output = model.forward(input);
 
         // Empty tensor: [2, 0] - 2 dimensions, 0 non-zero elements.
         // ONNX NonZero spec: output is always int64.
-        let expected = Tensor::<TestBackend, 2, Int>::empty([2, 0], (&device, DType::I64));
+        let expected = Tensor::<2, Int>::empty([2, 0], (&device, DType::I64));
 
         output.to_data().assert_eq(&expected.to_data(), true);
     }

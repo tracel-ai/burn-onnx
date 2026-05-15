@@ -4,18 +4,15 @@ include_models!(celu);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn celu() {
         let device = Default::default();
-        let model: celu::Model<TestBackend> = celu::Model::new(&device);
+        let model: celu::Model = celu::Model::new(&device);
 
         // Run the model (alpha=2.0)
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [
                 [0.49671414, -0.1382643, 0.64768857],
                 [1.5230298, -0.23415338, -0.23413695],
@@ -30,6 +27,6 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
     }
 }

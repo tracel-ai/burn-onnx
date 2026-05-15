@@ -34,7 +34,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = burn::tensor::activation::softplus(input, 1.0);
             output
         }

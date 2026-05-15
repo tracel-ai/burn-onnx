@@ -5,17 +5,15 @@ include_models!(hann_window, hann_window_symmetric, hann_window_runtime);
 mod tests {
     use super::*;
 
-    use crate::backend::TestBackend;
-
     #[test]
     fn hann_window_periodic() {
         let device = Default::default();
-        let model: hann_window::Model<TestBackend> = hann_window::Model::new(&device);
+        let model: hann_window::Model = hann_window::Model::new(&device);
 
         let output = model.forward();
 
         // Expected periodic Hann window of size 10 (from ONNX reference evaluator)
-        let expected = burn::tensor::Tensor::<TestBackend, 1>::from_floats(
+        let expected = burn::tensor::Tensor::<1>::from_floats(
             [
                 0.0_f32,
                 0.095_491_506,
@@ -39,13 +37,12 @@ mod tests {
     #[test]
     fn hann_window_symmetric_test() {
         let device = Default::default();
-        let model: hann_window_symmetric::Model<TestBackend> =
-            hann_window_symmetric::Model::new(&device);
+        let model: hann_window_symmetric::Model = hann_window_symmetric::Model::new(&device);
 
         let output = model.forward();
 
         // Expected symmetric Hann window of size 10 (from ONNX reference evaluator)
-        let expected = burn::tensor::Tensor::<TestBackend, 1>::from_floats(
+        let expected = burn::tensor::Tensor::<1>::from_floats(
             [
                 0.0_f32,
                 0.116_977_78,
@@ -69,13 +66,12 @@ mod tests {
     #[test]
     fn hann_window_runtime_size() {
         let device = Default::default();
-        let model: hann_window_runtime::Model<TestBackend> =
-            hann_window_runtime::Model::new(&device);
+        let model: hann_window_runtime::Model = hann_window_runtime::Model::new(&device);
 
         // Pass size=10 at runtime
         let output = model.forward(10);
 
-        let expected = burn::tensor::Tensor::<TestBackend, 1>::from_floats(
+        let expected = burn::tensor::Tensor::<1>::from_floats(
             [
                 0.0_f32,
                 0.095_491_506,

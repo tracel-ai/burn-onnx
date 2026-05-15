@@ -18,10 +18,7 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     // Helper function to assert scalar values with tolerance
     fn assert_scalar_approx_eq(actual: f32, expected: f32, tolerance: f64) {
@@ -38,10 +35,10 @@ mod tests {
     #[test]
     fn reduce_min() {
         let device = Default::default();
-        let model: reduce_min::Model<TestBackend> = reduce_min::Model::new(&device);
+        let model: reduce_min::Model = reduce_min::Model::new(&device);
 
         // Run the models
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, 4.0, 9.0, 25.0], //
                 [2.0, 5.0, 10.0, 26.0],
@@ -69,10 +66,10 @@ mod tests {
     #[test]
     fn reduce_max() {
         let device = Default::default();
-        let model: reduce_max::Model<TestBackend> = reduce_max::Model::new(&device);
+        let model: reduce_max::Model = reduce_max::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, 4.0, 9.0, 25.0], //
                 [2.0, 5.0, 10.0, 26.0],
@@ -100,10 +97,10 @@ mod tests {
     #[test]
     fn reduce_sum() {
         let device = Default::default();
-        let model: reduce_sum::Model<TestBackend> = reduce_sum::Model::new(&device);
+        let model: reduce_sum::Model = reduce_sum::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, 4.0, 9.0, 25.0], //
                 [2.0, 5.0, 10.0, 26.0],
@@ -125,20 +122,20 @@ mod tests {
         output3.to_data().assert_eq(&expected3, true);
         output4
             .to_data()
-            .assert_approx_eq::<FT>(&expected4, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected4, burn::tensor::Tolerance::default());
         output5.to_data().assert_eq(&expected5, true);
         output6
             .to_data()
-            .assert_approx_eq::<FT>(&expected6, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected6, burn::tensor::Tolerance::default());
     }
 
     #[test]
     fn reduce_prod() {
         let device = Default::default();
-        let model: reduce_prod::Model<TestBackend> = reduce_prod::Model::new(&device);
+        let model: reduce_prod::Model = reduce_prod::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, 4.0, 9.0, 25.0], //
                 [2.0, 5.0, 10.0, 26.0],
@@ -157,19 +154,19 @@ mod tests {
         output2.to_data().assert_eq(&expected2, true);
         output3
             .to_data()
-            .assert_approx_eq::<FT>(&expected3, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected3, burn::tensor::Tolerance::default());
         output4
             .to_data()
-            .assert_approx_eq::<FT>(&expected4, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected4, burn::tensor::Tolerance::default());
     }
 
     #[test]
     fn reduce_mean() {
         let device = Default::default();
-        let model: reduce_mean::Model<TestBackend> = reduce_mean::Model::new(&device);
+        let model: reduce_mean::Model = reduce_mean::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, 4.0, 9.0, 25.0], //
                 [2.0, 5.0, 10.0, 26.0],
@@ -190,25 +187,25 @@ mod tests {
         assert_scalar_approx_eq(output2, expected2_scalar, 1e-6);
         output3
             .to_data()
-            .assert_approx_eq::<FT>(&expected3, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected3, burn::tensor::Tolerance::default());
         output4
             .to_data()
-            .assert_approx_eq::<FT>(&expected4, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected4, burn::tensor::Tolerance::default());
         output5
             .to_data()
-            .assert_approx_eq::<FT>(&expected5, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected5, burn::tensor::Tolerance::default());
         output6
             .to_data()
-            .assert_approx_eq::<FT>(&expected6, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected6, burn::tensor::Tolerance::default());
     }
 
     #[test]
     fn reduce_sum_square() {
         let device = Default::default();
-        let model: reduce_sum_square::Model<TestBackend> = reduce_sum_square::Model::new(&device);
+        let model: reduce_sum_square::Model = reduce_sum_square::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, 4.0, 9.0, 25.0], //
                 [2.0, 5.0, 10.0, 26.0],
@@ -234,25 +231,25 @@ mod tests {
         assert_scalar_approx_eq(output1, expected1_scalar, 1e-6);
         output2
             .to_data()
-            .assert_approx_eq::<FT>(&expected2, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected2, burn::tensor::Tolerance::default());
         output3
             .to_data()
-            .assert_approx_eq::<FT>(&expected3, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected3, burn::tensor::Tolerance::default());
         output4
             .to_data()
-            .assert_approx_eq::<FT>(&expected4, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected4, burn::tensor::Tolerance::default());
         output5
             .to_data()
-            .assert_approx_eq::<FT>(&expected5, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected5, burn::tensor::Tolerance::default());
     }
 
     #[test]
     fn reduce_l1() {
         let device = Default::default();
-        let model: reduce_l1::Model<TestBackend> = reduce_l1::Model::new(&device);
+        let model: reduce_l1::Model = reduce_l1::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, -4.0, 9.0, 25.0], //
                 [2.0, 5.0, -10.0, 26.0],
@@ -279,25 +276,25 @@ mod tests {
         assert_scalar_approx_eq(output1, expected1_scalar, 1e-6);
         output2
             .to_data()
-            .assert_approx_eq::<FT>(&expected2, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected2, burn::tensor::Tolerance::default());
         output3
             .to_data()
-            .assert_approx_eq::<FT>(&expected3, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected3, burn::tensor::Tolerance::default());
         output4
             .to_data()
-            .assert_approx_eq::<FT>(&expected4, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected4, burn::tensor::Tolerance::default());
         output5
             .to_data()
-            .assert_approx_eq::<FT>(&expected5, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected5, burn::tensor::Tolerance::default());
     }
 
     #[test]
     fn reduce_l2() {
         let device = Default::default();
-        let model: reduce_l2::Model<TestBackend> = reduce_l2::Model::new(&device);
+        let model: reduce_l2::Model = reduce_l2::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, -4.0, 9.0, 25.0], //
                 [2.0, 5.0, -10.0, 26.0],
@@ -323,25 +320,25 @@ mod tests {
         assert_scalar_approx_eq(output1, expected1_scalar, 1e-6);
         output2
             .to_data()
-            .assert_approx_eq::<FT>(&expected2, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected2, burn::tensor::Tolerance::default());
         output3
             .to_data()
-            .assert_approx_eq::<FT>(&expected3, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected3, burn::tensor::Tolerance::default());
         output4
             .to_data()
-            .assert_approx_eq::<FT>(&expected4, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected4, burn::tensor::Tolerance::default());
         output5
             .to_data()
-            .assert_approx_eq::<FT>(&expected5, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected5, burn::tensor::Tolerance::default());
     }
 
     #[test]
     fn reduce_log_sum() {
         let device = Default::default();
-        let model: reduce_log_sum::Model<TestBackend> = reduce_log_sum::Model::new(&device);
+        let model: reduce_log_sum::Model = reduce_log_sum::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, 4.0, 9.0, 25.0], //
                 [2.0, 5.0, 10.0, 26.0],
@@ -367,25 +364,25 @@ mod tests {
         assert_scalar_approx_eq(output1, expected1_scalar, 1e-6);
         output2
             .to_data()
-            .assert_approx_eq::<FT>(&expected2, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected2, burn::tensor::Tolerance::default());
         output3
             .to_data()
-            .assert_approx_eq::<FT>(&expected3, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected3, burn::tensor::Tolerance::default());
         output4
             .to_data()
-            .assert_approx_eq::<FT>(&expected4, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected4, burn::tensor::Tolerance::default());
         output5
             .to_data()
-            .assert_approx_eq::<FT>(&expected5, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected5, burn::tensor::Tolerance::default());
     }
 
     #[test]
     fn reduce_log_sum_exp() {
         let device = Default::default();
-        let model: reduce_log_sum_exp::Model<TestBackend> = reduce_log_sum_exp::Model::new(&device);
+        let model: reduce_log_sum_exp::Model = reduce_log_sum_exp::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, 4.0, 9.0, 25.0], //
                 [2.0, 5.0, 10.0, 26.0],
@@ -411,16 +408,16 @@ mod tests {
         assert_scalar_approx_eq(output1, expected1_scalar, 1e-6);
         output2
             .to_data()
-            .assert_approx_eq::<FT>(&expected2, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected2, burn::tensor::Tolerance::default());
         output3
             .to_data()
-            .assert_approx_eq::<FT>(&expected3, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected3, burn::tensor::Tolerance::default());
         output4
             .to_data()
-            .assert_approx_eq::<FT>(&expected4, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected4, burn::tensor::Tolerance::default());
         output5
             .to_data()
-            .assert_approx_eq::<FT>(&expected5, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected5, burn::tensor::Tolerance::default());
     }
 
     #[test]
@@ -428,11 +425,11 @@ mod tests {
         // Regression test for partial static_shape in ReduceMean
         // This was causing "index out of bounds" panic before the fix
         let device = Default::default();
-        let model: reduce_mean_partial_shape::Model<TestBackend> =
+        let model: reduce_mean_partial_shape::Model =
             reduce_mean_partial_shape::Model::new(&device);
 
         // Input with shape [1, 4, 8]
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [[
                 [
                     1.9269, 1.4873, 0.9007, -2.1055, 0.6784, -1.2345, -0.0431, -1.6047,
@@ -460,17 +457,17 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
     }
 
     #[test]
     fn reduce_min_bool() {
         // Test ReduceMin on boolean tensors (equivalent to logical AND)
         let device = Default::default();
-        let model: reduce_min_bool::Model<TestBackend> = reduce_min_bool::Model::new(&device);
+        let model: reduce_min_bool::Model = reduce_min_bool::Model::new(&device);
 
         // Input: [2, 3, 4] boolean tensor
-        let input = Tensor::<TestBackend, 3, burn::tensor::Bool>::from_bool(
+        let input = Tensor::<3, burn::tensor::Bool>::from_bool(
             TensorData::from([
                 [
                     [true, true, false, true],    // All True except one
@@ -508,10 +505,10 @@ mod tests {
     fn reduce_max_bool() {
         // Test ReduceMax on boolean tensors (equivalent to logical OR)
         let device = Default::default();
-        let model: reduce_max_bool::Model<TestBackend> = reduce_max_bool::Model::new(&device);
+        let model: reduce_max_bool::Model = reduce_max_bool::Model::new(&device);
 
         // Input: [2, 3, 4] boolean tensor
-        let input = Tensor::<TestBackend, 3, burn::tensor::Bool>::from_bool(
+        let input = Tensor::<3, burn::tensor::Bool>::from_bool(
             TensorData::from([
                 [
                     [false, false, false, false], // All False

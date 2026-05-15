@@ -12,12 +12,10 @@ mod tests {
     use super::*;
     use burn::tensor::TensorData;
 
-    use crate::backend::TestBackend;
-
     #[test]
     fn range() {
         let device = Default::default();
-        let model: range::Model<TestBackend> = range::Model::new(&device);
+        let model: range::Model = range::Model::new(&device);
 
         // Run the model
         let start = 0i64;
@@ -32,7 +30,7 @@ mod tests {
     #[test]
     fn range_static() {
         let device = Default::default();
-        let model: range_static::Model<TestBackend> = range_static::Model::new(&device);
+        let model: range_static::Model = range_static::Model::new(&device);
 
         // Run the model - all parameters are static
         let output = model.forward();
@@ -44,7 +42,7 @@ mod tests {
     #[test]
     fn range_mixed() {
         let device = Default::default();
-        let model: range_mixed::Model<TestBackend> = range_mixed::Model::new(&device);
+        let model: range_mixed::Model = range_mixed::Model::new(&device);
 
         // Run the model - start is runtime, limit and delta are static
         let start = 0i64;
@@ -64,7 +62,7 @@ mod tests {
     #[test]
     fn range_runtime() {
         let device = Default::default();
-        let model: range_runtime::Model<TestBackend> = range_runtime::Model::new(&device);
+        let model: range_runtime::Model = range_runtime::Model::new(&device);
 
         // Test case 1: 0 to 10 by 2
         let start = 0i64;
@@ -108,8 +106,7 @@ mod tests {
     #[test]
     fn range_negative_delta() {
         let device = Default::default();
-        let model: range_negative_delta::Model<TestBackend> =
-            range_negative_delta::Model::new(&device);
+        let model: range_negative_delta::Model = range_negative_delta::Model::new(&device);
 
         // Descending range: start=10, limit=0, delta=-2
         let output = model.forward();

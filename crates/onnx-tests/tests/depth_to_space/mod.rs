@@ -5,17 +5,14 @@ include_models!(depth_to_space_dcr, depth_to_space_crd);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, Tolerance, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Tensor, TensorData, Tolerance};
 
     #[test]
     fn depth_to_space_dcr() {
         let device = Default::default();
-        let model: depth_to_space_dcr::Model<TestBackend> = depth_to_space_dcr::Model::new(&device);
+        let model: depth_to_space_dcr::Model = depth_to_space_dcr::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [
                 [
                     [[0.5, -0.14, 0.65], [1.52, -0.23, -0.23]],
@@ -50,15 +47,15 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn depth_to_space_crd() {
         let device = Default::default();
-        let model: depth_to_space_crd::Model<TestBackend> = depth_to_space_crd::Model::new(&device);
+        let model: depth_to_space_crd::Model = depth_to_space_crd::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [
                 [
                     [[0.34, -1.76, 0.32], [-0.39, -0.68, 0.61]],
@@ -93,6 +90,6 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 }

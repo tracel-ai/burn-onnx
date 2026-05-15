@@ -31,13 +31,13 @@ impl NodeCodegen for onnx_ir::node::and::AndNode {
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 let rank = rhs_ty.rank();
                 quote! {
-                    if #lhs_value { #rhs_value } else { Tensor::<B, #rank, Int>::zeros(#rhs_value.shape(), &self.device).bool() }
+                    if #lhs_value { #rhs_value } else { Tensor::<#rank, Int>::zeros(#rhs_value.shape(), &self.device).bool() }
                 }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                 let rank = lhs_ty.rank();
                 quote! {
-                    if #rhs_value { #lhs_value } else { Tensor::<B, #rank, Int>::zeros(#lhs_value.shape(), &self.device).bool() }
+                    if #rhs_value { #lhs_value } else { Tensor::<#rank, Int>::zeros(#lhs_value.shape(), &self.device).bool() }
                 }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
@@ -60,7 +60,7 @@ impl NodeCodegen for onnx_ir::node::and::AndNode {
             // bool_and path.
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
                 quote! {
-                    Tensor::<B, 1, burn::tensor::Int>::from_data(
+                    Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#lhs_value as &[i64]),
                         (&self.device, burn::tensor::DType::I64),
                     )
@@ -71,7 +71,7 @@ impl NodeCodegen for onnx_ir::node::and::AndNode {
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
                 quote! {
                     #lhs_value.bool_and(
-                        Tensor::<B, 1, burn::tensor::Int>::from_data(
+                        Tensor::<1, burn::tensor::Int>::from_data(
                             burn::tensor::TensorData::from(&#rhs_value as &[i64]),
                             (&self.device, burn::tensor::DType::I64),
                         )
@@ -107,11 +107,11 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: bool, rhs: Tensor<B, 4, Bool>) -> Tensor<B, 4, Bool> {
+        pub fn forward(&self, lhs: bool, rhs: Tensor<4, Bool>) -> Tensor<4, Bool> {
             let output = if lhs {
                 rhs
             } else {
-                Tensor::<B, 4usize, Int>::zeros(rhs.shape(), &self.device).bool()
+                Tensor::<4usize, Int>::zeros(rhs.shape(), &self.device).bool()
             };
             output
         }
@@ -127,11 +127,11 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 4, Bool>, rhs: bool) -> Tensor<B, 4, Bool> {
+        pub fn forward(&self, lhs: Tensor<4, Bool>, rhs: bool) -> Tensor<4, Bool> {
             let output = if rhs {
                 lhs
             } else {
-                Tensor::<B, 4usize, Int>::zeros(lhs.shape(), &self.device).bool()
+                Tensor::<4usize, Int>::zeros(lhs.shape(), &self.device).bool()
             };
             output
         }
@@ -169,11 +169,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            lhs: Tensor<B, 2, Bool>,
-            rhs: Tensor<B, 2, Bool>,
-        ) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, lhs: Tensor<2, Bool>, rhs: Tensor<2, Bool>) -> Tensor<2, Bool> {
             let output = lhs.bool_and(rhs);
             output
         }
@@ -189,9 +185,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: [i64; 1], rhs: Tensor<B, 1, Bool>) -> Tensor<B, 1, Bool> {
+        pub fn forward(&self, lhs: [i64; 1], rhs: Tensor<1, Bool>) -> Tensor<1, Bool> {
             let output = Tensor::<
-                B,
                 1,
                 burn::tensor::Int,
             >::from_data(
@@ -214,11 +209,10 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 1, Bool>, rhs: [i64; 1]) -> Tensor<B, 1, Bool> {
+        pub fn forward(&self, lhs: Tensor<1, Bool>, rhs: [i64; 1]) -> Tensor<1, Bool> {
             let output = lhs
                 .bool_and(
                     Tensor::<
-                        B,
                         1,
                         burn::tensor::Int,
                     >::from_data(

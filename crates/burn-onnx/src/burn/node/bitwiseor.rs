@@ -29,10 +29,10 @@ impl NodeCodegen for onnx_ir::node::bitwiseor::BitwiseOrNode {
                 quote! { #lhs_bc.bitwise_or(#rhs_bc) }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
-                quote! { #lhs_value.bitwise_or_scalar((#rhs_value as i64).elem()) }
+                quote! { #lhs_value.bitwise_or_scalar(#rhs_value as i64) }
             }
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
-                quote! { #rhs_value.bitwise_or_scalar((#lhs_value as i64).elem()) }
+                quote! { #rhs_value.bitwise_or_scalar(#lhs_value as i64) }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
                 quote! { #lhs_value | #rhs_value }
@@ -62,11 +62,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            lhs: Tensor<B, 2, Int>,
-            rhs: Tensor<B, 2, Int>,
-        ) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, lhs: Tensor<2, Int>, rhs: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = lhs.bitwise_or(rhs);
             output
         }
@@ -82,8 +78,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 2, Int>, rhs: i32) -> Tensor<B, 2, Int> {
-            let output = lhs.bitwise_or_scalar((rhs as i64).elem());
+        pub fn forward(&self, lhs: Tensor<2, Int>, rhs: i32) -> Tensor<2, Int> {
+            let output = lhs.bitwise_or_scalar(rhs as i64);
             output
         }
         ");
@@ -98,8 +94,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: i32, rhs: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
-            let output = rhs.bitwise_or_scalar((lhs as i64).elem());
+        pub fn forward(&self, lhs: i32, rhs: Tensor<2, Int>) -> Tensor<2, Int> {
+            let output = rhs.bitwise_or_scalar(lhs as i64);
             output
         }
         ");
@@ -130,11 +126,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            lhs: Tensor<B, 3, Int>,
-            rhs: Tensor<B, 2, Int>,
-        ) -> Tensor<B, 3, Int> {
+        pub fn forward(&self, lhs: Tensor<3, Int>, rhs: Tensor<2, Int>) -> Tensor<3, Int> {
             let output = lhs.bitwise_or((rhs).unsqueeze_dims(&[0isize]));
             output
         }
@@ -150,11 +142,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            lhs: Tensor<B, 2, Int>,
-            rhs: Tensor<B, 3, Int>,
-        ) -> Tensor<B, 3, Int> {
+        pub fn forward(&self, lhs: Tensor<2, Int>, rhs: Tensor<3, Int>) -> Tensor<3, Int> {
             let output = (lhs).unsqueeze_dims(&[0isize]).bitwise_or(rhs);
             output
         }

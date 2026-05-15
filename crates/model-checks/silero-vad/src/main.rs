@@ -37,18 +37,18 @@ struct ReferenceOutputs {
 
 /// Run a single test case and return (passed, actual_output, expected_output)
 fn run_test_case(
-    model: &Model<MyBackend>,
-    device: &Device<MyBackend>,
+    model: &Model,
+    device: &Device,
     test_case: &TestCase,
     sample_rate: i64,
 ) -> (bool, f32, f32) {
     // Create input tensor from test case samples
     let input_data: Vec<f32> = test_case.input_samples.clone();
-    let input = Tensor::<MyBackend, 1>::from_floats(input_data.as_slice(), device)
+    let input = Tensor::<1>::from_floats(input_data.as_slice(), device)
         .reshape([1, test_case.input_samples.len()]);
 
     // Initialize state to zeros
-    let state = Tensor::<MyBackend, 3>::zeros([2, 1, 128], device);
+    let state = Tensor::<3>::zeros([2, 1, 128], device);
 
     // Run inference
     let (output, _state_out) = model.forward(input, sample_rate, state);
@@ -107,14 +107,14 @@ fn main() {
     println!("Initializing Silero VAD model...");
     let device = model_checks_common::best_device!();
     let weights_path = concat!(env!("OUT_DIR"), "/model/silero_vad.bpk");
-    let model: Model<MyBackend> = Model::from_file(weights_path, &device);
+    let model: Model = Model::from_file(weights_path, &device);
     println!("  Model initialized\n");
 
     // Warmup run (compiles GPU shaders, allocates buffers)
     println!("Warmup inference...");
     {
-        let input = Tensor::<MyBackend, 1>::zeros([1 * 512], &device).reshape([1, 512]);
-        let state = Tensor::<MyBackend, 3>::zeros([2, 1, 128], &device);
+        let input = Tensor::<1>::zeros([1 * 512], &device).reshape([1, 512]);
+        let state = Tensor::<3>::zeros([2, 1, 128], &device);
         let start = Instant::now();
         let _ = model.forward(input, reference.sample_rate, state);
         println!("  Warmup completed in {:.2?}\n", start.elapsed());

@@ -45,7 +45,7 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
             return quote! {
                 let #output = {
                     let onnx_shape: [i64; #output_rank] = #shape;
-                    let input_tensor = Tensor::<B, 1, Int>::from_data(
+                    let input_tensor = Tensor::<1, Int>::from_data(
                         burn::tensor::TensorData::from(#input.as_slice()),
                         (&self.device, burn::tensor::DType::I64)
                     );
@@ -63,7 +63,7 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
             };
         }
 
-        // ScalarTensor is already a Tensor<B, 1> on device, just expand directly.
+        // ScalarTensor is already a Tensor<1> on device, just expand directly.
         if input_arg.ty.is_scalar_tensor() {
             let static_shape = match &self.config {
                 onnx_ir::expand::ExpandConfig::Static(s) => Some(s.clone()),
@@ -95,7 +95,7 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
             };
             return quote! {
                 let #output = {
-                    let input = Tensor::<B, 1 #kind>::from_data(
+                    let input = Tensor::<1 #kind>::from_data(
                         burn::tensor::TensorData::from([#input]),
                         (&self.device, #dtype_tokens)
                     );
@@ -147,7 +147,7 @@ mod tests {
         let node = create_expand_node_static("expand1", 2, vec![2, 3, 4]);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<3> {
             let output = {
                 let onnx_shape: [i64; 3usize] = [2, 3, 4];
                 let input_dims = input.dims();
@@ -171,7 +171,7 @@ mod tests {
         let node = create_expand_node_static("expand1", 2, vec![1, 5, 10]);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<3> {
             let output = {
                 let onnx_shape: [i64; 3usize] = [1, 5, 10];
                 let input_dims = input.dims();
@@ -200,10 +200,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: i64) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: i64) -> Tensor<2, Int> {
             let output = {
                 let input = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -227,10 +226,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: f32) -> Tensor<B, 2> {
+        pub fn forward(&self, input: f32) -> Tensor<2> {
             let output = {
                 let input = Tensor::<
-                    B,
                     1,
                 >::from_data(
                     burn::tensor::TensorData::from([input]),
@@ -253,10 +251,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: bool) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, input: bool) -> Tensor<2, Bool> {
             let output = {
                 let input = Tensor::<
-                    B,
                     1,
                     Bool,
                 >::from_data(
@@ -281,7 +278,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<1, Int>) -> Tensor<2, Int> {
             let output = {
                 let shape: [i64; 2] = [2, 3];
                 input.expand(shape)
@@ -303,11 +300,10 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_out: [i64; 2]) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, shape_out: [i64; 2]) -> Tensor<2, Int> {
             let output = {
                 let onnx_shape: [i64; 2usize] = [2, 2];
                 let input_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(

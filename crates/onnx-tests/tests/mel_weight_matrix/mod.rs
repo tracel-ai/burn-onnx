@@ -9,8 +9,6 @@ include_models!(
 mod tests {
     use super::*;
 
-    use crate::backend::TestBackend;
-
     // Expected for num_mel_bins=8, dft_length=16, sample_rate=8192, lower=0, upper=4096.
     // This is the exact configuration used by the official ONNX test_melweightmatrix case;
     // the triangles collapse to peak-only columns because the mel edges align with DFT bins.
@@ -29,12 +27,11 @@ mod tests {
     #[test]
     fn mel_weight_matrix_constants() {
         let device = Default::default();
-        let model: mel_weight_matrix_constants::Model<TestBackend> =
+        let model: mel_weight_matrix_constants::Model =
             mel_weight_matrix_constants::Model::new(&device);
 
         let output = model.forward();
-        let expected =
-            burn::tensor::Tensor::<TestBackend, 2>::from_floats(OFFICIAL_EXPECTED, &device);
+        let expected = burn::tensor::Tensor::<2>::from_floats(OFFICIAL_EXPECTED, &device);
 
         output
             .to_data()
@@ -44,12 +41,11 @@ mod tests {
     #[test]
     fn mel_weight_matrix_runtime() {
         let device = Default::default();
-        let model: mel_weight_matrix_runtime::Model<TestBackend> =
+        let model: mel_weight_matrix_runtime::Model =
             mel_weight_matrix_runtime::Model::new(&device);
 
         let output = model.forward(8, 16, 8192, 0.0, 4096.0);
-        let expected =
-            burn::tensor::Tensor::<TestBackend, 2>::from_floats(OFFICIAL_EXPECTED, &device);
+        let expected = burn::tensor::Tensor::<2>::from_floats(OFFICIAL_EXPECTED, &device);
 
         output
             .to_data()
@@ -59,14 +55,13 @@ mod tests {
     #[test]
     fn mel_weight_matrix_shaped() {
         let device = Default::default();
-        let model: mel_weight_matrix_shaped::Model<TestBackend> =
-            mel_weight_matrix_shaped::Model::new(&device);
+        let model: mel_weight_matrix_shaped::Model = mel_weight_matrix_shaped::Model::new(&device);
 
         // num_mel_bins=4, dft_length=32, sample_rate=16000, 300-4000 Hz.
         let output = model.forward(4, 32, 16000, 300.0, 4000.0);
 
         // Expected [17, 4] from ONNX reference evaluator.
-        let expected = burn::tensor::Tensor::<TestBackend, 2>::from_floats(
+        let expected = burn::tensor::Tensor::<2>::from_floats(
             [
                 [0.0_f32, 0.0, 0.0, 0.0],
                 [1.0, 0.0, 0.0, 0.0],

@@ -67,19 +67,18 @@ fn main() {
     println!("Initializing Kokoro model...");
     let start = Instant::now();
     let weights_path = concat!(env!("OUT_DIR"), "/model/kokoro-v1.bpk");
-    let model: Model<MyBackend> = Model::from_file(weights_path, &device);
+    let model: Model = Model::from_file(weights_path, &device);
     println!("  Model initialized in {:.2?}", start.elapsed());
 
     let seq_len = reference.tokens.len();
-    let tokens = Tensor::<MyBackend, 1, Int>::from_ints(reference.tokens.as_slice(), &device)
-        .reshape([1, seq_len]);
-    let style =
-        Tensor::<MyBackend, 1>::from_floats(reference.style.as_slice(), &device).reshape([1, 256]);
-    let speed = Tensor::<MyBackend, 1>::from_floats([reference.speed].as_slice(), &device);
+    let tokens =
+        Tensor::<1, Int>::from_ints(reference.tokens.as_slice(), &device).reshape([1, seq_len]);
+    let style = Tensor::<1>::from_floats(reference.style.as_slice(), &device).reshape([1, 256]);
+    let speed = Tensor::<1>::from_floats([reference.speed].as_slice(), &device);
 
     println!("Running inference...");
     let start = Instant::now();
-    let audio: Tensor<MyBackend, 1> = model.forward(tokens, style, speed);
+    let audio: Tensor<1> = model.forward(tokens, style, speed);
     let audio_vec: Vec<f32> = audio.to_data().to_vec().expect("audio to Vec<f32>");
     println!("  Inference completed in {:.2?}", start.elapsed());
     println!("  Produced {} samples", audio_vec.len());

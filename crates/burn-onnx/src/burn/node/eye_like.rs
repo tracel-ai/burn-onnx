@@ -59,7 +59,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = Tensor::diag_mask(input.shape(), 0i64, &self.device)
                 .bool_not()
                 .float()
@@ -79,7 +79,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = Tensor::diag_mask(input.shape(), 1i64, &self.device)
                 .bool_not()
                 .int()
@@ -99,7 +99,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2, Bool>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, input: Tensor<2, Bool>) -> Tensor<2, Bool> {
             let output = Tensor::diag_mask(input.shape(), 0i64, &self.device).bool_not();
             output
         }

@@ -51,7 +51,7 @@ mod tests {
         let node = create_hardmax_node("hardmax1", 2, 1);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let input = input;
                 let indices = input.clone().argmax(1);
@@ -74,7 +74,7 @@ mod tests {
         let node = create_hardmax_node("hardmax1", 3, 0);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = {
                 let input = input;
                 let indices = input.clone().argmax(0);

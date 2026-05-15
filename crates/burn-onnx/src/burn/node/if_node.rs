@@ -131,7 +131,7 @@ impl NodeCodegen for onnx_ir::node::if_node::IfNode {
             }
             ArgType::Tensor(_) => {
                 let cond_tensor = scope.arg(cond_arg);
-                quote! { #cond_tensor.into_scalar().elem::<bool>() }
+                quote! { #cond_tensor.into_scalar::<bool>() }
             }
             ArgType::Shape(rank) => {
                 // Shape comparison result: [i64; N] with 0/1 values.

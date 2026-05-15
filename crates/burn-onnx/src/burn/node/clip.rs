@@ -150,7 +150,7 @@ mod tests {
         let node = create_clip_node("clip1", Some(-1.0), Some(1.0));
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let __clip_min = -1f64;
                 let __clip_max = 1f64;
@@ -169,7 +169,7 @@ mod tests {
         let node = create_clip_node("clip1", None, None);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input;
             output
         }
@@ -181,7 +181,7 @@ mod tests {
         let node = create_clip_node("clip1", Some(0.0), None);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let __clip_min = 0f64;
                 input.clamp_min(__clip_min)
@@ -196,7 +196,7 @@ mod tests {
         let node = create_clip_node("clip1", None, Some(10.0));
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let __clip_max = 10f64;
                 input.clamp_max(__clip_max)
@@ -212,7 +212,7 @@ mod tests {
         // as `ArgType::ScalarTensor`, which onnx-ir models as a rank-1
         // tensor with shape [1] (see ArgType::rank() for ScalarTensor).
         // Burn's clamp_min takes a native scalar, so we extract it via
-        // .into_scalar().elem::<T>() and cast to f64.
+        // .into_scalar::<T>() and cast to f64.
         let config = ClipConfig {
             min: Some(ClipInput::Runtime(onnx_ir::ir::RuntimeInputRef::new(
                 "min_val".to_string(),
@@ -228,9 +228,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>, min_val: Tensor<B, 1>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>, min_val: Tensor<1>) -> Tensor<2> {
             let output = {
-                let __clip_min = (min_val.into_scalar().elem::<f32>() as f64);
+                let __clip_min = ((min_val).into_scalar::<f32>() as f64);
                 input.clamp_min(__clip_min)
             };
             output
@@ -261,13 +261,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 2>,
-            min_val: Tensor<B, 1>,
-            max_val: Tensor<B, 1>,
-        ) -> Tensor<B, 2> {
+            input: Tensor<2>,
+            min_val: Tensor<1>,
+            max_val: Tensor<1>,
+        ) -> Tensor<2> {
             let output = {
-                let __clip_min = (min_val.into_scalar().elem::<f32>() as f64);
-                let __clip_max = (max_val.into_scalar().elem::<f32>() as f64);
+                let __clip_min = ((min_val).into_scalar::<f32>() as f64);
+                let __clip_max = ((max_val).into_scalar::<f32>() as f64);
                 input.clamp(__clip_min, __clip_max)
             };
             output
@@ -296,13 +296,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<B, 2, Int>,
-            min_val: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2, Int>, min_val: Tensor<1, Int>) -> Tensor<2, Int> {
             let output = {
-                let __clip_min = (min_val.into_scalar().elem::<i64>() as i64);
+                let __clip_min = ((min_val).into_scalar::<i64>() as i64);
                 input.clamp_min(__clip_min)
             };
             output
@@ -331,13 +327,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<B, 2, Int>,
-            min_val: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2, Int>, min_val: Tensor<1, Int>) -> Tensor<2, Int> {
             let output = {
-                let __clip_min = (min_val.into_scalar().elem::<u64>() as u64);
+                let __clip_min = ((min_val).into_scalar::<u64>() as u64);
                 input.clamp_min(__clip_min)
             };
             output
@@ -362,7 +354,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>, min_val: f32) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>, min_val: f32) -> Tensor<2> {
             let output = {
                 let __clip_min = (min_val as f64);
                 input.clamp_min(__clip_min)

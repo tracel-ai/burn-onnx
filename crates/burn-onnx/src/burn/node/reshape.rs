@@ -28,23 +28,23 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                         // Check if output is a scalar
                         match &output_arg.ty {
                             ArgType::ScalarTensor(_) => {
-                                // Keep on device as Tensor<B, 1>
+                                // Keep on device as Tensor<1>
                                 quote! {
                                     let #output = #input.reshape([1]);
                                 }
                             }
                             ArgType::ScalarNative(elem_type) => {
                                 use onnx_ir::ir::DType;
-                                let elem_cast = match elem_type {
-                                    DType::F32 => quote! { .elem::<f32>() },
-                                    DType::F64 => quote! { .elem::<f64>() },
-                                    DType::I32 => quote! { .elem::<i32>() },
-                                    DType::I64 => quote! { .elem::<i64>() },
-                                    DType::Bool(_) => quote! { .elem::<bool>() },
+                                let into_scalar = match elem_type {
+                                    DType::F32 => quote! { .into_scalar::<f32>() },
+                                    DType::F64 => quote! { .into_scalar::<f64>() },
+                                    DType::I32 => quote! { .into_scalar::<i32>() },
+                                    DType::I64 => quote! { .into_scalar::<i64>() },
+                                    DType::Bool(_) => quote! { .into_scalar::<bool>() },
                                     _ => panic!("Unsupported scalar type: {:?}", elem_type),
                                 };
                                 quote! {
-                                    let #output = #input.into_scalar()#elem_cast;
+                                    let #output = #input #into_scalar;
                                 }
                             }
                             ArgType::Tensor(_) => {
@@ -70,13 +70,13 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                         input_rank
                                     );
                                 }
-                                // Shape [i64; 1] -> Tensor<B, 1, Int> on device.
+                                // Shape [i64; 1] -> Tensor<1, Int> on device.
                                 // Pin the runtime dtype via (device, dtype) so the bare
                                 // `&device` overload can't silently narrow the i64 source
                                 // to the backend's default IntElem (CLAUDE.md).
                                 let dtype_tokens = elem_type.to_tokens();
                                 quote! {
-                                    let #output = Tensor::<B, 1, Int>::from_data(
+                                    let #output = Tensor::<1, Int>::from_data(
                                         burn::tensor::TensorData::from([#input_name[0]]),
                                         (&self.device, #dtype_tokens),
                                     );
@@ -117,7 +117,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                 quote! {
                                     let #output = {
                                         let shape_array = #input_name as [i64; #input_rank];
-                                        Tensor::<B, 1, Int>::from_data(
+                                        Tensor::<1, Int>::from_data(
                                             TensorData::from(shape_array),
                                             (&self.device, #dtype_tokens)
                                         )
@@ -140,7 +140,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
 
                                 if tensor_type.dtype.is_float() {
                                     quote! {
-                                        let #output = Tensor::<B, #output_rank>::from_data(
+                                        let #output = Tensor::<#output_rank>::from_data(
                                             burn::tensor::TensorData::from([#input_name as f64]),
                                             (&self.device, #dtype_tokens)
                                         ).reshape(#shape_values);
@@ -148,7 +148,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                 } else if tensor_type.dtype.is_int() || tensor_type.dtype.is_uint()
                                 {
                                     quote! {
-                                        let #output = Tensor::<B, #output_rank, Int>::from_data(
+                                        let #output = Tensor::<#output_rank, Int>::from_data(
                                             burn::tensor::TensorData::from([#input_name as i64]),
                                             (&self.device, #dtype_tokens)
                                         ).reshape(#shape_values);
@@ -161,7 +161,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                         quote! { #input_name != 0 }
                                     };
                                     quote! {
-                                        let #output = Tensor::<B, #output_rank, Bool>::from_data(
+                                        let #output = Tensor::<#output_rank, Bool>::from_data(
                                             burn::tensor::TensorData::from([#bool_expr]),
                                             (&self.device, #dtype_tokens)
                                         ).reshape(#shape_values);
@@ -182,7 +182,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                         }
                     }
                     ArgType::ScalarTensor(_) => {
-                        // ScalarTensor is already a Tensor<B, 1> on device
+                        // ScalarTensor is already a Tensor<1> on device
                         let input = scope.arg(input_arg);
 
                         match &output_arg.ty {
@@ -282,7 +282,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 3>) -> Tensor<B, 2> {
+        pub fn forward(&self, data: Tensor<3>) -> Tensor<2> {
             let reshaped = data.reshape([2, 3]);
             reshaped
         }
@@ -301,7 +301,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, tensor: Tensor<B, 3>) -> Tensor<B, 2> {
+        pub fn forward(&self, tensor: Tensor<3>) -> Tensor<2> {
             let result = tensor.reshape([2, -1]);
             result
         }
@@ -320,7 +320,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<1> {
             let flattened = input.reshape([-1]);
             flattened
         }
@@ -340,8 +340,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, tensor: Tensor<B, 1>) -> f32 {
-            let scalar = tensor.into_scalar().elem::<f32>();
+        pub fn forward(&self, tensor: Tensor<1>) -> f32 {
+            let scalar = tensor.into_scalar::<f32>();
             scalar
         }
         ");
@@ -359,8 +359,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1>) -> f64 {
-            let value = input.into_scalar().elem::<f64>();
+        pub fn forward(&self, input: Tensor<1>) -> f64 {
+            let value = input.into_scalar::<f64>();
             value
         }
         ");
@@ -378,8 +378,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 1, Int>) -> i32 {
-            let int_val = data.into_scalar().elem::<i32>();
+        pub fn forward(&self, data: Tensor<1, Int>) -> i32 {
+            let int_val = data.into_scalar::<i32>();
             int_val
         }
         ");
@@ -397,8 +397,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1, Int>) -> i64 {
-            let long_val = input.into_scalar().elem::<i64>();
+        pub fn forward(&self, input: Tensor<1, Int>) -> i64 {
+            let long_val = input.into_scalar::<i64>();
             long_val
         }
         ");
@@ -416,8 +416,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, mask: Tensor<B, 1, Bool>) -> bool {
-            let flag = mask.into_scalar().elem::<bool>();
+        pub fn forward(&self, mask: Tensor<1, Bool>) -> bool {
+            let flag = mask.into_scalar::<bool>();
             flag
         }
         ");
@@ -544,11 +544,10 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dims: [i64; 3]) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, dims: [i64; 3]) -> Tensor<1, Int> {
             let tensor_dims = {
                 let shape_array = dims as [i64; 3usize];
                 Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -579,7 +578,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 3>, target_shape: [i64; 2]) -> Tensor<B, 2> {
+        pub fn forward(&self, data: Tensor<3>, target_shape: [i64; 2]) -> Tensor<2> {
             let reshaped = data.reshape(target_shape);
             reshaped
         }
@@ -603,7 +602,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, x: Tensor<B, 3>, new_shape: Tensor<B, 1, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, x: Tensor<3>, new_shape: Tensor<1, Int>) -> Tensor<2> {
             let shape_data = new_shape.to_data();
             let shape_array = shape_data.as_slice::<i64>().unwrap();
             let y = x.reshape([shape_array[0] as usize, shape_array[1] as usize]);
@@ -629,11 +628,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<B, 4>,
-            shape_tensor: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<4>, shape_tensor: Tensor<1, Int>) -> Tensor<3> {
             let shape_data = shape_tensor.to_data();
             let shape_array = shape_data.as_slice::<i64>().unwrap();
             let output = input
@@ -664,7 +659,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, tensor_in: Tensor<B, 2>, dims: Tensor<B, 1, Int>) -> Tensor<B, 4> {
+        pub fn forward(&self, tensor_in: Tensor<2>, dims: Tensor<1, Int>) -> Tensor<4> {
             let shape_data = dims.to_data();
             let shape_array = shape_data.as_slice::<i64>().unwrap();
             let tensor_out = tensor_in
@@ -692,9 +687,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, value: i64) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, value: i64) -> Tensor<1, Int> {
             let tensor_out = Tensor::<
-                B,
                 1usize,
                 Int,
             >::from_data(
@@ -719,9 +713,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, val: f32) -> Tensor<B, 1> {
+        pub fn forward(&self, val: f32) -> Tensor<1> {
             let out = Tensor::<
-                B,
                 1usize,
             >::from_data(
                     burn::tensor::TensorData::from([val as f64]),
@@ -765,7 +758,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, tensor: Tensor<B, 1>) -> Tensor<B, 1> {
+        pub fn forward(&self, tensor: Tensor<1>) -> Tensor<1> {
             let output = tensor.reshape([1]);
             output
         }
@@ -785,9 +778,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_in: [i64; 1]) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, shape_in: [i64; 1]) -> Tensor<1, Int> {
             let output = Tensor::<
-                B,
                 1,
                 Int,
             >::from_data(

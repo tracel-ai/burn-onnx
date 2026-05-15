@@ -48,7 +48,7 @@ mod tests {
         let node = create_swish_node("swish1", 1.0);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = burn::tensor::activation::silu(input);
             output
         }
@@ -60,7 +60,7 @@ mod tests {
         let node = create_swish_node("swish1", 0.5);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input.clone() * burn::tensor::activation::sigmoid(input * 0.5);
             output
         }

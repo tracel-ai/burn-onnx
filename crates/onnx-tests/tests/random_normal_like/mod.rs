@@ -4,14 +4,12 @@ include_models!(random_normal_like);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Shape, TensorData};
 
     #[test]
     fn random_normal_like() {
         let device = Default::default();
-        let model = random_normal_like::Model::<TestBackend>::new(&device);
+        let model = random_normal_like::Model::new(&device);
         let input = TensorData::zeros::<f64, _>(Shape::from([2, 4, 4]));
         let expected_shape = Shape::from([2, 4, 4]);
 

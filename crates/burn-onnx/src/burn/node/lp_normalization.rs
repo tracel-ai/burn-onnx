@@ -49,7 +49,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = {
                 let x = input;
                 let norm = burn::tensor::linalg::l2_norm(x.clone(), 2);
@@ -69,7 +69,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = {
                 let x = input;
                 let norm = burn::tensor::linalg::l1_norm(x.clone(), 0);
@@ -89,7 +89,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = {
                 let x = input;
                 let norm = burn::tensor::linalg::l2_norm(x.clone(), 1);
@@ -109,7 +109,7 @@ mod tests {
             .build();
         let code = codegen_forward_with_clone(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = {
                 let x = input.clone();
                 let norm = burn::tensor::linalg::l2_norm(x.clone(), 2);

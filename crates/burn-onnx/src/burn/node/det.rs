@@ -27,9 +27,9 @@ impl NodeCodegen for onnx_ir::node::det::DetNode {
                 quote! {
                     let #output = {
                         let (p, _l, u) =
-                            burn::tensor::linalg::lu::<B, 2usize, 1usize>(#input);
+                            burn::tensor::linalg::lu::<2usize, 1usize>(#input);
                         let det_u =
-                            burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(u)
+                            burn::tensor::linalg::diag::<2usize, 1usize, Float>(u)
                                 .prod();
                         let n = p.dims()[0];
                         let perm_vec = p.argmax(1).reshape([n]);
@@ -45,7 +45,7 @@ impl NodeCodegen for onnx_ir::node::det::DetNode {
                         let parity = inv_count.remainder_scalar(2i64);
                         let device = det_u.device();
                         let dtype = det_u.dtype();
-                        let sign = Tensor::<B, 1, Float>::from_data(
+                        let sign = Tensor::<1, Float>::from_data(
                             [1.0f32, -1.0f32],
                             (&device, dtype,)
                         )
@@ -67,14 +67,14 @@ impl NodeCodegen for onnx_ir::node::det::DetNode {
                         let batch_size: usize = shape[..#batch_rank].iter().product();
                         let m = shape[#batch_rank];
                         let flat = #input.reshape([batch_size, m, m]);
-                        let mut dets: alloc::vec::Vec<Tensor<B, 1, Float>> = alloc::vec::Vec::with_capacity(batch_size);
+                        let mut dets: alloc::vec::Vec<Tensor<1, Float>> = alloc::vec::Vec::with_capacity(batch_size);
                         for i in 0..batch_size {
-                            let matrix: Tensor<B, 2, Float> =
+                            let matrix: Tensor<2, Float> =
                                 flat.clone().slice([i..(i + 1), 0..m, 0..m]).squeeze_dims::<2>(&[0]);
                             let (p, _l, u) =
-                                burn::tensor::linalg::lu::<B, 2usize, 1usize>(matrix);
+                                burn::tensor::linalg::lu::<2usize, 1usize>(matrix);
                             let det_u =
-                                burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(u)
+                                burn::tensor::linalg::diag::<2usize, 1usize, Float>(u)
                                     .prod();
                             let n = p.dims()[0];
                             let perm_vec = p.argmax(1).reshape([n]);
@@ -90,7 +90,7 @@ impl NodeCodegen for onnx_ir::node::det::DetNode {
                             let parity = inv_count.remainder_scalar(2i64);
                             let device = det_u.device();
                             let dtype = det_u.dtype();
-                            let sign = Tensor::<B, 1, Float>::from_data(
+                            let sign = Tensor::<1, Float>::from_data(
                                 [1.0f32, -1.0f32],
                                 (&device, dtype,)
                             )
@@ -121,10 +121,10 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<1> {
             let output = {
-                let (p, _l, u) = burn::tensor::linalg::lu::<B, 2usize, 1usize>(input);
-                let det_u = burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(u).prod();
+                let (p, _l, u) = burn::tensor::linalg::lu::<2usize, 1usize>(input);
+                let det_u = burn::tensor::linalg::diag::<2usize, 1usize, Float>(u).prod();
                 let n = p.dims()[0];
                 let perm_vec = p.argmax(1).reshape([n]);
                 let perm_f = perm_vec.float().cast(burn::tensor::DType::F32);
@@ -139,7 +139,7 @@ mod tests {
                 let parity = inv_count.remainder_scalar(2i64);
                 let device = det_u.device();
                 let dtype = det_u.dtype();
-                let sign = Tensor::<B, 1, Float>::from_data([1.0f32, -1.0f32], (&device, dtype))
+                let sign = Tensor::<1, Float>::from_data([1.0f32, -1.0f32], (&device, dtype))
                     .select(0, parity);
                 det_u * sign
             };
@@ -156,22 +156,22 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<1> {
             let output = {
                 let shape = input.shape();
                 let batch_size: usize = shape[..1usize].iter().product();
                 let m = shape[1usize];
                 let flat = input.reshape([batch_size, m, m]);
-                let mut dets: alloc::vec::Vec<Tensor<B, 1, Float>> = alloc::vec::Vec::with_capacity(
+                let mut dets: alloc::vec::Vec<Tensor<1, Float>> = alloc::vec::Vec::with_capacity(
                     batch_size,
                 );
                 for i in 0..batch_size {
-                    let matrix: Tensor<B, 2, Float> = flat
+                    let matrix: Tensor<2, Float> = flat
                         .clone()
                         .slice([i..(i + 1), 0..m, 0..m])
                         .squeeze_dims::<2>(&[0]);
-                    let (p, _l, u) = burn::tensor::linalg::lu::<B, 2usize, 1usize>(matrix);
-                    let det_u = burn::tensor::linalg::diag::<B, 2usize, 1usize, Float>(u).prod();
+                    let (p, _l, u) = burn::tensor::linalg::lu::<2usize, 1usize>(matrix);
+                    let det_u = burn::tensor::linalg::diag::<2usize, 1usize, Float>(u).prod();
                     let n = p.dims()[0];
                     let perm_vec = p.argmax(1).reshape([n]);
                     let perm_f = perm_vec.float().cast(burn::tensor::DType::F32);
@@ -186,11 +186,7 @@ mod tests {
                     let parity = inv_count.remainder_scalar(2i64);
                     let device = det_u.device();
                     let dtype = det_u.dtype();
-                    let sign = Tensor::<
-                        B,
-                        1,
-                        Float,
-                    >::from_data([1.0f32, -1.0f32], (&device, dtype))
+                    let sign = Tensor::<1, Float>::from_data([1.0f32, -1.0f32], (&device, dtype))
                         .select(0, parity);
                     dets.push(det_u * sign);
                 }

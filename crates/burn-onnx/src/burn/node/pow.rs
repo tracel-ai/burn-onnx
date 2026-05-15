@@ -86,14 +86,14 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                 let base = if rhs_rank > 1 {
                     let dims: Vec<isize> = (0..rhs_rank - 1).map(|i| i as isize).collect();
                     quote! {
-                        Tensor::<B, 1>::from_data(
+                        Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#lhs as f64]),
                             (&self.device, #dtype_tokens)
                         ).unsqueeze_dims(&[#(#dims),*])
                     }
                 } else {
                     quote! {
-                        Tensor::<B, 1>::from_data(
+                        Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#lhs as f64]),
                             (&self.device, #dtype_tokens)
                         )
@@ -109,14 +109,14 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                 let base = if rhs_rank > 1 {
                     let dims: Vec<isize> = (0..rhs_rank - 1).map(|i| i as isize).collect();
                     quote! {
-                        Tensor::<B, 1>::from_data(
+                        Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#lhs as f64]),
                             (&self.device, #dtype_tokens)
                         ).unsqueeze_dims(&[#(#dims),*])
                     }
                 } else {
                     quote! {
-                        Tensor::<B, 1>::from_data(
+                        Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#lhs as f64]),
                             (&self.device, #dtype_tokens)
                         )
@@ -155,7 +155,7 @@ mod tests {
             .output_tensor("output", 2, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 2>, exponent: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, base: Tensor<2>, exponent: Tensor<2>) -> Tensor<2> {
             let output = base.powf(exponent);
             output
         }
@@ -170,7 +170,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 3>, exponent: Tensor<B, 2>) -> Tensor<B, 3> {
+        pub fn forward(&self, base: Tensor<3>, exponent: Tensor<2>) -> Tensor<3> {
             let output = base.powf((exponent).unsqueeze_dims(&[0isize]));
             output
         }
@@ -185,7 +185,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 2>, exponent: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, base: Tensor<2>, exponent: Tensor<3>) -> Tensor<3> {
             let output = (base).unsqueeze_dims(&[0isize]).powf(exponent);
             output
         }
@@ -200,7 +200,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 3>, exponent: Tensor<B, 1>) -> Tensor<B, 3> {
+        pub fn forward(&self, base: Tensor<3>, exponent: Tensor<1>) -> Tensor<3> {
             let output = base.powf((exponent).unsqueeze_dims(&[0isize, 1isize]));
             output
         }
@@ -215,7 +215,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 1>, exponent: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, base: Tensor<1>, exponent: Tensor<3>) -> Tensor<3> {
             let output = (base).unsqueeze_dims(&[0isize, 1isize]).powf(exponent);
             output
         }
@@ -230,7 +230,7 @@ mod tests {
             .output_scalar_tensor("output", DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 1>, exponent: Tensor<B, 1>) -> Tensor<B, 1> {
+        pub fn forward(&self, base: Tensor<1>, exponent: Tensor<1>) -> Tensor<1> {
             let output = base.powf(exponent);
             output
         }
@@ -247,7 +247,7 @@ mod tests {
             .output_tensor("output", 2, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 2>, exponent: Tensor<B, 2, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, base: Tensor<2>, exponent: Tensor<2, Int>) -> Tensor<2> {
             let output = base.powi(exponent);
             output
         }
@@ -262,7 +262,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 3>, exponent: Tensor<B, 2, Int>) -> Tensor<B, 3> {
+        pub fn forward(&self, base: Tensor<3>, exponent: Tensor<2, Int>) -> Tensor<3> {
             let output = base.powi((exponent).unsqueeze_dims(&[0isize]));
             output
         }
@@ -277,7 +277,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 2>, exponent: Tensor<B, 3, Int>) -> Tensor<B, 3> {
+        pub fn forward(&self, base: Tensor<2>, exponent: Tensor<3, Int>) -> Tensor<3> {
             let output = (base).unsqueeze_dims(&[0isize]).powi(exponent);
             output
         }
@@ -292,7 +292,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 3>, exponent: Tensor<B, 1, Int>) -> Tensor<B, 3> {
+        pub fn forward(&self, base: Tensor<3>, exponent: Tensor<1, Int>) -> Tensor<3> {
             let output = base.powi((exponent).unsqueeze_dims(&[0isize, 1isize]));
             output
         }
@@ -307,7 +307,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 1>, exponent: Tensor<B, 3, Int>) -> Tensor<B, 3> {
+        pub fn forward(&self, base: Tensor<1>, exponent: Tensor<3, Int>) -> Tensor<3> {
             let output = (base).unsqueeze_dims(&[0isize, 1isize]).powi(exponent);
             output
         }
@@ -324,7 +324,7 @@ mod tests {
             .output_tensor("output", 2, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 2>, exponent: f32) -> Tensor<B, 2> {
+        pub fn forward(&self, base: Tensor<2>, exponent: f32) -> Tensor<2> {
             let output = base.powf_scalar(exponent);
             output
         }
@@ -339,7 +339,7 @@ mod tests {
             .output_tensor("output", 2, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 2>, exponent: i32) -> Tensor<B, 2> {
+        pub fn forward(&self, base: Tensor<2>, exponent: i32) -> Tensor<2> {
             let output = base.powi_scalar(exponent);
             output
         }
@@ -354,7 +354,7 @@ mod tests {
             .output_tensor("output", 2, DType::I32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: Tensor<B, 2, Int>, exponent: i32) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, base: Tensor<2, Int>, exponent: i32) -> Tensor<2, Int> {
             let output = base.powi_scalar(exponent);
             output
         }
@@ -418,9 +418,8 @@ mod tests {
             .output_tensor("output", 2, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: f32, exponent: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, base: f32, exponent: Tensor<2>) -> Tensor<2> {
             let output = Tensor::<
-                B,
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([base as f64]),
@@ -441,9 +440,8 @@ mod tests {
             .output_tensor("output", 2, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: f32, exponent: Tensor<B, 2, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, base: f32, exponent: Tensor<2, Int>) -> Tensor<2> {
             let output = Tensor::<
-                B,
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([base as f64]),
@@ -464,9 +462,8 @@ mod tests {
             .output_scalar_tensor("output", DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, base: f32, exponent: Tensor<B, 1>) -> Tensor<B, 1> {
+        pub fn forward(&self, base: f32, exponent: Tensor<1>) -> Tensor<1> {
             let output = Tensor::<
-                B,
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([base as f64]),

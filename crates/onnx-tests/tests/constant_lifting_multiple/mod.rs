@@ -5,18 +5,16 @@ include_models!(constant_lifting_multiple, constant_reused);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::TestBackend;
-    use burn::tensor::{Tensor, TensorData};
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn test_constant_lifting_multiple() {
-        let model: constant_lifting_multiple::Model<TestBackend> =
-            constant_lifting_multiple::Model::default();
+        let model: constant_lifting_multiple::Model = constant_lifting_multiple::Model::default();
 
         let device = Default::default();
 
         // Create input tensor (2x3 as defined in the Python script)
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0f32, -2.0, 8.0], [-4.0, 5.0, 3.0]]),
             &device,
         );
@@ -39,12 +37,12 @@ mod tests {
     fn test_constant_reused() {
         // This test verifies that constants used multiple times are NOT lifted
         // while constants used only once ARE lifted
-        let model: constant_reused::Model<TestBackend> = constant_reused::Model::default();
+        let model: constant_reused::Model = constant_reused::Model::default();
 
         let device = Default::default();
 
         // Create input tensor (2x3)
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0f32, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );

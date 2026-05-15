@@ -67,7 +67,7 @@ fn collect_rnn_snapshots(
     inputs: &[Argument],
     config: &onnx_ir::rnn::RnnConfig,
 ) -> Vec<TensorSnapshot> {
-    use crate::burn::node_traits::{SerializationBackend, extract_node_data};
+    use crate::burn::node_traits::extract_node_data;
     use burn::tensor::Tensor;
 
     let hidden_size = config.hidden_size;
@@ -100,14 +100,11 @@ fn collect_rnn_snapshots(
 
     // Create tensors from data, pinning the runtime dtype to the ONNX weight
     // dtype via `(device, dtype)`. A bare `&device` would let
-    // `Tensor::from_data` convert to SerializationBackend's default FloatElem
-    // (f32 on Flex), silently truncating f64 weights before they enter the
-    // snapshot pipeline.
-    let w_tensor: Tensor<SerializationBackend, 3> =
-        Tensor::from_data(data_w.clone(), (&device, dtype));
-    let r_tensor: Tensor<SerializationBackend, 3> =
-        Tensor::from_data(data_r.clone(), (&device, dtype));
-    let b_tensor: Option<Tensor<SerializationBackend, 2>> = data_b
+    // `Tensor::from_data` resolve the dtype from the device default and
+    // silently truncate f64 weights before they enter the snapshot pipeline.
+    let w_tensor: Tensor<3> = Tensor::from_data(data_w.clone(), (&device, dtype));
+    let r_tensor: Tensor<3> = Tensor::from_data(data_r.clone(), (&device, dtype));
+    let b_tensor: Option<Tensor<2>> = data_b
         .clone()
         .map(|b| Tensor::from_data(b, (&device, dtype)));
 
@@ -159,8 +156,8 @@ fn collect_rnn_snapshots(
             let rb_start = hidden_size + onnx_gate_idx * hidden_size;
             let rb_end = rb_start + hidden_size;
 
-            let wb: Tensor<SerializationBackend, 1> = b.clone().slice([wb_start..wb_end]);
-            let rb: Tensor<SerializationBackend, 1> = b.clone().slice([rb_start..rb_end]);
+            let wb: Tensor<1> = b.clone().slice([wb_start..wb_end]);
+            let rb: Tensor<1> = b.clone().slice([rb_start..rb_end]);
             let bias = wb.add(rb);
             let bias_data = bias.into_data();
 
@@ -192,8 +189,7 @@ fn collect_rnn_snapshots(
 
         // Hidden transform bias: zeros (combined bias is in input_transform)
         if b_dir.is_some() {
-            let zeros: Tensor<SerializationBackend, 1> =
-                Tensor::zeros([hidden_size], (&device, dtype));
+            let zeros: Tensor<1> = Tensor::zeros([hidden_size], (&device, dtype));
             let zeros_data = zeros.into_data();
 
             let path = format!(
@@ -213,7 +209,7 @@ fn collect_rnn_snapshots(
 ///
 /// Normalizes the data back to the target dtype as a safety net. The upstream
 /// weight-slicing pipeline already pins the dtype when building the intermediate
-/// `Tensor<SerializationBackend, _>` (via `from_data(data, (device, dtype))`),
+/// `Tensor<_>` (via `from_data(data, (device, dtype))`),
 /// so this `convert_dtype` is ordinarily a no-op. It stays in place to guarantee
 /// the snapshot's dtype tag matches the tensor data even if a future refactor
 /// introduces a path that produces data in a different dtype.
@@ -307,7 +303,7 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
         match self.config.direction {
             RnnDirection::Forward => Some(Field::new(
                 self.name.clone(),
-                quote! { Rnn<B> },
+                quote! { Rnn },
                 quote! {
                     let #name = RnnConfig::new(#d_input, #d_hidden, #bias)
                         .with_batch_first(#batch_first)
@@ -318,7 +314,7 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
             )),
             RnnDirection::Reverse => Some(Field::new(
                 self.name.clone(),
-                quote! { Rnn<B> },
+                quote! { Rnn },
                 quote! {
                     let #name = RnnConfig::new(#d_input, #d_hidden, #bias)
                         .with_batch_first(#batch_first)
@@ -330,7 +326,7 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
             )),
             RnnDirection::Bidirectional => Some(Field::new(
                 self.name.clone(),
-                quote! { BiRnn<B> },
+                quote! { BiRnn },
                 quote! {
                     let #name = BiRnnConfig::new(#d_input, #d_hidden, #bias)
                         .with_batch_first(#batch_first)
@@ -573,11 +569,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
-        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let (output_seq, final_state) = self.Rnn1.forward(input, None);
                 (
@@ -597,11 +593,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
-        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let (output_seq, final_state) = self.Rnn1.forward(input, None);
                 (
@@ -626,11 +622,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
-        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let (output_seq, final_state) = self.Rnn1.forward(input, None);
                 (

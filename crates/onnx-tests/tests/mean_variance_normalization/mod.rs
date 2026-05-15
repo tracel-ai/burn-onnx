@@ -9,17 +9,12 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, Tolerance, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Tensor, TensorData, Tolerance};
 
     // Input generated via np.random.seed(42), shape [2, 3, 4, 5]. Shared by all
     // tests so we can compare axis configurations on the same data.
-    fn test_input(
-        device: &<TestBackend as burn::tensor::backend::BackendTypes>::Device,
-    ) -> Tensor<TestBackend, 4> {
-        Tensor::<TestBackend, 4>::from_floats(
+    fn test_input(device: &Device) -> Tensor<4> {
+        Tensor::<4>::from_floats(
             [
                 [
                     [
@@ -147,7 +142,7 @@ mod tests {
     #[test]
     fn mean_variance_normalization_default_axes() {
         let device = Default::default();
-        let model: mean_variance_normalization_default_axes::Model<TestBackend> =
+        let model: mean_variance_normalization_default_axes::Model =
             mean_variance_normalization_default_axes::Model::default();
 
         let output = model.forward(test_input(&device));
@@ -197,13 +192,13 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn mean_variance_normalization_custom_axes() {
         let device = Default::default();
-        let model: mean_variance_normalization_custom_axes::Model<TestBackend> =
+        let model: mean_variance_normalization_custom_axes::Model =
             mean_variance_normalization_custom_axes::Model::default();
 
         let output = model.forward(test_input(&device));
@@ -319,7 +314,7 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
@@ -327,7 +322,7 @@ mod tests {
         // Reduces to a scalar mean and variance, exercising full broadcast back
         // to the input shape through Burn's `mean_dims` keepdims behavior.
         let device = Default::default();
-        let model: mean_variance_normalization_all_axes::Model<TestBackend> =
+        let model: mean_variance_normalization_all_axes::Model =
             mean_variance_normalization_all_axes::Model::default();
 
         let output = model.forward(test_input(&device));
@@ -443,7 +438,7 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
@@ -451,10 +446,10 @@ mod tests {
         // `axes=[-4, -2, -1]` on a rank-4 input resolves to `[0, 2, 3]`, so the
         // output must match `mean_variance_normalization_default_axes` exactly.
         let device = Default::default();
-        let model: mean_variance_normalization_negative_axes::Model<TestBackend> =
+        let model: mean_variance_normalization_negative_axes::Model =
             mean_variance_normalization_negative_axes::Model::default();
 
-        let default_model: mean_variance_normalization_default_axes::Model<TestBackend> =
+        let default_model: mean_variance_normalization_default_axes::Model =
             mean_variance_normalization_default_axes::Model::default();
 
         let input = test_input(&device);
@@ -463,6 +458,6 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected.to_data(), Tolerance::default());
+            .assert_approx_eq::<f32>(&expected.to_data(), Tolerance::default());
     }
 }

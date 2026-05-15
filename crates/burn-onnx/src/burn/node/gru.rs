@@ -38,7 +38,7 @@ fn collect_gru_snapshots(
     inputs: &[Argument],
     config: &onnx_ir::gru::GruConfig,
 ) -> Vec<TensorSnapshot> {
-    use crate::burn::node_traits::{SerializationBackend, extract_node_data};
+    use crate::burn::node_traits::extract_node_data;
     use burn::tensor::Tensor;
 
     let hidden_size = config.hidden_size;
@@ -72,14 +72,11 @@ fn collect_gru_snapshots(
 
     // Create tensors from data, pinning the runtime dtype to the ONNX weight
     // dtype via `(device, dtype)`. A bare `&device` would let
-    // `Tensor::from_data` convert to SerializationBackend's default FloatElem
-    // (f32 on Flex), silently truncating f64 weights before they enter the
-    // snapshot pipeline.
-    let w_tensor: Tensor<SerializationBackend, 3> =
-        Tensor::from_data(data_w.clone(), (&device, dtype));
-    let r_tensor: Tensor<SerializationBackend, 3> =
-        Tensor::from_data(data_r.clone(), (&device, dtype));
-    let b_tensor: Option<Tensor<SerializationBackend, 2>> = data_b
+    // `Tensor::from_data` resolve the dtype from the device default and
+    // silently truncate f64 weights before they enter the snapshot pipeline.
+    let w_tensor: Tensor<3> = Tensor::from_data(data_w.clone(), (&device, dtype));
+    let r_tensor: Tensor<3> = Tensor::from_data(data_r.clone(), (&device, dtype));
+    let b_tensor: Option<Tensor<2>> = data_b
         .clone()
         .map(|b| Tensor::from_data(b, (&device, dtype)));
 
@@ -128,7 +125,7 @@ fn collect_gru_snapshots(
                 let wb_start = onnx_gate_idx * hidden_size;
                 let wb_end = wb_start + hidden_size;
 
-                let wb: Tensor<SerializationBackend, 1> = b.clone().slice([wb_start..wb_end]);
+                let wb: Tensor<1> = b.clone().slice([wb_start..wb_end]);
                 let bias_data = wb.into_data();
 
                 let path = format!(
@@ -161,7 +158,7 @@ fn collect_gru_snapshots(
                 let rb_start = 3 * hidden_size + onnx_gate_idx * hidden_size;
                 let rb_end = rb_start + hidden_size;
 
-                let rb: Tensor<SerializationBackend, 1> = b.clone().slice([rb_start..rb_end]);
+                let rb: Tensor<1> = b.clone().slice([rb_start..rb_end]);
                 let bias_data = rb.into_data();
 
                 let path = format!(
@@ -338,7 +335,7 @@ fn forward_bidirectional(
     let hidden_size = node.config.hidden_size;
 
     // ONNX initial_h: [2, batch_size, hidden_size]
-    // BiGru expects: Option<Tensor<B, 3>> with shape [2, batch, hidden] - no transform needed
+    // BiGru expects: Option<Tensor<3>> with shape [2, batch, hidden] - no transform needed
     let initial_state_expr = if has_initial_h {
         let h_input = scope.arg(&node.inputs[5]);
         quote! { Some(#h_input) }
@@ -437,7 +434,7 @@ impl NodeCodegen for onnx_ir::gru::GruNode {
         match self.config.direction {
             GruDirection::Forward | GruDirection::Reverse => Some(Field::new(
                 self.name.clone(),
-                quote! { burn::nn::gru::Gru<B> },
+                quote! { burn::nn::gru::Gru },
                 quote! {
                     let #name = burn::nn::gru::GruConfig::new(#d_input, #d_hidden, #bias)
                         .with_reset_after(#reset_after)
@@ -448,7 +445,7 @@ impl NodeCodegen for onnx_ir::gru::GruNode {
                 let batch_first = self.config.batch_first;
                 Some(Field::new(
                     self.name.clone(),
-                    quote! { burn::nn::gru::BiGru<B> },
+                    quote! { burn::nn::gru::BiGru },
                     quote! {
                         let #name = burn::nn::gru::BiGruConfig::new(#d_input, #d_hidden, #bias)
                             .with_reset_after(#reset_after)
@@ -573,11 +570,11 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
-        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let gru_output = self.gru1.forward(input.swap_dims(0, 1), None);
                 let batch_first_output = gru_output;
@@ -604,11 +601,11 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
-        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let gru_output = self
                     .gru1
@@ -643,11 +640,11 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
-        ) -> Tensor<B, 4> {
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> Tensor<4> {
             let Y = {
                 let gru_output = self.gru1.forward(input.swap_dims(0, 1), None);
                 let batch_first_output = gru_output;
@@ -691,11 +688,11 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
-        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let gru_output = self.gru1.forward(input, None);
                 let batch_first_output = gru_output;
@@ -722,13 +719,13 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
             sequence_lens: i64,
-            initial_h: Tensor<B, 3>,
-        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            initial_h: Tensor<3>,
+        ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let gru_output = self
                     .gru1
@@ -757,11 +754,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
-        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let (output_seq, final_state) = self.gru1.forward(input, None);
                 (
@@ -785,11 +782,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
-        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let (output_seq, final_state) = self.gru1.forward(input, None);
                 (
@@ -812,11 +809,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
-        ) -> Tensor<B, 4> {
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> Tensor<4> {
             let Y = {
                 let (output_seq, _final_state) = self.gru1.forward(input, None);
                 {
@@ -837,13 +834,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            W: Tensor<B, 3>,
-            R: Tensor<B, 3>,
-            B: Tensor<B, 2>,
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
             sequence_lens: i64,
-            initial_h: Tensor<B, 3>,
-        ) -> (Tensor<B, 4>, Tensor<B, 3>) {
+            initial_h: Tensor<3>,
+        ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let (output_seq, final_state) = self.gru1.forward(input, Some(initial_h));
                 (

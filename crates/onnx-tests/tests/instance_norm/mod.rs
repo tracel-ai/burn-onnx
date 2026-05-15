@@ -5,17 +5,14 @@ include_models!(instance_norm1d, instance_norm2d, instance_norm3d);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, Tolerance, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Tensor, TensorData, Tolerance};
 
     #[test]
     fn instance_norm1d() {
         let device = Default::default();
-        let model: instance_norm1d::Model<TestBackend> = instance_norm1d::Model::default();
+        let model: instance_norm1d::Model = instance_norm1d::Model::default();
 
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [0., 1., 2., 3.], //
@@ -45,15 +42,15 @@ mod tests {
         ]);
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn instance_norm2d() {
         let device = Default::default();
-        let model: instance_norm2d::Model<TestBackend> = instance_norm2d::Model::default();
+        let model: instance_norm2d::Model = instance_norm2d::Model::default();
 
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [
                 [
                     [
@@ -111,15 +108,15 @@ mod tests {
         ]);
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn instance_norm3d() {
         let device = Default::default();
-        let model: instance_norm3d::Model<TestBackend> = instance_norm3d::Model::default();
+        let model: instance_norm3d::Model = instance_norm3d::Model::default();
 
-        let input = Tensor::<TestBackend, 5>::from_floats(
+        let input = Tensor::<5>::from_floats(
             [
                 [
                     [[[0., 1.], [2., 3.]], [[4., 5.], [6., 7.]]],
@@ -167,6 +164,6 @@ mod tests {
         ]);
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 }

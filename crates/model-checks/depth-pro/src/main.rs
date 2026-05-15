@@ -14,13 +14,13 @@ pub mod depth_pro {
 }
 
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    pixel_values: Param<Tensor<B, 4>>,
-    predicted_depth: Param<Tensor<B, 3>>,
+struct TestData {
+    pixel_values: Param<Tensor<4>>,
+    predicted_depth: Param<Tensor<3>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         // DepthPro: input 1536x1536, output depth map 1536x1536
         Self {
             pixel_values: Initializer::Zeros.init([1, 3, 1536, 1536], device),
@@ -51,7 +51,7 @@ fn main() {
     let start = Instant::now();
     let device = model_checks_common::best_device!();
     let weights_path = concat!(env!("OUT_DIR"), "/model/depth-pro.bpk");
-    let model: depth_pro::Model<MyBackend> = depth_pro::Model::from_file(weights_path, &device);
+    let model: depth_pro::Model = depth_pro::Model::from_file(weights_path, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
 
@@ -69,7 +69,7 @@ fn main() {
     let test_data_path = artifacts_dir.join("test_data.pt");
     println!("\nLoading test data from {}...", test_data_path.display());
     let start = Instant::now();
-    let mut test_data = TestData::<MyBackend>::new(&device);
+    let mut test_data = TestData::new(&device);
     let mut store = PytorchStore::from_file(&test_data_path);
     test_data
         .load_from(&mut store)
@@ -106,7 +106,7 @@ fn main() {
     println!("  Inference completed in {:.2?}", inference_time);
 
     // The model returns rank 4 due to If node branch alignment; squeeze dim 0 to rank 3
-    let predicted_depth: Tensor<MyBackend, 3> = predicted_depth_4d.squeeze_dim(0);
+    let predicted_depth: Tensor<3> = predicted_depth_4d.squeeze_dim(0);
 
     // Display output shape
     let depth_shape: [usize; 3] = predicted_depth.shape().dims();
@@ -126,8 +126,8 @@ fn main() {
 
     let diff = predicted_depth - reference_depth;
     let abs_diff = diff.abs();
-    let max_diff: f32 = abs_diff.clone().max().into_scalar();
-    let mean_diff: f32 = abs_diff.mean().into_scalar();
+    let max_diff: f32 = abs_diff.clone().max().into_scalar::<f32>();
+    let mean_diff: f32 = abs_diff.mean().into_scalar::<f32>();
 
     println!("  Maximum absolute difference: {:.6}", max_diff);
     println!("  Mean absolute difference: {:.6}", mean_diff);

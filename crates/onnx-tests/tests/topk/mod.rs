@@ -11,16 +11,14 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn topk() {
         let device = Default::default();
-        let model = topk::Model::<TestBackend>::new(&device);
+        let model = topk::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [
                 [0.33669037, 0.12880941, 0.23446237, 0.23033303, -1.12285638],
                 [-0.18632829, 2.20820141, -0.63799703, 0.46165723, 0.26735088],
@@ -49,10 +47,10 @@ mod tests {
     fn topk_axis0() {
         // axis=0, shape [5, 4], k=3
         let device = Default::default();
-        let model = topk_axis0::Model::<TestBackend>::new(&device);
+        let model = topk_axis0::Model::new(&device);
 
         // np.random.seed(42); np.random.randn(5, 4).astype(np.float32)
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [
                 [0.49671414, -0.1382643, 0.64768857, 1.5230298],
                 [-0.23415338, -0.23413695, 1.5792128, 0.7674347],
@@ -79,10 +77,10 @@ mod tests {
     fn topk_1d() {
         // 1D tensor [8], axis=0, k=3
         let device = Default::default();
-        let model = topk_1d::Model::<TestBackend>::new(&device);
+        let model = topk_1d::Model::new(&device);
 
         // np.random.seed(42); np.random.randn(8).astype(np.float32)
-        let input = Tensor::<TestBackend, 1>::from_floats(
+        let input = Tensor::<1>::from_floats(
             [
                 0.49671414,
                 -0.1382643,
@@ -108,10 +106,10 @@ mod tests {
     fn topk_3d() {
         // axis=1 on [2, 4, 3] tensor, k=2
         let device = Default::default();
-        let model = topk_3d::Model::<TestBackend>::new(&device);
+        let model = topk_3d::Model::new(&device);
 
         // np.random.seed(42); np.random.randn(2, 4, 3).astype(np.float32)
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [0.49671414, -0.1382643, 0.64768857],
@@ -151,10 +149,10 @@ mod tests {
     fn topk_k_full() {
         // k = full dimension size (k=5 on axis=1, shape [3, 5])
         let device = Default::default();
-        let model = topk_k_full::Model::<TestBackend>::new(&device);
+        let model = topk_k_full::Model::new(&device);
 
         // np.random.seed(42); np.random.randn(3, 5).astype(np.float32)
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [
                 [0.49671414, -0.1382643, 0.64768857, 1.5230298, -0.23415338],
                 [-0.23413695, 1.5792128, 0.7674347, -0.46947438, 0.54256004],
@@ -186,10 +184,10 @@ mod tests {
     fn topk_negative_axis() {
         // axis=-2 on [3, 4, 5] tensor, k=2 (resolves to axis=1)
         let device = Default::default();
-        let model = topk_negative_axis::Model::<TestBackend>::new(&device);
+        let model = topk_negative_axis::Model::new(&device);
 
         // np.random.seed(42); np.random.randn(3, 4, 5).astype(np.float32)
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [0.49671414, -0.1382643, 0.64768857, 1.5230298, -0.23415338],

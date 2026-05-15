@@ -46,12 +46,12 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
 
                         quote! {
                             {
-                                let offset_tensor = Tensor::<B, 1>::from_data(
+                                let offset_tensor = Tensor::<1>::from_data(
                                     [#(#offset_values),*],
                                     (&self.device, burn::tensor::DType::F32),
                                 )
                                 .reshape([#(#reshape_dims),*]);
-                                let scale_tensor = Tensor::<B, 1>::from_data(
+                                let scale_tensor = Tensor::<1>::from_data(
                                     [#(#scale_values),*],
                                     (&self.device, burn::tensor::DType::F32),
                                 )
@@ -67,7 +67,7 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
 
                         quote! {
                             {
-                                let offset_tensor = Tensor::<B, 1>::from_data(
+                                let offset_tensor = Tensor::<1>::from_data(
                                     [#(#offset_values),*],
                                     (&self.device, burn::tensor::DType::F32),
                                 )
@@ -83,7 +83,7 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
 
                         quote! {
                             {
-                                let scale_tensor = Tensor::<B, 1>::from_data(
+                                let scale_tensor = Tensor::<1>::from_data(
                                     [#(#scale_values),*],
                                     (&self.device, burn::tensor::DType::F32),
                                 )
@@ -130,11 +130,10 @@ mod tests {
         );
         let node = ScalerNode::new("scaler1".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let scale_tensor = Tensor::<
-                    B,
                     1,
                 >::from_data([2f32], (&self.device, burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
@@ -158,11 +157,10 @@ mod tests {
         );
         let node = ScalerNode::new("scaler2".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let offset_tensor = Tensor::<
-                    B,
                     1,
                 >::from_data([1f32], (&self.device, burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
@@ -186,16 +184,14 @@ mod tests {
         );
         let node = ScalerNode::new("scaler3".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let offset_tensor = Tensor::<
-                    B,
                     1,
                 >::from_data([1f32], (&self.device, burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
                 let scale_tensor = Tensor::<
-                    B,
                     1,
                 >::from_data([2f32], (&self.device, burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
@@ -220,7 +216,7 @@ mod tests {
         let node = ScalerNode::new("scaler4".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input.clone();
             output
         }
@@ -240,16 +236,14 @@ mod tests {
         );
         let node = ScalerNode::new("scaler5".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let offset_tensor = Tensor::<
-                    B,
                     1,
                 >::from_data([0.5f32, 1f32, 1.5f32], (&self.device, burn::tensor::DType::F32))
                     .reshape([1usize, 3usize]);
                 let scale_tensor = Tensor::<
-                    B,
                     1,
                 >::from_data([1f32, 2f32, 3f32], (&self.device, burn::tensor::DType::F32))
                     .reshape([1usize, 3usize]);
@@ -274,16 +268,14 @@ mod tests {
         );
         let node = ScalerNode::new("scaler6".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2> {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2> {
             let output = {
                 let offset_tensor = Tensor::<
-                    B,
                     1,
                 >::from_data([1f32], (&self.device, burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
                 let scale_tensor = Tensor::<
-                    B,
                     1,
                 >::from_data([2f32], (&self.device, burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
@@ -309,7 +301,7 @@ mod tests {
         let node = ScalerNode::new("scaler7".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2> {
             let output = input.float().cast(burn::tensor::DType::F32);
             output
         }

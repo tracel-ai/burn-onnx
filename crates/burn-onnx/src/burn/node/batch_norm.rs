@@ -26,7 +26,7 @@ impl NodeCodegen for BatchNormalizationNode {
                 Some(Field::new(
                     self.name.clone(),
                     quote! {
-                        BatchNorm<B>
+                        BatchNorm
                     },
                     quote! {
                         let #name = BatchNormConfig::new(#num_features)
@@ -195,7 +195,7 @@ mod tests {
         let node = create_batch_norm_node("batch_norm1");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self.batch_norm1.forward(input);
             output
         }
@@ -207,7 +207,7 @@ mod tests {
         let node = create_batch_norm_node("batch_norm1");
         let code = codegen_forward_with_clone(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self.batch_norm1.forward(input.clone());
             output
         }
@@ -221,12 +221,12 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 3>,
-            scale: Tensor<B, 1>,
-            bias: Tensor<B, 1>,
-            mean: Tensor<B, 1>,
-            var: Tensor<B, 1>,
-        ) -> Tensor<B, 3> {
+            input: Tensor<3>,
+            scale: Tensor<1>,
+            bias: Tensor<1>,
+            mean: Tensor<1>,
+            var: Tensor<1>,
+        ) -> Tensor<3> {
             let output = {
                 let scale = scale.unsqueeze_dims(&[0isize, 2isize]);
                 let bias = bias.unsqueeze_dims(&[0isize, 2isize]);
@@ -246,12 +246,12 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 4>,
-            scale: Tensor<B, 1>,
-            bias: Tensor<B, 1>,
-            mean: Tensor<B, 1>,
-            var: Tensor<B, 1>,
-        ) -> Tensor<B, 4> {
+            input: Tensor<4>,
+            scale: Tensor<1>,
+            bias: Tensor<1>,
+            mean: Tensor<1>,
+            var: Tensor<1>,
+        ) -> Tensor<4> {
             let output = {
                 let scale = scale.unsqueeze_dims(&[0isize, 2isize, 3isize]);
                 let bias = bias.unsqueeze_dims(&[0isize, 2isize, 3isize]);
@@ -271,12 +271,12 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 5>,
-            scale: Tensor<B, 1>,
-            bias: Tensor<B, 1>,
-            mean: Tensor<B, 1>,
-            var: Tensor<B, 1>,
-        ) -> Tensor<B, 5> {
+            input: Tensor<5>,
+            scale: Tensor<1>,
+            bias: Tensor<1>,
+            mean: Tensor<1>,
+            var: Tensor<1>,
+        ) -> Tensor<5> {
             let output = {
                 let scale = scale.unsqueeze_dims(&[0isize, 2isize, 3isize, 4isize]);
                 let bias = bias.unsqueeze_dims(&[0isize, 2isize, 3isize, 4isize]);
@@ -296,12 +296,12 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 4>,
-            scale: Tensor<B, 1>,
-            bias: Tensor<B, 1>,
-            mean: Tensor<B, 1>,
-            var: Tensor<B, 1>,
-        ) -> Tensor<B, 4> {
+            input: Tensor<4>,
+            scale: Tensor<1>,
+            bias: Tensor<1>,
+            mean: Tensor<1>,
+            var: Tensor<1>,
+        ) -> Tensor<4> {
             let output = {
                 let scale = scale.clone().unsqueeze_dims(&[0isize, 2isize, 3isize]);
                 let bias = bias.clone().unsqueeze_dims(&[0isize, 2isize, 3isize]);

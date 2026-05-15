@@ -5,26 +5,24 @@ include_models!(matmul, matmul_ranks, matmul_scalar_add);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Int, Tensor, TensorData};
 
     #[test]
     fn matmul() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: matmul::Model<TestBackend> = matmul::Model::default();
+        let model: matmul::Model = matmul::Model::default();
 
         let device = Default::default();
-        let a = Tensor::<TestBackend, 1, Int>::arange(0..24, &device)
+        let a = Tensor::<1, Int>::arange(0..24, &device)
             .reshape([1, 2, 3, 4])
             .float();
-        let b = Tensor::<TestBackend, 1, Int>::arange(0..16, &device)
+        let b = Tensor::<1, Int>::arange(0..16, &device)
             .reshape([1, 2, 4, 2])
             .float();
-        let c = Tensor::<TestBackend, 1, Int>::arange(0..96, &device)
+        let c = Tensor::<1, Int>::arange(0..96, &device)
             .reshape([2, 3, 4, 4])
             .float();
-        let d = Tensor::<TestBackend, 1, Int>::arange(0..4, &device).float();
+        let d = Tensor::<1, Int>::arange(0..4, &device).float();
 
         let (output_mm, output_mv, output_vm) = model.forward(a, b, c, d);
         // matrix-matrix `a @ b`
@@ -67,23 +65,23 @@ mod tests {
     #[test]
     fn matmul_ranks() {
         // Test various rank combinations for matmul broadcasting
-        let model: matmul_ranks::Model<TestBackend> = matmul_ranks::Model::default();
+        let model: matmul_ranks::Model = matmul_ranks::Model::default();
 
         let device = Default::default();
 
         // Create input tensors
-        let mat2d = Tensor::<TestBackend, 1, Int>::arange(0..12, &device)
+        let mat2d = Tensor::<1, Int>::arange(0..12, &device)
             .reshape([3, 4])
             .float();
-        let mat3d = Tensor::<TestBackend, 1, Int>::arange(0..24, &device)
+        let mat3d = Tensor::<1, Int>::arange(0..24, &device)
             .reshape([2, 3, 4])
             .float();
-        let vec = Tensor::<TestBackend, 1, Int>::arange(0..4, &device).float();
-        let vec3 = Tensor::<TestBackend, 1, Int>::arange(0..3, &device).float();
-        let mat2d_square = Tensor::<TestBackend, 1, Int>::arange(0..16, &device)
+        let vec = Tensor::<1, Int>::arange(0..4, &device).float();
+        let vec3 = Tensor::<1, Int>::arange(0..3, &device).float();
+        let mat2d_square = Tensor::<1, Int>::arange(0..16, &device)
             .reshape([4, 4])
             .float();
-        let mat3d_for_vec = Tensor::<TestBackend, 1, Int>::arange(0..24, &device)
+        let mat3d_for_vec = Tensor::<1, Int>::arange(0..24, &device)
             .reshape([2, 3, 4])
             .float();
 
@@ -115,11 +113,11 @@ mod tests {
     /// MatMul + Add with scalar bias [1] should NOT be fused into Linear.
     #[test]
     fn matmul_scalar_add() {
-        let model: matmul_scalar_add::Model<TestBackend> = matmul_scalar_add::Model::default();
+        let model: matmul_scalar_add::Model = matmul_scalar_add::Model::default();
 
         let device = Default::default();
         // x = [[0,1,2,3],[4,5,6,7]] matching the Python script
-        let x = Tensor::<TestBackend, 1, Int>::arange(0..8, &device)
+        let x = Tensor::<1, Int>::arange(0..8, &device)
             .reshape([2, 4])
             .float();
 

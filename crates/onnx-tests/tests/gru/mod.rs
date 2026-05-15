@@ -4,18 +4,16 @@ include_models!(gru, gru_reverse, gru_with_initial_state, gru_bidirectional);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor};
+    use burn::tensor::{Device, Shape, Tensor};
     use float_cmp::ApproxEq;
-
-    use crate::backend::TestBackend;
 
     #[test]
     fn gru_forward() {
         let device = Default::default();
-        let model: gru::Model<TestBackend> = gru::Model::default();
+        let model: gru::Model = gru::Model::default();
 
         // Input shape: [seq_length=5, batch_size=2, input_size=4] (seed=99)
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [-0.1424, 2.0572, 0.2833, 1.3298],
@@ -51,8 +49,8 @@ mod tests {
         assert_eq!(output.shape(), expected_output_shape);
         assert_eq!(h_n.shape(), expected_h_shape);
 
-        let output_sum = output.sum().into_scalar();
-        let h_n_sum = h_n.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
+        let h_n_sum = h_n.sum().into_scalar::<f32>();
 
         // Expected from ONNX ReferenceEvaluator
         let expected_output_sum = -0.050_507_9;
@@ -75,9 +73,9 @@ mod tests {
     #[test]
     fn gru_reverse_forward() {
         let device = Default::default();
-        let model: gru_reverse::Model<TestBackend> = gru_reverse::Model::default();
+        let model: gru_reverse::Model = gru_reverse::Model::default();
 
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [-0.1424, 2.0572, 0.2833, 1.3298],
@@ -113,8 +111,8 @@ mod tests {
         assert_eq!(output.shape(), expected_output_shape);
         assert_eq!(h_n.shape(), expected_h_shape);
 
-        let output_sum = output.sum().into_scalar();
-        let h_n_sum = h_n.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
+        let h_n_sum = h_n.sum().into_scalar::<f32>();
 
         let expected_output_sum = -2.035_414_7;
         let expected_h_n_sum = -0.936_855_7;
@@ -136,10 +134,9 @@ mod tests {
     #[test]
     fn gru_with_initial_state_forward() {
         let device = Default::default();
-        let model: gru_with_initial_state::Model<TestBackend> =
-            gru_with_initial_state::Model::default();
+        let model: gru_with_initial_state::Model = gru_with_initial_state::Model::default();
 
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [-0.1424, 2.0572, 0.2833, 1.3298],
@@ -166,7 +163,7 @@ mod tests {
         );
 
         // Initial hidden state: [num_directions=1, batch_size=2, hidden_size=8]
-        let h_0 = Tensor::<TestBackend, 3>::from_floats(
+        let h_0 = Tensor::<3>::from_floats(
             [[
                 [
                     0.8501, -0.2644, 0.8817, -0.5608, -0.5960, 0.2764, -0.4080, -0.2483,
@@ -186,8 +183,8 @@ mod tests {
         assert_eq!(output.shape(), expected_output_shape);
         assert_eq!(h_n.shape(), expected_h_shape);
 
-        let output_sum = output.sum().into_scalar();
-        let h_n_sum = h_n.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
+        let h_n_sum = h_n.sum().into_scalar::<f32>();
 
         let expected_output_sum = 5.103_189_0;
         let expected_h_n_sum = 0.052_935_8;
@@ -209,10 +206,10 @@ mod tests {
     #[test]
     fn gru_bidirectional_forward() {
         let device = Default::default();
-        let model: gru_bidirectional::Model<TestBackend> = gru_bidirectional::Model::default();
+        let model: gru_bidirectional::Model = gru_bidirectional::Model::default();
 
         // Same input as other GRU tests: [seq_length=5, batch_size=2, input_size=4] (seed=99)
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [-0.1424, 2.0572, 0.2833, 1.3298],
@@ -248,8 +245,8 @@ mod tests {
         assert_eq!(output.shape(), expected_output_shape);
         assert_eq!(h_n.shape(), expected_h_shape);
 
-        let output_sum = output.sum().into_scalar();
-        let h_n_sum = h_n.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
+        let h_n_sum = h_n.sum().into_scalar::<f32>();
 
         // Expected from onnxruntime
         let expected_output_sum = 1.811_869_7;

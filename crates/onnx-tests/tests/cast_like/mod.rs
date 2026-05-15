@@ -5,26 +5,21 @@ include_models!(cast_like);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, TensorData, Tolerance, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Int, Tensor, TensorData, Tolerance};
 
     #[test]
     fn cast_like() {
         let device = Default::default();
-        let model: cast_like::Model<TestBackend> = cast_like::Model::new(&device);
+        let model: cast_like::Model = cast_like::Model::new(&device);
 
         // float_input: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] shape [2, 3]
-        let float_input =
-            Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
+        let float_input = Tensor::<2>::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
         // int_target: same shape, used only for dtype (i64)
-        let int_target = Tensor::<TestBackend, 2, Int>::from_ints([[0, 0, 0], [0, 0, 0]], &device);
+        let int_target = Tensor::<2, Int>::from_ints([[0, 0, 0], [0, 0, 0]], &device);
         // int_input: [1, 2, 3, 4, 5, 6] shape [2, 3]
-        let int_input = Tensor::<TestBackend, 2, Int>::from_ints([[1, 2, 3], [4, 5, 6]], &device);
+        let int_input = Tensor::<2, Int>::from_ints([[1, 2, 3], [4, 5, 6]], &device);
         // float_target: same shape, used only for dtype (f32)
-        let float_target =
-            Tensor::<TestBackend, 2>::from_floats([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], &device);
+        let float_target = Tensor::<2>::from_floats([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], &device);
 
         let (float_to_int, int_to_float) = model.forward(
             float_input.clone(),
@@ -41,6 +36,6 @@ mod tests {
         let expected_float = TensorData::from([[1.0f32, 2.0, 3.0], [4.0, 5.0, 6.0]]);
         int_to_float
             .to_data()
-            .assert_approx_eq::<FT>(&expected_float, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected_float, Tolerance::default());
     }
 }

@@ -13,26 +13,23 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{DType, Int, Tensor, TensorData};
+    use burn::tensor::{DType, Device, Int, Tensor, TensorData};
     use half::{bf16, f16};
-
-    use crate::backend::TestBackend;
 
     // Case 1: 3D operands with scalar (per-tensor) quantization parameters.
     #[test]
     fn qlinear_matmul_scalar() {
         let device = Default::default();
-        let model: qlinear_matmul_scalar::Model<TestBackend> =
-            qlinear_matmul_scalar::Model::new(&device);
+        let model: qlinear_matmul_scalar::Model = qlinear_matmul_scalar::Model::new(&device);
 
-        let a = Tensor::<TestBackend, 3, Int>::from_data(
+        let a = Tensor::<3, Int>::from_data(
             TensorData::from([
                 [[6u8, 1, 19, 10], [11, 3, 2, 19]],
                 [[14, 14, 10, 3], [7, 7, 14, 1]],
             ]),
             (&device, DType::U8),
         );
-        let b = Tensor::<TestBackend, 3, Int>::from_data(
+        let b = Tensor::<3, Int>::from_data(
             TensorData::from([
                 [[12u8, 11, 6], [16, 7, 2], [18, 18, 1], [15, 7, 10]],
                 [[17, 14, 10], [17, 13, 13], [3, 12, 2], [7, 11, 18]],
@@ -53,35 +50,27 @@ mod tests {
     #[test]
     fn qlinear_matmul_vector() {
         let device = Default::default();
-        let model: qlinear_matmul_vector::Model<TestBackend> =
-            qlinear_matmul_vector::Model::new(&device);
+        let model: qlinear_matmul_vector::Model = qlinear_matmul_vector::Model::new(&device);
 
-        let a = Tensor::<TestBackend, 2, Int>::from_data(
+        let a = Tensor::<2, Int>::from_data(
             TensorData::from([[6u8, 1, 19, 10], [11, 3, 2, 19]]),
             (&device, DType::U8),
         );
-        let a_scale = Tensor::<TestBackend, 1>::from_floats([0.19160044, 0.7818941], &device);
-        let a_zero_point = Tensor::<TestBackend, 1, Int>::from_data(
-            TensorData::from([4u8, 1]),
-            (&device, DType::U8),
-        );
+        let a_scale = Tensor::<1>::from_floats([0.19160044, 0.7818941], &device);
+        let a_zero_point =
+            Tensor::<1, Int>::from_data(TensorData::from([4u8, 1]), (&device, DType::U8));
 
-        let b = Tensor::<TestBackend, 2, Int>::from_data(
+        let b = Tensor::<2, Int>::from_data(
             TensorData::from([[18u8, 1, 15], [7, 10, 17], [14, 10, 17], [13, 13, 3]]),
             (&device, DType::U8),
         );
-        let b_scale =
-            Tensor::<TestBackend, 1>::from_floats([0.15143815, 0.6543796, 0.06584746], &device);
-        let b_zero_point = Tensor::<TestBackend, 1, Int>::from_data(
-            TensorData::from([3u8, 1, 3]),
-            (&device, DType::U8),
-        );
+        let b_scale = Tensor::<1>::from_floats([0.15143815, 0.6543796, 0.06584746], &device);
+        let b_zero_point =
+            Tensor::<1, Int>::from_data(TensorData::from([3u8, 1, 3]), (&device, DType::U8));
 
-        let y_scale = Tensor::<TestBackend, 1>::from_floats([1.0f32, 0.5], &device);
-        let y_zero_point = Tensor::<TestBackend, 1, Int>::from_data(
-            TensorData::from([10u8, 5]),
-            (&device, DType::U8),
-        );
+        let y_scale = Tensor::<1>::from_floats([1.0f32, 0.5], &device);
+        let y_zero_point =
+            Tensor::<1, Int>::from_data(TensorData::from([10u8, 5]), (&device, DType::U8));
 
         let output = model.forward(
             a,
@@ -104,48 +93,48 @@ mod tests {
     #[test]
     fn qlinear_matmul_nd() {
         let device = Default::default();
-        let model: qlinear_matmul_nd::Model<TestBackend> = qlinear_matmul_nd::Model::new(&device);
+        let model: qlinear_matmul_nd::Model = qlinear_matmul_nd::Model::new(&device);
 
-        let a = Tensor::<TestBackend, 3, Int>::from_data(
+        let a = Tensor::<3, Int>::from_data(
             TensorData::from([
                 [[6u8, 1, 19, 10], [11, 3, 2, 19]],
                 [[14, 14, 10, 3], [7, 7, 14, 1]],
             ]),
             (&device, DType::U8),
         );
-        let a_scale = Tensor::<TestBackend, 3>::from_data(
+        let a_scale = Tensor::<3>::from_data(
             TensorData::from([[[0.60088164f32], [0.4513744]], [[0.10897516], [0.4646564]]]),
             &device,
         );
-        let a_zero_point = Tensor::<TestBackend, 3, Int>::from_data(
+        let a_zero_point = Tensor::<3, Int>::from_data(
             TensorData::from([[[4u8], [3]], [[2], [4]]]),
             (&device, DType::U8),
         );
 
-        let b = Tensor::<TestBackend, 3, Int>::from_data(
+        let b = Tensor::<3, Int>::from_data(
             TensorData::from([
                 [[1u8, 3, 12], [9, 11, 4], [16, 5, 1], [9, 19, 0]],
                 [[12, 14, 19], [1, 19, 14], [0, 4, 19], [11, 17, 2]],
             ]),
             (&device, DType::U8),
         );
-        let b_scale = Tensor::<TestBackend, 3>::from_data(
+        let b_scale = Tensor::<3>::from_data(
             TensorData::from([
                 [[0.61553663f32, 0.01699564, 0.0328318]],
                 [[0.5295269, 0.40586236, 0.05619901]],
             ]),
             &device,
         );
-        let b_zero_point = Tensor::<TestBackend, 3, Int>::from_data(
+        let b_zero_point = Tensor::<3, Int>::from_data(
             TensorData::from([[[3u8, 2, 3]], [[3, 0, 2]]]),
             (&device, DType::U8),
         );
 
-        let y_scale = Tensor::<TestBackend, 3>::from_data(
+        let y_scale = Tensor::<3>::from_data(
             TensorData::from([[[1.7899106f32], [1.5204613]], [[1.1757488], [0.51989746]]]),
             &device,
         );
-        let y_zero_point = Tensor::<TestBackend, 3, Int>::from_data(
+        let y_zero_point = Tensor::<3, Int>::from_data(
             TensorData::from([[[8u8], [11]], [[13], [1]]]),
             (&device, DType::U8),
         );
@@ -177,14 +166,14 @@ mod tests {
     #[test]
     fn qlinear_matmul_u8_saturate() {
         let device = Default::default();
-        let model: qlinear_matmul_u8_saturate::Model<TestBackend> =
+        let model: qlinear_matmul_u8_saturate::Model =
             qlinear_matmul_u8_saturate::Model::new(&device);
 
-        let a = Tensor::<TestBackend, 2, Int>::from_data(
+        let a = Tensor::<2, Int>::from_data(
             TensorData::from([[120u8, 120, 120, 120], [0, 0, 0, 0]]),
             (&device, DType::U8),
         );
-        let b = Tensor::<TestBackend, 2, Int>::from_data(
+        let b = Tensor::<2, Int>::from_data(
             TensorData::from([[120u8, 5], [120, 5], [120, 5], [120, 5]]),
             (&device, DType::U8),
         );
@@ -206,14 +195,14 @@ mod tests {
     #[test]
     fn qlinear_matmul_i8_saturate() {
         let device = Default::default();
-        let model: qlinear_matmul_i8_saturate::Model<TestBackend> =
+        let model: qlinear_matmul_i8_saturate::Model =
             qlinear_matmul_i8_saturate::Model::new(&device);
 
-        let a = Tensor::<TestBackend, 2, Int>::from_data(
+        let a = Tensor::<2, Int>::from_data(
             TensorData::from([[100i8, 100, 100, 100], [-100, -100, -100, -100]]),
             (&device, DType::I8),
         );
-        let b = Tensor::<TestBackend, 2, Int>::from_data(
+        let b = Tensor::<2, Int>::from_data(
             TensorData::from([[100i8, 1], [100, 1], [100, 1], [100, 1]]),
             (&device, DType::I8),
         );
@@ -228,14 +217,13 @@ mod tests {
     #[test]
     fn qlinear_matmul_opset_10() {
         let device = Default::default();
-        let model: qlinear_matmul_opset_10::Model<TestBackend> =
-            qlinear_matmul_opset_10::Model::new(&device);
+        let model: qlinear_matmul_opset_10::Model = qlinear_matmul_opset_10::Model::new(&device);
 
-        let a = Tensor::<TestBackend, 2, Int>::from_data(
+        let a = Tensor::<2, Int>::from_data(
             TensorData::from([[6u8, 1, 19, 10], [11, 3, 2, 19]]),
             (&device, DType::U8),
         );
-        let b = Tensor::<TestBackend, 2, Int>::from_data(
+        let b = Tensor::<2, Int>::from_data(
             TensorData::from([[14u8, 14, 10], [3, 7, 7], [14, 1, 12], [11, 6, 16]]),
             (&device, DType::U8),
         );
@@ -260,14 +248,14 @@ mod tests {
     #[test]
     fn qlinear_matmul_scalar_f16_scale() {
         let device = Default::default();
-        let model: qlinear_matmul_scalar_f16_scale::Model<TestBackend> =
+        let model: qlinear_matmul_scalar_f16_scale::Model =
             qlinear_matmul_scalar_f16_scale::Model::new(&device);
 
-        let a = Tensor::<TestBackend, 2, Int>::from_data(
+        let a = Tensor::<2, Int>::from_data(
             TensorData::from([[6u8, 1, 19, 10], [11, 3, 2, 19]]),
             (&device, DType::U8),
         );
-        let b = Tensor::<TestBackend, 2, Int>::from_data(
+        let b = Tensor::<2, Int>::from_data(
             TensorData::from([[14u8, 14, 10], [3, 7, 7], [14, 1, 12], [11, 6, 16]]),
             (&device, DType::U8),
         );
@@ -292,27 +280,25 @@ mod tests {
     #[test]
     fn qlinear_matmul_vector_bf16_scale() {
         let device = Default::default();
-        let model: qlinear_matmul_vector_bf16_scale::Model<TestBackend> =
+        let model: qlinear_matmul_vector_bf16_scale::Model =
             qlinear_matmul_vector_bf16_scale::Model::new(&device);
 
-        let a = Tensor::<TestBackend, 2, Int>::from_data(
+        let a = Tensor::<2, Int>::from_data(
             TensorData::from([[6u8, 1, 19, 10], [11, 3, 2, 19]]),
             (&device, DType::U8),
         );
-        let a_scale = Tensor::<TestBackend, 1>::from_data(
+        let a_scale = Tensor::<1>::from_data(
             TensorData::from([bf16::from_f32(0.19160044), bf16::from_f32(0.7818941)]),
             &device,
         );
-        let a_zero_point = Tensor::<TestBackend, 1, Int>::from_data(
-            TensorData::from([4u8, 1]),
-            (&device, DType::U8),
-        );
+        let a_zero_point =
+            Tensor::<1, Int>::from_data(TensorData::from([4u8, 1]), (&device, DType::U8));
 
-        let b = Tensor::<TestBackend, 2, Int>::from_data(
+        let b = Tensor::<2, Int>::from_data(
             TensorData::from([[18u8, 1, 15], [7, 10, 17], [14, 10, 17], [13, 13, 3]]),
             (&device, DType::U8),
         );
-        let b_scale = Tensor::<TestBackend, 1>::from_data(
+        let b_scale = Tensor::<1>::from_data(
             TensorData::from([
                 bf16::from_f32(0.15143815),
                 bf16::from_f32(0.6543796),
@@ -320,19 +306,15 @@ mod tests {
             ]),
             &device,
         );
-        let b_zero_point = Tensor::<TestBackend, 1, Int>::from_data(
-            TensorData::from([3u8, 1, 3]),
-            (&device, DType::U8),
-        );
+        let b_zero_point =
+            Tensor::<1, Int>::from_data(TensorData::from([3u8, 1, 3]), (&device, DType::U8));
 
-        let y_scale = Tensor::<TestBackend, 1>::from_data(
+        let y_scale = Tensor::<1>::from_data(
             TensorData::from([bf16::from_f32(1.0), bf16::from_f32(0.5)]),
             &device,
         );
-        let y_zero_point = Tensor::<TestBackend, 1, Int>::from_data(
-            TensorData::from([10u8, 5]),
-            (&device, DType::U8),
-        );
+        let y_zero_point =
+            Tensor::<1, Int>::from_data(TensorData::from([10u8, 5]), (&device, DType::U8));
 
         let output = model.forward(
             a,

@@ -262,7 +262,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, signal: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, signal: Tensor<3>) -> Tensor<3> {
             let upsampled = self.upsample.forward(signal);
             upsampled
         }
@@ -284,7 +284,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, audio: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, audio: Tensor<3>) -> Tensor<3> {
             let resampled = self.interpolate.forward(audio);
             resampled
         }
@@ -306,7 +306,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, waveform: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, waveform: Tensor<3>) -> Tensor<3> {
             let output = self.resize1d.forward(waveform);
             output
         }
@@ -330,7 +330,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, image: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, image: Tensor<4>) -> Tensor<4> {
             let resized = self.resize.forward(image);
             resized
         }
@@ -352,7 +352,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input_img: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input_img: Tensor<4>) -> Tensor<4> {
             let output_img = self.upscale.forward(input_img);
             output_img
         }
@@ -374,7 +374,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, features: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, features: Tensor<4>) -> Tensor<4> {
             let scaled = self.bicubic_resize.forward(features);
             scaled
         }
@@ -396,7 +396,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, tensor: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, tensor: Tensor<4>) -> Tensor<4> {
             let doubled = self.double_size.forward(tensor);
             doubled
         }
@@ -418,7 +418,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, hires: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, hires: Tensor<4>) -> Tensor<4> {
             let lores = self.downsample.forward(hires);
             lores
         }
@@ -440,7 +440,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, data: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, data: Tensor<4>) -> Tensor<4> {
             let result = self.scale_up.forward(data);
             result
         }
@@ -468,7 +468,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, target_size: [i64; 4]) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, target_size: [i64; 4]) -> Tensor<4> {
             let output = {
                 let target_height = target_size[2] as usize;
                 let target_width = target_size[3] as usize;
@@ -505,7 +505,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, img: Tensor<B, 4>, new_dims: [i64; 4]) -> Tensor<B, 4> {
+        pub fn forward(&self, img: Tensor<4>, new_dims: [i64; 4]) -> Tensor<4> {
             let resized_img = {
                 let target_height = new_dims[2] as usize;
                 let target_width = new_dims[3] as usize;
@@ -542,7 +542,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, source: Tensor<B, 4>, output_shape: [i64; 4]) -> Tensor<B, 4> {
+        pub fn forward(&self, source: Tensor<4>, output_shape: [i64; 4]) -> Tensor<4> {
             let dest = {
                 let target_height = output_shape[2] as usize;
                 let target_width = output_shape[3] as usize;
@@ -582,7 +582,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, target_size: [i64; 4]) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, target_size: [i64; 4]) -> Tensor<4> {
             let output = {
                 let target_height = target_size[2] as usize;
                 let target_width = target_size[3] as usize;
@@ -621,7 +621,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, x: Tensor<B, 4>, size_tensor: Tensor<B, 1, Int>) -> Tensor<B, 4> {
+        pub fn forward(&self, x: Tensor<4>, size_tensor: Tensor<1, Int>) -> Tensor<4> {
             let y = {
                 let sizes_data = size_tensor.to_data().convert::<i64>();
                 let sizes_array = sizes_data.as_slice::<i64>().unwrap();
@@ -660,11 +660,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            frame: Tensor<B, 4>,
-            dims_tensor: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, frame: Tensor<4>, dims_tensor: Tensor<1, Int>) -> Tensor<4> {
             let resampled_frame = {
                 let sizes_data = dims_tensor.to_data().convert::<i64>();
                 let sizes_array = sizes_data.as_slice::<i64>().unwrap();
@@ -703,11 +699,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input_data: Tensor<B, 4>,
-            target_dims: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, input_data: Tensor<4>, target_dims: Tensor<1, Int>) -> Tensor<4> {
             let output_data = {
                 let sizes_data = target_dims.to_data().convert::<i64>();
                 let sizes_array = sizes_data.as_slice::<i64>().unwrap();
@@ -748,7 +740,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, scale_factors: [i64; 4]) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, scale_factors: [i64; 4]) -> Tensor<4> {
             let output = {
                 let input_dims = input.dims();
                 let target_height = ((input_dims[2] as f64) * (scale_factors[2] as f64))
@@ -787,7 +779,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, image: Tensor<B, 4>, scale_vals: [i64; 4]) -> Tensor<B, 4> {
+        pub fn forward(&self, image: Tensor<4>, scale_vals: [i64; 4]) -> Tensor<4> {
             let scaled_image = {
                 let input_dims = image.dims();
                 let target_height = ((input_dims[2] as f64) * (scale_vals[2] as f64)) as usize;
@@ -825,7 +817,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, features: Tensor<B, 4>, cubic_scales: [i64; 4]) -> Tensor<B, 4> {
+        pub fn forward(&self, features: Tensor<4>, cubic_scales: [i64; 4]) -> Tensor<4> {
             let upscaled = {
                 let input_dims = features.dims();
                 let target_height = ((input_dims[2] as f64) * (cubic_scales[2] as f64)) as usize;
@@ -865,7 +857,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, x: Tensor<B, 4>, scales_tensor: Tensor<B, 1>) -> Tensor<B, 4> {
+        pub fn forward(&self, x: Tensor<4>, scales_tensor: Tensor<1>) -> Tensor<4> {
             let y = {
                 let input_dims = x.dims();
                 let scales_data = scales_tensor.to_data().convert::<f32>();
@@ -905,7 +897,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, frame: Tensor<B, 4>, scale_input: Tensor<B, 1>) -> Tensor<B, 4> {
+        pub fn forward(&self, frame: Tensor<4>, scale_input: Tensor<1>) -> Tensor<4> {
             let resized_frame = {
                 let input_dims = frame.dims();
                 let scales_data = scale_input.to_data().convert::<f32>();
@@ -945,11 +937,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            data: Tensor<B, 4>,
-            cubic_scale_tensor: Tensor<B, 1>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, data: Tensor<4>, cubic_scale_tensor: Tensor<1>) -> Tensor<4> {
             let result = {
                 let input_dims = data.dims();
                 let scales_data = cubic_scale_tensor.to_data().convert::<f32>();

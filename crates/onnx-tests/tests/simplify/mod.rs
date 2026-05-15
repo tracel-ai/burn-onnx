@@ -44,57 +44,53 @@ mod tests {
     use super::*;
     use burn::tensor::Tensor;
 
-    use crate::backend::TestBackend;
-
     // -- Output equality tests --
 
     #[test]
     fn shape_folding() {
         let device = Default::default();
-        let s = simplified::simplify_shape_folding::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_shape_folding::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
+        let s = simplified::simplify_shape_folding::Model::new(&device);
+        let u = unsimplified::simplify_shape_folding::Model::new(&device);
+        let input = Tensor::<3>::ones([2, 3, 4], &device);
         assert_eq!(s.forward(input.clone()), u.forward(input));
     }
 
     #[test]
     fn gather_on_shape() {
         let device = Default::default();
-        let s = simplified::simplify_gather_on_shape::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_gather_on_shape::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
+        let s = simplified::simplify_gather_on_shape::Model::new(&device);
+        let u = unsimplified::simplify_gather_on_shape::Model::new(&device);
+        let input = Tensor::<3>::ones([2, 3, 4], &device);
         assert_eq!(s.forward(input.clone()), u.forward(input));
     }
 
     #[test]
     fn slice_on_shape() {
         let device = Default::default();
-        let s = simplified::simplify_slice_on_shape::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_slice_on_shape::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 4>::ones([2, 3, 4, 5], &device);
+        let s = simplified::simplify_slice_on_shape::Model::new(&device);
+        let u = unsimplified::simplify_slice_on_shape::Model::new(&device);
+        let input = Tensor::<4>::ones([2, 3, 4, 5], &device);
         assert_eq!(s.forward(input.clone()), u.forward(input));
     }
 
     #[test]
     fn concat_shapes() {
         let device = Default::default();
-        let s = simplified::simplify_concat_shapes::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_concat_shapes::Model::<TestBackend>::new(&device);
-        let x = Tensor::<TestBackend, 2>::ones([2, 3], &device);
-        let y = Tensor::<TestBackend, 3>::ones([4, 5, 6], &device);
+        let s = simplified::simplify_concat_shapes::Model::new(&device);
+        let u = unsimplified::simplify_concat_shapes::Model::new(&device);
+        let x = Tensor::<2>::ones([2, 3], &device);
+        let y = Tensor::<3>::ones([4, 5, 6], &device);
         assert_eq!(s.forward(x.clone(), y.clone()), u.forward(x, y));
     }
 
     #[test]
     fn reshape_from_shape() {
         let device = Default::default();
-        let s = simplified::simplify_reshape_from_shape::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_reshape_from_shape::Model::<TestBackend>::new(&device);
-        let x = Tensor::<TestBackend, 1>::from_floats(
-            [0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 11.],
-            &device,
-        );
-        let shape_source = Tensor::<TestBackend, 2>::zeros([3, 4], &device);
+        let s = simplified::simplify_reshape_from_shape::Model::new(&device);
+        let u = unsimplified::simplify_reshape_from_shape::Model::new(&device);
+        let x =
+            Tensor::<1>::from_floats([0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 11.], &device);
+        let shape_source = Tensor::<2>::zeros([3, 4], &device);
         assert_eq!(
             s.forward(x.clone(), shape_source.clone()).to_data(),
             u.forward(x, shape_source).to_data()
@@ -104,18 +100,18 @@ mod tests {
     #[test]
     fn binary_ops_on_shape() {
         let device = Default::default();
-        let s = simplified::simplify_binary_ops_on_shape::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_binary_ops_on_shape::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
+        let s = simplified::simplify_binary_ops_on_shape::Model::new(&device);
+        let u = unsimplified::simplify_binary_ops_on_shape::Model::new(&device);
+        let input = Tensor::<3>::ones([2, 3, 4], &device);
         assert_eq!(s.forward(input.clone()), u.forward(input));
     }
 
     #[test]
     fn cast_shape() {
         let device = Default::default();
-        let s = simplified::simplify_cast_shape::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_cast_shape::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
+        let s = simplified::simplify_cast_shape::Model::new(&device);
+        let u = unsimplified::simplify_cast_shape::Model::new(&device);
+        let input = Tensor::<3>::ones([2, 3, 4], &device);
         assert_eq!(
             s.forward(input.clone()).to_data(),
             u.forward(input).to_data()
@@ -125,20 +121,20 @@ mod tests {
     #[test]
     fn where_on_shapes() {
         let device = Default::default();
-        let s = simplified::simplify_where_on_shapes::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_where_on_shapes::Model::<TestBackend>::new(&device);
-        let x = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
-        let y = Tensor::<TestBackend, 3>::ones([5, 6, 7], &device);
+        let s = simplified::simplify_where_on_shapes::Model::new(&device);
+        let u = unsimplified::simplify_where_on_shapes::Model::new(&device);
+        let x = Tensor::<3>::ones([2, 3, 4], &device);
+        let y = Tensor::<3>::ones([5, 6, 7], &device);
         assert_eq!(s.forward(true, x.clone(), y.clone()), u.forward(true, x, y));
     }
 
     #[test]
     fn expand_from_shape() {
         let device = Default::default();
-        let s = simplified::simplify_expand_from_shape::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_expand_from_shape::Model::<TestBackend>::new(&device);
-        let x = Tensor::<TestBackend, 3>::ones([1, 1, 4], &device);
-        let shape_source = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
+        let s = simplified::simplify_expand_from_shape::Model::new(&device);
+        let u = unsimplified::simplify_expand_from_shape::Model::new(&device);
+        let x = Tensor::<3>::ones([1, 1, 4], &device);
+        let shape_source = Tensor::<3>::ones([2, 3, 4], &device);
         assert_eq!(
             s.forward(x.clone(), shape_source.clone()).to_data(),
             u.forward(x, shape_source).to_data()
@@ -148,19 +144,19 @@ mod tests {
     #[test]
     fn gather_shape_chain() {
         let device = Default::default();
-        let s = simplified::simplify_gather_shape_chain::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_gather_shape_chain::Model::<TestBackend>::new(&device);
-        let x = Tensor::<TestBackend, 3>::ones([3, 1, 4], &device);
-        let y = Tensor::<TestBackend, 3>::ones([5, 6, 7], &device);
+        let s = simplified::simplify_gather_shape_chain::Model::new(&device);
+        let u = unsimplified::simplify_gather_shape_chain::Model::new(&device);
+        let x = Tensor::<3>::ones([3, 1, 4], &device);
+        let y = Tensor::<3>::ones([5, 6, 7], &device);
         assert_eq!(s.forward(x.clone(), y.clone()), u.forward(x, y));
     }
 
     #[test]
     fn permute_via_shape_gather() {
         let device = Default::default();
-        let s = simplified::simplify_permute_via_shape_gather::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_permute_via_shape_gather::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 4>::ones([2, 3, 4, 5], &device);
+        let s = simplified::simplify_permute_via_shape_gather::Model::new(&device);
+        let u = unsimplified::simplify_permute_via_shape_gather::Model::new(&device);
+        let input = Tensor::<4>::ones([2, 3, 4, 5], &device);
         assert_eq!(
             s.forward(input.clone()).to_data(),
             u.forward(input).to_data()
@@ -170,9 +166,9 @@ mod tests {
     #[test]
     fn constant_of_shape_opt() {
         let device = Default::default();
-        let s = simplified::simplify_constant_of_shape_opt::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_constant_of_shape_opt::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 2>::ones([2, 3], &device);
+        let s = simplified::simplify_constant_of_shape_opt::Model::new(&device);
+        let u = unsimplified::simplify_constant_of_shape_opt::Model::new(&device);
+        let input = Tensor::<2>::ones([2, 3], &device);
         assert_eq!(
             s.forward(input.clone()).to_data(),
             u.forward(input).to_data()
@@ -181,13 +177,12 @@ mod tests {
 
     #[test]
     fn sdpa_coalesce() {
-        use burn::tensor::{Tolerance, ops::FloatElem};
-        type FT = FloatElem<TestBackend>;
+        use burn::tensor::{Device, Tolerance};
         let device = Default::default();
-        let s = simplified::simplify_sdpa_coalesce::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_sdpa_coalesce::Model::<TestBackend>::new(&device);
+        let s = simplified::simplify_sdpa_coalesce::Model::new(&device);
+        let u = unsimplified::simplify_sdpa_coalesce::Model::new(&device);
         // Use distinct tensors to catch Q/K/V ordering bugs
-        let q = Tensor::<TestBackend, 4>::from_floats(
+        let q = Tensor::<4>::from_floats(
             [[
                 [
                     [1.0, 2.0, 3.0, 4.0],
@@ -202,7 +197,7 @@ mod tests {
             ]],
             &device,
         );
-        let k = Tensor::<TestBackend, 4>::from_floats(
+        let k = Tensor::<4>::from_floats(
             [[
                 [
                     [0.1, 0.3, 0.5, 0.7],
@@ -217,7 +212,7 @@ mod tests {
             ]],
             &device,
         );
-        let v = Tensor::<TestBackend, 4>::from_floats(
+        let v = Tensor::<4>::from_floats(
             [[
                 [
                     [2.0, 0.5, 1.0, 3.0],
@@ -236,7 +231,7 @@ mod tests {
         let u_out = u.forward(q, k, v);
         s_out
             .to_data()
-            .assert_approx_eq::<FT>(&u_out.to_data(), Tolerance::default());
+            .assert_approx_eq::<f32>(&u_out.to_data(), Tolerance::default());
     }
 
     // -- Codegen snapshot tests --
@@ -263,7 +258,7 @@ mod tests {
         let u = unsimplified_source::simplify_gather_on_shape();
         assert_codegen_differs(s, u, "gather_on_shape");
         insta::assert_snapshot!(extract_forward(u), @r"
-        pub fn forward(&self, x: Tensor<B, 3>) -> i64 {
+        pub fn forward(&self, x: Tensor<3>) -> i64 {
                 let shape1_out1: [i64; 3] = {
                     let axes = &x.dims()[0..3];
                     let mut output = [0i64; 3];
@@ -278,7 +273,7 @@ mod tests {
         }
         ");
         insta::assert_snapshot!(extract_forward(s), @r"
-        pub fn forward(&self, x: Tensor<B, 3>) -> i64 {
+        pub fn forward(&self, x: Tensor<3>) -> i64 {
                 let gather1_out1 = 3i64;
                 gather1_out1
             }
@@ -292,7 +287,7 @@ mod tests {
         let u = unsimplified_source::simplify_slice_on_shape();
         assert_codegen_differs(s, u, "slice_on_shape");
         insta::assert_snapshot!(extract_forward(u), @r"
-        pub fn forward(&self, x: Tensor<B, 4>) -> [i64; 2] {
+        pub fn forward(&self, x: Tensor<4>) -> [i64; 2] {
                 let shape1_out1: [i64; 4] = {
                     let axes = &x.dims()[0..4];
                     let mut output = [0i64; 4];
@@ -307,7 +302,7 @@ mod tests {
         }
         ");
         insta::assert_snapshot!(extract_forward(s), @r"
-        pub fn forward(&self, x: Tensor<B, 4>) -> [i64; 2] {
+        pub fn forward(&self, x: Tensor<4>) -> [i64; 2] {
                 let slice1_out1: [i64; 2] = [3i64, 4i64];
                 slice1_out1
             }
@@ -321,7 +316,7 @@ mod tests {
         let u = unsimplified_source::simplify_gather_shape_chain();
         assert_codegen_differs(s, u, "gather_shape_chain");
         insta::assert_snapshot!(extract_forward(u), @r"
-        pub fn forward(&self, x: Tensor<B, 3>, y: Tensor<B, 3>) -> i64 {
+        pub fn forward(&self, x: Tensor<3>, y: Tensor<3>) -> i64 {
                 let shape1_out1: [i64; 3] = {
                     let axes = &x.dims()[0..3];
                     let mut output = [0i64; 3];
@@ -350,7 +345,7 @@ mod tests {
         }
         ");
         insta::assert_snapshot!(extract_forward(s), @r"
-        pub fn forward(&self, x: Tensor<B, 3>, y: Tensor<B, 3>) -> i64 {
+        pub fn forward(&self, x: Tensor<3>, y: Tensor<3>) -> i64 {
                 let gather2_out1 = 6i64;
                 gather2_out1
             }
@@ -364,7 +359,7 @@ mod tests {
         let u = unsimplified_source::simplify_permute_via_shape_gather();
         assert_codegen_differs(s, u, "permute_via_shape_gather");
         insta::assert_snapshot!(extract_forward(u), @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
                 let shape1_out1: [i64; 4] = {
                     let axes = &input.clone().dims()[0..4];
                     let mut output = [0i64; 4];
@@ -420,7 +415,7 @@ mod tests {
         }
         ");
         insta::assert_snapshot!(extract_forward(s), @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
                 let reshape1_out1 = input.permute([0, 1, 3, 2]);
                 reshape1_out1
             }
@@ -431,9 +426,9 @@ mod tests {
     #[test]
     fn constant_fold() {
         let device = Default::default();
-        let s = simplified::simplify_constant_fold::Model::<TestBackend>::new(&device);
-        let u = unsimplified::simplify_constant_fold::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
+        let s = simplified::simplify_constant_fold::Model::new(&device);
+        let u = unsimplified::simplify_constant_fold::Model::new(&device);
+        let input = Tensor::<3>::ones([2, 3, 4], &device);
         assert_eq!(s.forward(input.clone()), u.forward(input));
     }
 
@@ -443,7 +438,7 @@ mod tests {
         let u = unsimplified_source::simplify_constant_fold();
         assert_codegen_differs(s, u, "constant_fold");
         insta::assert_snapshot!(extract_forward(u), @r"
-        pub fn forward(&self, x: Tensor<B, 3>) -> i64 {
+        pub fn forward(&self, x: Tensor<3>) -> i64 {
                 let shape1_out1: [i64; 3] = {
                     let axes = &x.clone().dims()[0..3];
                     let mut output = [0i64; 3];
@@ -468,7 +463,7 @@ mod tests {
         }
         ");
         insta::assert_snapshot!(extract_forward(s), @r"
-        pub fn forward(&self, x: Tensor<B, 3>) -> i64 {
+        pub fn forward(&self, x: Tensor<3>) -> i64 {
                 let mul1_out1 = 12i64;
                 mul1_out1
             }
@@ -482,12 +477,7 @@ mod tests {
         let u = unsimplified_source::simplify_sdpa_coalesce();
         assert_codegen_differs(s, u, "sdpa_coalesce");
         insta::assert_snapshot!(extract_forward(u), @r"
-        pub fn forward(
-                &self,
-                q: Tensor<B, 4>,
-                k: Tensor<B, 4>,
-                v: Tensor<B, 4>,
-            ) -> Tensor<B, 4> {
+        pub fn forward(&self, q: Tensor<4>, k: Tensor<4>, v: Tensor<4>) -> Tensor<4> {
                 let transpose1_out1 = k.permute([0, 1, 3, 2]);
                 let matmul1_out1 = q.matmul(transpose1_out1);
                 let constant1_out1 = self.constant1.val();
@@ -500,12 +490,7 @@ mod tests {
         }
         ");
         insta::assert_snapshot!(extract_forward(s), @r"
-        pub fn forward(
-                &self,
-                q: Tensor<B, 4>,
-                k: Tensor<B, 4>,
-                v: Tensor<B, 4>,
-            ) -> Tensor<B, 4> {
+        pub fn forward(&self, q: Tensor<4>, k: Tensor<4>, v: Tensor<4>) -> Tensor<4> {
                 let (matmul2_out1,) = {
                     let q = q;
                     let k = k;

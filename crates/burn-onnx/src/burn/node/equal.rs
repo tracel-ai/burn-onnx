@@ -50,7 +50,7 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
                 let dtype_tokens = rhs_ty.elem_type().to_tokens();
                 quote! {
                     {
-                        let shape_tensor = Tensor::<B, 1, Int>::from_data(
+                        let shape_tensor = Tensor::<1, Int>::from_data(
                             burn::tensor::TensorData::from(#lhs_value.as_slice()),
                             (&self.device, #dtype_tokens)
                         );
@@ -62,7 +62,7 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
                 let dtype_tokens = lhs_ty.elem_type().to_tokens();
                 quote! {
                     {
-                        let shape_tensor = Tensor::<B, 1, Int>::from_data(
+                        let shape_tensor = Tensor::<1, Int>::from_data(
                             burn::tensor::TensorData::from(#rhs_value.as_slice()),
                             (&self.device, #dtype_tokens)
                         );
@@ -98,7 +98,7 @@ mod tests {
             .output_tensor("output", 2, DType::Bool(BoolStore::Native))
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 2>, rhs: Tensor<B, 2>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, lhs: Tensor<2>, rhs: Tensor<2>) -> Tensor<2, Bool> {
             let output = lhs.equal(rhs);
             output
         }
@@ -113,7 +113,7 @@ mod tests {
             .output_tensor("output", 3, DType::Bool(BoolStore::Native))
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 3>, rhs: Tensor<B, 2>) -> Tensor<B, 3, Bool> {
+        pub fn forward(&self, lhs: Tensor<3>, rhs: Tensor<2>) -> Tensor<3, Bool> {
             let output = lhs.equal((rhs).unsqueeze_dims(&[0isize]));
             output
         }
@@ -128,7 +128,7 @@ mod tests {
             .output_tensor("output", 3, DType::Bool(BoolStore::Native))
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 2>, rhs: Tensor<B, 3>) -> Tensor<B, 3, Bool> {
+        pub fn forward(&self, lhs: Tensor<2>, rhs: Tensor<3>) -> Tensor<3, Bool> {
             let output = (lhs).unsqueeze_dims(&[0isize]).equal(rhs);
             output
         }
@@ -143,7 +143,7 @@ mod tests {
             .output_tensor("output", 3, DType::Bool(BoolStore::Native))
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 3>, rhs: Tensor<B, 1>) -> Tensor<B, 3, Bool> {
+        pub fn forward(&self, lhs: Tensor<3>, rhs: Tensor<1>) -> Tensor<3, Bool> {
             let output = lhs.equal((rhs).unsqueeze_dims(&[0isize, 1isize]));
             output
         }
@@ -158,7 +158,7 @@ mod tests {
             .output_tensor("output", 3, DType::Bool(BoolStore::Native))
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 1>, rhs: Tensor<B, 3>) -> Tensor<B, 3, Bool> {
+        pub fn forward(&self, lhs: Tensor<1>, rhs: Tensor<3>) -> Tensor<3, Bool> {
             let output = (lhs).unsqueeze_dims(&[0isize, 1isize]).equal(rhs);
             output
         }
@@ -173,7 +173,7 @@ mod tests {
             .output_tensor("output", 1, DType::Bool(BoolStore::Native))
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 1>, rhs: Tensor<B, 1>) -> Tensor<B, 1, Bool> {
+        pub fn forward(&self, lhs: Tensor<1>, rhs: Tensor<1>) -> Tensor<1, Bool> {
             let output = lhs.equal(rhs);
             output
         }
@@ -190,7 +190,7 @@ mod tests {
             .output_tensor("output", 2, DType::Bool(BoolStore::Native))
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 2>, rhs: f32) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, lhs: Tensor<2>, rhs: f32) -> Tensor<2, Bool> {
             let output = lhs.equal_elem(rhs);
             output
         }
@@ -205,7 +205,7 @@ mod tests {
             .output_tensor("output", 2, DType::Bool(BoolStore::Native))
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: f32, rhs: Tensor<B, 2>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, lhs: f32, rhs: Tensor<2>) -> Tensor<2, Bool> {
             let output = rhs.equal_elem(lhs);
             output
         }
@@ -262,10 +262,9 @@ mod tests {
             .output_tensor("output", 1, DType::Bool(BoolStore::Native))
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<B, 1, Int>) -> Tensor<B, 1, Bool> {
+        pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<1, Int>) -> Tensor<1, Bool> {
             let output = {
                 let shape_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -287,10 +286,9 @@ mod tests {
             .output_tensor("output", 1, DType::Bool(BoolStore::Native))
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 1, Int>, rhs: [i64; 4]) -> Tensor<B, 1, Bool> {
+        pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 4]) -> Tensor<1, Bool> {
             let output = {
                 let shape_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(

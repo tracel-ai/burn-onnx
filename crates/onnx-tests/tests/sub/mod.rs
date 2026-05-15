@@ -5,18 +5,16 @@ include_models!(sub, sub_int, sub_shape, sub_broadcast, sub_shape_tensor);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{DType, Int, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{DType, Device, Int, Tensor, TensorData};
 
     #[test]
     fn sub_scalar_from_tensor_and_tensor_from_tensor() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: sub::Model<TestBackend> = sub::Model::default();
+        let model: sub::Model = sub::Model::default();
 
         let device = Default::default();
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats([[[[1., 2., 3., 4.]]]], &device);
+        let input = Tensor::<4>::from_floats([[[[1., 2., 3., 4.]]]], &device);
         let scalar = 3.0f64;
         let output = model.forward(input, scalar);
         let expected = TensorData::from([[[[-12f32, -13., -14., -15.]]]]);
@@ -27,13 +25,13 @@ mod tests {
     #[test]
     fn sub_scalar_from_int_tensor_and_int_tensor_from_tensor() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: sub_int::Model<TestBackend> = sub_int::Model::default();
+        let model: sub_int::Model = sub_int::Model::default();
 
         let device = Default::default();
         // The ONNX model (sub_int.py) declares the tensor input as INT64.
         // Construct with explicit I64 dtype so the dtype-preserving Sub
         // carries I64 through to the output.
-        let input = Tensor::<TestBackend, 4, Int>::from_data(
+        let input = Tensor::<4, Int>::from_data(
             TensorData::from([[[[1i64, 2, 3, 4]]]]),
             (&device, DType::I64),
         );
@@ -47,12 +45,12 @@ mod tests {
     #[test]
     fn sub_shape_with_scalar_and_shape() {
         // Initialize the model
-        let model: sub_shape::Model<TestBackend> = sub_shape::Model::default();
+        let model: sub_shape::Model = sub_shape::Model::default();
 
         let device = Default::default();
         // Create input tensors
-        let input1 = Tensor::<TestBackend, 3>::ones([10, 8, 6], &device);
-        let input2 = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
+        let input1 = Tensor::<3>::ones([10, 8, 6], &device);
+        let input2 = Tensor::<3>::ones([2, 3, 4], &device);
         let (shape_minus_scalar, shape_minus_shape) = model.forward(input1, input2);
 
         // Expected outputs
@@ -65,10 +63,10 @@ mod tests {
 
     #[test]
     fn sub_broadcast_tensor_ranks() {
-        let model: sub_broadcast::Model<TestBackend> = sub_broadcast::Model::default();
+        let model: sub_broadcast::Model = sub_broadcast::Model::default();
         let device = Default::default();
 
-        let x_3d = Tensor::<TestBackend, 3>::from_floats(
+        let x_3d = Tensor::<3>::from_floats(
             [
                 [
                     [10.0, 20.0, 30.0, 40.0],
@@ -84,7 +82,7 @@ mod tests {
             &device,
         );
 
-        let y_2d = Tensor::<TestBackend, 2>::from_floats(
+        let y_2d = Tensor::<2>::from_floats(
             [
                 [1.0, 2.0, 3.0, 4.0],
                 [5.0, 6.0, 7.0, 8.0],
@@ -93,7 +91,7 @@ mod tests {
             &device,
         );
 
-        let a_2d = Tensor::<TestBackend, 2>::from_floats(
+        let a_2d = Tensor::<2>::from_floats(
             [
                 [100.0, 100.0, 100.0, 100.0],
                 [200.0, 200.0, 200.0, 200.0],

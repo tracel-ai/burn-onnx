@@ -10,17 +10,15 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Int, Tensor, TensorData};
 
     #[test]
     fn bitwise_and_tensors() {
         let device = Default::default();
-        let model: bitwise_and::Model<TestBackend> = bitwise_and::Model::new(&device);
+        let model: bitwise_and::Model = bitwise_and::Model::new(&device);
         // Run the model
-        let input1 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
-        let input2 = Tensor::<TestBackend, 1, Int>::from_ints([1, 1, 2, 2], &device);
+        let input1 = Tensor::<1, Int>::from_ints([1, 2, 3, 4], &device);
+        let input2 = Tensor::<1, Int>::from_ints([1, 1, 2, 2], &device);
         let output = model.forward(input1, input2);
         let expected = TensorData::from([1i32, 0, 2, 0]);
         output.to_data().assert_eq(&expected, true);
@@ -29,9 +27,9 @@ mod tests {
     #[test]
     fn bitwise_and_scalar_tensor() {
         let device = Default::default();
-        let model: bitwise_and_scalar::Model<TestBackend> = bitwise_and_scalar::Model::new(&device);
+        let model: bitwise_and_scalar::Model = bitwise_and_scalar::Model::new(&device);
         // Run the model
-        let input1 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
+        let input1 = Tensor::<1, Int>::from_ints([1, 2, 3, 4], &device);
         let scalar = 2;
         let output = model.forward(input1, scalar);
         let expected = TensorData::from([0i32, 2, 2, 0]);
@@ -41,10 +39,10 @@ mod tests {
     #[test]
     fn scalar_bitwise_and_tensor() {
         let device = Default::default();
-        let model: scalar_bitwise_and::Model<TestBackend> = scalar_bitwise_and::Model::new(&device);
+        let model: scalar_bitwise_and::Model = scalar_bitwise_and::Model::new(&device);
         // Run the model
         let scalar = 2;
-        let input2 = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3, 4], &device);
+        let input2 = Tensor::<1, Int>::from_ints([1, 2, 3, 4], &device);
         let output = model.forward(scalar, input2);
         // Bitwise AND is commutative, so result should be same as tensor-scalar
         let expected = TensorData::from([0i32, 2, 2, 0]);
@@ -54,7 +52,7 @@ mod tests {
     #[test]
     fn scalar_bitwise_and_scalar() {
         let device = Default::default();
-        let model: scalar_bitwise_and_scalar::Model<TestBackend> =
+        let model: scalar_bitwise_and_scalar::Model =
             scalar_bitwise_and_scalar::Model::new(&device);
         // Run the model
         let lhs = 7; // 0b111

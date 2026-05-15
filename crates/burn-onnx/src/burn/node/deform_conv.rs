@@ -69,7 +69,7 @@ impl NodeCodegen for DeformConvNode {
 
         Some(Field::new(
             self.name.clone(),
-            quote! { DeformConv2d<B> },
+            quote! { DeformConv2d },
             quote! {
                 let #name = DeformConv2dConfig::new(#channels, #kernel_size)
                     .with_stride(#stride)
@@ -313,7 +313,7 @@ mod tests {
         let node = create_static_deform_conv_node("deform_conv1", true, false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>, offset: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, offset: Tensor<4>) -> Tensor<4> {
             let output = self.deform_conv1.forward(input, offset, None);
             output
         }
@@ -327,10 +327,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 4>,
-            offset: Tensor<B, 4>,
-            mask: Tensor<B, 4>,
-        ) -> Tensor<B, 4> {
+            input: Tensor<4>,
+            offset: Tensor<4>,
+            mask: Tensor<4>,
+        ) -> Tensor<4> {
             let output = self.deform_conv1.forward(input, offset, Some(mask));
             output
         }
@@ -401,10 +401,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 4>,
-            weight: Tensor<B, 4>,
-            offset: Tensor<B, 4>,
-        ) -> Tensor<B, 4> {
+            input: Tensor<4>,
+            weight: Tensor<4>,
+            offset: Tensor<4>,
+        ) -> Tensor<4> {
             let output = burn::tensor::module::deform_conv2d(
                 input,
                 offset,
@@ -430,10 +430,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 4>,
-            weight: Tensor<B, 4>,
-            offset: Tensor<B, 4>,
-        ) -> Tensor<B, 4> {
+            input: Tensor<4>,
+            weight: Tensor<4>,
+            offset: Tensor<4>,
+        ) -> Tensor<4> {
             let output = burn::tensor::module::deform_conv2d(
                 input,
                 offset,
@@ -455,12 +455,12 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 4>,
-            weight: Tensor<B, 4>,
-            offset: Tensor<B, 4>,
-            bias: Tensor<B, 1>,
-            mask: Tensor<B, 4>,
-        ) -> Tensor<B, 4> {
+            input: Tensor<4>,
+            weight: Tensor<4>,
+            offset: Tensor<4>,
+            bias: Tensor<1>,
+            mask: Tensor<4>,
+        ) -> Tensor<4> {
             let output = burn::tensor::module::deform_conv2d(
                 input,
                 offset,

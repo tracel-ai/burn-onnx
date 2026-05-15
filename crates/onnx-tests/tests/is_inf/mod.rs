@@ -11,19 +11,15 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn is_inf() {
         let device = Default::default();
-        let model: is_inf::Model<TestBackend> = is_inf::Model::new(&device);
+        let model: is_inf::Model = is_inf::Model::new(&device);
 
-        let input1 = Tensor::<TestBackend, 2>::from_floats(
-            [[1.0, f32::INFINITY, -9.0, f32::NEG_INFINITY]],
-            &device,
-        );
+        let input1 =
+            Tensor::<2>::from_floats([[1.0, f32::INFINITY, -9.0, f32::NEG_INFINITY]], &device);
 
         let output = model.forward(input1);
         let expected = TensorData::from([[false, true, false, true]]);
@@ -34,7 +30,7 @@ mod tests {
     #[test]
     fn is_inf_scalar() {
         let device = Default::default();
-        let model: is_inf_scalar::Model<TestBackend> = is_inf_scalar::Model::new(&device);
+        let model: is_inf_scalar::Model = is_inf_scalar::Model::new(&device);
 
         let input1 = f32::INFINITY;
 
@@ -47,12 +43,10 @@ mod tests {
     #[test]
     fn is_inf_neg_only() {
         let device = Default::default();
-        let model: is_inf_neg_only::Model<TestBackend> = is_inf_neg_only::Model::new(&device);
+        let model: is_inf_neg_only::Model = is_inf_neg_only::Model::new(&device);
 
-        let input1 = Tensor::<TestBackend, 2>::from_floats(
-            [[1.0, f32::INFINITY, -9.0, f32::NEG_INFINITY]],
-            &device,
-        );
+        let input1 =
+            Tensor::<2>::from_floats([[1.0, f32::INFINITY, -9.0, f32::NEG_INFINITY]], &device);
 
         let output = model.forward(input1);
         let expected = TensorData::from([[false, false, false, true]]);
@@ -63,12 +57,10 @@ mod tests {
     #[test]
     fn is_inf_pos_only() {
         let device = Default::default();
-        let model: is_inf_pos_only::Model<TestBackend> = is_inf_pos_only::Model::new(&device);
+        let model: is_inf_pos_only::Model = is_inf_pos_only::Model::new(&device);
 
-        let input1 = Tensor::<TestBackend, 2>::from_floats(
-            [[1.0, f32::INFINITY, -9.0, f32::NEG_INFINITY]],
-            &device,
-        );
+        let input1 =
+            Tensor::<2>::from_floats([[1.0, f32::INFINITY, -9.0, f32::NEG_INFINITY]], &device);
 
         let output = model.forward(input1);
         let expected = TensorData::from([[false, true, false, false]]);
@@ -79,12 +71,10 @@ mod tests {
     #[test]
     fn is_inf_none() {
         let device = Default::default();
-        let model: is_inf_none::Model<TestBackend> = is_inf_none::Model::new(&device);
+        let model: is_inf_none::Model = is_inf_none::Model::new(&device);
 
-        let input1 = Tensor::<TestBackend, 2>::from_floats(
-            [[1.0, f32::INFINITY, -9.0, f32::NEG_INFINITY]],
-            &device,
-        );
+        let input1 =
+            Tensor::<2>::from_floats([[1.0, f32::INFINITY, -9.0, f32::NEG_INFINITY]], &device);
 
         let output = model.forward(input1);
         let expected = TensorData::from([[false, false, false, false]]);

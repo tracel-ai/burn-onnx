@@ -4,18 +4,14 @@ include_models!(selu);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn selu() {
         let device = Default::default();
-        let model: selu::Model<TestBackend> = selu::Model::new(&device);
+        let model: selu::Model = selu::Model::new(&device);
 
-        let input =
-            Tensor::<TestBackend, 2>::from_floats([[-1.0, 0.0, 1.0], [2.0, -0.5, -2.0]], &device);
+        let input = Tensor::<2>::from_floats([[-1.0, 0.0, 1.0], [2.0, -0.5, -2.0]], &device);
         let output = model.forward(input);
         let expected = TensorData::from([
             [-1.111_330_6f32, 0.0, 1.050_701],
@@ -24,6 +20,6 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
     }
 }

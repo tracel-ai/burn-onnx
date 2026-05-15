@@ -4,19 +4,16 @@ include_models!(sigmoid);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn sigmoid() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: sigmoid::Model<TestBackend> = sigmoid::Model::new(&device);
+        let model: sigmoid::Model = sigmoid::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [
                 [0.33669037, 0.128_809_4, 0.23446237],
                 [0.23033303, -1.122_856_4, -0.18632829],
@@ -31,6 +28,6 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, burn::tensor::Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
     }
 }

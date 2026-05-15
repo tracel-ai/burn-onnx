@@ -14,16 +14,16 @@ include!(concat!(env!("OUT_DIR"), "/model/face_detector.rs"));
 /// Test data structure matching the PyTorch saved format.
 /// BlazeFace outputs two 3D tensors: regressors and classifiers.
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    input: Param<Tensor<B, 4>>,
+struct TestData {
+    input: Param<Tensor<4>>,
     /// Bounding box and keypoint regressors: [1, 896, 16]
-    regressors: Param<Tensor<B, 3>>,
+    regressors: Param<Tensor<3>>,
     /// Face confidence classifiers: [1, 896, 1]
-    classificators: Param<Tensor<B, 3>>,
+    classificators: Param<Tensor<3>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         // BlazeFace Short Range: 128x128 NHWC input, 896 anchors
         Self {
             input: Initializer::Zeros.init([1, 128, 128, 3], device),
@@ -73,14 +73,14 @@ fn main() {
     let start = Instant::now();
     let device = model_checks_common::best_device!();
     let weights_path = concat!(env!("OUT_DIR"), "/model/face_detector.bpk");
-    let model: Model<MyBackend> = Model::from_file(weights_path, &device);
+    let model: Model = Model::from_file(weights_path, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
 
     // Load test data from PyTorch file
     println!("\nLoading test data from {}...", test_data_file.display());
     let start = Instant::now();
-    let mut test_data = TestData::<MyBackend>::new(&device);
+    let mut test_data = TestData::new(&device);
     let mut store = PytorchStore::from_file(&test_data_file);
     test_data
         .load_from(&mut store)
@@ -149,8 +149,8 @@ fn main() {
 
             let diff = output.clone() - reference.clone();
             let abs_diff = diff.abs();
-            let max_diff = abs_diff.clone().max().into_scalar();
-            let mean_diff = abs_diff.mean().into_scalar();
+            let max_diff = abs_diff.clone().max().into_scalar::<f32>();
+            let mean_diff = abs_diff.mean().into_scalar::<f32>();
             println!("    Max abs diff:  {:.6}", max_diff);
             println!("    Mean abs diff: {:.6}", mean_diff);
 

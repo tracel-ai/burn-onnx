@@ -11,19 +11,17 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor};
+    use burn::tensor::{Device, Shape, Tensor};
     use core::f64::consts;
     use float_cmp::ApproxEq;
-
-    use crate::backend::TestBackend;
 
     #[test]
     fn conv1d() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: conv1d::Model<TestBackend> = conv1d::Model::default();
+        let model: conv1d::Model = conv1d::Model::default();
 
         // Run the model with pi as input for easier testing
-        let input = Tensor::<TestBackend, 3>::full([6, 4, 10], consts::PI, &Default::default());
+        let input = Tensor::<3>::full([6, 4, 10], consts::PI, &Default::default());
 
         let output = model.forward(input);
 
@@ -33,18 +31,18 @@ mod tests {
 
         // We are using the sum of the output tensor to test the correctness of the conv1d node
         // because the output tensor is too large to compare with the expected tensor.
-        let output_sum = output.sum().into_scalar();
-        let expected_sum = -54.549_243; // from pytorch
+        let output_sum = output.sum().into_scalar::<f32>();
+        let expected_sum: f32 = -54.549_243; // from pytorch
         assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));
     }
 
     #[test]
     fn conv2d() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: conv2d::Model<TestBackend> = conv2d::Model::default();
+        let model: conv2d::Model = conv2d::Model::default();
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 4>::ones([2, 4, 10, 15], &Default::default());
+        let input = Tensor::<4>::ones([2, 4, 10, 15], &Default::default());
 
         let output = model.forward(input);
 
@@ -53,7 +51,7 @@ mod tests {
 
         // We are using the sum of the output tensor to test the correctness of the conv2d node
         // because the output tensor is too large to compare with the expected tensor.
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
 
         // PyTorch f32 ground truth (from conv2d/conv2d.py, torch 2.10.0 CPU).
         // Tolerance accommodates gemm-order accumulation drift on the ~1080-element
@@ -65,10 +63,10 @@ mod tests {
     #[test]
     fn conv3d() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: conv3d::Model<TestBackend> = conv3d::Model::default();
+        let model: conv3d::Model = conv3d::Model::default();
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 5>::ones([2, 4, 4, 5, 7], &Default::default());
+        let input = Tensor::<5>::ones([2, 4, 4, 5, 7], &Default::default());
 
         let output = model.forward(input);
 
@@ -77,9 +75,9 @@ mod tests {
 
         // We are using the sum of the output tensor to test the correctness of the conv3d node
         // because the output tensor is too large to compare with the expected tensor.
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
 
-        let expected_sum = 48.494_262; // from pytorch
+        let expected_sum: f32 = 48.494_262; // from pytorch
 
         assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));
     }
@@ -88,11 +86,10 @@ mod tests {
     fn conv1d_asymmetric_padding() {
         // Initialize the model with weights (loaded from the exported file)
         // This model tests asymmetric padding: (left=1, right=2)
-        let model: conv1d_asymmetric_padding::Model<TestBackend> =
-            conv1d_asymmetric_padding::Model::default();
+        let model: conv1d_asymmetric_padding::Model = conv1d_asymmetric_padding::Model::default();
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 3>::ones([2, 4, 10], &Default::default());
+        let input = Tensor::<3>::ones([2, 4, 10], &Default::default());
 
         let output = model.forward(input);
 
@@ -102,8 +99,8 @@ mod tests {
         assert_eq!(output.shape(), expected_shape);
 
         // We are using the sum of the output tensor to test the correctness
-        let output_sum = output.sum().into_scalar();
-        let expected_sum = -0.386_136; // from pytorch
+        let output_sum = output.sum().into_scalar::<f32>();
+        let expected_sum: f32 = -0.386_136; // from pytorch
 
         assert!(expected_sum.approx_eq(output_sum, (1.0e-3, 2)));
     }
@@ -112,11 +109,10 @@ mod tests {
     fn conv2d_asymmetric_padding() {
         // Initialize the model with weights (loaded from the exported file)
         // This model tests asymmetric padding: (left=1, right=2, top=1, bottom=3)
-        let model: conv2d_asymmetric_padding::Model<TestBackend> =
-            conv2d_asymmetric_padding::Model::default();
+        let model: conv2d_asymmetric_padding::Model = conv2d_asymmetric_padding::Model::default();
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 4>::ones([2, 4, 10, 15], &Default::default());
+        let input = Tensor::<4>::ones([2, 4, 10, 15], &Default::default());
 
         let output = model.forward(input);
 
@@ -127,7 +123,7 @@ mod tests {
 
         // We are using the sum of the output tensor to test the correctness
         // because the output tensor is too large to compare with the expected tensor.
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
 
         // PyTorch f32 ground truth (from conv/conv2d_asymmetric_padding.py, torch 2.10.0
         // CPU). Tolerance is a bit larger than conv2d because the ~2304-element output

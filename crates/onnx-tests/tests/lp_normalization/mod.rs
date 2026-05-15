@@ -9,17 +9,12 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, Tolerance, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Tensor, TensorData, Tolerance};
 
     // Input generated via np.random.seed(42), shape [2, 3, 4]. Shared across all
     // tests so different axis/p configurations operate on the same data.
-    fn test_input(
-        device: &<TestBackend as burn::tensor::backend::BackendTypes>::Device,
-    ) -> Tensor<TestBackend, 3> {
-        Tensor::<TestBackend, 3>::from_floats(
+    fn test_input(device: &Device) -> Tensor<3> {
+        Tensor::<3>::from_floats(
             [
                 [
                     [0.49671414, -0.13826430, 0.64768857, 1.52302980],
@@ -39,8 +34,7 @@ mod tests {
     #[test]
     fn lp_normalization_default() {
         let device = Default::default();
-        let model: lp_normalization_default::Model<TestBackend> =
-            lp_normalization_default::Model::default();
+        let model: lp_normalization_default::Model = lp_normalization_default::Model::default();
 
         let output = model.forward(test_input(&device));
 
@@ -59,14 +53,13 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn lp_normalization_l1_axis1() {
         let device = Default::default();
-        let model: lp_normalization_l1_axis1::Model<TestBackend> =
-            lp_normalization_l1_axis1::Model::default();
+        let model: lp_normalization_l1_axis1::Model = lp_normalization_l1_axis1::Model::default();
 
         let output = model.forward(test_input(&device));
 
@@ -85,14 +78,13 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn lp_normalization_l2_axis0() {
         let device = Default::default();
-        let model: lp_normalization_l2_axis0::Model<TestBackend> =
-            lp_normalization_l2_axis0::Model::default();
+        let model: lp_normalization_l2_axis0::Model = lp_normalization_l2_axis0::Model::default();
 
         let output = model.forward(test_input(&device));
 
@@ -111,14 +103,14 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
     #[test]
     fn lp_normalization_l2_negative_axis() {
         // axis=-2 on rank-3 resolves to axis=1.
         let device = Default::default();
-        let model: lp_normalization_l2_negative_axis::Model<TestBackend> =
+        let model: lp_normalization_l2_negative_axis::Model =
             lp_normalization_l2_negative_axis::Model::default();
 
         let output = model.forward(test_input(&device));
@@ -138,6 +130,6 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 }

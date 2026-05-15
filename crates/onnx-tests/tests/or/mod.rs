@@ -5,20 +5,18 @@ include_models!(or, or_scalar, or_broadcast);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Bool, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Bool, Device, Tensor, TensorData};
 
     #[test]
     fn or() {
         let device = Default::default();
-        let model: or::Model<TestBackend> = or::Model::new(&device);
+        let model: or::Model = or::Model::new(&device);
 
-        let input_x = Tensor::<TestBackend, 4, Bool>::from_bool(
+        let input_x = Tensor::<4, Bool>::from_bool(
             TensorData::from([[[[false, false, true, true]]]]),
             &device,
         );
-        let input_y = Tensor::<TestBackend, 4, Bool>::from_bool(
+        let input_y = Tensor::<4, Bool>::from_bool(
             TensorData::from([[[[false, true, false, true]]]]),
             &device,
         );
@@ -32,7 +30,7 @@ mod tests {
     #[test]
     fn or_scalar() {
         let device = Default::default();
-        let model: or_scalar::Model<TestBackend> = or_scalar::Model::new(&device);
+        let model: or_scalar::Model = or_scalar::Model::new(&device);
 
         // Test various combinations of scalar boolean inputs
         // (input1 || true) || (input2 || false) = true || input2 = true
@@ -44,11 +42,11 @@ mod tests {
 
     #[test]
     fn or_broadcast_tensor_ranks() {
-        let model = or_broadcast::Model::<TestBackend>::default();
+        let model = or_broadcast::Model::default();
         let device = Default::default();
 
         // Create tensors matching the Python script
-        let x_3d = Tensor::<TestBackend, 3, Bool>::from_data(
+        let x_3d = Tensor::<3, Bool>::from_data(
             [
                 [
                     [true, false, false, false],
@@ -64,7 +62,7 @@ mod tests {
             &device,
         );
 
-        let y_2d = Tensor::<TestBackend, 2, Bool>::from_data(
+        let y_2d = Tensor::<2, Bool>::from_data(
             [
                 [false, false, true, true],
                 [false, true, true, false],
@@ -73,7 +71,7 @@ mod tests {
             &device,
         );
 
-        let a_2d = Tensor::<TestBackend, 2, Bool>::from_data(
+        let a_2d = Tensor::<2, Bool>::from_data(
             [
                 [false, true, false, false],
                 [false, false, false, true],
@@ -82,7 +80,7 @@ mod tests {
             &device,
         );
 
-        let b_3d = Tensor::<TestBackend, 3, Bool>::from_data(
+        let b_3d = Tensor::<3, Bool>::from_data(
             [
                 [
                     [true, false, true, true],

@@ -1,9 +1,8 @@
 use std::env::args;
 
 use burn::{
-    backend::Flex,
     data::dataset::{Dataset, vision::MnistDataset},
-    tensor::Tensor,
+    tensor::{Device, Tensor},
 };
 
 use onnx_inference::mnist::Model;
@@ -25,13 +24,11 @@ fn main() {
 
     assert!(image_index < 10000, "Image index must be less than 10000");
 
-    type Backend = Flex;
-
-    // Get a default device for the backend
-    let device = <Backend as burn::tensor::backend::BackendTypes>::Device::default();
+    // Get a default device. Backend is selected via Cargo features at compile time.
+    let device: Device = Default::default();
 
     // Create a new model and load the state
-    let model: Model<Backend> = Model::default();
+    let model: Model = Model::default();
 
     // Load the MNIST dataset and get an item
     let dataset = MnistDataset::test();
@@ -40,7 +37,7 @@ fn main() {
     // Create a tensor from the image data
     let image_data = item.image.iter().copied().flatten().collect::<Vec<f32>>();
     let mut input =
-        Tensor::<Backend, 1>::from_floats(image_data.as_slice(), &device).reshape([1, 1, 28, 28]);
+        Tensor::<1>::from_floats(image_data.as_slice(), &device).reshape([1, 1, 28, 28]);
 
     // Normalize the input
     input = ((input / 255) - 0.1307) / 0.3081;
@@ -49,7 +46,7 @@ fn main() {
     let output = model.forward(input);
 
     // Get the index of the maximum value
-    let arg_max = output.argmax(1).into_scalar() as u8;
+    let arg_max = output.argmax(1).into_scalar::<i64>() as u8;
 
     // Check if the index matches the label
     assert!(arg_max == item.label);

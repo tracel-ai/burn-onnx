@@ -7,15 +7,13 @@ mod tests {
     use burn::tensor::Shape;
     use burn::tensor::Tensor;
 
-    use crate::backend::TestBackend;
-
     #[test]
     fn bernoulli() {
         let device = Default::default();
-        let model = bernoulli::Model::<TestBackend>::new(&device);
+        let model = bernoulli::Model::new(&device);
 
         let shape = Shape::from([10]);
-        let input = Tensor::<TestBackend, 1>::full(Shape::from([10]), 0.5, &device);
+        let input = Tensor::<1>::full(Shape::from([10]), 0.5, &device);
         let output = model.forward(input);
         assert_eq!(shape, output.shape());
     }

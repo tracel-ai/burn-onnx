@@ -101,7 +101,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> (Tensor<B, 2>, Tensor<B, 2, Int>) {
+        pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2, Int>) {
             let (values, __topk_indices_raw) = input.topk_with_indices(5, 1);
             let indices = __topk_indices_raw.cast(burn::tensor::DType::I64);
             (values, indices)
@@ -127,9 +127,9 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            input: Tensor<B, 2>,
-            k: Tensor<B, 1, Int>,
-        ) -> (Tensor<B, 2>, Tensor<B, 2, Int>) {
+            input: Tensor<2>,
+            k: Tensor<1, Int>,
+        ) -> (Tensor<2>, Tensor<2, Int>) {
             let (values, __topk_indices_raw) = {
                 let __topk_k: usize = {
                     let __data = k.to_data().convert::<i64>();

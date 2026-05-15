@@ -31,13 +31,13 @@ impl NodeCodegen for onnx_ir::node::or::OrNode {
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 let rank = rhs_ty.rank();
                 quote! {
-                    if #lhs_value { Tensor::<B, #rank, Int>::ones(#rhs_value.shape(), &self.device).bool() } else { #rhs_value }
+                    if #lhs_value { Tensor::<#rank, Int>::ones(#rhs_value.shape(), &self.device).bool() } else { #rhs_value }
                 }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                 let rank = lhs_ty.rank();
                 quote! {
-                    if #rhs_value { Tensor::<B, #rank, Int>::ones(#lhs_value.shape(), &self.device).bool() } else { #lhs_value }
+                    if #rhs_value { Tensor::<#rank, Int>::ones(#lhs_value.shape(), &self.device).bool() } else { #lhs_value }
                 }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
@@ -77,9 +77,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: bool, rhs: Tensor<B, 4, Bool>) -> Tensor<B, 4, Bool> {
+        pub fn forward(&self, lhs: bool, rhs: Tensor<4, Bool>) -> Tensor<4, Bool> {
             let output = if lhs {
-                Tensor::<B, 4usize, Int>::ones(rhs.shape(), &self.device).bool()
+                Tensor::<4usize, Int>::ones(rhs.shape(), &self.device).bool()
             } else {
                 rhs
             };
@@ -97,9 +97,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 4, Bool>, rhs: bool) -> Tensor<B, 4, Bool> {
+        pub fn forward(&self, lhs: Tensor<4, Bool>, rhs: bool) -> Tensor<4, Bool> {
             let output = if rhs {
-                Tensor::<B, 4usize, Int>::ones(lhs.shape(), &self.device).bool()
+                Tensor::<4usize, Int>::ones(lhs.shape(), &self.device).bool()
             } else {
                 lhs
             };
@@ -139,11 +139,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            lhs: Tensor<B, 2, Bool>,
-            rhs: Tensor<B, 2, Bool>,
-        ) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, lhs: Tensor<2, Bool>, rhs: Tensor<2, Bool>) -> Tensor<2, Bool> {
             let output = lhs.bool_or(rhs);
             output
         }

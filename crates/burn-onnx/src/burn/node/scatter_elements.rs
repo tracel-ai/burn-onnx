@@ -159,10 +159,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            data: Tensor<B, 2>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 2>,
-        ) -> Tensor<B, 2> {
+            data: Tensor<2>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<2>,
+        ) -> Tensor<2> {
             let output = {
                 let gathered = data.clone().gather(0, indices.clone());
                 data.scatter(0, indices, updates - gathered, burn::tensor::IndexingUpdateOp::Add)
@@ -186,10 +186,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            data: Tensor<B, 2>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 2>,
-        ) -> Tensor<B, 2> {
+            data: Tensor<2>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<2>,
+        ) -> Tensor<2> {
             let output = data.scatter(1, indices, updates, burn::tensor::IndexingUpdateOp::Add);
             output
         }
@@ -210,10 +210,10 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
-            data: Tensor<B, 2>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 2>,
-        ) -> Tensor<B, 2> {
+            data: Tensor<2>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<2>,
+        ) -> Tensor<2> {
             let output = {
                 let data_dims = data.dims();
                 let updates_dims = updates.dims();
@@ -285,10 +285,10 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
-            data: Tensor<B, 2>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 2>,
-        ) -> Tensor<B, 2> {
+            data: Tensor<2>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<2>,
+        ) -> Tensor<2> {
             let output = {
                 let data_dims = data.dims();
                 let updates_dims = updates.dims();
@@ -359,10 +359,10 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
-            data: Tensor<B, 2>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 2>,
-        ) -> Tensor<B, 2> {
+            data: Tensor<2>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<2>,
+        ) -> Tensor<2> {
             let output = {
                 let data_dims = data.dims();
                 let updates_dims = updates.dims();
@@ -433,10 +433,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            data: Tensor<B, 2, Int>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 2, Int>,
-        ) -> Tensor<B, 2, Int> {
+            data: Tensor<2, Int>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<2, Int>,
+        ) -> Tensor<2, Int> {
             let output = {
                 let gathered = data.clone().gather(0, indices.clone());
                 data.scatter(0, indices, updates - gathered, burn::tensor::IndexingUpdateOp::Add)
@@ -460,10 +460,10 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
-            data: Tensor<B, 1, Bool>,
-            indices: Tensor<B, 1, Int>,
-            updates: Tensor<B, 1, Bool>,
-        ) -> Tensor<B, 1, Bool> {
+            data: Tensor<1, Bool>,
+            indices: Tensor<1, Int>,
+            updates: Tensor<1, Bool>,
+        ) -> Tensor<1, Bool> {
             let output = {
                 let data_dims = data.dims();
                 let updates_dims = updates.dims();

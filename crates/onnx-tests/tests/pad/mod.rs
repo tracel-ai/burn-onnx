@@ -11,16 +11,14 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn pad_constant() {
         let device = Default::default();
-        let model: pad::Model<TestBackend> = pad::Model::new(&device);
+        let model: pad::Model = pad::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 2>::from_floats([[1., 2.], [3., 4.], [5., 6.]], &device);
+        let input = Tensor::<2>::from_floats([[1., 2.], [3., 4.], [5., 6.]], &device);
         let output = model.forward(input).to_data();
         let expected = TensorData::from([
             [0.0_f32, 0., 0., 0., 0., 0., 0., 0.],
@@ -38,13 +36,10 @@ mod tests {
     #[test]
     fn pad_reflect_mode() {
         let device = Default::default();
-        let model: pad_reflect::Model<TestBackend> = pad_reflect::Model::new(&device);
+        let model: pad_reflect::Model = pad_reflect::Model::new(&device);
 
         // Input: 3x3 tensor
-        let input = Tensor::<TestBackend, 2>::from_floats(
-            [[1., 2., 3.], [4., 5., 6.], [7., 8., 9.]],
-            &device,
-        );
+        let input = Tensor::<2>::from_floats([[1., 2., 3.], [4., 5., 6.], [7., 8., 9.]], &device);
         let output = model.forward(input).to_data();
 
         // Expected with reflect padding (1,1,1,1):
@@ -63,10 +58,9 @@ mod tests {
     #[test]
     fn pad_runtime_constant_value() {
         let device = Default::default();
-        let model: pad_runtime_constant::Model<TestBackend> =
-            pad_runtime_constant::Model::new(&device);
+        let model: pad_runtime_constant::Model = pad_runtime_constant::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 2>::from_floats([[1., 2.], [3., 4.]], &device);
+        let input = Tensor::<2>::from_floats([[1., 2.], [3., 4.]], &device);
         let output = model.forward(input, 5.0_f32).to_data();
         let expected = TensorData::from([
             [5.0_f32, 5., 5., 5.],
@@ -81,10 +75,10 @@ mod tests {
     #[test]
     fn pad_optional_constant_value() {
         let device = Default::default();
-        let model: pad_optional_constant_value::Model<TestBackend> =
+        let model: pad_optional_constant_value::Model =
             pad_optional_constant_value::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
+        let input = Tensor::<2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
         let output = model.forward(input).to_data();
         let expected = TensorData::from([
             [0.0_f32, 0., 0., 0., 0.],
@@ -99,10 +93,10 @@ mod tests {
     #[test]
     fn pad_ndim() {
         let device = Default::default();
-        let model: pad_ndim::Model<TestBackend> = pad_ndim::Model::new(&device);
+        let model: pad_ndim::Model = pad_ndim::Model::new(&device);
 
         // Input: [1, 2, 3, 3] tensor with values 1..18
-        let input = Tensor::<TestBackend, 4>::from_data(
+        let input = Tensor::<4>::from_data(
             TensorData::from([[
                 [[1., 2., 3.], [4., 5., 6.], [7., 8., 9.]],
                 [[10., 11., 12.], [13., 14., 15.], [16., 17., 18.]],
@@ -168,10 +162,10 @@ mod tests {
     #[test]
     fn pad_edge_mode() {
         let device = Default::default();
-        let model: pad_edge::Model<TestBackend> = pad_edge::Model::new(&device);
+        let model: pad_edge::Model = pad_edge::Model::new(&device);
 
         // Input: 2x3 tensor
-        let input = Tensor::<TestBackend, 2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
+        let input = Tensor::<2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
         let output = model.forward(input).to_data();
 
         // Expected with edge padding (1,1,1,1):

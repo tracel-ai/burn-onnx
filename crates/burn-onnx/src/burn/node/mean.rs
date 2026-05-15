@@ -38,12 +38,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            a: Tensor<B, 2>,
-            b: Tensor<B, 2>,
-            c: Tensor<B, 2>,
-        ) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<2>, c: Tensor<2>) -> Tensor<2> {
             let output = (a + b + c) / 3u32;
             output
         }
@@ -59,7 +54,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<2>) -> Tensor<2> {
             let output = (a + b) / 2u32;
             output
         }

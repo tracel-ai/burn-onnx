@@ -83,7 +83,7 @@ fn main() {
     let device = model_checks_common::best_device!();
     println!("Loading kokoro-v1-debug...");
     let weights = concat!(env!("OUT_DIR"), "/model/kokoro-v1-debug.bpk");
-    let model: Model<MyBackend> = Model::from_file(weights, &device);
+    let model: Model = Model::from_file(weights, &device);
 
     #[derive(Deserialize)]
     struct RefIn {
@@ -98,10 +98,9 @@ fn main() {
     .expect("parse reference_outputs.json");
 
     let seq_len = r.tokens.len();
-    let tokens =
-        Tensor::<MyBackend, 1, Int>::from_ints(r.tokens.as_slice(), &device).reshape([1, seq_len]);
-    let style = Tensor::<MyBackend, 1>::from_floats(r.style.as_slice(), &device).reshape([1, 256]);
-    let speed = Tensor::<MyBackend, 1>::from_floats([r.speed].as_slice(), &device);
+    let tokens = Tensor::<1, Int>::from_ints(r.tokens.as_slice(), &device).reshape([1, seq_len]);
+    let style = Tensor::<1>::from_floats(r.style.as_slice(), &device).reshape([1, 256]);
+    let speed = Tensor::<1>::from_floats([r.speed].as_slice(), &device);
 
     println!("Running burn forward (debug build)...");
     let out = model.forward(tokens, style, speed);

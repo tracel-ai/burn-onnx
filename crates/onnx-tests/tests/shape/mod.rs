@@ -6,15 +6,13 @@ mod tests {
     use super::*;
     use burn::tensor::Tensor;
 
-    use crate::backend::TestBackend;
-
     #[test]
     fn shape() {
         let device = Default::default();
-        let model: shape::Model<TestBackend> = shape::Model::new(&device);
+        let model: shape::Model = shape::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 2>::ones([4, 2], &device);
+        let input = Tensor::<2>::ones([4, 2], &device);
         let output = model.forward(input);
         let expected = [4i64, 2i64];
         assert_eq!(output, expected);
@@ -23,10 +21,10 @@ mod tests {
     #[test]
     fn shape_of_shape() {
         let device = Default::default();
-        let model: shape_of_shape::Model<TestBackend> = shape_of_shape::Model::new(&device);
+        let model: shape_of_shape::Model = shape_of_shape::Model::new(&device);
 
         // Run the model - tests Shape operation on a Shape input
-        let input = Tensor::<TestBackend, 4>::ones([2, 3, 4, 5], &device);
+        let input = Tensor::<4>::ones([2, 3, 4, 5], &device);
         let (shape1, shape2) = model.forward(input);
 
         // shape1 should be the shape of the input tensor
@@ -41,10 +39,10 @@ mod tests {
     #[test]
     fn shape_slice() {
         let device = Default::default();
-        let model: shape_slice::Model<TestBackend> = shape_slice::Model::new(&device);
+        let model: shape_slice::Model = shape_slice::Model::new(&device);
 
         // Run the model - tests Shape operation with start/end parameters
-        let input = Tensor::<TestBackend, 5>::ones([2, 3, 4, 5, 6], &device);
+        let input = Tensor::<5>::ones([2, 3, 4, 5, 6], &device);
         let output = model.forward(input);
 
         // With start=1, end=4, should extract dimensions [3, 4, 5]
@@ -55,10 +53,10 @@ mod tests {
     #[test]
     fn shape_chain() {
         let device = Default::default();
-        let model: shape_chain::Model<TestBackend> = shape_chain::Model::new(&device);
+        let model: shape_chain::Model = shape_chain::Model::new(&device);
 
         // Run the model - tests multiple chained Shape operations
-        let input = Tensor::<TestBackend, 4>::ones([3, 4, 5, 6], &device);
+        let input = Tensor::<4>::ones([3, 4, 5, 6], &device);
         let (shape1, rank_shape, partial_shape, partial_rank_shape) = model.forward(input);
 
         // shape1 should be the full shape of the input

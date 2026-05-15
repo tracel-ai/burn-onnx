@@ -161,7 +161,7 @@ macro_rules! impl_reduce_node {
                             reduced_input
                         }
                     } else if matches!(&output_arg.ty, onnx_ir::ir::ArgType::ScalarTensor(_)) {
-                        // Keep as Tensor<B, 1> on device
+                        // Keep as Tensor<1> on device
                         quote! { #reduced_input.reshape([1]) }
                     } else if output_rank == 0 {
                         reduced_input
@@ -175,7 +175,7 @@ macro_rules! impl_reduce_node {
                         onnx_ir::ir::ArgType::ScalarNative(_) => {
                             quote! {
                                 let #output = {
-                                    #final_output.into_scalar().elem::<bool>()
+                                    #final_output.into_scalar::<bool>()
                                 };
                             }
                         }
@@ -345,7 +345,7 @@ macro_rules! impl_reduce_node {
                 // Handle scalar outputs by extracting the scalar value from the tensor result
                 let output_expr = match &output_arg.ty {
                     onnx_ir::ir::ArgType::ScalarTensor(_) => {
-                        // Keep as Tensor<B, 1> on device (no GPU stall)
+                        // Keep as Tensor<1> on device (no GPU stall)
                         quote! { #raw_output_expr.reshape([1]) }
                     }
                     onnx_ir::ir::ArgType::ScalarNative(dtype) => {
@@ -410,7 +410,7 @@ mod tests {
         let node = create_reduce_max_node("reduce_max1", config);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = { input.max_dim(1usize) };
             output
         }
@@ -427,7 +427,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = { input.mean_dim(1usize) };
             output
         }
@@ -444,7 +444,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = { input.sum_dim(1usize) };
             output
         }
@@ -457,7 +457,7 @@ mod tests {
         let node = create_reduce_max_node("reduce_max1", config);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = { input.max_dim(1usize).max_dim(2usize) };
             output
         }
@@ -474,7 +474,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 1> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<1> {
             let output = {
                 input.sum_dim(1usize).sum_dim(2usize).squeeze_dims::<1usize>(&[1, 2])
             };

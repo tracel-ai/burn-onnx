@@ -9,32 +9,28 @@ include_models!(matmulinteger, matmulinteger_ranks);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::TestBackend;
-    use burn::tensor::{DType, Int, Tensor, TensorData};
+    use burn::tensor::{DType, Device, Int, Tensor, TensorData};
 
     // Helper to create i32 tensor from nested arrays
     // The ONNX MatMulInteger model uses I32 constants, so we need i32 tensors.
     // We use from_data with dtype to preserve I32 dtype (from_data without dtype converts to the backend's default IntElem).
     fn tensor_2d_i32<const R: usize, const C: usize>(
         data: [[i32; C]; R],
-        device: &<TestBackend as burn::tensor::backend::BackendTypes>::Device,
-    ) -> Tensor<TestBackend, 2, Int> {
+        device: &Device,
+    ) -> Tensor<2, Int> {
         let tensor_data = TensorData::from(data);
         Tensor::from_data(tensor_data, (device, DType::I32))
     }
 
     fn tensor_3d_i32<const B: usize, const R: usize, const C: usize>(
         data: [[[i32; C]; R]; B],
-        device: &<TestBackend as burn::tensor::backend::BackendTypes>::Device,
-    ) -> Tensor<TestBackend, 3, Int> {
+        device: &Device,
+    ) -> Tensor<3, Int> {
         let tensor_data = TensorData::from(data);
         Tensor::from_data(tensor_data, (device, DType::I32))
     }
 
-    fn tensor_1d_i32<const N: usize>(
-        data: [i32; N],
-        device: &<TestBackend as burn::tensor::backend::BackendTypes>::Device,
-    ) -> Tensor<TestBackend, 1, Int> {
+    fn tensor_1d_i32<const N: usize>(data: [i32; N], device: &Device) -> Tensor<1, Int> {
         let tensor_data = TensorData::from(data);
         Tensor::from_data(tensor_data, (device, DType::I32))
     }
@@ -43,7 +39,7 @@ mod tests {
     #[test]
     fn matmulinteger_basic() {
         let device = Default::default();
-        let model: matmulinteger::Model<TestBackend> = matmulinteger::Model::default();
+        let model: matmulinteger::Model = matmulinteger::Model::default();
 
         // Build inputs matching Python test in matmulinteger.py
         // Note: The ONNX model uses I32 dtype, so we use i32 tensors to match
@@ -81,7 +77,7 @@ mod tests {
     #[test]
     fn matmulinteger_ranks() {
         let device = Default::default();
-        let model: matmulinteger_ranks::Model<TestBackend> = matmulinteger_ranks::Model::default();
+        let model: matmulinteger_ranks::Model = matmulinteger_ranks::Model::default();
 
         // Create inputs matching Python test shapes using i32 (ONNX model uses I32)
         // mat2d: [3, 4]

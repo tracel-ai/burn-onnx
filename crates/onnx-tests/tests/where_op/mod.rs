@@ -16,18 +16,16 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn where_op() {
         let device = Default::default();
-        let model: where_op::Model<TestBackend> = where_op::Model::new(&device);
+        let model: where_op::Model = where_op::Model::new(&device);
 
         let x = Tensor::ones([2, 2], &device);
         let y = Tensor::zeros([2, 2], &device);
-        let mask = Tensor::from_bool([[true, false], [false, true]].into(), &device);
+        let mask = Tensor::from_bool([[true, false], [false, true]], &device);
 
         let output = model.forward(mask, x, y);
         let expected = TensorData::from([[1f32, 0.0], [0.0, 1.0]]);
@@ -38,11 +36,11 @@ mod tests {
     #[test]
     fn where_op_broadcast() {
         let device = Default::default();
-        let model: where_op_broadcast::Model<TestBackend> = where_op_broadcast::Model::new(&device);
+        let model: where_op_broadcast::Model = where_op_broadcast::Model::new(&device);
 
         let x = Tensor::ones([2], &device);
         let y = Tensor::zeros([2], &device);
-        let mask = Tensor::from_bool([[true, false], [false, true]].into(), &device);
+        let mask = Tensor::from_bool([[true, false], [false, true]], &device);
 
         let output = model.forward(mask, x, y);
         let expected = TensorData::from([[1f32, 0.0], [0.0, 1.0]]);
@@ -53,11 +51,11 @@ mod tests {
     #[test]
     fn where_op_scalar_x() {
         let device = Default::default();
-        let model: where_op_scalar_x::Model<TestBackend> = where_op_scalar_x::Model::new(&device);
+        let model: where_op_scalar_x::Model = where_op_scalar_x::Model::new(&device);
 
         let x = 1.0f32;
         let y = Tensor::zeros([2, 2], &device);
-        let mask = Tensor::from_bool([[true, false], [false, true]].into(), &device);
+        let mask = Tensor::from_bool([[true, false], [false, true]], &device);
 
         let output = model.forward(mask, x, y);
         let expected = TensorData::from([[1f32, 0.0], [0.0, 1.0]]);
@@ -68,11 +66,11 @@ mod tests {
     #[test]
     fn where_op_scalar_y() {
         let device = Default::default();
-        let model: where_op_scalar_y::Model<TestBackend> = where_op_scalar_y::Model::new(&device);
+        let model: where_op_scalar_y::Model = where_op_scalar_y::Model::new(&device);
 
         let x = Tensor::ones([2, 2], &device);
         let y = 0.0f32;
-        let mask = Tensor::from_bool([[true, false], [false, true]].into(), &device);
+        let mask = Tensor::from_bool([[true, false], [false, true]], &device);
 
         let output = model.forward(mask, x, y);
         let expected = TensorData::from([[1f32, 0.0], [0.0, 1.0]]);
@@ -83,8 +81,7 @@ mod tests {
     #[test]
     fn where_op_all_scalar() {
         let device = Default::default();
-        let model: where_op_all_scalar::Model<TestBackend> =
-            where_op_all_scalar::Model::new(&device);
+        let model: where_op_all_scalar::Model = where_op_all_scalar::Model::new(&device);
 
         let x = 1.0f32;
         let y = 0.0f32;
@@ -102,10 +99,9 @@ mod tests {
         // The condition tensor is larger than the scalar-derived [1,1] tensor,
         // so mask_fill must expand y before applying the mask.
         let device = Default::default();
-        let model: where_scalar_xy::Model<TestBackend> = where_scalar_xy::Model::new(&device);
+        let model: where_scalar_xy::Model = where_scalar_xy::Model::new(&device);
 
-        let condition =
-            Tensor::from_bool([[true, false, true], [false, true, false]].into(), &device);
+        let condition = Tensor::from_bool([[true, false, true], [false, true, false]], &device);
 
         let output = model.forward(condition);
         // Where(cond, -1.0, 0.0): -1.0 where true, 0.0 where false
@@ -117,14 +113,13 @@ mod tests {
     #[test]
     fn where_shape_all_shapes() {
         let device = Default::default();
-        let model: where_shape_all_shapes::Model<TestBackend> =
-            where_shape_all_shapes::Model::new(&device);
+        let model: where_shape_all_shapes::Model = where_shape_all_shapes::Model::new(&device);
 
         // Create input tensors with specific shapes
-        let input1 = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
-        let input2 = Tensor::<TestBackend, 3>::ones([5, 6, 7], &device);
-        let input3 = Tensor::<TestBackend, 3>::ones([10, 20, 30], &device);
-        let input4 = Tensor::<TestBackend, 3>::ones([100, 200, 300], &device);
+        let input1 = Tensor::<3>::ones([2, 3, 4], &device);
+        let input2 = Tensor::<3>::ones([5, 6, 7], &device);
+        let input3 = Tensor::<3>::ones([10, 20, 30], &device);
+        let input4 = Tensor::<3>::ones([100, 200, 300], &device);
 
         let output = model.forward(input1, input2, input3, input4);
         // Since shapes are different, Equal will return [0, 0, 0]
@@ -137,12 +132,11 @@ mod tests {
     #[test]
     fn where_shape_scalar_cond() {
         let device = Default::default();
-        let model: where_shape_scalar_cond::Model<TestBackend> =
-            where_shape_scalar_cond::Model::new(&device);
+        let model: where_shape_scalar_cond::Model = where_shape_scalar_cond::Model::new(&device);
 
         // Create input tensors
-        let input1 = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
-        let input2 = Tensor::<TestBackend, 3>::ones([5, 6, 7], &device);
+        let input1 = Tensor::<3>::ones([2, 3, 4], &device);
+        let input2 = Tensor::<3>::ones([5, 6, 7], &device);
 
         // Test with true condition
         let condition = true;
@@ -160,14 +154,13 @@ mod tests {
     #[test]
     fn where_shapes_from_inputs() {
         let device = Default::default();
-        let model: where_shapes_from_inputs::Model<TestBackend> =
-            where_shapes_from_inputs::Model::new(&device);
+        let model: where_shapes_from_inputs::Model = where_shapes_from_inputs::Model::new(&device);
 
         // Create input tensors with shapes [1,2,3], [4,5,6], [7,8,9], and [1,0,3]
-        let input1 = Tensor::<TestBackend, 3>::ones([1, 2, 3], &device);
-        let input2 = Tensor::<TestBackend, 3>::ones([4, 5, 6], &device);
-        let input3 = Tensor::<TestBackend, 3>::ones([7, 8, 9], &device);
-        let input4 = Tensor::<TestBackend, 3>::ones([1, 0, 3], &device); // Note: The shape matters, not the content
+        let input1 = Tensor::<3>::ones([1, 2, 3], &device);
+        let input2 = Tensor::<3>::ones([4, 5, 6], &device);
+        let input3 = Tensor::<3>::ones([7, 8, 9], &device);
+        let input4 = Tensor::<3>::ones([1, 0, 3], &device); // Note: The shape matters, not the content
 
         let output = model.forward(input1, input2, input3, input4);
         // Condition is shape1 == shape4 -> [1, 0, 1] (true=1, false=0)
@@ -181,10 +174,10 @@ mod tests {
     fn where_static_shape() {
         let device = Default::default();
         // Use Model::default() to load constants from the record file
-        let model: where_static_shape::Model<TestBackend> = where_static_shape::Model::default();
+        let model: where_static_shape::Model = where_static_shape::Model::default();
 
         // Create condition tensor (needs to be Bool type)
-        let condition = Tensor::from_bool([[true, false], [false, true]].into(), &device);
+        let condition = Tensor::from_bool([[true, false], [false, true]], &device);
 
         let output = model.forward(condition);
 

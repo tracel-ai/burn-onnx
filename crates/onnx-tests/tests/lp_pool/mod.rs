@@ -5,32 +5,28 @@ include_models!(lp_pool1d, lp_pool2d);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, Tolerance, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Tensor, TensorData, Tolerance};
 
     #[test]
     fn lp_pool1d() {
         let device = Default::default();
-        let model: lp_pool1d::Model<TestBackend> = lp_pool1d::Model::new(&device);
+        let model: lp_pool1d::Model = lp_pool1d::Model::new(&device);
 
-        let input =
-            Tensor::<TestBackend, 3>::from_floats([[[-1.0, 2.0, -3.0, 4.0, -5.0]]], &device);
+        let input = Tensor::<3>::from_floats([[[-1.0, 2.0, -3.0, 4.0, -5.0]]], &device);
         let output = model.forward(input);
 
         let expected = TensorData::from([[[2.0800838f32, 4.6260653, 5.738794]]]);
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::rel_abs(0.01, 0.001));
+            .assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(0.01, 0.001));
     }
 
     #[test]
     fn lp_pool2d() {
         let device = Default::default();
-        let model: lp_pool2d::Model<TestBackend> = lp_pool2d::Model::new(&device);
+        let model: lp_pool2d::Model = lp_pool2d::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, -2.0, 3.0, -4.0],
                 [5.0, -6.0, 7.0, -8.0],
@@ -50,6 +46,6 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::rel_abs(0.01, 0.001));
+            .assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(0.01, 0.001));
     }
 }

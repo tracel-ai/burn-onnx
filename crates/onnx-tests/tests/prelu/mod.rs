@@ -5,18 +5,16 @@ include_models!(prelu, prelu_with_channel_slope);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn prelu() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: prelu::Model<TestBackend> = prelu::Model::new(&device);
+        let model: prelu::Model = prelu::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [
                 [0.33669037, 0.0, 0.23446237],
                 [0.23033303, -1.122_856, -0.18632829],
@@ -35,10 +33,9 @@ mod tests {
     #[test]
     fn prelu_with_channel_slope() {
         let device = Default::default();
-        let model: prelu_with_channel_slope::Model<TestBackend> =
-            prelu_with_channel_slope::Model::new(&device);
+        let model: prelu_with_channel_slope::Model = prelu_with_channel_slope::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[
                 [[0.5, -0.5], [1.0, -1.0]],   // ch0: mix of pos/neg
                 [[0.1, 0.2], [0.3, 0.4]],     // ch1: all positive

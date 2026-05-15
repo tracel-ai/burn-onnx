@@ -5,17 +5,15 @@ include_models!(greater, greater_scalar, greater_broadcast);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn greater() {
         let device = Default::default();
-        let model: greater::Model<TestBackend> = greater::Model::new(&device);
+        let model: greater::Model = greater::Model::new(&device);
 
-        let input1 = Tensor::<TestBackend, 2>::from_floats([[1.0, 4.0, 9.0, 25.0]], &device);
-        let input2 = Tensor::<TestBackend, 2>::from_floats([[1.0, 5.0, 8.0, -25.0]], &device);
+        let input1 = Tensor::<2>::from_floats([[1.0, 4.0, 9.0, 25.0]], &device);
+        let input2 = Tensor::<2>::from_floats([[1.0, 5.0, 8.0, -25.0]], &device);
 
         let output = model.forward(input1, input2);
         let expected = TensorData::from([[false, false, true, true]]);
@@ -26,9 +24,9 @@ mod tests {
     #[test]
     fn greater_scalar() {
         let device = Default::default();
-        let model: greater_scalar::Model<TestBackend> = greater_scalar::Model::new(&device);
+        let model: greater_scalar::Model = greater_scalar::Model::new(&device);
 
-        let input1 = Tensor::<TestBackend, 2>::from_floats([[1.0, 4.0, 9.0, 0.5]], &device);
+        let input1 = Tensor::<2>::from_floats([[1.0, 4.0, 9.0, 0.5]], &device);
         let input2 = 1.0;
 
         let output = model.forward(input1, input2);
@@ -40,11 +38,11 @@ mod tests {
     #[test]
     fn greater_broadcast() {
         let device = Default::default();
-        let model: greater_broadcast::Model<TestBackend> = greater_broadcast::Model::new(&device);
+        let model: greater_broadcast::Model = greater_broadcast::Model::new(&device);
 
         // Shape [1, 4] vs [4, 4]
-        let input1 = Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0, 3.0, 4.0]], &device);
-        let input2 = Tensor::<TestBackend, 2>::from_floats(
+        let input1 = Tensor::<2>::from_floats([[1.0, 2.0, 3.0, 4.0]], &device);
+        let input2 = Tensor::<2>::from_floats(
             [
                 [0.5, 1.5, 2.5, 3.5],
                 [1.5, 2.5, 3.5, 4.5],

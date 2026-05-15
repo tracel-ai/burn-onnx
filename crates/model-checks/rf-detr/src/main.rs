@@ -14,14 +14,14 @@ include!(concat!(env!("OUT_DIR"), "/model/rf_detr_small.rs"));
 /// Test data structure matching the PyTorch saved format
 /// RF-DETR has two outputs: dets (bounding boxes) and labels (class scores)
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    input: Param<Tensor<B, 4>>,
-    output_dets: Param<Tensor<B, 3>>,
-    output_labels: Param<Tensor<B, 3>>,
+struct TestData {
+    input: Param<Tensor<4>>,
+    output_dets: Param<Tensor<3>>,
+    output_labels: Param<Tensor<3>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         // RF-DETR Small: input 512x512, 300 queries, 4 bbox coords, 91 classes (COCO)
         Self {
             input: Initializer::Zeros.init([1, 3, 512, 512], device),
@@ -74,7 +74,7 @@ fn main() {
     // The model weights are generated at build time and stored in the OUT_DIR
     // We need to load them from the embedded burnpack file
     let weights_path = concat!(env!("OUT_DIR"), "/model/rf_detr_small.bpk");
-    let model: Model<MyBackend> = Model::from_file(weights_path, &device);
+    let model: Model = Model::from_file(weights_path, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
 
@@ -91,7 +91,7 @@ fn main() {
     // Load test data from PyTorch file
     println!("\nLoading test data from {}...", test_data_file.display());
     let start = Instant::now();
-    let mut test_data = TestData::<MyBackend>::new(&device);
+    let mut test_data = TestData::new(&device);
     let mut store = PytorchStore::from_file(&test_data_file);
     test_data
         .load_from(&mut store)
@@ -157,8 +157,8 @@ fn main() {
         // Calculate and display the difference statistics
         let diff = output_dets.clone() - reference_dets.clone();
         let abs_diff = diff.abs();
-        let max_diff = abs_diff.clone().max().into_scalar();
-        let mean_diff = abs_diff.mean().into_scalar();
+        let max_diff = abs_diff.clone().max().into_scalar::<f32>();
+        let mean_diff = abs_diff.mean().into_scalar::<f32>();
 
         println!("    Maximum absolute difference: {:.6}", max_diff);
         println!("    Mean absolute difference: {:.6}", mean_diff);
@@ -195,8 +195,8 @@ fn main() {
         // Calculate and display the difference statistics
         let diff = output_labels.clone() - reference_labels.clone();
         let abs_diff = diff.abs();
-        let max_diff = abs_diff.clone().max().into_scalar();
-        let mean_diff = abs_diff.mean().into_scalar();
+        let max_diff = abs_diff.clone().max().into_scalar::<f32>();
+        let mean_diff = abs_diff.mean().into_scalar::<f32>();
 
         println!("    Maximum absolute difference: {:.6}", max_diff);
         println!("    Mean absolute difference: {:.6}", mean_diff);

@@ -14,26 +14,20 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Int, Tensor, TensorData};
 
     #[test]
     fn einsum_matmul_and_batch_matmul() {
-        let model: einsum::Model<TestBackend> = einsum::Model::default();
+        let model: einsum::Model = einsum::Model::default();
         let device = Default::default();
 
-        let a =
-            Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], &device);
-        let b = Tensor::<TestBackend, 2>::from_floats(
-            [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]],
-            &device,
-        );
-        let c = Tensor::<TestBackend, 3>::from_floats(
+        let a = Tensor::<2>::from_floats([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], &device);
+        let b = Tensor::<2>::from_floats([[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]], &device);
+        let c = Tensor::<3>::from_floats(
             [[[1.0, 0.0], [0.0, 1.0]], [[2.0, 0.0], [0.0, 2.0]]],
             &device,
         );
-        let d = Tensor::<TestBackend, 3>::from_floats(
+        let d = Tensor::<3>::from_floats(
             [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]],
             &device,
         );
@@ -54,14 +48,11 @@ mod tests {
 
     #[test]
     fn einsum_sam_pattern() {
-        let model: einsum_sam::Model<TestBackend> = einsum_sam::Model::default();
+        let model: einsum_sam::Model = einsum_sam::Model::default();
         let device = Default::default();
 
-        let r_q = Tensor::<TestBackend, 4>::from_floats(
-            [[[[1.0, 0.0, 0.0]], [[0.0, 1.0, 0.0]]]],
-            &device,
-        );
-        let r_h = Tensor::<TestBackend, 3>::from_floats(
+        let r_q = Tensor::<4>::from_floats([[[[1.0, 0.0, 0.0]], [[0.0, 1.0, 0.0]]]], &device);
+        let r_h = Tensor::<3>::from_floats(
             [
                 [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
                 [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]],
@@ -79,11 +70,11 @@ mod tests {
 
     #[test]
     fn einsum_outer_product_int() {
-        let model: einsum_outer_int::Model<TestBackend> = einsum_outer_int::Model::default();
+        let model: einsum_outer_int::Model = einsum_outer_int::Model::default();
         let device = Default::default();
 
-        let a = Tensor::<TestBackend, 1, Int>::from_ints([1, 2, 3], &device);
-        let b = Tensor::<TestBackend, 1, Int>::from_ints([4, 5, 6], &device);
+        let a = Tensor::<1, Int>::from_ints([1, 2, 3], &device);
+        let b = Tensor::<1, Int>::from_ints([4, 5, 6], &device);
 
         let output = model.forward(a, b);
 
@@ -93,10 +84,10 @@ mod tests {
 
     #[test]
     fn einsum_scalar_operands() {
-        let model: einsum_scalar::Model<TestBackend> = einsum_scalar::Model::default();
+        let model: einsum_scalar::Model = einsum_scalar::Model::default();
         let device = Default::default();
 
-        let matrix = Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0], [3.0, 4.0]], &device);
+        let matrix = Tensor::<2>::from_floats([[1.0, 2.0], [3.0, 4.0]], &device);
 
         let (lhs_scaled, rhs_scaled) = model.forward(2.0, matrix.clone(), 3.0);
 
@@ -109,20 +100,18 @@ mod tests {
 
     #[test]
     fn einsum_scalar_scalar_operand() {
-        let model: einsum_scalar_scalar::Model<TestBackend> =
-            einsum_scalar_scalar::Model::default();
+        let model: einsum_scalar_scalar::Model = einsum_scalar_scalar::Model::default();
         let output = model.forward(2.0, 3.0);
         assert_eq!(output, 6.0f32);
     }
 
     #[test]
     fn einsum_implicit_form() {
-        let model: einsum_implicit::Model<TestBackend> = einsum_implicit::Model::default();
+        let model: einsum_implicit::Model = einsum_implicit::Model::default();
         let device = Default::default();
 
-        let a =
-            Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], &device);
-        let b = Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0], [3.0, 4.0]], &device);
+        let a = Tensor::<2>::from_floats([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], &device);
+        let b = Tensor::<2>::from_floats([[1.0, 2.0], [3.0, 4.0]], &device);
 
         let output = model.forward(a, b);
 
@@ -133,11 +122,11 @@ mod tests {
 
     #[test]
     fn einsum_one_sided_reduction() {
-        let model: einsum_reduction::Model<TestBackend> = einsum_reduction::Model::default();
+        let model: einsum_reduction::Model = einsum_reduction::Model::default();
         let device = Default::default();
 
-        let a = Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0], [3.0, 4.0]], &device);
-        let b = Tensor::<TestBackend, 2>::from_floats([[10.0, 20.0, 30.0]], &device);
+        let a = Tensor::<2>::from_floats([[1.0, 2.0], [3.0, 4.0]], &device);
+        let b = Tensor::<2>::from_floats([[10.0, 20.0, 30.0]], &device);
 
         let output = model.forward(a, b);
 
@@ -150,16 +139,16 @@ mod tests {
 
     #[test]
     fn einsum_ellipsis_batch_matmul() {
-        let model: einsum_ellipsis::Model<TestBackend> = einsum_ellipsis::Model::default();
+        let model: einsum_ellipsis::Model = einsum_ellipsis::Model::default();
         let device = Default::default();
 
         // "...ij,...jk->...ik" with rank 4 (2 batch dims)
         // Use identity-like matrices for easy verification
-        let a = Tensor::<TestBackend, 4>::from_floats(
+        let a = Tensor::<4>::from_floats(
             [[[[1.0, 0.0], [0.0, 1.0]], [[2.0, 0.0], [0.0, 2.0]]]],
             &device,
         );
-        let b = Tensor::<TestBackend, 4>::from_floats(
+        let b = Tensor::<4>::from_floats(
             [[[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]],
             &device,
         );
@@ -174,12 +163,11 @@ mod tests {
 
     #[test]
     fn einsum_shadow_rhs_reuses_original_input() {
-        let model: einsum_shadow_rhs::Model<TestBackend> = einsum_shadow_rhs::Model::default();
+        let model: einsum_shadow_rhs::Model = einsum_shadow_rhs::Model::default();
         let device = Default::default();
 
-        let lhs =
-            Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
-        let einsum_rhs = Tensor::<TestBackend, 2>::from_floats(
+        let lhs = Tensor::<2>::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
+        let einsum_rhs = Tensor::<2>::from_floats(
             [[1.0, 10.0, 100.0], [2.0, 20.0, 200.0], [3.0, 30.0, 300.0]],
             &device,
         );

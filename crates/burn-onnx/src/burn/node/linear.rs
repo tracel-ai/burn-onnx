@@ -43,11 +43,7 @@ impl NodeCodegen for onnx_ir::linear::LinearNode {
             }
         };
 
-        Some(Field::new(
-            self.name.clone(),
-            quote! { Linear<B> },
-            init_code,
-        ))
+        Some(Field::new(self.name.clone(), quote! { Linear }, init_code))
     }
 
     fn collect_snapshots(&self, field_name: &str) -> Vec<TensorSnapshot> {
@@ -154,7 +150,7 @@ mod tests {
         let node = create_linear_node_gemm("linear1");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = self.linear1.forward(input);
             output
         }
@@ -166,7 +162,7 @@ mod tests {
         let node = create_linear_node_matmul("linear2");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = self.linear2.forward(input);
             output
         }

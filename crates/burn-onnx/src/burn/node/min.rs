@@ -56,7 +56,7 @@ mod tests {
         let node = create_min_node("min1", 2, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<2>) -> Tensor<2> {
             let output = a.min_pair(b);
             output
         }
@@ -68,7 +68,7 @@ mod tests {
         let node = create_min_node("min1", 3, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 3>, b: Tensor<B, 2>) -> Tensor<B, 3> {
+        pub fn forward(&self, a: Tensor<3>, b: Tensor<2>) -> Tensor<3> {
             let output = a.min_pair((b).unsqueeze_dims(&[0isize]));
             output
         }
@@ -80,7 +80,7 @@ mod tests {
         let node = create_min_node("min1", 2, 3);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2>, b: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, a: Tensor<2>, b: Tensor<3>) -> Tensor<3> {
             let output = (a).unsqueeze_dims(&[0isize]).min_pair(b);
             output
         }

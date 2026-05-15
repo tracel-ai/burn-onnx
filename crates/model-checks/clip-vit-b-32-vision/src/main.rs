@@ -17,13 +17,13 @@ pub mod clip_vit_b_32_vision {
 }
 
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    pixel_values: Param<Tensor<B, 4>>,
-    image_embeds: Param<Tensor<B, 2>>,
+struct TestData {
+    pixel_values: Param<Tensor<4>>,
+    image_embeds: Param<Tensor<2>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         // CLIP ViT-B-32 vision: image_size=224, embed_dim=512
         Self {
             pixel_values: Initializer::Zeros.init([1, 3, 224, 224], device),
@@ -55,7 +55,7 @@ fn main() {
     let start = Instant::now();
     let device = model_checks_common::best_device!();
     let weights_path = concat!(env!("OUT_DIR"), "/model/clip-vit-b-32-vision_opset16.bpk");
-    let model: clip_vit_b_32_vision::Model<MyBackend> =
+    let model: clip_vit_b_32_vision::Model =
         clip_vit_b_32_vision::Model::from_file(weights_path, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
@@ -74,7 +74,7 @@ fn main() {
     let test_data_path = artifacts_dir.join("test_data.pt");
     println!("\nLoading test data from {}...", test_data_path.display());
     let start = Instant::now();
-    let mut test_data = TestData::<MyBackend>::new(&device);
+    let mut test_data = TestData::new(&device);
     let mut store = PytorchStore::from_file(&test_data_path);
     test_data
         .load_from(&mut store)
@@ -148,8 +148,8 @@ fn main() {
         // Calculate and display the difference statistics
         let diff = image_embeds.clone() - reference_image_embeds.clone();
         let abs_diff = diff.abs();
-        let max_diff = abs_diff.clone().max().into_scalar();
-        let mean_diff = abs_diff.mean().into_scalar();
+        let max_diff = abs_diff.clone().max().into_scalar::<f32>();
+        let mean_diff = abs_diff.mean().into_scalar::<f32>();
 
         println!("    Maximum absolute difference: {:.6}", max_diff);
         println!("    Mean absolute difference: {:.6}", mean_diff);

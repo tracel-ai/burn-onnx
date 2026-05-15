@@ -127,7 +127,7 @@ impl NodeCodegen for onnx_ir::cast::CastNode {
                             let #output = {
                                 let shape_array = #input as [i64; #rank];
                                 let float_array: [f64; #rank] = shape_array.map(|x| x as f64);
-                                Tensor::<B, 1>::from_data(
+                                Tensor::<1>::from_data(
                                     TensorData::from(float_array),
                                     (&self.device, #dtype_tokens)
                                 )
@@ -140,7 +140,7 @@ impl NodeCodegen for onnx_ir::cast::CastNode {
                             let #output = {
                                 let shape_array = #input as [i64; #rank];
                                 let bool_array: [bool; #rank] = shape_array.map(|x| x != 0);
-                                Tensor::<B, 1, Bool>::from_data(
+                                Tensor::<1, Bool>::from_data(
                                     TensorData::from(bool_array),
                                     (&self.device, #dtype_tokens)
                                 )
@@ -216,7 +216,7 @@ mod tests {
         let node = create_cast_node_tensor("cast1", DType::I32, DType::F32);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2> {
             let output = input.float().cast(burn::tensor::DType::F32);
             output
         }
@@ -228,7 +228,7 @@ mod tests {
         let node = create_cast_node_tensor("cast1", DType::F32, DType::I32);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Int> {
             let output = input.int().cast(burn::tensor::DType::I32);
             output
         }
@@ -240,7 +240,7 @@ mod tests {
         let node = create_cast_node_tensor("cast1", DType::F32, DType::Bool(BoolStore::Native));
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Bool> {
             let output = input.bool();
             output
         }
@@ -252,7 +252,7 @@ mod tests {
         let node = create_cast_node_tensor("cast1", DType::F32, DType::F32);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input;
             output
         }
@@ -288,7 +288,7 @@ mod tests {
         let node = create_cast_node_tensor("cast1", DType::F32, DType::F16);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input.cast(burn::tensor::DType::F16);
             output
         }
@@ -300,7 +300,7 @@ mod tests {
         let node = create_cast_node_tensor("cast1", DType::I64, DType::I32);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = input.cast(burn::tensor::DType::I32);
             output
         }
@@ -312,7 +312,7 @@ mod tests {
         let node = create_cast_node_tensor("cast1", DType::Bool(BoolStore::Native), DType::I64);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2, Bool>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2, Bool>) -> Tensor<2, Int> {
             let output = input.int().cast(burn::tensor::DType::I64);
             output
         }

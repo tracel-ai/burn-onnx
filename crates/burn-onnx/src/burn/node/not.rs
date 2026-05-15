@@ -55,7 +55,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2, Bool>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, input: Tensor<2, Bool>) -> Tensor<2, Bool> {
             let output = input.bool_not();
             output
         }

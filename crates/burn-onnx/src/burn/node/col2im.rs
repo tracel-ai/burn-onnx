@@ -87,7 +87,7 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
             let b_shape_tokens = quote! { [#(#b_shape_dims),*] };
 
             block_terms.push(quote! {
-                Tensor::<B, 1, Int>::arange(0..#b_size as i64, &device)
+                Tensor::<1, Int>::arange(0..#b_size as i64, &device)
                     .mul_scalar(#b_dilation_stride)
                     .reshape(#b_shape_tokens)
             });
@@ -101,14 +101,14 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
             let w_shape_tokens = quote! { [#(#w_shape_dims),*] };
 
             window_terms.push(quote! {
-                Tensor::<B, 1, Int>::arange(0..#w_size as i64, &device)
+                Tensor::<1, Int>::arange(0..#w_size as i64, &device)
                     .mul_scalar(#w_stride_stride)
                     .reshape(#w_shape_tokens)
             });
         }
 
         let block_sum = if block_terms.is_empty() {
-            quote! { Tensor::<B, 1, Int>::zeros([1], &device) }
+            quote! { Tensor::<1, Int>::zeros([1], &device) }
         } else {
             let first = &block_terms[0];
             let rest = &block_terms[1..];
@@ -120,7 +120,7 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
         };
 
         let window_sum = if window_terms.is_empty() {
-            quote! { Tensor::<B, 1, Int>::zeros([1], &device) }
+            quote! { Tensor::<1, Int>::zeros([1], &device) }
         } else {
             let first = &window_terms[0];
             let rest = &window_terms[1..];
@@ -197,7 +197,7 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
 
                 // 2. Create output canvas (Padded, Flattened)
                 // Shape: [N, C, PaddedTotal]
-                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, #padded_size], &device);
+                let canvas = Tensor::<3>::zeros([batch_size, channels, #padded_size], &device);
 
                 // 3. Create Indices Tensor [BlockProd * Windows]
                 // We compute the indices at runtime using arange and broadcasting to avoid embedding large literal arrays.
@@ -246,25 +246,25 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r###"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<4> {
             let output = {
                 let [batch_size, col_channels, _l] = input.shape().dims();
                 let channels = col_channels / 4usize;
                 let device = input.device();
                 let input_flat = input.reshape([batch_size, channels, 64usize]);
-                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, 25usize], &device);
+                let canvas = Tensor::<3>::zeros([batch_size, channels, 25usize], &device);
                 let indices = {
-                    let block_offsets = (Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                    let block_offsets = (Tensor::<1, Int>::arange(0..2usize as i64, &device)
                         .mul_scalar(1i64)
                         .reshape([1usize, 2usize])
-                        + Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                        + Tensor::<1, Int>::arange(0..2usize as i64, &device)
                             .mul_scalar(5i64)
                             .reshape([2usize, 1usize]))
                         .reshape([4usize, 1]);
-                    let window_offsets = (Tensor::<B, 1, Int>::arange(0..4usize as i64, &device)
+                    let window_offsets = (Tensor::<1, Int>::arange(0..4usize as i64, &device)
                         .mul_scalar(1i64)
                         .reshape([1usize, 4usize])
-                        + Tensor::<B, 1, Int>::arange(0..4usize as i64, &device)
+                        + Tensor::<1, Int>::arange(0..4usize as i64, &device)
                             .mul_scalar(5i64)
                             .reshape([4usize, 1usize]))
                         .reshape([1, 16usize]);
@@ -303,25 +303,25 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r###"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<4> {
             let output = {
                 let [batch_size, col_channels, _l] = input.shape().dims();
                 let channels = col_channels / 4usize;
                 let device = input.device();
                 let input_flat = input.reshape([batch_size, channels, 144usize]);
-                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, 49usize], &device);
+                let canvas = Tensor::<3>::zeros([batch_size, channels, 49usize], &device);
                 let indices = {
-                    let block_offsets = (Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                    let block_offsets = (Tensor::<1, Int>::arange(0..2usize as i64, &device)
                         .mul_scalar(1i64)
                         .reshape([1usize, 2usize])
-                        + Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                        + Tensor::<1, Int>::arange(0..2usize as i64, &device)
                             .mul_scalar(7i64)
                             .reshape([2usize, 1usize]))
                         .reshape([4usize, 1]);
-                    let window_offsets = (Tensor::<B, 1, Int>::arange(0..6usize as i64, &device)
+                    let window_offsets = (Tensor::<1, Int>::arange(0..6usize as i64, &device)
                         .mul_scalar(1i64)
                         .reshape([1usize, 6usize])
-                        + Tensor::<B, 1, Int>::arange(0..6usize as i64, &device)
+                        + Tensor::<1, Int>::arange(0..6usize as i64, &device)
                             .mul_scalar(7i64)
                             .reshape([6usize, 1usize]))
                         .reshape([1, 36usize]);
@@ -361,25 +361,25 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r###"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<4> {
             let output = {
                 let [batch_size, col_channels, _l] = input.shape().dims();
                 let channels = col_channels / 4usize;
                 let device = input.device();
                 let input_flat = input.reshape([batch_size, channels, 36usize]);
-                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, 36usize], &device);
+                let canvas = Tensor::<3>::zeros([batch_size, channels, 36usize], &device);
                 let indices = {
-                    let block_offsets = (Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                    let block_offsets = (Tensor::<1, Int>::arange(0..2usize as i64, &device)
                         .mul_scalar(1i64)
                         .reshape([1usize, 2usize])
-                        + Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                        + Tensor::<1, Int>::arange(0..2usize as i64, &device)
                             .mul_scalar(6i64)
                             .reshape([2usize, 1usize]))
                         .reshape([4usize, 1]);
-                    let window_offsets = (Tensor::<B, 1, Int>::arange(0..3usize as i64, &device)
+                    let window_offsets = (Tensor::<1, Int>::arange(0..3usize as i64, &device)
                         .mul_scalar(2i64)
                         .reshape([1usize, 3usize])
-                        + Tensor::<B, 1, Int>::arange(0..3usize as i64, &device)
+                        + Tensor::<1, Int>::arange(0..3usize as i64, &device)
                             .mul_scalar(12i64)
                             .reshape([3usize, 1usize]))
                         .reshape([1, 9usize]);
@@ -418,25 +418,25 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r###"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<4> {
             let output = {
                 let [batch_size, col_channels, _l] = input.shape().dims();
                 let channels = col_channels / 4usize;
                 let device = input.device();
                 let input_flat = input.reshape([batch_size, channels, 36usize]);
-                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, 25usize], &device);
+                let canvas = Tensor::<3>::zeros([batch_size, channels, 25usize], &device);
                 let indices = {
-                    let block_offsets = (Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                    let block_offsets = (Tensor::<1, Int>::arange(0..2usize as i64, &device)
                         .mul_scalar(2i64)
                         .reshape([1usize, 2usize])
-                        + Tensor::<B, 1, Int>::arange(0..2usize as i64, &device)
+                        + Tensor::<1, Int>::arange(0..2usize as i64, &device)
                             .mul_scalar(10i64)
                             .reshape([2usize, 1usize]))
                         .reshape([4usize, 1]);
-                    let window_offsets = (Tensor::<B, 1, Int>::arange(0..3usize as i64, &device)
+                    let window_offsets = (Tensor::<1, Int>::arange(0..3usize as i64, &device)
                         .mul_scalar(1i64)
                         .reshape([1usize, 3usize])
-                        + Tensor::<B, 1, Int>::arange(0..3usize as i64, &device)
+                        + Tensor::<1, Int>::arange(0..3usize as i64, &device)
                             .mul_scalar(5i64)
                             .reshape([3usize, 1usize]))
                         .reshape([1, 9usize]);
@@ -475,19 +475,19 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r###"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = {
                 let [batch_size, col_channels, _l] = input.shape().dims();
                 let channels = col_channels / 3usize;
                 let device = input.device();
                 let input_flat = input.reshape([batch_size, channels, 24usize]);
-                let canvas = Tensor::<B, 3>::zeros([batch_size, channels, 10usize], &device);
+                let canvas = Tensor::<3>::zeros([batch_size, channels, 10usize], &device);
                 let indices = {
-                    let block_offsets = (Tensor::<B, 1, Int>::arange(0..3usize as i64, &device)
+                    let block_offsets = (Tensor::<1, Int>::arange(0..3usize as i64, &device)
                         .mul_scalar(1i64)
                         .reshape([3usize]))
                         .reshape([3usize, 1]);
-                    let window_offsets = (Tensor::<B, 1, Int>::arange(0..8usize as i64, &device)
+                    let window_offsets = (Tensor::<1, Int>::arange(0..8usize as i64, &device)
                         .mul_scalar(1i64)
                         .reshape([8usize]))
                         .reshape([1, 8usize]);

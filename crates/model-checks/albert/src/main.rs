@@ -15,16 +15,16 @@ include!(concat!(env!("OUT_DIR"), "/model_info.rs"));
 use albert_model::Model;
 
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    input_ids: Param<Tensor<B, 2, Int>>,
-    attention_mask: Param<Tensor<B, 2, Int>>,
-    token_type_ids: Param<Tensor<B, 2, Int>>,
-    last_hidden_state: Param<Tensor<B, 3>>,
-    pooler_output: Param<Tensor<B, 2>>,
+struct TestData {
+    input_ids: Param<Tensor<2, Int>>,
+    attention_mask: Param<Tensor<2, Int>>,
+    token_type_ids: Param<Tensor<2, Int>>,
+    last_hidden_state: Param<Tensor<3>>,
+    pooler_output: Param<Tensor<2>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         use burn::module::ParamId;
         // Initialize with correct shapes matching the test data
         // ALBERT base uses sequence_length=128, hidden_size=768
@@ -86,7 +86,7 @@ fn main() {
     println!("Initializing {} model...", display_name);
     let start = Instant::now();
     let device = model_checks_common::best_device!();
-    let model: Model<MyBackend> = Model::from_file(WEIGHTS_PATH, &device);
+    let model: Model = Model::from_file(WEIGHTS_PATH, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
 
@@ -103,7 +103,7 @@ fn main() {
     // Load test data from PyTorch file
     println!("\nLoading test data from {}...", test_data_file.display());
     let start = Instant::now();
-    let mut test_data = TestData::<MyBackend>::new(&device);
+    let mut test_data = TestData::new(&device);
     let mut store = PytorchStore::from_file(&test_data_file);
     test_data
         .load_from(&mut store)
@@ -185,8 +185,8 @@ fn main() {
 
         let diff = outputs.0.clone() - reference_last_hidden.clone();
         let abs_diff = diff.abs();
-        let max_diff = abs_diff.clone().max().into_scalar();
-        let mean_diff = abs_diff.mean().into_scalar();
+        let max_diff = abs_diff.clone().max().into_scalar::<f32>();
+        let mean_diff = abs_diff.mean().into_scalar::<f32>();
 
         println!("      Maximum absolute difference: {:.6}", max_diff);
         println!("      Mean absolute difference: {:.6}", mean_diff);
@@ -205,8 +205,8 @@ fn main() {
 
         let diff = outputs.1.clone() - reference_pooler.clone();
         let abs_diff = diff.abs();
-        let max_diff = abs_diff.clone().max().into_scalar();
-        let mean_diff = abs_diff.mean().into_scalar();
+        let max_diff = abs_diff.clone().max().into_scalar::<f32>();
+        let mean_diff = abs_diff.mean().into_scalar::<f32>();
 
         println!("      Maximum absolute difference: {:.6}", max_diff);
         println!("      Mean absolute difference: {:.6}", mean_diff);

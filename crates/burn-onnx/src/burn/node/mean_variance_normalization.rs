@@ -49,7 +49,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = {
                 let x = input;
                 let mean = x.clone().mean_dims(&[0, 2, 3]);
@@ -71,7 +71,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = {
                 let x = input;
                 let mean = x.clone().mean_dims(&[1]);
@@ -93,7 +93,7 @@ mod tests {
             .build();
         let code = codegen_forward_with_clone(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = {
                 let x = input.clone();
                 let mean = x.clone().mean_dims(&[0, 2, 3]);

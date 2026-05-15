@@ -16,20 +16,17 @@ include_models!(
 mod tests {
     use super::*;
     use alloc::vec::Vec;
-    use burn::tensor::{Tensor, TensorData, ops::FloatElem};
+    use burn::tensor::{Device, Tensor, TensorData};
     use float_cmp::ApproxEq;
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
 
     #[test]
     fn resize_with_sizes() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: resize_with_sizes::Model<TestBackend> = resize_with_sizes::Model::new(&device);
+        let model: resize_with_sizes::Model = resize_with_sizes::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [0.0, 1.0, 2.0, 3.0],
                 [4.0, 5.0, 6.0, 7.0],
@@ -50,10 +47,10 @@ mod tests {
     fn resize_with_shape() {
         // Initialize the model without weights
         let device = Default::default();
-        let model: resize_with_shape::Model<TestBackend> = resize_with_shape::Model::new(&device);
+        let model: resize_with_shape::Model = resize_with_shape::Model::new(&device);
 
         // Create input tensor [1, 3, 4, 4]
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[
                 [
                     [0.0, 1.0, 2.0, 3.0],
@@ -102,11 +99,10 @@ mod tests {
     fn resize_with_sizes_tensor() {
         // Initialize the model without weights
         let device = Default::default();
-        let model: resize_with_sizes_tensor::Model<TestBackend> =
-            resize_with_sizes_tensor::Model::new(&device);
+        let model: resize_with_sizes_tensor::Model = resize_with_sizes_tensor::Model::new(&device);
 
         // Create input tensor [1, 3, 4, 4]
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[
                 [
                     [1.0, 2.0, 3.0, 4.0],
@@ -131,8 +127,7 @@ mod tests {
         );
 
         // Create sizes tensor [1, 3, 2, 2] - resize to 2x2
-        let sizes =
-            Tensor::<TestBackend, 1, burn::tensor::Int>::from_ints([1i64, 3, 2, 2], &device);
+        let sizes = Tensor::<1, burn::tensor::Int>::from_ints([1i64, 3, 2, 2], &device);
 
         // The model should resize from [1, 3, 4, 4] to [1, 3, 2, 2] using nearest neighbor
         let output = model.forward(input, sizes);
@@ -159,11 +154,10 @@ mod tests {
     fn resize_with_scales_1d_linear() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: resize_1d_linear_scale::Model<TestBackend> =
-            resize_1d_linear_scale::Model::new(&device);
+        let model: resize_1d_linear_scale::Model = resize_1d_linear_scale::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [[[1.5410, -0.2934, -2.1788, 0.5684, -1.0845, -1.3986]]],
             &device,
         );
@@ -171,20 +165,20 @@ mod tests {
         // The scales are 1.5
         let output = model.forward(input);
 
-        Tensor::<TestBackend, 3>::from([[[
+        Tensor::<3>::from([[[
             1.5410, 0.3945, -0.7648, -1.9431, -0.8052, 0.3618, -0.6713, -1.2023, -1.3986,
         ]]])
         .to_data()
-        .assert_approx_eq::<FT>(&output.into_data(), burn::tensor::Tolerance::default());
+        .assert_approx_eq::<f32>(&output.into_data(), burn::tensor::Tolerance::default());
     }
 
     #[test]
     fn resize_with_scales_2d_bilinear_half_pixel() {
         let device = Default::default();
-        let model: resize_2d_bilinear_half_pixel::Model<TestBackend> =
+        let model: resize_2d_bilinear_half_pixel::Model =
             resize_2d_bilinear_half_pixel::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [0.0, 1.0, 2.0, 3.0],
                 [4.0, 5.0, 6.0, 7.0],
@@ -213,11 +207,10 @@ mod tests {
     fn resize_with_scales_2d_bilinear() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: resize_2d_bilinear_scale::Model<TestBackend> =
-            resize_2d_bilinear_scale::Model::new(&device);
+        let model: resize_2d_bilinear_scale::Model = resize_2d_bilinear_scale::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [-1.1258, -1.1524, -0.2506, -0.4339, 0.8487, 0.6920],
                 [-0.3160, -2.1152, 0.3223, -1.2633, 0.3500, 0.3081],
@@ -232,7 +225,7 @@ mod tests {
         // The scales are 1.5, 1.5
         let output = model.forward(input);
 
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
         let expected_sum = -3.401_126_6; // from pytorch
 
         assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));
@@ -242,11 +235,10 @@ mod tests {
     fn resize_with_scales_2d_nearest() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: resize_2d_nearest_scale::Model<TestBackend> =
-            resize_2d_nearest_scale::Model::<TestBackend>::new(&device);
+        let model: resize_2d_nearest_scale::Model = resize_2d_nearest_scale::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [-1.1258, -1.1524, -0.2506, -0.4339, 0.8487, 0.6920],
                 [-0.3160, -2.1152, 0.3223, -1.2633, 0.3500, 0.3081],
@@ -263,7 +255,7 @@ mod tests {
 
         assert_eq!(output.dims(), [1, 1, 9, 9]);
 
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
         let expected_sum = -0.812_227_7; // from pytorch
 
         assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));
@@ -273,11 +265,10 @@ mod tests {
     fn resize_with_scales_1d_nearest() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: resize_1d_nearest_scale::Model<TestBackend> =
-            resize_1d_nearest_scale::Model::<TestBackend>::new(&device);
+        let model: resize_1d_nearest_scale::Model = resize_1d_nearest_scale::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [[[1.5410, -0.2934, -2.1788, 0.5684, -1.0845, -1.3986]]],
             &device,
         );
@@ -287,7 +278,7 @@ mod tests {
 
         assert_eq!(output.dims(), [1, 1, 9]);
 
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
         let expected_sum = -4.568_224; // from pytorch
 
         assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));
@@ -297,11 +288,10 @@ mod tests {
     fn resize_with_scales_2d_bicubic() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: resize_2d_bicubic_scale::Model<TestBackend> =
-            resize_2d_bicubic_scale::Model::<TestBackend>::new(&device);
+        let model: resize_2d_bicubic_scale::Model = resize_2d_bicubic_scale::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [-1.1258, -1.1524, -0.2506, -0.4339, 0.8487, 0.6920],
                 [-0.3160, -2.1152, 0.3223, -1.2633, 0.3500, 0.3081],
@@ -318,7 +308,7 @@ mod tests {
 
         assert_eq!(output.dims(), [1, 1, 9, 9]);
 
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
 
         let expected_sum = -3.515_921; // from pytorch
 
@@ -329,11 +319,11 @@ mod tests {
     fn resize_with_scales_tensor() {
         // Initialize the model without weights
         let device = Default::default();
-        let model: resize_with_scales_tensor::Model<TestBackend> =
+        let model: resize_with_scales_tensor::Model =
             resize_with_scales_tensor::Model::new(&device);
 
         // Create input tensor [1, 3, 4, 4]
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[
                 [
                     [1.0, 2.0, 3.0, 4.0],
@@ -359,7 +349,7 @@ mod tests {
 
         // Create scales tensor to double spatial dimensions: [1, 3, 4, 4] -> [1, 3, 8, 8]
         // Format: [scale_n, scale_c, scale_h, scale_w]
-        let scales = Tensor::<TestBackend, 1>::from_floats([1.0f32, 1.0, 2.0, 2.0], &device);
+        let scales = Tensor::<1>::from_floats([1.0f32, 1.0, 2.0, 2.0], &device);
 
         // The model should resize from [1, 3, 4, 4] to [1, 3, 8, 8] using nearest neighbor
         let output = model.forward(input, scales);
@@ -370,7 +360,7 @@ mod tests {
         // With nearest neighbor and 2x upsampling, output sum should be 4x input sum
         // Input sum per channel: 136, 392, 648 => total = 1176
         // Output sum should be 4704 (each value repeated 4 times)
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
         let expected_sum = 4704.0f32;
 
         assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));

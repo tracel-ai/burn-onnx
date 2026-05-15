@@ -121,7 +121,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 2>, rhs: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, lhs: Tensor<2>, rhs: Tensor<2>) -> Tensor<2> {
             let output = lhs.matmul(rhs);
             output
         }

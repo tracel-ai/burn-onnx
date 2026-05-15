@@ -40,7 +40,7 @@ impl NodeCodegen for onnx_ir::conv3d::Conv3dNode {
         Some(Field::new(
             self.name.clone(),
             quote! {
-                Conv3d<B>
+                Conv3d
             },
             quote! {
                 let #name = Conv3dConfig::new(#channels, #kernel_size)
@@ -145,7 +145,7 @@ mod tests {
         let node = create_conv3d_node("conv1");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 5>) -> Tensor<B, 5> {
+        pub fn forward(&self, input: Tensor<5>) -> Tensor<5> {
             let output = self.conv1.forward(input);
             output
         }
@@ -157,7 +157,7 @@ mod tests {
         let node = create_conv3d_node("conv1");
         let code = codegen_forward_with_clone(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 5>) -> Tensor<B, 5> {
+        pub fn forward(&self, input: Tensor<5>) -> Tensor<5> {
             let output = self.conv1.forward(input.clone());
             output
         }

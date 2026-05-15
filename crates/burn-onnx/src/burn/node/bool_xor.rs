@@ -72,7 +72,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: bool, rhs: Tensor<B, 4, Bool>) -> Tensor<B, 4, Bool> {
+        pub fn forward(&self, lhs: bool, rhs: Tensor<4, Bool>) -> Tensor<4, Bool> {
             let output = if lhs { rhs.bool_not() } else { rhs };
             output
         }
@@ -88,7 +88,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 4, Bool>, rhs: bool) -> Tensor<B, 4, Bool> {
+        pub fn forward(&self, lhs: Tensor<4, Bool>, rhs: bool) -> Tensor<4, Bool> {
             let output = if rhs { lhs.bool_not() } else { lhs };
             output
         }
@@ -130,11 +130,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            lhs: Tensor<B, 2, Bool>,
-            rhs: Tensor<B, 2, Bool>,
-        ) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, lhs: Tensor<2, Bool>, rhs: Tensor<2, Bool>) -> Tensor<2, Bool> {
             let output = lhs.not_equal(rhs);
             output
         }

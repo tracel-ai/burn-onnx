@@ -25,7 +25,7 @@ impl NodeCodegen for onnx_ir::bitshift::BitShiftNode {
                     quote! { #lhs.bitwise_left_shift(#rhs) }
                 }
                 (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
-                    quote! { #lhs.bitwise_left_shift_scalar(#rhs.elem()) }
+                    quote! { #lhs.bitwise_left_shift_scalar(#rhs) }
                 }
                 (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                     quote! {
@@ -45,7 +45,7 @@ impl NodeCodegen for onnx_ir::bitshift::BitShiftNode {
                     quote! { #lhs.bitwise_right_shift(#rhs) }
                 }
                 (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
-                    quote! { #lhs.bitwise_right_shift_scalar(#rhs.elem()) }
+                    quote! { #lhs.bitwise_right_shift_scalar(#rhs) }
                 }
                 (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                     quote! {
@@ -86,11 +86,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            lhs: Tensor<B, 2, Int>,
-            rhs: Tensor<B, 2, Int>,
-        ) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, lhs: Tensor<2, Int>, rhs: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = lhs.bitwise_left_shift(rhs);
             output
         }
@@ -108,11 +104,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            lhs: Tensor<B, 2, Int>,
-            rhs: Tensor<B, 2, Int>,
-        ) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, lhs: Tensor<2, Int>, rhs: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = lhs.bitwise_right_shift(rhs);
             output
         }
@@ -130,8 +122,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 2, Int>, rhs: i32) -> Tensor<B, 2, Int> {
-            let output = lhs.bitwise_left_shift_scalar(rhs.elem());
+        pub fn forward(&self, lhs: Tensor<2, Int>, rhs: i32) -> Tensor<2, Int> {
+            let output = lhs.bitwise_left_shift_scalar(rhs);
             output
         }
         ");
@@ -148,8 +140,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: Tensor<B, 2, Int>, rhs: i32) -> Tensor<B, 2, Int> {
-            let output = lhs.bitwise_right_shift_scalar(rhs.elem());
+        pub fn forward(&self, lhs: Tensor<2, Int>, rhs: i32) -> Tensor<2, Int> {
+            let output = lhs.bitwise_right_shift_scalar(rhs);
             output
         }
         ");
@@ -166,7 +158,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: i32, rhs: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, lhs: i32, rhs: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = {
                 let _scalar_tensor = rhs.full_like(lhs);
                 _scalar_tensor.bitwise_left_shift(rhs)
@@ -187,7 +179,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: i32, rhs: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, lhs: i32, rhs: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = {
                 let _scalar_tensor = rhs.full_like(lhs);
                 _scalar_tensor.bitwise_right_shift(rhs)

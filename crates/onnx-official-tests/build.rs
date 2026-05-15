@@ -813,7 +813,7 @@ fn emit_single_test(buf: &mut String, name: &str, meta: &TestMeta, mode: TestMod
     .unwrap();
     writeln!(
         buf,
-        "    let model = generated::{name}::Model::<TestBackend>::from_file(bpk_path, &device);"
+        "    let model = generated::{name}::Model::from_file(bpk_path, &device);"
     )
     .unwrap();
 
@@ -849,10 +849,10 @@ fn emit_single_test(buf: &mut String, name: &str, meta: &TestMeta, mode: TestMod
         // mutate the test's input dtype.
         writeln!(
             buf,
-            "    let {binding}: burn::tensor::Tensor<TestBackend, {rank}{kind}> = match {binding}_ref.values {{\n\
+            "    let {binding}: burn::tensor::Tensor<{rank}{kind}> = match {binding}_ref.values {{\n\
              \x20       onnx_official_tests::pb_loader::TensorValues::{variant}(values) => {{\n\
              \x20           let data = burn::tensor::TensorData::new(values, {binding}_ref.shape);\n\
-             \x20           burn::tensor::Tensor::<TestBackend, {rank}{kind}>::from_data(data, (&device, {dtype_tokens}))\n\
+             \x20           burn::tensor::Tensor::<{rank}{kind}>::from_data(data, (&device, {dtype_tokens}))\n\
              \x20       }}\n\
              \x20       other => panic!(\"{name} input_{idx}: expected {onnx_name}, got {{}}\", other.dtype_name()),\n\
              \x20   }};"

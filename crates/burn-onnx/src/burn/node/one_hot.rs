@@ -269,7 +269,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, indices: Tensor<B, 1, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, indices: Tensor<1, Int>) -> Tensor<2> {
             let output = indices
                 .one_hot_fill(10usize, 1f32, 0f32, -1i64)
                 .float()
@@ -293,7 +293,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, indices: Tensor<B, 1, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, indices: Tensor<1, Int>) -> Tensor<2, Int> {
             let output = indices
                 .one_hot_fill(5usize, 1f32, 0f32, -1i64)
                 .cast(burn::tensor::DType::I32);
@@ -316,7 +316,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, indices: Tensor<B, 1>) -> Tensor<B, 2> {
+        pub fn forward(&self, indices: Tensor<1>) -> Tensor<2> {
             let output = indices
                 .one_hot_fill(5usize, 1f32, 0f32, 0i64)
                 .cast(burn::tensor::DType::F32);
@@ -339,7 +339,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, indices: Tensor<B, 1>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, indices: Tensor<1>) -> Tensor<2, Int> {
             let output = indices
                 .one_hot_fill(5usize, 1f32, 0f32, 0i64)
                 .int()
@@ -363,7 +363,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, indices: Tensor<B, 1, Int>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, indices: Tensor<1, Int>) -> Tensor<2, Bool> {
             let output = indices.one_hot_fill(5usize, 1f32, 0f32, -1i64).bool();
             output
         }
@@ -397,10 +397,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            indices: Tensor<B, 1, Int>,
-            depth: Tensor<B, 1>,
-            values: Tensor<B, 1>,
-        ) -> Tensor<B, 2> {
+            indices: Tensor<1, Int>,
+            depth: Tensor<1>,
+            values: Tensor<1>,
+        ) -> Tensor<2> {
             let output = {
                 let __onehot_depth: usize = {
                     let __data = depth.to_data().convert::<i64>();
@@ -441,11 +441,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            indices: Tensor<B, 1, Int>,
-            depth: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 2> {
+        pub fn forward(&self, indices: Tensor<1, Int>, depth: Tensor<1, Int>) -> Tensor<2> {
             let output = {
                 let __onehot_depth: usize = {
                     let __data = depth.to_data().convert::<i64>();
@@ -486,9 +482,9 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            indices: Tensor<B, 1, Int>,
-            values: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 2, Int> {
+            indices: Tensor<1, Int>,
+            values: Tensor<1, Int>,
+        ) -> Tensor<2, Int> {
             let output = {
                 let (__onehot_off_i, __onehot_on_i): (i64, i64) = {
                     let __data = values.to_data().convert::<i64>();
@@ -528,11 +524,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            indices: Tensor<B, 1>,
-            values: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, indices: Tensor<1>, values: Tensor<1, Int>) -> Tensor<2, Int> {
             let output = {
                 let (__onehot_off_i, __onehot_on_i): (i64, i64) = {
                     let __data = values.to_data().convert::<i64>();
@@ -576,9 +568,9 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            indices: Tensor<B, 1, Int>,
-            values: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 2, Int> {
+            indices: Tensor<1, Int>,
+            values: Tensor<1, Int>,
+        ) -> Tensor<2, Int> {
             let output = {
                 let (__onehot_off_u, __onehot_on_u): (u64, u64) = {
                     let __data = values.to_data().convert::<u64>();
@@ -611,7 +603,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, indices: Tensor<B, 1>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, indices: Tensor<1>) -> Tensor<2, Bool> {
             let output = indices.one_hot_fill(5usize, 1f32, 0f32, 0i64).bool();
             output
         }

@@ -5,17 +5,14 @@ include_models!(space_to_depth);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, Tolerance, ops::FloatElem};
-
-    use crate::backend::TestBackend;
-    type FT = FloatElem<TestBackend>;
+    use burn::tensor::{Device, Tensor, TensorData, Tolerance};
 
     #[test]
     fn space_to_depth() {
         let device = Default::default();
-        let model: space_to_depth::Model<TestBackend> = space_to_depth::Model::new(&device);
+        let model: space_to_depth::Model = space_to_depth::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [
                 [[
                     [0.5, -0.14, 0.65, 1.52, -0.23, -0.23],
@@ -50,6 +47,6 @@ mod tests {
 
         output
             .to_data()
-            .assert_approx_eq::<FT>(&expected, Tolerance::default());
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 }

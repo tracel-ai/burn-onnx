@@ -34,7 +34,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = input.bitwise_not();
             output
         }

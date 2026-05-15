@@ -94,7 +94,7 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                                     quote! {
                                         {
                                             let mask = #input.clone().is_nan();
-                                            let imputed_values = Tensor::<B, 1>::from_data(
+                                            let imputed_values = Tensor::<1>::from_data(
                                                 burn::tensor::TensorData::from([#((#imputed_values_vec) as f64),*]),
                                                 (&self.device, #dtype_tokens),
                                             )
@@ -108,7 +108,7 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                                     quote! {
                                         {
                                             let mask = #input.clone().equal_elem(#replaced_value);
-                                            let imputed_values = Tensor::<B, 1>::from_data(
+                                            let imputed_values = Tensor::<1>::from_data(
                                                 burn::tensor::TensorData::from([#((#imputed_values_vec) as f64),*]),
                                                 (&self.device, #dtype_tokens),
                                             )
@@ -149,7 +149,7 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                                 quote! {
                                     {
                                         let mask = #input.clone().equal_elem(#replaced_int);
-                                        let imputed_values = Tensor::<B, 1, burn::tensor::Int>::from_data(
+                                        let imputed_values = Tensor::<1, burn::tensor::Int>::from_data(
                                             burn::tensor::TensorData::from([#(#imputed_values_vec),*]),
                                             (&self.device, #dtype_tokens),
                                         )
@@ -199,7 +199,7 @@ mod tests {
         let node = ImputerNode::new("imputer1".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let mask = input.clone().is_nan();
                 input.clone().mask_fill(mask, 0f32)
@@ -223,7 +223,7 @@ mod tests {
         let node = ImputerNode::new("imputer2".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let mask = input.clone().equal_elem(-999f32);
                 input.clone().mask_fill(mask, 1f32)
@@ -246,12 +246,11 @@ mod tests {
         );
         let node = ImputerNode::new("imputer3".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = {
                 let mask = input.clone().is_nan();
                 let imputed_values = Tensor::<
-                    B,
                     1,
                 >::from_data(
                         burn::tensor::TensorData::from([
@@ -284,7 +283,7 @@ mod tests {
         let node = ImputerNode::new("imputer4".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = {
                 let mask = input.clone().equal_elem(-1i64);
                 input.clone().mask_fill(mask, 0i64)
@@ -309,7 +308,7 @@ mod tests {
         let node = ImputerNode::new("imputer7".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @"
-        pub fn forward(&self, input: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = {
                 let mask = input.clone().equal_elem(0i64);
                 input.clone().mask_fill(mask, 99i64)

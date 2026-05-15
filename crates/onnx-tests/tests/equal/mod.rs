@@ -5,18 +5,15 @@ include_models!(equal, equal_shape, equal_two_shapes, equal_scalar);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn equal_scalar_to_scalar_and_tensor_to_tensor() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: equal::Model<TestBackend> = equal::Model::default();
+        let model: equal::Model = equal::Model::default();
 
         // Run the model
-        let input =
-            Tensor::<TestBackend, 4>::from_floats([[[[1., 1., 1., 1.]]]], &Default::default());
+        let input = Tensor::<4>::from_floats([[[[1., 1., 1., 1.]]]], &Default::default());
 
         let scalar = 2f64;
         let (tensor_out, scalar_out) = model.forward(input, scalar);
@@ -30,10 +27,10 @@ mod tests {
     #[test]
     fn equal_shape() {
         // Test comparing a Shape output with a constant shape
-        let model: equal_shape::Model<TestBackend> = equal_shape::Model::default();
+        let model: equal_shape::Model = equal_shape::Model::default();
 
         // Create input tensor with shape [2, 3, 4]
-        let input = Tensor::<TestBackend, 3>::zeros([2, 3, 4], &Default::default());
+        let input = Tensor::<3>::zeros([2, 3, 4], &Default::default());
 
         let output = model.forward(input);
         // Shape [2, 3, 4] should equal [2, 3, 4]
@@ -45,9 +42,9 @@ mod tests {
     #[test]
     fn equal_scalar() {
         let device = Default::default();
-        let model: equal_scalar::Model<TestBackend> = equal_scalar::Model::new(&device);
+        let model: equal_scalar::Model = equal_scalar::Model::new(&device);
 
-        let x = Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0, 3.0, 2.0]], &device);
+        let x = Tensor::<2>::from_floats([[1.0, 2.0, 3.0, 2.0]], &device);
         let y = 2.0f32;
 
         let (tensor_scalar, scalar_tensor) = model.forward(x, y);
@@ -60,11 +57,11 @@ mod tests {
     #[test]
     fn equal_two_shapes() {
         // Test comparing shapes from two different tensors
-        let model: equal_two_shapes::Model<TestBackend> = equal_two_shapes::Model::default();
+        let model: equal_two_shapes::Model = equal_two_shapes::Model::default();
 
         // Create two input tensors with same shape [2, 3, 4]
-        let input1 = Tensor::<TestBackend, 3>::zeros([2, 3, 4], &Default::default());
-        let input2 = Tensor::<TestBackend, 3>::ones([2, 3, 4], &Default::default());
+        let input1 = Tensor::<3>::zeros([2, 3, 4], &Default::default());
+        let input2 = Tensor::<3>::ones([2, 3, 4], &Default::default());
 
         let output = model.forward(input1, input2);
         // Both have shape [2, 3, 4] so all elements should be equal (1 for true)

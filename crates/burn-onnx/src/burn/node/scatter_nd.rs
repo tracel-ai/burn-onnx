@@ -99,10 +99,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            data: Tensor<B, 1>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 1>,
-        ) -> Tensor<B, 1> {
+            data: Tensor<1>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<1>,
+        ) -> Tensor<1> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -117,7 +117,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -153,10 +152,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            data: Tensor<B, 1>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 1>,
-        ) -> Tensor<B, 1> {
+            data: Tensor<1>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<1>,
+        ) -> Tensor<1> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -171,7 +170,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -203,10 +201,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            data: Tensor<B, 1>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 1>,
-        ) -> Tensor<B, 1> {
+            data: Tensor<1>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<1>,
+        ) -> Tensor<1> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -221,7 +219,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -253,10 +250,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            data: Tensor<B, 1>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 1>,
-        ) -> Tensor<B, 1> {
+            data: Tensor<1>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<1>,
+        ) -> Tensor<1> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -271,7 +268,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -303,10 +299,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            data: Tensor<B, 1>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 1>,
-        ) -> Tensor<B, 1> {
+            data: Tensor<1>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<1>,
+        ) -> Tensor<1> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -321,7 +317,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -353,10 +348,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            data: Tensor<B, 2, Int>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 2, Int> {
+            data: Tensor<2, Int>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<1, Int>,
+        ) -> Tensor<2, Int> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -371,7 +366,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -407,10 +401,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            data: Tensor<B, 1, Bool>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 1, Bool>,
-        ) -> Tensor<B, 1, Bool> {
+            data: Tensor<1, Bool>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<1, Bool>,
+        ) -> Tensor<1, Bool> {
             let output = {
                 let __nd_data_dims = data.dims();
                 let __nd_indices = indices.cast(burn::tensor::DType::I64);
@@ -425,7 +419,6 @@ mod tests {
                 let mut __nd_bcast_shape = [1usize; 2];
                 __nd_bcast_shape[2 - 1] = __nd_k;
                 let __nd_dims_tensor = Tensor::<
-                    B,
                     1,
                     Int,
                 >::from_data(
@@ -465,10 +458,10 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
-            data: Tensor<B, 1, Bool>,
-            indices: Tensor<B, 2, Int>,
-            updates: Tensor<B, 1, Bool>,
-        ) -> Tensor<B, 1, Bool> {
+            data: Tensor<1, Bool>,
+            indices: Tensor<2, Int>,
+            updates: Tensor<1, Bool>,
+        ) -> Tensor<1, Bool> {
             let output = {
                 compile_error!(
                     "ScatterND node 'scatter1': Add reduction is not supported for bool tensors"

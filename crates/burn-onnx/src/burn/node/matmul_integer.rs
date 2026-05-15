@@ -124,7 +124,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2, Int>, b: Tensor<B, 2, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, a: Tensor<2, Int>, b: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = ((a).cast(burn::tensor::DType::I32))
                 .matmul((b).cast(burn::tensor::DType::I32));
             output
@@ -145,11 +145,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            a: Tensor<B, 2, Int>,
-            b: Tensor<B, 2, Int>,
-            a_zero_point: Tensor<B, 2, Int>,
-            b_zero_point: Tensor<B, 2, Int>,
-        ) -> Tensor<B, 2, Int> {
+            a: Tensor<2, Int>,
+            b: Tensor<2, Int>,
+            a_zero_point: Tensor<2, Int>,
+            b_zero_point: Tensor<2, Int>,
+        ) -> Tensor<2, Int> {
             let output = ((a)
                 .cast(burn::tensor::DType::I32)
                 .sub((a_zero_point).cast(burn::tensor::DType::I32).unsqueeze::<2usize>()))
@@ -175,10 +175,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            a: Tensor<B, 2, Int>,
-            b: Tensor<B, 2, Int>,
-            a_zero_point: Tensor<B, 2, Int>,
-        ) -> Tensor<B, 2, Int> {
+            a: Tensor<2, Int>,
+            b: Tensor<2, Int>,
+            a_zero_point: Tensor<2, Int>,
+        ) -> Tensor<2, Int> {
             let output = ((a)
                 .cast(burn::tensor::DType::I32)
                 .sub((a_zero_point).cast(burn::tensor::DType::I32).unsqueeze::<2usize>()))
@@ -197,7 +197,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 3, Int>, b: Tensor<B, 2, Int>) -> Tensor<B, 3, Int> {
+        pub fn forward(&self, a: Tensor<3, Int>, b: Tensor<2, Int>) -> Tensor<3, Int> {
             let output = ((a).cast(burn::tensor::DType::I32))
                 .matmul(((b).cast(burn::tensor::DType::I32)).unsqueeze::<3usize>());
             output
@@ -214,7 +214,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2, Int>, b: Tensor<B, 3, Int>) -> Tensor<B, 3, Int> {
+        pub fn forward(&self, a: Tensor<2, Int>, b: Tensor<3, Int>) -> Tensor<3, Int> {
             let output = ((a).cast(burn::tensor::DType::I32))
                 .unsqueeze::<3usize>()
                 .matmul((b).cast(burn::tensor::DType::I32));
@@ -232,7 +232,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 2, Int>, b: Tensor<B, 1, Int>) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, a: Tensor<2, Int>, b: Tensor<1, Int>) -> Tensor<1, Int> {
             let output = ((a).cast(burn::tensor::DType::I32))
                 .matmul(((b).cast(burn::tensor::DType::I32)).unsqueeze_dims(&[-1isize]))
                 .squeeze_dim::<1usize>(1usize);
@@ -250,7 +250,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 1, Int>, b: Tensor<B, 2, Int>) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, a: Tensor<1, Int>, b: Tensor<2, Int>) -> Tensor<1, Int> {
             let output = ((a).cast(burn::tensor::DType::I32))
                 .unsqueeze::<2usize>()
                 .matmul((b).cast(burn::tensor::DType::I32))
@@ -269,7 +269,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, a: Tensor<B, 3, Int>, b: Tensor<B, 1, Int>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, a: Tensor<3, Int>, b: Tensor<1, Int>) -> Tensor<2, Int> {
             let output = ((a).cast(burn::tensor::DType::I32))
                 .matmul(((b).cast(burn::tensor::DType::I32)).unsqueeze_dims(&[-1isize, 0isize]))
                 .squeeze_dim::<2usize>(2usize);
@@ -291,11 +291,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            a: Tensor<B, 1, Int>,
-            b: Tensor<B, 1, Int>,
-            a_zero_point: Tensor<B, 1, Int>,
-            b_zero_point: Tensor<B, 1, Int>,
-        ) -> Tensor<B, 1, Int> {
+            a: Tensor<1, Int>,
+            b: Tensor<1, Int>,
+            a_zero_point: Tensor<1, Int>,
+            b_zero_point: Tensor<1, Int>,
+        ) -> Tensor<1, Int> {
             let output = ((a)
                 .cast(burn::tensor::DType::I32)
                 .sub((a_zero_point).cast(burn::tensor::DType::I32)))

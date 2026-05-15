@@ -73,7 +73,7 @@ impl NodeCodegen for onnx_ir::node::argmax::ArgMaxNode {
                 // Extracted to native scalar, no cast needed
                 quote! {
                     let argmax_result = #argmax_expr;
-                    let #output = argmax_result.into_scalar().elem::<i64>();
+                    let #output = argmax_result.into_scalar::<i64>();
                 }
             }
             _ => panic!("ArgMax output must be Tensor or Scalar"),
@@ -98,7 +98,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3, Int> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3, Int> {
             let output = input.argmax(1).cast(burn::tensor::DType::I64);
             output
         }
@@ -115,7 +115,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 3, Int> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<3, Int> {
             let argmax_result = input.argmax(2);
             let output = argmax_result.squeeze_dim::<3usize>(2).cast(burn::tensor::DType::I64);
             output
@@ -133,7 +133,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1>) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, input: Tensor<1>) -> Tensor<1, Int> {
             let output = input.argmax(0).reshape([1]).cast(burn::tensor::DType::I64);
             output
         }
@@ -150,9 +150,9 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 1>) -> i64 {
+        pub fn forward(&self, input: Tensor<1>) -> i64 {
             let argmax_result = input.argmax(0);
-            let output = argmax_result.into_scalar().elem::<i64>();
+            let output = argmax_result.into_scalar::<i64>();
             output
         }
         ");
@@ -170,7 +170,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3, Int> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3, Int> {
             let output = {
                 let __argmax_input = input;
                 let __argmax_axis_size = __argmax_input.shape()[1usize] as i64;
@@ -196,7 +196,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 3, Int> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<3, Int> {
             let argmax_result = {
                 let __argmax_input = input;
                 let __argmax_axis_size = __argmax_input.shape()[2usize] as i64;

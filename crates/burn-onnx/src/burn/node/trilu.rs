@@ -55,7 +55,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input.triu(0);
             output
         }
@@ -72,7 +72,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input.tril(1);
             output
         }
@@ -89,7 +89,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, mask: Tensor<B, 2, Bool>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, mask: Tensor<2, Bool>) -> Tensor<2, Bool> {
             let masked = mask.int().tril(0).bool();
             masked
         }
@@ -106,7 +106,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, mask: Tensor<B, 3, Bool>) -> Tensor<B, 3, Bool> {
+        pub fn forward(&self, mask: Tensor<3, Bool>) -> Tensor<3, Bool> {
             let masked = mask.int().triu(-1).bool();
             masked
         }

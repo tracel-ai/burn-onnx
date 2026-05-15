@@ -17,15 +17,15 @@ pub mod modernbert_base {
 }
 
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    input_ids: Param<Tensor<B, 2, Int>>,
-    attention_mask: Param<Tensor<B, 2, Int>>,
-    last_hidden_state: Param<Tensor<B, 3>>,
-    pooled_output: Param<Tensor<B, 2>>,
+struct TestData {
+    input_ids: Param<Tensor<2, Int>>,
+    attention_mask: Param<Tensor<2, Int>>,
+    last_hidden_state: Param<Tensor<3>>,
+    pooled_output: Param<Tensor<2>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         use burn::module::ParamId;
         // ModernBERT-base: sequence_length=512, hidden_size=768
         // Note: Initializer only works for float tensors, Int tensors need manual init
@@ -39,10 +39,7 @@ impl<B: Backend> TestData<B> {
 }
 
 /// Apply mean pooling to get sentence embeddings
-fn mean_pool<B: Backend>(
-    last_hidden_state: Tensor<B, 3>,
-    attention_mask: Tensor<B, 2, Int>,
-) -> Tensor<B, 2> {
+fn mean_pool(last_hidden_state: Tensor<3>, attention_mask: Tensor<2, Int>) -> Tensor<2> {
     // Convert attention_mask to float and expand dimensions to match hidden_state
     let attention_mask_float = attention_mask.float().unsqueeze_dim::<3>(2);
 
@@ -89,8 +86,7 @@ fn main() {
     let start = Instant::now();
     let device = model_checks_common::best_device!();
     let weights_path = concat!(env!("OUT_DIR"), "/model/modernbert-base_opset16.bpk");
-    let model: modernbert_base::Model<MyBackend> =
-        modernbert_base::Model::from_file(weights_path, &device);
+    let model: modernbert_base::Model = modernbert_base::Model::from_file(weights_path, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
 
@@ -108,7 +104,7 @@ fn main() {
     let test_data_path = artifacts_dir.join("test_data.pt");
     println!("\nLoading test data from {}...", test_data_path.display());
     let start = Instant::now();
-    let mut test_data = TestData::<MyBackend>::new(&device);
+    let mut test_data = TestData::new(&device);
     let mut store = PytorchStore::from_file(&test_data_path);
     test_data
         .load_from(&mut store)
@@ -217,8 +213,8 @@ fn main() {
         // Calculate and display the difference statistics
         let diff = last_hidden_state.clone() - reference_last_hidden_state.clone();
         let abs_diff = diff.abs();
-        let max_diff = abs_diff.clone().max().into_scalar();
-        let mean_diff = abs_diff.mean().into_scalar();
+        let max_diff = abs_diff.clone().max().into_scalar::<f32>();
+        let mean_diff = abs_diff.mean().into_scalar::<f32>();
 
         println!("    Maximum absolute difference: {:.6}", max_diff);
         println!("    Mean absolute difference: {:.6}", mean_diff);
@@ -254,8 +250,8 @@ fn main() {
         // Calculate and display the difference statistics
         let diff = pooled_output.clone() - reference_pooled_output.clone();
         let abs_diff = diff.abs();
-        let max_diff = abs_diff.clone().max().into_scalar();
-        let mean_diff = abs_diff.mean().into_scalar();
+        let max_diff = abs_diff.clone().max().into_scalar::<f32>();
+        let mean_diff = abs_diff.mean().into_scalar::<f32>();
 
         println!("    Maximum absolute difference: {:.6}", max_diff);
         println!("    Mean absolute difference: {:.6}", mean_diff);

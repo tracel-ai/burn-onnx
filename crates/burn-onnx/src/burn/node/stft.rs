@@ -114,9 +114,9 @@ fn matrix_dft_core(
     // If no window, use a rank-1 ones tensor; otherwise take the caller's.
     // onnx-ir has already validated window shape == [frame_length].
     let window_bind = match window {
-        Some(w) => quote! { let window: burn::tensor::Tensor<B, 1> = #w; },
+        Some(w) => quote! { let window: burn::tensor::Tensor<1> = #w; },
         None => quote! {
-            let window: burn::tensor::Tensor<B, 1> =
+            let window: burn::tensor::Tensor<1> =
                 burn::tensor::Tensor::ones([#frame_length], &device);
         },
     };
@@ -125,12 +125,12 @@ fn matrix_dft_core(
         let device = signal.device();
 
         // Frame the signal: [B, L] -> [B, n_frames, n_fft]
-        let frames: burn::tensor::Tensor<B, 3> =
+        let frames: burn::tensor::Tensor<3> =
             signal.unfold(1, #frame_length, #frame_step);
 
         // Apply window per frame.
         #window_bind
-        let windowed: burn::tensor::Tensor<B, 3> =
+        let windowed: burn::tensor::Tensor<3> =
             frames.mul(window.reshape([1, 1, #frame_length]));
 
         // Cast to f64 for the matmul. The downstream graph (e.g. kokoro's
@@ -177,11 +177,11 @@ fn matrix_dft_core(
         // Pass (&device, DType::F64) so the tensor lands in f64; bare &device
         // would resolve to the backend's default float dtype (typically f32),
         // which would mismatch the f64 matmul below.
-        let w_real_t: burn::tensor::Tensor<B, 2> = burn::tensor::Tensor::from_data(
+        let w_real_t: burn::tensor::Tensor<2> = burn::tensor::Tensor::from_data(
             burn::tensor::TensorData::new(w_real, [n_freqs, n_fft]),
             (&device, burn::tensor::DType::F64),
         ).transpose();
-        let w_imag_t: burn::tensor::Tensor<B, 2> = burn::tensor::Tensor::from_data(
+        let w_imag_t: burn::tensor::Tensor<2> = burn::tensor::Tensor::from_data(
             burn::tensor::TensorData::new(w_imag, [n_freqs, n_fft]),
             (&device, burn::tensor::DType::F64),
         ).transpose();
@@ -194,9 +194,9 @@ fn matrix_dft_core(
         let flat = windowed_f64.reshape([batch * n_frames, n_fft]);
         let re_f64 = flat.clone().matmul(w_real_t);
         let im_f64 = flat.matmul(w_imag_t);
-        let re: burn::tensor::Tensor<B, 3> =
+        let re: burn::tensor::Tensor<3> =
             re_f64.reshape([batch, n_frames, n_freqs]).cast(burn::tensor::DType::F32);
-        let im: burn::tensor::Tensor<B, 3> =
+        let im: burn::tensor::Tensor<3> =
             im_f64.reshape([batch, n_frames, n_freqs]).cast(burn::tensor::DType::F32);
 
         burn::tensor::Tensor::stack::<4>(alloc::vec![re, im], 3)
@@ -225,7 +225,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, signal: Tensor<B, 3>) -> Tensor<B, 4> {
+        pub fn forward(&self, signal: Tensor<3>) -> Tensor<4> {
             let output = {
                 let signal = signal.squeeze_dims::<2usize>(&[2isize]);
                 let options = burn::tensor::signal::StftOptions {
@@ -257,7 +257,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, signal: Tensor<B, 3>) -> Tensor<B, 4> {
+        pub fn forward(&self, signal: Tensor<3>) -> Tensor<4> {
             let output = {
                 let signal = signal.squeeze_dims::<2usize>(&[2isize]);
                 let options = burn::tensor::signal::StftOptions {
@@ -291,7 +291,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, signal: Tensor<B, 2>) -> Tensor<B, 4> {
+        pub fn forward(&self, signal: Tensor<2>) -> Tensor<4> {
             let output = {
                 let signal = signal;
                 let options = burn::tensor::signal::StftOptions {
@@ -325,16 +325,16 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, signal: Tensor<B, 2>) -> Tensor<B, 4> {
+        pub fn forward(&self, signal: Tensor<2>) -> Tensor<4> {
             let output = {
                 let signal = signal;
                 let device = signal.device();
-                let frames: burn::tensor::Tensor<B, 3> = signal.unfold(1, 20usize, 5usize);
-                let window: burn::tensor::Tensor<B, 1> = burn::tensor::Tensor::ones(
+                let frames: burn::tensor::Tensor<3> = signal.unfold(1, 20usize, 5usize);
+                let window: burn::tensor::Tensor<1> = burn::tensor::Tensor::ones(
                     [20usize],
                     &device,
                 );
-                let windowed: burn::tensor::Tensor<B, 3> = frames
+                let windowed: burn::tensor::Tensor<3> = frames
                     .mul(window.reshape([1, 1, 20usize]));
                 let windowed_f64 = windowed.cast(burn::tensor::DType::F64);
                 let n_fft = 20usize;
@@ -353,12 +353,12 @@ mod tests {
                         w_imag.push(-theta.sin());
                     }
                 }
-                let w_real_t: burn::tensor::Tensor<B, 2> = burn::tensor::Tensor::from_data(
+                let w_real_t: burn::tensor::Tensor<2> = burn::tensor::Tensor::from_data(
                         burn::tensor::TensorData::new(w_real, [n_freqs, n_fft]),
                         (&device, burn::tensor::DType::F64),
                     )
                     .transpose();
-                let w_imag_t: burn::tensor::Tensor<B, 2> = burn::tensor::Tensor::from_data(
+                let w_imag_t: burn::tensor::Tensor<2> = burn::tensor::Tensor::from_data(
                         burn::tensor::TensorData::new(w_imag, [n_freqs, n_fft]),
                         (&device, burn::tensor::DType::F64),
                     )
@@ -369,10 +369,10 @@ mod tests {
                 let flat = windowed_f64.reshape([batch * n_frames, n_fft]);
                 let re_f64 = flat.clone().matmul(w_real_t);
                 let im_f64 = flat.matmul(w_imag_t);
-                let re: burn::tensor::Tensor<B, 3> = re_f64
+                let re: burn::tensor::Tensor<3> = re_f64
                     .reshape([batch, n_frames, n_freqs])
                     .cast(burn::tensor::DType::F32);
-                let im: burn::tensor::Tensor<B, 3> = im_f64
+                let im: burn::tensor::Tensor<3> = im_f64
                     .reshape([batch, n_frames, n_freqs])
                     .cast(burn::tensor::DType::F32);
                 burn::tensor::Tensor::stack::<4>(alloc::vec![re, im], 3)
@@ -405,10 +405,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            signal: Tensor<B, 3>,
-            _frame_step_placeholder: Tensor<B, 0, Int>,
-            window: Tensor<B, 1>,
-        ) -> Tensor<B, 4> {
+            signal: Tensor<3>,
+            _frame_step_placeholder: Tensor<0, Int>,
+            window: Tensor<1>,
+        ) -> Tensor<4> {
             let output = {
                 let signal = signal.squeeze_dims::<2usize>(&[2isize]);
                 let options = burn::tensor::signal::StftOptions {

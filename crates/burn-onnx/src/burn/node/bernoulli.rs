@@ -64,7 +64,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Bool> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Bool> {
             let output = input.random_like(Distribution::Default).lower(input);
             output
         }
@@ -79,7 +79,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Int> {
             let output = input
                 .random_like(Distribution::Default)
                 .lower(input)
@@ -98,7 +98,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input
                 .random_like(Distribution::Default)
                 .lower(input)
@@ -117,7 +117,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Int> {
             let output = input
                 .random_like(Distribution::Default)
                 .lower(input)

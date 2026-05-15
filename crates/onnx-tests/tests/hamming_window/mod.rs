@@ -9,17 +9,15 @@ include_models!(
 mod tests {
     use super::*;
 
-    use crate::backend::TestBackend;
-
     #[test]
     fn hamming_window_periodic() {
         let device = Default::default();
-        let model: hamming_window::Model<TestBackend> = hamming_window::Model::new(&device);
+        let model: hamming_window::Model = hamming_window::Model::new(&device);
 
         let output = model.forward();
 
         // Expected periodic Hamming window of size 10 (from ONNX reference evaluator)
-        let expected = burn::tensor::Tensor::<TestBackend, 1>::from_floats(
+        let expected = burn::tensor::Tensor::<1>::from_floats(
             [
                 0.086_956_52_f32,
                 0.174_144_42,
@@ -43,13 +41,12 @@ mod tests {
     #[test]
     fn hamming_window_symmetric_test() {
         let device = Default::default();
-        let model: hamming_window_symmetric::Model<TestBackend> =
-            hamming_window_symmetric::Model::new(&device);
+        let model: hamming_window_symmetric::Model = hamming_window_symmetric::Model::new(&device);
 
         let output = model.forward();
 
         // Expected symmetric Hamming window of size 10 (from ONNX reference evaluator)
-        let expected = burn::tensor::Tensor::<TestBackend, 1>::from_floats(
+        let expected = burn::tensor::Tensor::<1>::from_floats(
             [
                 0.086_956_52_f32,
                 0.193_762_33,
@@ -73,13 +70,12 @@ mod tests {
     #[test]
     fn hamming_window_runtime_size() {
         let device = Default::default();
-        let model: hamming_window_runtime::Model<TestBackend> =
-            hamming_window_runtime::Model::new(&device);
+        let model: hamming_window_runtime::Model = hamming_window_runtime::Model::new(&device);
 
         // Pass size=10 at runtime
         let output = model.forward(10);
 
-        let expected = burn::tensor::Tensor::<TestBackend, 1>::from_floats(
+        let expected = burn::tensor::Tensor::<1>::from_floats(
             [
                 0.086_956_52_f32,
                 0.174_144_42,

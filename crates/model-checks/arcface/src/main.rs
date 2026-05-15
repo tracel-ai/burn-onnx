@@ -14,13 +14,13 @@ include!(concat!(env!("OUT_DIR"), "/model/arcface.rs"));
 /// Test data structure matching the PyTorch saved format.
 /// ArcFace takes a 112x112 face image and produces a 512-dim embedding.
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    data: Param<Tensor<B, 4>>,
-    fc1: Param<Tensor<B, 2>>,
+struct TestData {
+    data: Param<Tensor<4>>,
+    fc1: Param<Tensor<2>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         Self {
             data: Initializer::Zeros.init([1, 3, 112, 112], device),
             fc1: Initializer::Zeros.init([1, 512], device),
@@ -67,14 +67,14 @@ fn main() {
     let start = Instant::now();
     let device = model_checks_common::best_device!();
     let weights_path = concat!(env!("OUT_DIR"), "/model/arcface.bpk");
-    let model: Model<MyBackend> = Model::from_file(weights_path, &device);
+    let model: Model = Model::from_file(weights_path, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
 
     // Load test data from PyTorch file
     println!("\nLoading test data from {}...", test_data_file.display());
     let start = Instant::now();
-    let mut test_data = TestData::<MyBackend>::new(&device);
+    let mut test_data = TestData::new(&device);
     let mut store = PytorchStore::from_file(&test_data_file);
     test_data
         .load_from(&mut store)
@@ -125,8 +125,8 @@ fn main() {
         println!("Model test completed successfully!");
     } else {
         let diff = (output.clone() - reference.clone()).abs();
-        let max_diff: f32 = diff.clone().max().into_scalar();
-        let mean_diff: f32 = diff.mean().into_scalar();
+        let max_diff: f32 = diff.clone().max().into_scalar::<f32>();
+        let mean_diff: f32 = diff.mean().into_scalar::<f32>();
         println!("  Max abs diff:  {:.6}", max_diff);
         println!("  Mean abs diff: {:.6}", mean_diff);
         println!("  Validation:  FAIL");

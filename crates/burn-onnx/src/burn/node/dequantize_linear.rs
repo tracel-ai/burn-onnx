@@ -95,7 +95,7 @@ mod tests {
         let node = create_node("dq", false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, x: Tensor<B, 2, Int>, x_scale: Tensor<B, 0>) -> Tensor<B, 2> {
+        pub fn forward(&self, x: Tensor<2, Int>, x_scale: Tensor<0>) -> Tensor<2> {
             let y = ((x).cast(burn::tensor::DType::I32).float().cast(burn::tensor::DType::F32))
                 .mul((x_scale).unsqueeze_dims(&[0isize, 1isize]));
             y
@@ -110,10 +110,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            x: Tensor<B, 2, Int>,
-            x_scale: Tensor<B, 0>,
-            x_zero_point: Tensor<B, 0, Int>,
-        ) -> Tensor<B, 2> {
+            x: Tensor<2, Int>,
+            x_scale: Tensor<0>,
+            x_zero_point: Tensor<0, Int>,
+        ) -> Tensor<2> {
             let y = (((x).cast(burn::tensor::DType::I32).float().cast(burn::tensor::DType::F32))
                 .sub(
                     ((x_zero_point)

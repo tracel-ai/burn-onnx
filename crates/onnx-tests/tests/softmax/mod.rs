@@ -5,18 +5,16 @@ include_models!(softmax);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn softmax() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: softmax::Model<TestBackend> = softmax::Model::new(&device);
+        let model: softmax::Model = softmax::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [
                 [0.33669037, 0.128_809_4, 0.23446237],
                 [0.23033303, -1.122_856_4, -0.18632829],

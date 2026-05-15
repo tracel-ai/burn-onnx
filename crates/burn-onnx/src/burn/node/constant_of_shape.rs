@@ -90,11 +90,11 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
 
                     if bool_val {
                         quote! {
-                            let #output = Tensor::<B, #output_rank, Int>::ones(#shape_expr, &self.device).bool();
+                            let #output = Tensor::<#output_rank, Int>::ones(#shape_expr, &self.device).bool();
                         }
                     } else {
                         quote! {
-                            let #output = Tensor::<B, #output_rank, Int>::zeros(#shape_expr, &self.device).bool();
+                            let #output = Tensor::<#output_rank, Int>::zeros(#shape_expr, &self.device).bool();
                         }
                     }
                 } else {
@@ -106,7 +106,7 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
                     // Create tensor with explicit dtype, reshape to correct rank, then expand
                     if tensor.dtype.is_float() {
                         quote! {
-                            let #output = Tensor::<B, 1>::from_data(
+                            let #output = Tensor::<1>::from_data(
                                 burn::tensor::TensorData::from([#value as f64]),
                                 (&self.device, #dtype_tokens)
                             ).reshape([#(#ones),*]).expand(#shape_expr);
@@ -114,7 +114,7 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
                     } else {
                         // Int types
                         quote! {
-                            let #output = Tensor::<B, 1, Int>::from_data(
+                            let #output = Tensor::<1, Int>::from_data(
                                 burn::tensor::TensorData::from([#value as i64]),
                                 (&self.device, #dtype_tokens)
                             ).reshape([#(#ones),*]).expand(#shape_expr);
@@ -281,9 +281,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, target_shape: [i64; 3]) -> Tensor<B, 3> {
+        pub fn forward(&self, target_shape: [i64; 3]) -> Tensor<3> {
             let filled = Tensor::<
-                B,
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([1.5f32 as f64]),
@@ -309,9 +308,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dims: [i64; 2]) -> Tensor<B, 2> {
+        pub fn forward(&self, dims: [i64; 2]) -> Tensor<2> {
             let matrix = Tensor::<
-                B,
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([0.5f64 as f64]),
@@ -337,9 +335,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, size: [i64; 2]) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, size: [i64; 2]) -> Tensor<2, Int> {
             let grid = Tensor::<
-                B,
                 1,
                 Int,
             >::from_data(
@@ -366,9 +363,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, length: [i64; 1]) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, length: [i64; 1]) -> Tensor<1, Int> {
             let vector = Tensor::<
-                B,
                 1,
                 Int,
             >::from_data(
@@ -395,8 +391,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_dims: [i64; 2]) -> Tensor<B, 2, Bool> {
-            let mask = Tensor::<B, 2, Int>::ones([3usize, 4usize], &self.device).bool();
+        pub fn forward(&self, shape_dims: [i64; 2]) -> Tensor<2, Bool> {
+            let mask = Tensor::<2, Int>::ones([3usize, 4usize], &self.device).bool();
             mask
         }
         ");
@@ -415,9 +411,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dimensions: [i64; 3]) -> Tensor<B, 3, Bool> {
-            let flags = Tensor::<B, 3, Int>::zeros([6usize, 7usize, 8usize], &self.device)
-                .bool();
+        pub fn forward(&self, dimensions: [i64; 3]) -> Tensor<3, Bool> {
+            let flags = Tensor::<3, Int>::zeros([6usize, 7usize, 8usize], &self.device).bool();
             flags
         }
         ");
@@ -436,9 +431,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, size: [i64; 2]) -> Tensor<B, 2> {
+        pub fn forward(&self, size: [i64; 2]) -> Tensor<2> {
             let zeros = Tensor::<
-                B,
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([0.0f32 as f64]),
@@ -469,9 +463,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, dynamic_shape: [i64; 3]) -> Tensor<B, 3> {
+        pub fn forward(&self, dynamic_shape: [i64; 3]) -> Tensor<3> {
             let tensor = Tensor::<
-                B,
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([2.5f32 as f64]),
@@ -500,9 +493,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_param: [i64; 2]) -> Tensor<B, 2, Int> {
+        pub fn forward(&self, shape_param: [i64; 2]) -> Tensor<2, Int> {
             let data = Tensor::<
-                B,
                 1,
                 Int,
             >::from_data(
@@ -532,8 +524,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, sz: [i64; 4]) -> Tensor<B, 4, Bool> {
-            let bitmask = Tensor::<B, 4, Int>::ones(sz, &self.device).bool();
+        pub fn forward(&self, sz: [i64; 4]) -> Tensor<4, Bool> {
+            let bitmask = Tensor::<4, Int>::ones(sz, &self.device).bool();
             bitmask
         }
         ");
@@ -555,8 +547,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, target_dims: [i64; 2]) -> Tensor<B, 2, Bool> {
-            let empty_mask = Tensor::<B, 2, Int>::zeros(target_dims, &self.device).bool();
+        pub fn forward(&self, target_dims: [i64; 2]) -> Tensor<2, Bool> {
+            let empty_mask = Tensor::<2, Int>::zeros(target_dims, &self.device).bool();
             empty_mask
         }
         ");
@@ -578,9 +570,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, runtime_shape: [i64; 3]) -> Tensor<B, 3> {
+        pub fn forward(&self, runtime_shape: [i64; 3]) -> Tensor<3> {
             let zeros = Tensor::<
-                B,
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([0.0f32 as f64]),

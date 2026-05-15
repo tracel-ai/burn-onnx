@@ -16,13 +16,13 @@ use yolo_model::Model;
 
 /// Standard YOLO output: [1, 84, 8400] (v5, v8, v11, v12)
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    input: Param<Tensor<B, 4>>,
-    output: Param<Tensor<B, 3>>,
+struct TestData {
+    input: Param<Tensor<4>>,
+    output: Param<Tensor<3>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         Self {
             input: Initializer::Zeros.init([1, 3, 640, 640], device),
             output: Initializer::Zeros.init([1, 84, 8400], device),
@@ -32,13 +32,13 @@ impl<B: Backend> TestData<B> {
 
 /// End-to-end YOLO output: [1, 300, 6] (v10, v26)
 #[derive(Debug, Module)]
-struct TestDataE2E<B: Backend> {
-    input: Param<Tensor<B, 4>>,
-    output: Param<Tensor<B, 3>>,
+struct TestDataE2E {
+    input: Param<Tensor<4>>,
+    output: Param<Tensor<3>>,
 }
 
-impl<B: Backend> TestDataE2E<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestDataE2E {
+    fn new(device: &Device) -> Self {
         Self {
             input: Initializer::Zeros.init([1, 3, 640, 640], device),
             output: Initializer::Zeros.init([1, 300, 6], device),
@@ -110,7 +110,7 @@ fn main() {
     println!("Initializing {} model...", display_name);
     let start = Instant::now();
     let device = model_checks_common::best_device!();
-    let model: Model<MyBackend> = Model::from_file(WEIGHTS_PATH, &device);
+    let model: Model = Model::from_file(WEIGHTS_PATH, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
 
@@ -128,14 +128,14 @@ fn main() {
     println!("\nLoading test data from {}...", test_data_file.display());
     let start = Instant::now();
     let (input, reference_output) = if is_e2e_model(model_name) {
-        let mut test_data = TestDataE2E::<MyBackend>::new(&device);
+        let mut test_data = TestDataE2E::new(&device);
         let mut store = PytorchStore::from_file(&test_data_file);
         test_data
             .load_from(&mut store)
             .expect("Failed to load test data");
         (test_data.input.val(), test_data.output.val())
     } else {
-        let mut test_data = TestData::<MyBackend>::new(&device);
+        let mut test_data = TestData::new(&device);
         let mut store = PytorchStore::from_file(&test_data_file);
         test_data
             .load_from(&mut store)
@@ -201,8 +201,8 @@ fn main() {
         // Calculate and display the difference statistics
         let diff = output.clone() - reference_output.clone();
         let abs_diff = diff.abs();
-        let max_diff = abs_diff.clone().max().into_scalar();
-        let mean_diff = abs_diff.mean().into_scalar();
+        let max_diff = abs_diff.clone().max().into_scalar::<f32>();
+        let mean_diff = abs_diff.mean().into_scalar::<f32>();
 
         println!("  Maximum absolute difference: {:.6}", max_diff);
         println!("  Mean absolute difference: {:.6}", mean_diff);

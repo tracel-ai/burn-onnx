@@ -31,7 +31,7 @@ impl NodeCodegen for onnx_ir::node::conv_transpose1d::ConvTranspose1dNode {
         Some(Field::new(
             self.name.clone(),
             quote! {
-                ConvTranspose1d<B>
+                ConvTranspose1d
             },
             quote! {
                 let #name = ConvTranspose1dConfig::new([#channels_in, #channels_out], #kernel_size)
@@ -119,7 +119,7 @@ mod tests {
         let node = create_conv_transpose_1d_node("conv_transpose1");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = self.conv_transpose1.forward(input);
             output
         }
@@ -131,7 +131,7 @@ mod tests {
         let node = create_conv_transpose_1d_node("conv_transpose1");
         let code = codegen_forward_with_clone(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = self.conv_transpose1.forward(input.clone());
             output
         }

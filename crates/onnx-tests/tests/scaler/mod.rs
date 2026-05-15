@@ -5,22 +5,19 @@ include_models!(scaler, scaler_per_feature_3d, scaler_i64);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Int, Tensor, TensorData};
 
     #[test]
     fn test_scaler() {
         // Initialize the model
-        let model: scaler::Model<TestBackend> = scaler::Model::default();
+        let model: scaler::Model = scaler::Model::default();
 
         let device = Default::default();
 
         // Input: [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
         // Formula: Y = (X - offset) * scale
         // With scale=2.0 and offset=1.0: Y = (X - 1.0) * 2.0
-        let input =
-            Tensor::<TestBackend, 2>::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
+        let input = Tensor::<2>::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
 
         let output = model.forward(input);
 
@@ -36,12 +33,11 @@ mod tests {
         // Exercises the [1, ..., 1, F] reshape-to-last-axis broadcast path.
         // Model: scale=[1.0, 2.0, 0.5], offset=[0.0, 1.0, 2.0]
         // Formula per last-axis feature: Y[..., i] = (X[..., i] - offset[i]) * scale[i]
-        let model: scaler_per_feature_3d::Model<TestBackend> =
-            scaler_per_feature_3d::Model::default();
+        let model: scaler_per_feature_3d::Model = scaler_per_feature_3d::Model::default();
 
         let device = Default::default();
 
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
                 [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]],
@@ -68,11 +64,11 @@ mod tests {
         // I64 integer input with per-feature scale/offset.
         // Exercises the .int().cast(DType::F32) codegen path.
         // Model: scale=[3.0, 2.0, 1.0], offset=[2.0, 2.0, 2.0]
-        let model: scaler_i64::Model<TestBackend> = scaler_i64::Model::default();
+        let model: scaler_i64::Model = scaler_i64::Model::default();
 
         let device = Default::default();
 
-        let input = Tensor::<TestBackend, 2, Int>::from_ints([[2, 4, 6], [8, 10, 12]], &device);
+        let input = Tensor::<2, Int>::from_ints([[2, 4, 6], [8, 10, 12]], &device);
 
         let output = model.forward(input);
 

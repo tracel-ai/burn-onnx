@@ -80,7 +80,7 @@ mod tests {
         let node = create_tile_node("tile1", vec![2, 3]);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input.repeat(&[2, 3]);
             output
         }
@@ -92,7 +92,7 @@ mod tests {
         let node = create_tile_node("tile1", vec![1, 2, 3]);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input.repeat(&[1, 2, 3]);
             output
         }
@@ -112,7 +112,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>, repeats: Tensor<B, 1, Int>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>, repeats: Tensor<1, Int>) -> Tensor<2> {
             let output = {
                 let __repeats: alloc::vec::Vec<usize> = repeats
                     .to_data()
@@ -142,7 +142,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>, repeats: [i64; 2]) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>, repeats: [i64; 2]) -> Tensor<2> {
             let output = {
                 let __repeats: alloc::vec::Vec<usize> = repeats
                     .iter()

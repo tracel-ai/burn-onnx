@@ -80,7 +80,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> (Tensor<B, 2>, Tensor<B, 2>) {
+        pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2>) {
             let split_tensors = input.split(2, 0);
             let [output0, output1] = split_tensors.try_into().unwrap();
             (output0, output1)
@@ -105,10 +105,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<B, 2>,
-        ) -> (Tensor<B, 2>, Tensor<B, 2>, Tensor<B, 2>) {
+        pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2>, Tensor<2>) {
             let split_tensors = input.split_with_sizes([1, 3, 2].into(), 1);
             let [output0, output1, output2] = split_tensors.try_into().unwrap();
             (output0, output1, output2)
@@ -134,10 +131,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<B, 3>,
-        ) -> (Tensor<B, 3>, Tensor<B, 3>, Tensor<B, 3>) {
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<3>, Tensor<3>, Tensor<3>) {
             let dim_size = input.dims()[2];
             let chunk = dim_size.div_ceil(3);
             let sizes: Vec<usize> = (0..3)

@@ -42,7 +42,7 @@ impl NodeCodegen for onnx_ir::dropout::DropoutNode {
         quote! {
             let #y = #input;
             let #mask = {
-                let __dropout_ones: Tensor<B, #rank, burn::tensor::Int> =
+                let __dropout_ones: Tensor<#rank, burn::tensor::Int> =
                     Tensor::ones(#y.shape(), &self.device);
                 __dropout_ones.not_equal_elem(0i64)
             };
@@ -68,7 +68,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         // Inference-only: dropout is identity regardless of the static ratio.
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = input;
             output
         }
@@ -92,10 +92,10 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> (Tensor<B, 2>, Tensor<B, 2, Bool>) {
+        pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2, Bool>) {
             let output = input;
             let mask = {
-                let __dropout_ones: Tensor<B, 2usize, burn::tensor::Int> = Tensor::ones(
+                let __dropout_ones: Tensor<2usize, burn::tensor::Int> = Tensor::ones(
                     output.shape(),
                     &self.device,
                 );
@@ -123,7 +123,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>, ratio: f32) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>, ratio: f32) -> Tensor<2> {
             let output = input;
             output
         }

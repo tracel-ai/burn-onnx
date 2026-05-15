@@ -12,16 +12,14 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Shape, Tensor, TensorData};
 
     #[test]
     fn maxpool1d() {
         let device = Default::default();
 
-        let model: maxpool1d::Model<TestBackend> = maxpool1d::Model::new(&device);
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let model: maxpool1d::Model = maxpool1d::Model::new(&device);
+        let input = Tensor::<3>::from_floats(
             [[
                 [1.927, 1.487, 0.901, -2.106, 0.678],
                 [-1.235, -0.043, -1.605, -0.752, -0.687],
@@ -46,10 +44,10 @@ mod tests {
     fn maxpool2d() {
         // Initialize the model without weights (because the exported file does not contain them)
         let device = Default::default();
-        let model: maxpool2d::Model<TestBackend> = maxpool2d::Model::new(&device);
+        let model: maxpool2d::Model = maxpool2d::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.927, 1.487, 0.901, -2.106, 0.678],
                 [-1.235, -0.043, -1.605, -0.752, -0.687],
@@ -75,11 +73,9 @@ mod tests {
         // Input: 1x1x6 (values 1-6), kernel: 3, stride: 2, padding: 0
         // With ceil_mode=True: output = ceil((6-3)/2)+1 = 3 elements
         let device = Default::default();
-        let model: maxpool1d_ceil_mode::Model<TestBackend> =
-            maxpool1d_ceil_mode::Model::new(&device);
+        let model: maxpool1d_ceil_mode::Model = maxpool1d_ceil_mode::Model::new(&device);
 
-        let input =
-            Tensor::<TestBackend, 3>::from_floats([[[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]]], &device);
+        let input = Tensor::<3>::from_floats([[[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]]], &device);
         let output = model.forward(input);
 
         // Window 0: max(1,2,3) = 3
@@ -95,10 +91,9 @@ mod tests {
         // Input: 1x1x6x6 (values 1-36), kernel: 3x3, stride: 2x2, padding: 0
         // With ceil_mode=True: output = 3x3
         let device = Default::default();
-        let model: maxpool2d_ceil_mode::Model<TestBackend> =
-            maxpool2d_ceil_mode::Model::new(&device);
+        let model: maxpool2d_ceil_mode::Model = maxpool2d_ceil_mode::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 4>::from_floats(
+        let input = Tensor::<4>::from_floats(
             [[[
                 [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
                 [7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
@@ -133,11 +128,11 @@ mod tests {
     fn maxpool1d_asymmetric_padding() {
         // Test asymmetric padding (left=1, right=2) for MaxPool1d
         let device = Default::default();
-        let model: maxpool1d_asymmetric_padding::Model<TestBackend> =
+        let model: maxpool1d_asymmetric_padding::Model =
             maxpool1d_asymmetric_padding::Model::new(&device);
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 3>::ones([2, 4, 10], &device);
+        let input = Tensor::<3>::ones([2, 4, 10], &device);
         let output = model.forward(input);
 
         // With asymmetric padding (1, 2), input length 10 becomes 10+1+2=13
@@ -146,8 +141,8 @@ mod tests {
         assert_eq!(output.shape(), expected_shape);
 
         // Verify the sum matches PyTorch output (all 1.0 values, so max = 1.0 for all positions that see valid input)
-        let output_sum = output.sum().into_scalar();
-        let expected_sum = 88.0; // from pytorch
+        let output_sum = output.sum().into_scalar::<f32>();
+        let expected_sum: f32 = 88.0; // from pytorch
         assert!(
             (output_sum - expected_sum).abs() < 0.1,
             "Expected sum ~{}, got {}",
@@ -160,11 +155,11 @@ mod tests {
     fn maxpool2d_asymmetric_padding() {
         // Test asymmetric padding: top=1, left=1, bottom=2, right=2 (ONNX pads: [1,1,2,2])
         let device = Default::default();
-        let model: maxpool2d_asymmetric_padding::Model<TestBackend> =
+        let model: maxpool2d_asymmetric_padding::Model =
             maxpool2d_asymmetric_padding::Model::new(&device);
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 4>::ones([2, 4, 10, 15], &device);
+        let input = Tensor::<4>::ones([2, 4, 10, 15], &device);
         let output = model.forward(input);
 
         // With asymmetric padding (1, 1, 2, 2), input (10, 15) becomes (13, 18)
@@ -173,8 +168,8 @@ mod tests {
         assert_eq!(output.shape(), expected_shape);
 
         // Verify the sum matches ONNX Runtime output
-        let output_sum = output.sum().into_scalar();
-        let expected_sum = 1408.0; // from ONNX Runtime
+        let output_sum = output.sum().into_scalar::<f32>();
+        let expected_sum: f32 = 1408.0; // from ONNX Runtime
         assert!(
             (output_sum - expected_sum).abs() < 1.0,
             "Expected sum ~{}, got {}",

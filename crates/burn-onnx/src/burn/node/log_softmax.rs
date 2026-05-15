@@ -46,7 +46,7 @@ mod tests {
         let node = create_log_softmax_node("log_softmax1", 1);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = log_softmax(input, 1);
             output
         }
@@ -58,7 +58,7 @@ mod tests {
         let node = create_log_softmax_node("log_softmax1", 0);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = log_softmax(input, 0);
             output
         }

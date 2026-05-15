@@ -9,17 +9,15 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Int, Tensor, TensorData};
 
     #[test]
     fn gather_elements() {
-        let model: gather_elements::Model<TestBackend> = gather_elements::Model::default();
+        let model: gather_elements::Model = gather_elements::Model::default();
 
         let device = Default::default();
-        let input = Tensor::<TestBackend, 2>::from_floats([[1., 2.], [3., 4.]], &device);
-        let index = Tensor::<TestBackend, 2, Int>::from_ints([[0, 0], [1, 0]], &device);
+        let input = Tensor::<2>::from_floats([[1., 2.], [3., 4.]], &device);
+        let index = Tensor::<2, Int>::from_ints([[0, 0], [1, 0]], &device);
         let output = model.forward(input, index);
         let expected = TensorData::from([[1f32, 1.], [4., 3.]]);
 
@@ -30,10 +28,10 @@ mod tests {
     fn gather_elements_axis0() {
         // axis=0, data [3, 3], indices [2, 3]
         let device = Default::default();
-        let model = gather_elements_axis0::Model::<TestBackend>::new(&device);
+        let model = gather_elements_axis0::Model::new(&device);
 
         // np.random.seed(42); np.random.randn(3, 3).astype(np.float32)
-        let data = Tensor::<TestBackend, 2>::from_floats(
+        let data = Tensor::<2>::from_floats(
             [
                 [0.49671414, -0.1382643, 0.64768857],
                 [1.5230298, -0.23415338, -0.23413695],
@@ -41,7 +39,7 @@ mod tests {
             ],
             &device,
         );
-        let indices = Tensor::<TestBackend, 2, Int>::from_ints([[0, 2, 1], [2, 0, 0]], &device);
+        let indices = Tensor::<2, Int>::from_ints([[0, 2, 1], [2, 0, 0]], &device);
         let output = model.forward(data, indices);
 
         let expected = TensorData::from([
@@ -56,10 +54,10 @@ mod tests {
     fn gather_elements_3d() {
         // axis=1, data [2, 3, 4], indices [2, 2, 4]
         let device = Default::default();
-        let model = gather_elements_3d::Model::<TestBackend>::new(&device);
+        let model = gather_elements_3d::Model::new(&device);
 
         // np.random.seed(42); np.random.randn(2, 3, 4).astype(np.float32)
-        let data = Tensor::<TestBackend, 3>::from_floats(
+        let data = Tensor::<3>::from_floats(
             [
                 [
                     [0.49671414, -0.1382643, 0.64768857, 1.5230298],
@@ -74,7 +72,7 @@ mod tests {
             ],
             &device,
         );
-        let indices = Tensor::<TestBackend, 3, Int>::from_ints(
+        let indices = Tensor::<3, Int>::from_ints(
             [[[0, 2, 0, 2], [2, 0, 0, 2]], [[1, 0, 1, 1], [1, 0, 1, 0]]],
             &device,
         );
@@ -98,10 +96,10 @@ mod tests {
     fn gather_elements_negative_axis() {
         // axis=-1 (resolves to 1), data [3, 4], indices [3, 4]
         let device = Default::default();
-        let model = gather_elements_negative_axis::Model::<TestBackend>::new(&device);
+        let model = gather_elements_negative_axis::Model::new(&device);
 
         // np.random.seed(42); np.random.randn(3, 4).astype(np.float32)
-        let data = Tensor::<TestBackend, 2>::from_floats(
+        let data = Tensor::<2>::from_floats(
             [
                 [0.49671414, -0.1382643, 0.64768857, 1.5230298],
                 [-0.23415338, -0.23413695, 1.5792128, 0.7674347],
@@ -109,10 +107,8 @@ mod tests {
             ],
             &device,
         );
-        let indices = Tensor::<TestBackend, 2, Int>::from_ints(
-            [[3, 1, 1, 0], [3, 0, 0, 2], [2, 2, 1, 3]],
-            &device,
-        );
+        let indices =
+            Tensor::<2, Int>::from_ints([[3, 1, 1, 0], [3, 0, 0, 2], [2, 2, 1, 3]], &device);
         let output = model.forward(data, indices);
 
         let expected = TensorData::from([

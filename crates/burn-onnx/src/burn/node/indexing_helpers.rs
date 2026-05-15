@@ -54,7 +54,7 @@ pub(crate) fn negative_index_normalize(
         }
         let mut __nd_bcast_shape = [1usize; #indices_rank_lit];
         __nd_bcast_shape[#indices_rank_lit - 1] = __nd_k;
-        let __nd_dims_tensor = Tensor::<B, 1, Int>::from_data(
+        let __nd_dims_tensor = Tensor::<1, Int>::from_data(
             burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
             (&self.device, burn::tensor::DType::I64),
         )

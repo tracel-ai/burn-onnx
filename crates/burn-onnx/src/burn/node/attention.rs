@@ -331,7 +331,7 @@ fn forward_custom(
                 dtype if dtype.is_float() => mask_arg,
                 dtype if dtype.is_bool() => {
                     quote! {{
-                        let float_mask = Tensor::<B, 2>::zeros([shape[2], shape[3]], &#mask_arg.device());
+                        let float_mask = Tensor::<2>::zeros([shape[2], shape[3]], &#mask_arg.device());
                         float_mask.mask_fill(#mask_arg.bool_not(), f32::NEG_INFINITY)
                     }}
                 }
@@ -352,9 +352,9 @@ fn forward_custom(
         attn_mask = quote! {
             let #qk = {
                 let shape = #attn_mask_shape;
-                let mask = Tensor::<B, 2>::ones([shape[2], shape[3]], &#qk.device());
+                let mask = Tensor::<2>::ones([shape[2], shape[3]], &#qk.device());
                 let mask = mask.tril(0).bool().bool_not();
-                let float_mask = Tensor::<B, 2>::zeros([shape[2], shape[3]], &mask.device()).mask_fill(mask, f32::NEG_INFINITY);
+                let float_mask = Tensor::<2>::zeros([shape[2], shape[3]], &mask.device()).mask_fill(mask, f32::NEG_INFINITY);
                 #qk + float_mask.expand::<4, _>(shape)
             };
         };
@@ -464,12 +464,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, query: Tensor<4>, key: Tensor<4>, value: Tensor<4>) -> Tensor<4> {
             let (output,) = {
                 let q = query;
                 let k = key;
@@ -513,12 +508,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            query: Tensor<B, 3>,
-            key: Tensor<B, 3>,
-            value: Tensor<B, 3>,
-        ) -> Tensor<B, 3> {
+        pub fn forward(&self, query: Tensor<3>, key: Tensor<3>, value: Tensor<3>) -> Tensor<3> {
             let (output,) = {
                 let q = query;
                 let k = key;
@@ -580,12 +570,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, query: Tensor<4>, key: Tensor<4>, value: Tensor<4>) -> Tensor<4> {
             let (output,) = {
                 let q = query;
                 let k = key;
@@ -632,11 +617,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-            mask: Tensor<B, 4>,
-        ) -> Tensor<B, 4> {
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            mask: Tensor<4>,
+        ) -> Tensor<4> {
             let (output,) = {
                 let q = query;
                 let k = key;
@@ -680,12 +665,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, query: Tensor<4>, key: Tensor<4>, value: Tensor<4>) -> Tensor<4> {
             let (output,) = {
                 let q = query;
                 let k = key;
@@ -729,12 +709,7 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, query: Tensor<4>, key: Tensor<4>, value: Tensor<4>) -> Tensor<4> {
             let (output,) = {
                 let q = query;
                 let k = key;
@@ -781,11 +756,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-            mask: Tensor<B, 2, Bool>,
-        ) -> Tensor<B, 4> {
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            mask: Tensor<2, Bool>,
+        ) -> Tensor<4> {
             let (output,) = {
                 let q = query;
                 let k = key;
@@ -832,11 +807,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-            mask: Tensor<B, 3, Bool>,
-        ) -> Tensor<B, 4> {
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            mask: Tensor<3, Bool>,
+        ) -> Tensor<4> {
             let (output,) = {
                 let q = query;
                 let k = key;
@@ -887,13 +862,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-            mask: Tensor<B, 2, Bool>,
-            past_k: Tensor<B, 4>,
-            past_v: Tensor<B, 4>,
-        ) -> (Tensor<B, 4>, Tensor<B, 4>, Tensor<B, 4>) {
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            mask: Tensor<2, Bool>,
+            past_k: Tensor<4>,
+            past_v: Tensor<4>,
+        ) -> (Tensor<4>, Tensor<4>, Tensor<4>) {
             let (output, present_k, present_v) = {
                 let q = query;
                 let k = key;
@@ -948,13 +923,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-            bias: Tensor<B, 4>,
-            past_k: Tensor<B, 4>,
-            past_v: Tensor<B, 4>,
-        ) -> (Tensor<B, 4>, Tensor<B, 4>, Tensor<B, 4>) {
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            bias: Tensor<4>,
+            past_k: Tensor<4>,
+            past_v: Tensor<4>,
+        ) -> (Tensor<4>, Tensor<4>, Tensor<4>) {
             let (output, present_k, present_v) = {
                 let q = query;
                 let k = key;
@@ -1010,13 +985,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-            mask: Tensor<B, 4>,
-            past_k: Tensor<B, 4>,
-            past_v: Tensor<B, 4>,
-        ) -> (Tensor<B, 4>, Tensor<B, 4>, Tensor<B, 4>, Tensor<B, 4>) {
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            mask: Tensor<4>,
+            past_k: Tensor<4>,
+            past_v: Tensor<4>,
+        ) -> (Tensor<4>, Tensor<4>, Tensor<4>, Tensor<4>) {
             let (output, present_k, present_v, qk_output) = {
                 let q = query;
                 let k = key;
@@ -1076,13 +1051,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-            bias: Tensor<B, 4>,
-            past_k: Tensor<B, 4>,
-            past_v: Tensor<B, 4>,
-        ) -> (Tensor<B, 4>, Tensor<B, 4>, Tensor<B, 4>, Tensor<B, 4>) {
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            bias: Tensor<4>,
+            past_k: Tensor<4>,
+            past_v: Tensor<4>,
+        ) -> (Tensor<4>, Tensor<4>, Tensor<4>, Tensor<4>) {
             let (output, present_k, present_v, qk_output) = {
                 let q = query;
                 let k = key;
@@ -1146,13 +1121,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-            bias: Tensor<B, 4>,
-            past_k: Tensor<B, 4>,
-            past_v: Tensor<B, 4>,
-        ) -> (Tensor<B, 4>, Tensor<B, 4>, Tensor<B, 4>, Tensor<B, 4>) {
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            bias: Tensor<4>,
+            past_k: Tensor<4>,
+            past_v: Tensor<4>,
+        ) -> (Tensor<4>, Tensor<4>, Tensor<4>, Tensor<4>) {
             let (output, present_k, present_v, qk_output) = {
                 let q = query;
                 let k = key;
@@ -1207,11 +1182,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-            mask: Tensor<B, 4, Int>,
-        ) -> Tensor<B, 4> {
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            mask: Tensor<4, Int>,
+        ) -> Tensor<4> {
             let (output,) = {
                 let q = query;
                 let k = key;
@@ -1259,11 +1234,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(
             &self,
-            query: Tensor<B, 4>,
-            key: Tensor<B, 4>,
-            value: Tensor<B, 4>,
-            mask: Tensor<B, 4>,
-        ) -> Tensor<B, 4> {
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            mask: Tensor<4>,
+        ) -> Tensor<4> {
             let (output,) = {
                 let q = query;
                 let k = key;

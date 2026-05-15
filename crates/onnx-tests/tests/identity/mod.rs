@@ -10,12 +10,11 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::TestBackend;
-    use burn::tensor::{Tensor, TensorData};
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn test_identity_constant() {
-        let model: identity_constant::Model<TestBackend> = identity_constant::Model::default();
+        let model: identity_constant::Model = identity_constant::Model::default();
 
         let output = model.forward();
 
@@ -32,13 +31,12 @@ mod tests {
 
     #[test]
     fn test_identity_passthrough() {
-        let model: identity_passthrough::Model<TestBackend> =
-            identity_passthrough::Model::default();
+        let model: identity_passthrough::Model = identity_passthrough::Model::default();
 
         let device = Default::default();
 
         // Create input tensor (2x3 as defined in the Python script)
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0f32, 2.0, 3.0], [4.0, 5.0, 6.0]]),
             &device,
         );
@@ -59,12 +57,12 @@ mod tests {
 
     #[test]
     fn test_identity_chain() {
-        let model: identity_chain::Model<TestBackend> = identity_chain::Model::default();
+        let model: identity_chain::Model = identity_chain::Model::default();
 
         let device = Default::default();
 
         // Create input tensor (2x3 as defined in the Python script)
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([[1.0f32, -2.0, 3.0], [-4.0, 5.0, -6.0]]),
             &device,
         );
@@ -85,12 +83,12 @@ mod tests {
 
     #[test]
     fn test_identity_only() {
-        let model: identity_only::Model<TestBackend> = identity_only::Model::default();
+        let model: identity_only::Model = identity_only::Model::default();
 
         let device = Default::default();
 
         // Create input tensor (3x4 as defined in the Python script)
-        let input = Tensor::<TestBackend, 2>::from_data(
+        let input = Tensor::<2>::from_data(
             TensorData::from([
                 [1.0f32, 2.0, 3.0, 4.0],
                 [5.0, 6.0, 7.0, 8.0],

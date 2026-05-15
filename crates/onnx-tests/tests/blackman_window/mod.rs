@@ -9,17 +9,15 @@ include_models!(
 mod tests {
     use super::*;
 
-    use crate::backend::TestBackend;
-
     #[test]
     fn blackman_window_periodic() {
         let device = Default::default();
-        let model: blackman_window::Model<TestBackend> = blackman_window::Model::new(&device);
+        let model: blackman_window::Model = blackman_window::Model::new(&device);
 
         let output = model.forward();
 
         // Expected periodic Blackman window of size 10 (from ONNX reference evaluator)
-        let expected = burn::tensor::Tensor::<TestBackend, 1>::from_floats(
+        let expected = burn::tensor::Tensor::<1>::from_floats(
             [
                 0.0_f32,
                 0.040_212_862,
@@ -43,13 +41,13 @@ mod tests {
     #[test]
     fn blackman_window_symmetric_test() {
         let device = Default::default();
-        let model: blackman_window_symmetric::Model<TestBackend> =
+        let model: blackman_window_symmetric::Model =
             blackman_window_symmetric::Model::new(&device);
 
         let output = model.forward();
 
         // Expected symmetric Blackman window of size 10 (from ONNX reference evaluator)
-        let expected = burn::tensor::Tensor::<TestBackend, 1>::from_floats(
+        let expected = burn::tensor::Tensor::<1>::from_floats(
             [
                 0.0_f32,
                 0.050_869_63,
@@ -73,14 +71,13 @@ mod tests {
     #[test]
     fn blackman_window_runtime_size() {
         let device = Default::default();
-        let model: blackman_window_runtime::Model<TestBackend> =
-            blackman_window_runtime::Model::new(&device);
+        let model: blackman_window_runtime::Model = blackman_window_runtime::Model::new(&device);
 
         // Pass size=10 at runtime
         let output = model.forward(10);
 
         // Expected periodic Blackman window of size 10 (from ONNX reference evaluator)
-        let expected = burn::tensor::Tensor::<TestBackend, 1>::from_floats(
+        let expected = burn::tensor::Tensor::<1>::from_floats(
             [
                 0.0_f32,
                 0.040_212_862,

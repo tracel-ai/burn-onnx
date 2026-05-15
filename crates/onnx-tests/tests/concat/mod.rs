@@ -15,18 +15,16 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Shape, Tensor};
 
     #[test]
     fn concat_tensors() {
         // Initialize the model
         let device = Default::default();
-        let model: concat::Model<TestBackend> = concat::Model::new(&device);
+        let model: concat::Model = concat::Model::new(&device);
 
         // Run the model
-        let input = Tensor::<TestBackend, 4>::zeros([1, 2, 3, 5], &device);
+        let input = Tensor::<4>::zeros([1, 2, 3, 5], &device);
 
         let output = model.forward(input);
 
@@ -39,12 +37,12 @@ mod tests {
     fn concat_shapes() {
         // Initialize the model
         let device = Default::default();
-        let model: concat_shape::Model<TestBackend> = concat_shape::Model::new(&device);
+        let model: concat_shape::Model = concat_shape::Model::new(&device);
 
         // Create test inputs with the expected shapes
-        let input1 = Tensor::<TestBackend, 2>::zeros([2, 3], &device);
-        let input2 = Tensor::<TestBackend, 3>::zeros([4, 5, 6], &device);
-        let input3 = Tensor::<TestBackend, 1>::zeros([7], &device);
+        let input1 = Tensor::<2>::zeros([2, 3], &device);
+        let input2 = Tensor::<3>::zeros([4, 5, 6], &device);
+        let input3 = Tensor::<1>::zeros([7], &device);
 
         // Run the model - it extracts shapes and concatenates them
         let output = model.forward(input1, input2, input3);
@@ -58,11 +56,11 @@ mod tests {
     fn concat_shape_with_constant() {
         // Initialize the model
         let device = Default::default();
-        let model: concat_shape_with_constant::Model<TestBackend> =
+        let model: concat_shape_with_constant::Model =
             concat_shape_with_constant::Model::new(&device);
 
         // Create test input with shape [3, 4, 5]
-        let input1 = Tensor::<TestBackend, 3>::zeros([3, 4, 5], &device);
+        let input1 = Tensor::<3>::zeros([3, 4, 5], &device);
 
         // Run the model - it extracts shape and concatenates with constant [10, 20]
         let output = model.forward(input1);
@@ -76,11 +74,11 @@ mod tests {
     fn concat_mixed_single_element() {
         // Initialize the model
         let device = Default::default();
-        let model: concat_mixed_single_element::Model<TestBackend> =
+        let model: concat_mixed_single_element::Model =
             concat_mixed_single_element::Model::new(&device);
 
         // Create test input with shape [2, 3]
-        let input1 = Tensor::<TestBackend, 2>::zeros([2, 3], &device);
+        let input1 = Tensor::<2>::zeros([2, 3], &device);
 
         // Run the model - it extracts shape and concatenates with constant [100]
         let output = model.forward(input1);
@@ -94,11 +92,11 @@ mod tests {
     fn concat_mixed_three_elements() {
         // Initialize the model
         let device = Default::default();
-        let model: concat_mixed_three_elements::Model<TestBackend> =
+        let model: concat_mixed_three_elements::Model =
             concat_mixed_three_elements::Model::new(&device);
 
         // Create test input with shape [4, 5, 6]
-        let input1 = Tensor::<TestBackend, 3>::zeros([4, 5, 6], &device);
+        let input1 = Tensor::<3>::zeros([4, 5, 6], &device);
 
         // Run the model - it extracts shape and concatenates with constant [10, 20, 30]
         let output = model.forward(input1);
@@ -112,12 +110,11 @@ mod tests {
     fn concat_multiple_mixed() {
         // Initialize the model
         let device = Default::default();
-        let model: concat_multiple_mixed::Model<TestBackend> =
-            concat_multiple_mixed::Model::new(&device);
+        let model: concat_multiple_mixed::Model = concat_multiple_mixed::Model::new(&device);
 
         // Create test inputs
-        let input1 = Tensor::<TestBackend, 2>::zeros([2, 3], &device);
-        let input2 = Tensor::<TestBackend, 3>::zeros([4, 5, 6], &device);
+        let input1 = Tensor::<2>::zeros([2, 3], &device);
+        let input2 = Tensor::<3>::zeros([4, 5, 6], &device);
 
         // Run the model - it concatenates shapes and constants
         let output = model.forward(input1, input2);
@@ -132,11 +129,10 @@ mod tests {
         // Initialize the model
         let device = Default::default();
         // Use Model::default() to load constants from the record file
-        let model: concat_with_constants::Model<TestBackend> =
-            concat_with_constants::Model::default();
+        let model: concat_with_constants::Model = concat_with_constants::Model::default();
 
         // Create test input with shape [3, 4]
-        let input1 = Tensor::<TestBackend, 2>::zeros([3, 4], &device);
+        let input1 = Tensor::<2>::zeros([3, 4], &device);
 
         // Run the model - it concatenates shape with multiple constant tensors
         let output = model.forward(input1);
@@ -152,11 +148,10 @@ mod tests {
         // This test reproduces issue #4228: Concat receiving Scalar(I64) inputs
         // Pattern: Shape -> Gather (scalar index) -> Concat
         let device = Default::default();
-        let model: concat_scalar_direct::Model<TestBackend> =
-            concat_scalar_direct::Model::new(&device);
+        let model: concat_scalar_direct::Model = concat_scalar_direct::Model::new(&device);
 
         // Create test input with shape [2, 3, 4, 5]
-        let input1 = Tensor::<TestBackend, 4>::zeros([2, 3, 4, 5], &device);
+        let input1 = Tensor::<4>::zeros([2, 3, 4, 5], &device);
 
         // Run the model - extracts batch dim via Gather and concats with constant
         let output = model.forward(input1);
@@ -165,11 +160,11 @@ mod tests {
         // Shape values in ONNX are int64, so the model's codegen emits an I64 tensor.
         // Construct the expected tensor with explicit I64 dtype so `equal` doesn't hit
         // a dtype-mismatch assertion in the backend.
-        let expected = Tensor::<TestBackend, 1, burn::prelude::Int>::from_data(
+        let expected = Tensor::<1, burn::prelude::Int>::from_data(
             burn::tensor::TensorData::from([2i64, 64]),
             (&device, burn::tensor::DType::I64),
         );
-        assert!(output.equal(expected).all().into_scalar());
+        assert!(output.equal(expected).all().into_scalar::<bool>());
     }
 
     #[test]
@@ -177,11 +172,11 @@ mod tests {
         // This test shows a workaround pattern: Shape -> Gather -> Unsqueeze -> Concat
         // The output is a shape array since Unsqueeze converts scalar back to shape context
         let device = Default::default();
-        let model: concat_scalar_from_gather::Model<TestBackend> =
+        let model: concat_scalar_from_gather::Model =
             concat_scalar_from_gather::Model::new(&device);
 
         // Create test input with shape [2, 3, 4, 5]
-        let input1 = Tensor::<TestBackend, 4>::zeros([2, 3, 4, 5], &device);
+        let input1 = Tensor::<4>::zeros([2, 3, 4, 5], &device);
 
         // Run the model - extracts batch dim, unsqueezes, and concats with constants
         let output = model.forward(input1);

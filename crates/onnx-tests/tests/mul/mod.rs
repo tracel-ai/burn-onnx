@@ -5,18 +5,16 @@ include_models!(mul, mul_shape, mul_broadcast, mul_shape_tensor);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Tensor, TensorData};
 
     #[test]
     fn mul_scalar_with_tensor_and_tensor_with_tensor() {
         // Initialize the model with weights (loaded from the exported file)
-        let model: mul::Model<TestBackend> = mul::Model::default();
+        let model: mul::Model = mul::Model::default();
 
         let device = Default::default();
         // Run the model
-        let input = Tensor::<TestBackend, 4>::from_floats([[[[1., 2., 3., 4.]]]], &device);
+        let input = Tensor::<4>::from_floats([[[[1., 2., 3., 4.]]]], &device);
         let scalar = 6.0f64;
         let output = model.forward(input, scalar);
         let expected = TensorData::from([[[[126f32, 252., 378., 504.]]]]);
@@ -27,12 +25,12 @@ mod tests {
     #[test]
     fn mul_shape_with_scalar_and_shape() {
         // Initialize the model
-        let model: mul_shape::Model<TestBackend> = mul_shape::Model::default();
+        let model: mul_shape::Model = mul_shape::Model::default();
 
         let device = Default::default();
         // Create input tensors
-        let input1 = Tensor::<TestBackend, 3>::ones([2, 3, 4], &device);
-        let input2 = Tensor::<TestBackend, 3>::ones([1, 2, 3], &device);
+        let input1 = Tensor::<3>::ones([2, 3, 4], &device);
+        let input2 = Tensor::<3>::ones([1, 2, 3], &device);
         let (shape_times_scalar, shape_times_shape) = model.forward(input1, input2);
 
         // Expected outputs
@@ -45,10 +43,10 @@ mod tests {
 
     #[test]
     fn mul_broadcast_tensor_ranks() {
-        let model: mul_broadcast::Model<TestBackend> = mul_broadcast::Model::default();
+        let model: mul_broadcast::Model = mul_broadcast::Model::default();
         let device = Default::default();
 
-        let x_3d = Tensor::<TestBackend, 3>::from_floats(
+        let x_3d = Tensor::<3>::from_floats(
             [
                 [
                     [1.0, 2.0, 3.0, 4.0],
@@ -64,7 +62,7 @@ mod tests {
             &device,
         );
 
-        let y_2d = Tensor::<TestBackend, 2>::from_floats(
+        let y_2d = Tensor::<2>::from_floats(
             [
                 [2.0, 2.0, 2.0, 2.0],
                 [3.0, 3.0, 3.0, 3.0],
@@ -73,7 +71,7 @@ mod tests {
             &device,
         );
 
-        let a_2d = Tensor::<TestBackend, 2>::from_floats(
+        let a_2d = Tensor::<2>::from_floats(
             [
                 [1.0, 2.0, 3.0, 4.0],
                 [5.0, 6.0, 7.0, 8.0],
@@ -82,7 +80,7 @@ mod tests {
             &device,
         );
 
-        let b_3d = Tensor::<TestBackend, 3>::from_floats(
+        let b_3d = Tensor::<3>::from_floats(
             [
                 [
                     [2.0, 2.0, 2.0, 2.0],

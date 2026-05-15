@@ -32,7 +32,7 @@ impl NodeCodegen for onnx_ir::node::hann_window::HannWindowNode {
         };
 
         quote! {
-            let #output = hann_window::<B>(#size_expr, #periodic, &self.device)
+            let #output = hann_window(#size_expr, #periodic, &self.device)
                 .cast(#output_dtype);
         }
     }
@@ -62,9 +62,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self) -> Tensor<B, 1> {
-            let output = hann_window::<B>(10usize, true, &self.device)
-                .cast(burn::tensor::DType::F32);
+        pub fn forward(&self) -> Tensor<1> {
+            let output = hann_window(10usize, true, &self.device).cast(burn::tensor::DType::F32);
             output
         }
         ");
@@ -83,9 +82,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self) -> Tensor<B, 1> {
-            let output = hann_window::<B>(8usize, false, &self.device)
-                .cast(burn::tensor::DType::F64);
+        pub fn forward(&self) -> Tensor<1> {
+            let output = hann_window(8usize, false, &self.device).cast(burn::tensor::DType::F64);
             output
         }
         ");
@@ -109,10 +107,8 @@ mod tests {
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r#"
-        pub fn forward(&self, size: i64) -> Tensor<B, 1> {
-            let output = hann_window::<
-                B,
-            >(
+        pub fn forward(&self, size: i64) -> Tensor<1> {
+            let output = hann_window(
                     {
                         let __size = size;
                         assert!(

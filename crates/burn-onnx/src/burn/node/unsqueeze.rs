@@ -44,13 +44,13 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                 // Generate the correct output type based on the tensor kind
                 let output_type = match &output_tensor.dtype {
                     dtype if dtype.is_int() || dtype.is_uint() => {
-                        quote! { Tensor<B, #output_rank, Int> }
+                        quote! { Tensor<#output_rank, Int> }
                     }
                     dtype if dtype.is_float() => {
-                        quote! { Tensor<B, #output_rank> }
+                        quote! { Tensor<#output_rank> }
                     }
                     dtype if dtype.is_bool() => {
-                        quote! { Tensor<B, #output_rank, Bool> }
+                        quote! { Tensor<#output_rank, Bool> }
                     }
                     _ => panic!("Unsupported tensor dtype: {:?}", output_tensor.dtype),
                 };
@@ -69,7 +69,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                     dtype if dtype.is_int() || dtype.is_uint() => {
                         // Cast to i64 for TensorData, then from_data converts to target dtype
                         quote! {
-                            Tensor::<B, #output_rank, Int>::from_data(
+                            Tensor::<#output_rank, Int>::from_data(
                                 burn::tensor::TensorData::from([#scalar_name as i64]),
                                 (&self.device, #dtype_tokens)
                             ).unsqueeze()
@@ -78,7 +78,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                     dtype if dtype.is_float() => {
                         // Cast to f64 for TensorData, then from_data converts to target dtype
                         quote! {
-                            Tensor::<B, #output_rank>::from_data(
+                            Tensor::<#output_rank>::from_data(
                                 burn::tensor::TensorData::from([#scalar_name as f64]),
                                 (&self.device, #dtype_tokens)
                             ).unsqueeze()
@@ -86,7 +86,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                     }
                     dtype if dtype.is_bool() => {
                         quote! {
-                            Tensor::<B, #output_rank, Bool>::from_data(
+                            Tensor::<#output_rank, Bool>::from_data(
                                 burn::tensor::TensorData::from([#scalar_name != 0]),
                                 (&self.device, #dtype_tokens)
                             ).unsqueeze()
@@ -118,7 +118,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                 let output_rank = output_tensor.rank.to_tokens();
                 let dtype_tokens = output_tensor.dtype.to_tokens();
                 quote! {
-                    let #output: Tensor<B, #output_rank, Int> = Tensor::<B, 1, Int>::from_data(
+                    let #output: Tensor<#output_rank, Int> = Tensor::<1, Int>::from_data(
                         burn::tensor::TensorData::from(#input_name.as_slice()),
                         (&self.device, #dtype_tokens)
                     ).unsqueeze_dims::<#output_rank>(&#axes);
@@ -154,8 +154,8 @@ mod tests {
         let node = create_unsqueeze_node("unsqueeze1", vec![0]);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 3> {
-            let output: Tensor<B, 3> = input.unsqueeze_dims::<3>(&[0]);
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<3> {
+            let output: Tensor<3> = input.unsqueeze_dims::<3>(&[0]);
             output
         }
         ");
@@ -166,8 +166,8 @@ mod tests {
         let node = create_unsqueeze_node("unsqueeze1", vec![1]);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 3> {
-            let output: Tensor<B, 3> = input.unsqueeze_dims::<3>(&[1]);
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<3> {
+            let output: Tensor<3> = input.unsqueeze_dims::<3>(&[1]);
             output
         }
         ");
@@ -178,8 +178,8 @@ mod tests {
         let node = create_unsqueeze_node("unsqueeze1", vec![2]);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 3> {
-            let output: Tensor<B, 3> = input.unsqueeze_dims::<3>(&[2]);
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<3> {
+            let output: Tensor<3> = input.unsqueeze_dims::<3>(&[2]);
             output
         }
         ");
@@ -197,9 +197,8 @@ mod tests {
 
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, shape_val: [i64; 4]) -> Tensor<B, 2, Int> {
-            let output: Tensor<B, 2, Int> = Tensor::<
-                B,
+        pub fn forward(&self, shape_val: [i64; 4]) -> Tensor<2, Int> {
+            let output: Tensor<2, Int> = Tensor::<
                 1,
                 Int,
             >::from_data(

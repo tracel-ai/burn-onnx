@@ -4,16 +4,14 @@ include_models!(pow, pow_int, pow_broadcast);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Int, Tensor, TensorData};
 
     #[test]
     fn pow_int_with_tensor_and_scalar() {
         let device = Default::default();
-        let model: pow_int::Model<TestBackend> = pow_int::Model::new(&device);
+        let model: pow_int::Model = pow_int::Model::new(&device);
 
-        let input1 = Tensor::<TestBackend, 4, Int>::from_ints([[[[1, 2, 3, 4]]]], &device);
+        let input1 = Tensor::<4, Int>::from_ints([[[[1, 2, 3, 4]]]], &device);
         let input2 = 2;
 
         let output = model.forward(input1, input2);
@@ -25,7 +23,7 @@ mod tests {
     #[test]
     fn pow_broadcast() {
         let device = Default::default();
-        let model: pow_broadcast::Model<TestBackend> = pow_broadcast::Model::new(&device);
+        let model: pow_broadcast::Model = pow_broadcast::Model::new(&device);
 
         // base_3d: all 2.0, shape [2, 3, 4]
         let base_3d = Tensor::from_data(TensorData::from([[[2.0f32; 4]; 3]; 2]), &device);
@@ -78,7 +76,7 @@ mod tests {
     #[test]
     fn pow_with_tensor_and_scalar() {
         let device = Default::default();
-        let model: pow::Model<TestBackend> = pow::Model::new(&device);
+        let model: pow::Model = pow::Model::new(&device);
 
         let input1 = Tensor::from_floats([[[[1., 2., 3., 4.]]]], &device);
         let input2 = 2f64;

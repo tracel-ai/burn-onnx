@@ -13,13 +13,13 @@ include!(concat!(env!("OUT_DIR"), "/model_info.rs"));
 use smollm_model::Model;
 
 #[derive(Debug, Module)]
-struct TestData<B: Backend> {
-    input_ids: Param<Tensor<B, 2, Int>>,
-    logits: Param<Tensor<B, 3>>,
+struct TestData {
+    input_ids: Param<Tensor<2, Int>>,
+    logits: Param<Tensor<3>>,
 }
 
-impl<B: Backend> TestData<B> {
-    fn new(device: &B::Device) -> Self {
+impl TestData {
+    fn new(device: &Device) -> Self {
         use burn::module::ParamId;
         Self {
             input_ids: Param::initialized(ParamId::new(), Tensor::zeros([1, SEQ_LENGTH], device)),
@@ -69,7 +69,7 @@ fn main() {
     println!("Initializing {} model...", display_name);
     let start = Instant::now();
     let device = model_checks_common::best_device!();
-    let model: Model<MyBackend> = Model::from_file(WEIGHTS_PATH, &device);
+    let model: Model = Model::from_file(WEIGHTS_PATH, &device);
     let init_time = start.elapsed();
     println!("  Model initialized in {:.2?}", init_time);
 
@@ -84,7 +84,7 @@ fn main() {
 
     println!("\nLoading test data from {}...", test_data_file.display());
     let start = Instant::now();
-    let mut test_data = TestData::<MyBackend>::new(&device);
+    let mut test_data = TestData::new(&device);
     let mut store = PytorchStore::from_file(&test_data_file);
     test_data
         .load_from(&mut store)
@@ -119,8 +119,8 @@ fn main() {
 
     let diff = output_logits - reference_logits;
     let abs_diff = diff.abs();
-    let max_diff: f32 = abs_diff.clone().max().into_scalar();
-    let mean_diff: f32 = abs_diff.mean().into_scalar();
+    let max_diff: f32 = abs_diff.clone().max().into_scalar::<f32>();
+    let mean_diff: f32 = abs_diff.mean().into_scalar::<f32>();
 
     println!("  Maximum absolute difference: {:.6}", max_diff);
     println!("  Mean absolute difference: {:.6}", mean_diff);

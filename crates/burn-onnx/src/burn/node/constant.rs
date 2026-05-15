@@ -72,11 +72,11 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                 let v = tensor_data.scalar_f64().unwrap();
                 let val = super::super::codegen::f64_to_tokens(v);
                 (
-                    quote! { burn::module::Param<Tensor<B, 1>> },
+                    quote! { burn::module::Param<Tensor<1>> },
                     quote! {
-                        let #name: burn::module::Param<Tensor<B, 1>> = burn::module::Param::uninitialized(
+                        let #name: burn::module::Param<Tensor<1>> = burn::module::Param::uninitialized(
                             burn::module::ParamId::new(),
-                            move |device, _require_grad| Tensor::<B, 1>::from_data(
+                            move |device, _require_grad| Tensor::<1>::from_data(
                                 burn::tensor::TensorData::from([#val]),
                                 (device, #dtype_tokens),
                             ),
@@ -89,11 +89,11 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
             } else if dtype.is_int() || dtype.is_uint() {
                 let val = tensor_data.to_i64_vec().unwrap()[0];
                 (
-                    quote! { burn::module::Param<Tensor<B, 1, Int>> },
+                    quote! { burn::module::Param<Tensor<1, Int>> },
                     quote! {
-                        let #name: burn::module::Param<Tensor<B, 1, Int>> = burn::module::Param::uninitialized(
+                        let #name: burn::module::Param<Tensor<1, Int>> = burn::module::Param::uninitialized(
                             burn::module::ParamId::new(),
-                            move |device, _require_grad| Tensor::<B, 1, Int>::from_data(
+                            move |device, _require_grad| Tensor::<1, Int>::from_data(
                                 burn::tensor::TensorData::from([#val]),
                                 (device, #dtype_tokens),
                             ),
@@ -106,11 +106,11 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
             } else if dtype.is_bool() {
                 let val = tensor_data.as_slice::<bool>().unwrap()[0];
                 (
-                    quote! { burn::module::Param<Tensor<B, 1, Bool>> },
+                    quote! { burn::module::Param<Tensor<1, Bool>> },
                     quote! {
-                        let #name: burn::module::Param<Tensor<B, 1, Bool>> = burn::module::Param::uninitialized(
+                        let #name: burn::module::Param<Tensor<1, Bool>> = burn::module::Param::uninitialized(
                             burn::module::ParamId::new(),
-                            move |device, _require_grad| Tensor::<B, 1, Bool>::from_data(
+                            move |device, _require_grad| Tensor::<1, Bool>::from_data(
                                 burn::tensor::TensorData::from([#val]),
                                 (device, #dtype_tokens),
                             ),
@@ -134,11 +134,11 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
             // expects from this constant even before burnpack loading runs.
             match dtype {
                 d if d.is_int() || d.is_uint() => (
-                    quote! { burn::module::Param<Tensor<B, #rank_tok, Int>> },
+                    quote! { burn::module::Param<Tensor<#rank_tok, Int>> },
                     quote! {
-                        let #name: burn::module::Param<Tensor<B, #rank_tok, Int>> = burn::module::Param::uninitialized(
+                        let #name: burn::module::Param<Tensor<#rank_tok, Int>> = burn::module::Param::uninitialized(
                             burn::module::ParamId::new(),
-                            move |device, _require_grad| Tensor::<B, #rank_tok, Int>::zeros(#shape, (device, #dtype_tokens)),
+                            move |device, _require_grad| Tensor::<#rank_tok, Int>::zeros(#shape, (device, #dtype_tokens)),
                             device.clone(),
                             false,
                             #shape.into(),
@@ -146,11 +146,11 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                     },
                 ),
                 d if d.is_float() => (
-                    quote! { burn::module::Param<Tensor<B, #rank_tok>> },
+                    quote! { burn::module::Param<Tensor<#rank_tok>> },
                     quote! {
-                        let #name: burn::module::Param<Tensor<B, #rank_tok>> = burn::module::Param::uninitialized(
+                        let #name: burn::module::Param<Tensor<#rank_tok>> = burn::module::Param::uninitialized(
                             burn::module::ParamId::new(),
-                            move |device, _require_grad| Tensor::<B, #rank_tok>::zeros(#shape, (device, #dtype_tokens)),
+                            move |device, _require_grad| Tensor::<#rank_tok>::zeros(#shape, (device, #dtype_tokens)),
                             device.clone(),
                             false,
                             #shape.into(),
@@ -158,11 +158,11 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                     },
                 ),
                 d if d.is_bool() => (
-                    quote! { burn::module::Param<Tensor<B, #rank_tok, Bool>> },
+                    quote! { burn::module::Param<Tensor<#rank_tok, Bool>> },
                     quote! {
-                        let #name: burn::module::Param<Tensor<B, #rank_tok, Bool>> = burn::module::Param::uninitialized(
+                        let #name: burn::module::Param<Tensor<#rank_tok, Bool>> = burn::module::Param::uninitialized(
                             burn::module::ParamId::new(),
-                            move |device, _require_grad| Tensor::<B, #rank_tok, Bool>::empty(#shape, (device, #dtype_tokens)),
+                            move |device, _require_grad| Tensor::<#rank_tok, Bool>::empty(#shape, (device, #dtype_tokens)),
                             device.clone(),
                             false,
                             #shape.into(),
@@ -170,11 +170,11 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
                     },
                 ),
                 _ => (
-                    quote! { burn::module::Param<Tensor<B, #rank_tok>> },
+                    quote! { burn::module::Param<Tensor<#rank_tok>> },
                     quote! {
-                        let #name: burn::module::Param<Tensor<B, #rank_tok>> = burn::module::Param::uninitialized(
+                        let #name: burn::module::Param<Tensor<#rank_tok>> = burn::module::Param::uninitialized(
                             burn::module::ParamId::new(),
-                            move |device, _require_grad| Tensor::<B, #rank_tok>::zeros(#shape, (device, #dtype_tokens)),
+                            move |device, _require_grad| Tensor::<#rank_tok>::zeros(#shape, (device, #dtype_tokens)),
                             device.clone(),
                             false,
                             #shape.into(),

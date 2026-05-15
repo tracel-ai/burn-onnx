@@ -18,16 +18,14 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Shape, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Int, Shape, Tensor, TensorData};
 
     #[test]
     fn add_constant_f32() {
         let device = Default::default();
-        let model = constant_f32::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 3>::zeros(Shape::from([2, 3, 4]), &device);
-        let expected = Tensor::<TestBackend, 3>::full([2, 3, 4], 2, &device).to_data();
+        let model = constant_f32::Model::new(&device);
+        let input = Tensor::<3>::zeros(Shape::from([2, 3, 4]), &device);
+        let expected = Tensor::<3>::full([2, 3, 4], 2, &device).to_data();
 
         let output = model.forward(input);
 
@@ -38,10 +36,10 @@ mod tests {
     fn add_constant_f64() {
         use burn::tensor::DType;
         let device = Default::default();
-        let model = constant_f64::Model::<TestBackend>::new(&device);
+        let model = constant_f64::Model::new(&device);
         // The model's constant is f64; pass an f64 input so the dtype-preserving
         // Add doesn't hit an F32/F64 mismatch inside the backend.
-        let input = Tensor::<TestBackend, 3>::zeros(Shape::from([2, 3, 4]), (&device, DType::F64));
+        let input = Tensor::<3>::zeros(Shape::from([2, 3, 4]), (&device, DType::F64));
         let expected = TensorData::from([[[2.0f64; 4]; 3]; 2]);
 
         let output = model.forward(input);
@@ -52,9 +50,9 @@ mod tests {
     #[test]
     fn add_constant_i32() {
         let device = Default::default();
-        let model = constant_i32::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 3, Int>::zeros(Shape::from([2, 3, 4]), &device);
-        let expected = Tensor::<TestBackend, 3, Int>::full([2, 3, 4], 2, &device).to_data();
+        let model = constant_i32::Model::new(&device);
+        let input = Tensor::<3, Int>::zeros(Shape::from([2, 3, 4]), &device);
+        let expected = Tensor::<3, Int>::full([2, 3, 4], 2, &device).to_data();
 
         let output = model.forward(input);
 
@@ -65,11 +63,10 @@ mod tests {
     fn add_constant_i64() {
         use burn::tensor::DType;
         let device = Default::default();
-        let model = constant_i64::Model::<TestBackend>::new(&device);
+        let model = constant_i64::Model::new(&device);
         // The model's constant is i64; pass an i64 input so the dtype-preserving
         // Add doesn't hit an I32/I64 mismatch inside the backend.
-        let input =
-            Tensor::<TestBackend, 3, Int>::zeros(Shape::from([2, 3, 4]), (&device, DType::I64));
+        let input = Tensor::<3, Int>::zeros(Shape::from([2, 3, 4]), (&device, DType::I64));
         let expected = TensorData::from([[[2i64; 4]; 3]; 2]);
 
         let output = model.forward(input);
@@ -81,7 +78,7 @@ mod tests {
     fn or_constant_bool() {
         // Test scalar boolean constant with OR operation
         let device = Default::default();
-        let model = constant_bool::Model::<TestBackend>::new(&device);
+        let model = constant_bool::Model::new(&device);
 
         // Test with false input - should return true (false OR true = true)
         let output_false = model.forward(false);
@@ -96,17 +93,15 @@ mod tests {
     fn constant_tensor_f32_test() {
         // Test that multidimensional f32 tensor constants are properly loaded
         let device = Default::default();
-        let model: constant_tensor_f32::Model<TestBackend> = constant_tensor_f32::Model::default();
+        let model: constant_tensor_f32::Model = constant_tensor_f32::Model::default();
 
         // Create input tensor [2, 3] with values [[1, 2, 3], [4, 5, 6]]
-        let input =
-            Tensor::<TestBackend, 2>::from_data([[1.0f32, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
+        let input = Tensor::<2>::from_data([[1.0f32, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
 
         // Expected: input + constant where constant is [[1.5, 2.5, 3.5], [4.5, 5.5, 6.5]]
         // Result: [[2.5, 4.5, 6.5], [8.5, 10.5, 12.5]]
         let expected =
-            Tensor::<TestBackend, 2>::from_data([[2.5f32, 4.5, 6.5], [8.5, 10.5, 12.5]], &device)
-                .to_data();
+            Tensor::<2>::from_data([[2.5f32, 4.5, 6.5], [8.5, 10.5, 12.5]], &device).to_data();
 
         let output = model.forward(input);
         output.to_data().assert_eq(&expected, true);
@@ -121,12 +116,12 @@ mod tests {
         use burn::tensor::DType;
 
         let device = Default::default();
-        let model: constant_tensor_i32::Model<TestBackend> = constant_tensor_i32::Model::default();
+        let model: constant_tensor_i32::Model = constant_tensor_i32::Model::default();
 
         // Create input tensor [2, 3] with values [[1, 2, 3], [4, 5, 6]] using i32 dtype
         // Must use from_data with dtype to preserve I32 dtype (from_data without dtype converts to backend's IntElem)
         let input_data = TensorData::from([[1i32, 2, 3], [4, 5, 6]]);
-        let input = Tensor::<TestBackend, 2, Int>::from_data(input_data, (&device, DType::I32));
+        let input = Tensor::<2, Int>::from_data(input_data, (&device, DType::I32));
 
         // Expected: input + constant where constant is [[10, 20, 30], [40, 50, 60]]
         // Result: [[11, 22, 33], [44, 55, 66]]
@@ -140,16 +135,13 @@ mod tests {
     fn constant_tensor_bool_test() {
         // Test that multidimensional bool tensor constants are properly loaded
         let device = Default::default();
-        let model: constant_tensor_bool::Model<TestBackend> =
-            constant_tensor_bool::Model::default();
+        let model: constant_tensor_bool::Model = constant_tensor_bool::Model::default();
 
         // Create input tensor [2, 3] with bool values
         use burn::tensor::Bool;
         let input_data = [[false, false, false], [true, true, true]];
-        let input = Tensor::<TestBackend, 2, Bool>::from_bool(
-            burn::tensor::TensorData::from(input_data),
-            &device,
-        );
+        let input =
+            Tensor::<2, Bool>::from_bool(burn::tensor::TensorData::from(input_data), &device);
 
         // Expected: input OR constant where constant is [[true, false, true], [false, true, false]]
         // Result: [[true, false, true], [true, true, true]]
@@ -165,12 +157,10 @@ mod tests {
         // Test that empty f32 tensor constants with no data are properly handled
         // This tests the fix for the bug where empty float_data and raw_data caused a panic
         let device = Default::default();
-        let model: constant_empty_tensor_f32::Model<TestBackend> =
-            constant_empty_tensor_f32::Model::default();
+        let model: constant_empty_tensor_f32::Model = constant_empty_tensor_f32::Model::default();
 
         // Create input tensor [2, 3]
-        let input =
-            Tensor::<TestBackend, 2>::from_data([[1.0f32, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
+        let input = Tensor::<2>::from_data([[1.0f32, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
 
         // The model should load successfully even with an empty tensor constant attribute
         // The output is just the identity of the input
@@ -185,10 +175,10 @@ mod tests {
     #[test]
     fn constant_shape() {
         let device = Default::default();
-        let model = constant_shape::Model::<TestBackend>::new(&device);
+        let model = constant_shape::Model::new(&device);
 
         // Create input tensor with shape [2, 4, 6]
-        let input = Tensor::<TestBackend, 3>::zeros(Shape::from([2, 4, 6]), &device);
+        let input = Tensor::<3>::zeros(Shape::from([2, 4, 6]), &device);
 
         // The model tests Shape operations with constants
         // Input shape: [2, 4, 6]
@@ -231,10 +221,10 @@ mod tests {
         // This should succeed with our fix
         // Without the fix, this would panic during model creation with:
         // "Concat axis 2 is out of bounds for rank 2"
-        let model = rank_inference_propagation::Model::<TestBackend>::new(&device);
+        let model = rank_inference_propagation::Model::new(&device);
 
         // Create a 3D input tensor (batch=2, sequence=4, features=384)
-        let input = Tensor::<TestBackend, 3>::ones([2, 4, 384], &device);
+        let input = Tensor::<3>::ones([2, 4, 384], &device);
 
         // Run the model
         let output = model.forward(input);
@@ -276,10 +266,10 @@ mod tests {
         // propagation, causing type mismatches in binary operations.
 
         let device = Default::default();
-        let model = shape_binary_ops_with_constant::Model::<TestBackend>::new(&device);
+        let model = shape_binary_ops_with_constant::Model::new(&device);
 
         // Create input tensor with shape [2, 8, 3]
-        let input = Tensor::<TestBackend, 3>::ones(Shape::from([2, 8, 3]), &device);
+        let input = Tensor::<3>::ones(Shape::from([2, 8, 3]), &device);
 
         // Run the model
         let output = model.forward(input);

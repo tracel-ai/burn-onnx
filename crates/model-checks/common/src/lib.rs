@@ -33,26 +33,22 @@ pub fn artifacts_dir_build(model_name: &str) -> PathBuf {
 // ---------------------------------------------------------------------------
 // Backend and device selection
 // ---------------------------------------------------------------------------
+//
+// The new burn API removes the `B: Backend` generic from `Tensor`, `Module`,
+// and friends. Backend selection is now a runtime property of the `Device`
+// value, driven by Cargo features that bring in the corresponding burn
+// sub-crate (`burn-flex`, `burn-wgpu`, ...). There is no per-backend type
+// alias to define anymore.
+//
+// `backend_type!()` is kept as a no-op so existing model-check crates can call
+// it without breakage during the rev bump migration; new crates do not need
+// to invoke it.
 
-/// Defines `MyBackend` type alias based on the active feature flag.
-///
-/// Expands to four `#[cfg(feature = "...")]` type aliases for wgpu,
-/// flex, tch, and metal backends.
+/// No-op kept for source compatibility with model-check crates that still
+/// invoke `model_checks_common::backend_type!()`.
 #[macro_export]
 macro_rules! backend_type {
-    () => {
-        #[cfg(feature = "wgpu")]
-        pub type MyBackend = burn::backend::Wgpu;
-
-        #[cfg(feature = "flex")]
-        pub type MyBackend = burn::backend::Flex;
-
-        #[cfg(feature = "tch")]
-        pub type MyBackend = burn::backend::LibTorch<f32>;
-
-        #[cfg(feature = "metal")]
-        pub type MyBackend = burn::backend::Metal;
-    };
+    () => {};
 }
 
 /// Returns the best available device for the active backend.
@@ -67,8 +63,8 @@ macro_rules! best_device {
     () => {{
         #[cfg(feature = "tch")]
         {
-            use burn::backend::libtorch::LibTorchDevice;
-            match std::env::var("BURN_DEVICE").ok().as_deref() {
+            use burn::tensor::LibTorchDevice;
+            let libtorch: LibTorchDevice = match std::env::var("BURN_DEVICE").ok().as_deref() {
                 Some("cpu") => LibTorchDevice::Cpu,
                 Some("mps") => LibTorchDevice::Mps,
                 Some(s) if s.starts_with("cuda") => {
@@ -96,12 +92,14 @@ macro_rules! best_device {
                         LibTorchDevice::Cuda(0)
                     }
                 }
-            }
+            };
+            let device: burn::prelude::Device = libtorch.into();
+            device
         }
 
         #[cfg(not(feature = "tch"))]
         {
-            burn::prelude::Device::<MyBackend>::default()
+            <burn::prelude::Device as core::default::Default>::default()
         }
     }};
 }

@@ -111,7 +111,7 @@ mod tests {
         let node = create_avg_pool2d_node("pool1", false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self.pool1.forward(input);
             output
         }
@@ -123,7 +123,7 @@ mod tests {
         let node = create_avg_pool2d_node("pool1", false);
         let code = codegen_forward_with_clone(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = self.pool1.forward(input.clone());
             output
         }

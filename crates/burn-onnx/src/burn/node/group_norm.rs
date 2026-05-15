@@ -35,7 +35,7 @@ impl NodeCodegen for GroupNormalizationNode {
 
         Some(Field::new(
             self.name.clone(),
-            quote! { GroupNorm<B> },
+            quote! { GroupNorm },
             quote! {
                 let #name = GroupNormConfig::new(#num_groups, #num_features)
                     .with_epsilon(#epsilon)
@@ -188,7 +188,7 @@ mod tests {
         let node = create_static_group_norm_node("group_norm1");
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = {
                 let dtype = input.dtype();
                 self.group_norm1.forward(input.cast(burn::tensor::DType::F32)).cast(dtype)
@@ -203,7 +203,7 @@ mod tests {
         let node = create_static_group_norm_node("group_norm1");
         let code = codegen_forward_with_clone(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
             let output = {
                 let dtype = input.clone().dtype();
                 self.group_norm1
@@ -220,12 +220,7 @@ mod tests {
         let node = create_dynamic_group_norm_node("group_norm1", false);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<B, 4>,
-            scale: Tensor<B, 1>,
-            bias: Tensor<B, 1>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, scale: Tensor<1>, bias: Tensor<1>) -> Tensor<4> {
             let output = {
                 let __x = input;
                 let __scale = scale;
@@ -256,12 +251,7 @@ mod tests {
         let node = create_dynamic_group_norm_node("group_norm1", true);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<B, 4>,
-            scale: Tensor<B, 1>,
-            bias: Tensor<B, 1>,
-        ) -> Tensor<B, 4> {
+        pub fn forward(&self, input: Tensor<4>, scale: Tensor<1>, bias: Tensor<1>) -> Tensor<4> {
             let output = {
                 let __orig_dtype = input.dtype();
                 let __x = input.cast(burn::tensor::DType::F32);

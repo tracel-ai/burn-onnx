@@ -5,24 +5,22 @@ include_models!(dropout);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor};
+    use burn::tensor::{Device, Shape, Tensor};
     use float_cmp::ApproxEq;
-
-    use crate::backend::TestBackend;
 
     #[test]
     fn dropout() {
-        let model: dropout::Model<TestBackend> = dropout::Model::default();
+        let model: dropout::Model = dropout::Model::default();
 
         // Run the model with ones as input for easier testing
-        let input = Tensor::<TestBackend, 4>::ones([2, 4, 10, 15], &Default::default());
+        let input = Tensor::<4>::ones([2, 4, 10, 15], &Default::default());
 
         let output = model.forward(input);
 
         let expected_shape = Shape::from([2, 4, 10, 15]);
         assert_eq!(output.shape(), expected_shape);
 
-        let output_sum = output.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
 
         let expected_sum = 1200.0; // from pytorch
 

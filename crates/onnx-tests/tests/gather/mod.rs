@@ -17,18 +17,16 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Int, Tensor, TensorData};
-
-    use crate::backend::TestBackend;
+    use burn::tensor::{Device, Int, Tensor, TensorData};
 
     #[test]
     fn gather_1d_idx() {
-        let model: gather_1d_idx::Model<TestBackend> = gather_1d_idx::Model::default();
+        let model: gather_1d_idx::Model = gather_1d_idx::Model::default();
 
         let device = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
-        let index = Tensor::<TestBackend, 1, Int>::from_ints([0, 2], &device);
+        let input = Tensor::<2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
+        let index = Tensor::<1, Int>::from_ints([0, 2], &device);
         let expected = TensorData::from([[1f32, 3.], [4., 6.]]);
         let output = model.forward(input, index);
 
@@ -37,13 +35,12 @@ mod tests {
 
     #[test]
     fn gather_2d_idx() {
-        let model: gather_2d_idx::Model<TestBackend> = gather_2d_idx::Model::default();
+        let model: gather_2d_idx::Model = gather_2d_idx::Model::default();
 
         let device = Default::default();
 
-        let input =
-            Tensor::<TestBackend, 2>::from_data([[1.0, 1.2], [2.3, 3.4], [4.5, 5.7]], &device);
-        let index = Tensor::<TestBackend, 2, Int>::from_data([[0, 1], [1, 2]], &device);
+        let input = Tensor::<2>::from_data([[1.0, 1.2], [2.3, 3.4], [4.5, 5.7]], &device);
+        let index = Tensor::<2, Int>::from_data([[0, 1], [1, 2]], &device);
         let expected = TensorData::from([[[1f32, 1.2], [2.3, 3.4]], [[2.3, 3.4], [4.5, 5.7]]]);
         let output = model.forward(input, index);
 
@@ -52,13 +49,13 @@ mod tests {
 
     #[test]
     fn gather_shape() {
-        let model: gather_shape::Model<TestBackend> = gather_shape::Model::default();
+        let model: gather_shape::Model = gather_shape::Model::default();
 
         let device = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
+        let input = Tensor::<2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
         // shape(input) = [2, 3]
-        let index = Tensor::<TestBackend, 1, Int>::from_ints([0], &device);
+        let index = Tensor::<1, Int>::from_ints([0], &device);
 
         // The model now returns 4 outputs:
         // output1: gather with runtime index
@@ -84,7 +81,7 @@ mod tests {
         assert_eq!(output4, expected4);
 
         // Test with runtime negative index
-        let negative_index = Tensor::<TestBackend, 1, Int>::from_ints([-1], &device);
+        let negative_index = Tensor::<1, Int>::from_ints([-1], &device);
         let (output_neg, _, _, _) = model.forward(input, negative_index);
 
         // Runtime negative index -1 should get the last element (shape[2] = 3)
@@ -99,9 +96,9 @@ mod tests {
         // breaking downstream Slice operations
         // Pattern: Shape([1,3,8,6]) -> Gather([0,2,3,1]) -> Slice([1:3]) -> [8, 6]
         let device = Default::default();
-        let model = gather_shape_reorder::Model::<TestBackend>::new(&device);
+        let model = gather_shape_reorder::Model::new(&device);
 
-        let input = Tensor::<TestBackend, 4>::ones([1, 3, 8, 6], &device);
+        let input = Tensor::<4>::ones([1, 3, 8, 6], &device);
         let output = model.forward(input);
 
         // Reordered shape is [1,8,6,3], sliced [1:3] gives spatial dims [8, 6]
@@ -110,11 +107,11 @@ mod tests {
 
     #[test]
     fn gather_scalar() {
-        let model: gather_scalar::Model<TestBackend> = gather_scalar::Model::default();
+        let model: gather_scalar::Model = gather_scalar::Model::default();
 
         let device = Default::default();
 
-        let input = Tensor::<TestBackend, 2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
+        let input = Tensor::<2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
         let index = 0;
         let output = model.forward(input, index);
         let expected = TensorData::from([1f32, 2., 3.]);
@@ -124,11 +121,11 @@ mod tests {
 
     #[test]
     fn gather_scalar_out() {
-        let model: gather_scalar_out::Model<TestBackend> = gather_scalar_out::Model::default();
+        let model: gather_scalar_out::Model = gather_scalar_out::Model::default();
 
         let device = Default::default();
 
-        let input = Tensor::<TestBackend, 1>::from_floats([1., 2., 3.], &device);
+        let input = Tensor::<1>::from_floats([1., 2., 3.], &device);
         let index = 1;
         let output = model.forward(input, index);
 
@@ -140,13 +137,12 @@ mod tests {
     fn gather_with_shape_indices() {
         // Test the most comprehensive case of our runtime Shape indices implementation:
         // This is the exact scenario that was causing the original panic and required our full fix.
-        let model: gather_with_shape_indices::Model<TestBackend> =
-            gather_with_shape_indices::Model::default();
+        let model: gather_with_shape_indices::Model = gather_with_shape_indices::Model::default();
 
         let device = Default::default();
 
         // Input tensor with shape [2, 3]
-        let input = Tensor::<TestBackend, 2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
+        let input = Tensor::<2>::from_floats([[1., 2., 3.], [4., 5., 6.]], &device);
         let output = model.forward(input);
 
         // Expected: shape [2, 3] used as indices to gather from [100, 200, 300, 400, 500]
@@ -164,7 +160,7 @@ mod tests {
         // 3. Data as Constant node, indices as initializer
         // The final output is the sum of all three gather operations
         let device = Default::default();
-        let model: gather_constant_2d_indices::Model<TestBackend> =
+        let model: gather_constant_2d_indices::Model =
             gather_constant_2d_indices::Model::new(&device);
 
         // Model has no inputs (all inputs are constants/initializers)
@@ -200,11 +196,10 @@ mod tests {
     #[test]
     fn gather_negative_idx() {
         let device = Default::default();
-        let model: gather_negative_idx::Model<TestBackend> =
-            gather_negative_idx::Model::new(&device);
+        let model: gather_negative_idx::Model = gather_negative_idx::Model::new(&device);
 
         // Input shape: [4, 3]
-        let input = Tensor::<TestBackend, 2>::from_floats(
+        let input = Tensor::<2>::from_floats(
             [[1., 2., 3.], [4., 5., 6.], [7., 8., 9.], [10., 11., 12.]],
             &device,
         );
@@ -220,12 +215,12 @@ mod tests {
         // Test gathering from a scalar input. When the input is a scalar,
         // there's only one element to gather, so the output is always that scalar.
         // This pattern appears when Reshape(scalar, [-1]) is followed by Gather.
-        let model: gather_scalar_input::Model<TestBackend> = gather_scalar_input::Model::default();
+        let model: gather_scalar_input::Model = gather_scalar_input::Model::default();
 
         let device = Default::default();
 
         // Input is a 1x1 tensor that gets reshaped to scalar, then gathered
-        let input = Tensor::<TestBackend, 2>::from_floats([[123.456]], &device);
+        let input = Tensor::<2>::from_floats([[123.456]], &device);
         let output = model.forward(input);
 
         // Output should be the same scalar value
@@ -240,17 +235,17 @@ mod tests {
         // - Scalar index (rank 0): reduces dimension
         // - 1D tensor [1] (rank 1): preserves dimension
         // - 2D tensor [[1,0]] (rank 2): adds dimension
-        let model: gather_static_shape_indices::Model<TestBackend> =
+        let model: gather_static_shape_indices::Model =
             gather_static_shape_indices::Model::default();
 
         let device = Default::default();
 
         // Input tensor shape [3, 4, 5]
-        let input = Tensor::<TestBackend, 3>::ones([3, 4, 5], &device);
+        let input = Tensor::<3>::ones([3, 4, 5], &device);
         // Set specific values to verify correct indexing
         let input = input.clone().add_scalar(1.0); // All 2s
         // Make index 1 different
-        let slice_1 = Tensor::<TestBackend, 3>::ones([1, 4, 5], &device).add_scalar(4.0); // All 5s
+        let slice_1 = Tensor::<3>::ones([1, 4, 5], &device).add_scalar(4.0); // All 5s
         let input = input.slice_assign([1..2, 0..4, 0..5], slice_1);
 
         let (output_scalar, output_1d, output_2d) = model.forward(input);
@@ -278,16 +273,25 @@ mod tests {
         );
 
         // All should have selected index 1 (value 5.0) for first element
-        assert_eq!(output_scalar.clone().slice([0..1, 0..1]).into_scalar(), 5.0);
         assert_eq!(
-            output_1d.clone().slice([0..1, 0..1, 0..1]).into_scalar(),
+            output_scalar
+                .clone()
+                .slice([0..1, 0..1])
+                .into_scalar::<f32>(),
+            5.0
+        );
+        assert_eq!(
+            output_1d
+                .clone()
+                .slice([0..1, 0..1, 0..1])
+                .into_scalar::<f32>(),
             5.0
         );
         assert_eq!(
             output_2d
                 .clone()
                 .slice([0..1, 0..1, 0..1, 0..1])
-                .into_scalar(),
+                .into_scalar::<f32>(),
             5.0
         );
     }

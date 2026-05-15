@@ -4,20 +4,18 @@ include_models!(rnn, rnn_bidirectional, rnn_reverse, rnn_with_initial_state);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Shape, Tensor};
+    use burn::tensor::{Device, Shape, Tensor};
     use float_cmp::ApproxEq;
-
-    use crate::backend::TestBackend;
 
     #[test]
     fn rnn_forward() {
         let device = Default::default();
         // Initialize the model with weights (loaded from the exported file)
-        let model: rnn::Model<TestBackend> = rnn::Model::default();
+        let model: rnn::Model = rnn::Model::default();
 
         // Input shape: [seq_length=5, batch_size=2, input_size=4]
         // Using random values matching the PyTorch test
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [-1.4570, -0.1023, -0.5992, 0.4771],
@@ -56,8 +54,8 @@ mod tests {
         assert_eq!(h_n.shape(), expected_h_n_shape);
 
         // Verify approximate output values using sum (values from PyTorch)
-        let output_sum = output.sum().into_scalar();
-        let h_n_sum = h_n.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
+        let h_n_sum = h_n.sum().into_scalar::<f32>();
 
         // Expected values from ONNX runtime inference
         let expected_output_sum = -5.624_653_8;
@@ -80,11 +78,11 @@ mod tests {
     #[test]
     fn rnn_bidirectional_forward() {
         let device = Default::default();
-        let model: rnn_bidirectional::Model<TestBackend> = rnn_bidirectional::Model::default();
+        let model: rnn_bidirectional::Model = rnn_bidirectional::Model::default();
 
         // Input shape: [seq_length=5, batch_size=2, input_size=4]
         // Using random values matching the PyTorch test (seed 42)
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [-4.5051e-03, 1.6668e+00, 1.5392e-01, -1.0603e+00],
@@ -122,8 +120,8 @@ mod tests {
         assert_eq!(h_n.shape(), expected_h_shape);
 
         // Verify approximate output values using sum (values from PyTorch)
-        let output_sum = output.sum().into_scalar();
-        let h_n_sum = h_n.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
+        let h_n_sum = h_n.sum().into_scalar::<f32>();
 
         // Expected values from PyTorch inference
         let expected_output_sum = -10.244_780_5;
@@ -146,11 +144,11 @@ mod tests {
     #[test]
     fn rnn_reverse_forward() {
         let device = Default::default();
-        let model: rnn_reverse::Model<TestBackend> = rnn_reverse::Model::default();
+        let model: rnn_reverse::Model = rnn_reverse::Model::default();
 
         // Input shape: [seq_length=5, batch_size=2, input_size=4]
         // Using random values matching the PyTorch test (seed 42)
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [-1.4570, -0.1023, -0.5992, 0.4771],
@@ -189,8 +187,8 @@ mod tests {
         assert_eq!(h_n.shape(), expected_h_shape);
 
         // Verify approximate output values using sum (values from PyTorch)
-        let output_sum = output.sum().into_scalar();
-        let h_n_sum = h_n.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
+        let h_n_sum = h_n.sum().into_scalar::<f32>();
 
         // Expected values from PyTorch inference with reverse direction simulation
         let expected_output_sum = -5.572_328_5;
@@ -213,11 +211,10 @@ mod tests {
     #[test]
     fn rnn_with_initial_state_forward() {
         let device = Default::default();
-        let model: rnn_with_initial_state::Model<TestBackend> =
-            rnn_with_initial_state::Model::default();
+        let model: rnn_with_initial_state::Model = rnn_with_initial_state::Model::default();
 
         // Input shape: [seq_length=5, batch_size=2, input_size=4]
-        let input = Tensor::<TestBackend, 3>::from_floats(
+        let input = Tensor::<3>::from_floats(
             [
                 [
                     [-1.4570, -0.1023, -0.5992, 0.4771],
@@ -244,7 +241,7 @@ mod tests {
         );
 
         // Initial hidden state: [num_directions=1, batch_size=2, hidden_size=8]
-        let h_0 = Tensor::<TestBackend, 3>::from_floats(
+        let h_0 = Tensor::<3>::from_floats(
             [[
                 [
                     0.9633, -0.3095, 0.5712, 1.1179, -1.2956, 0.0503, -0.5855, -0.3900,
@@ -267,8 +264,8 @@ mod tests {
         assert_eq!(h_n.shape(), expected_h_shape);
 
         // Verify approximate output values using sum (values from PyTorch)
-        let output_sum = output.sum().into_scalar();
-        let h_n_sum = h_n.sum().into_scalar();
+        let output_sum = output.sum().into_scalar::<f32>();
+        let h_n_sum = h_n.sum().into_scalar::<f32>();
 
         // Expected values from PyTorch inference with initial states
         let expected_output_sum = -4.966_948_9;

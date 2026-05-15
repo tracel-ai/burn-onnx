@@ -4,15 +4,14 @@ include_models!(col2im_basic, col2im_complex);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::TestBackend;
     use alloc::vec;
-    use burn::tensor::{Int, Tensor, TensorData, Tolerance};
+    use burn::tensor::{Device, Int, Tensor, TensorData, Tolerance};
 
     #[test]
     fn test_col2im_basic() {
         let device = Default::default();
-        let model = col2im_basic::Model::<TestBackend>::new(&device);
-        let input = Tensor::<TestBackend, 3>::from_data(
+        let model = col2im_basic::Model::new(&device);
+        let input = Tensor::<3>::from_data(
             TensorData::new(
                 vec![
                     1., 5., 9., 13., 2., 6., 10., 14., 3., 7., 11., 15., 4., 8., 12., 16.,
@@ -38,11 +37,11 @@ mod tests {
     fn test_col2im_complex() {
         // Test with strides, padding, dilation
         let device = Default::default();
-        let model = col2im_complex::Model::<TestBackend>::new(&device);
+        let model = col2im_complex::Model::new(&device);
 
         // Input: [1, 9, 9] from col2im.py (N=1, C_in=9, L=9)
         // We use pattern input to verify index mapping (1..82)
-        let input = Tensor::<TestBackend, 1, Int>::arange(1..82, &device)
+        let input = Tensor::<1, Int>::arange(1..82, &device)
             .reshape([1, 9, 9])
             .float();
 

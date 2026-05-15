@@ -4,8 +4,7 @@ include_models!(stft_basic, stft_full, stft_non_pow2, stft_with_window);
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::backend::TestBackend;
+    use burn::tensor::Device;
 
     // Reproducible input from np.random.seed(42); np.random.randn(1, 32, 1)
     const SIGNAL_32: [f32; 32] = [
@@ -43,23 +42,21 @@ mod tests {
         1.852_278_2,
     ];
 
-    fn make_signal(
-        device: &<TestBackend as burn::tensor::backend::BackendTypes>::Device,
-    ) -> burn::tensor::Tensor<TestBackend, 3> {
+    fn make_signal(device: &Device) -> burn::tensor::Tensor<3> {
         let data = SIGNAL_32.map(|v| [v]);
-        burn::tensor::Tensor::<TestBackend, 3>::from_floats([data], device)
+        burn::tensor::Tensor::<3>::from_floats([data], device)
     }
 
     #[test]
     fn stft_basic() {
         let device = Default::default();
-        let model: stft_basic::Model<TestBackend> = stft_basic::Model::new(&device);
+        let model: stft_basic::Model = stft_basic::Model::new(&device);
         let input = make_signal(&device);
 
         let output = model.forward(input);
 
         // Expected values from ONNX reference evaluator (see stft_basic.py).
-        let expected = burn::tensor::Tensor::<TestBackend, 4>::from_floats(
+        let expected = burn::tensor::Tensor::<4>::from_floats(
             [[
                 [
                     [-0.407_059_73_f32, 0.0],
@@ -108,12 +105,12 @@ mod tests {
     fn stft_with_window() {
         let device = Default::default();
         // Use default() to load the window initializer from the .bpk file.
-        let model: stft_with_window::Model<TestBackend> = stft_with_window::Model::default();
+        let model: stft_with_window::Model = stft_with_window::Model::default();
         let input = make_signal(&device);
 
         let output = model.forward(input);
 
-        let expected = burn::tensor::Tensor::<TestBackend, 4>::from_floats(
+        let expected = burn::tensor::Tensor::<4>::from_floats(
             [[
                 [
                     [0.958_236_0_f32, 0.0],
@@ -166,13 +163,13 @@ mod tests {
         // test pins that path to ORT's reference output for n_fft = 20,
         // hop = 5 (matching Kokoro's decoder head).
         let device = Default::default();
-        let model: stft_non_pow2::Model<TestBackend> = stft_non_pow2::Model::new(&device);
+        let model: stft_non_pow2::Model = stft_non_pow2::Model::new(&device);
         let input = make_signal(&device);
 
         let output = model.forward(input);
 
         // Expected values from ONNX reference evaluator (see stft_non_pow2.py).
-        let expected = burn::tensor::Tensor::<TestBackend, 4>::from_floats(
+        let expected = burn::tensor::Tensor::<4>::from_floats(
             [[
                 [
                     [-3.425_971_3_f32, 0.0],
@@ -229,13 +226,13 @@ mod tests {
         // frame_length (16) rather than frame_length/2+1 (9). The second half of
         // each frame is the conjugate mirror of the first half.
         let device = Default::default();
-        let model: stft_full::Model<TestBackend> = stft_full::Model::new(&device);
+        let model: stft_full::Model = stft_full::Model::new(&device);
         let input = make_signal(&device);
 
         let output = model.forward(input);
 
         // Expected values from ONNX reference evaluator (see stft_full.py).
-        let expected = burn::tensor::Tensor::<TestBackend, 4>::from_floats(
+        let expected = burn::tensor::Tensor::<4>::from_floats(
             [[
                 [
                     [-0.407_059_73_f32, 0.0],

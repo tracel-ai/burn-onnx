@@ -44,7 +44,7 @@ mod tests {
         let node = create_leaky_relu_node("leaky_relu1", 0.01);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = burn::tensor::activation::leaky_relu(input, 0.01);
             output
         }
@@ -56,7 +56,7 @@ mod tests {
         let node = create_leaky_relu_node("leaky_relu1", 0.2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = burn::tensor::activation::leaky_relu(input, 0.2);
             output
         }

@@ -81,7 +81,7 @@ impl NodeCodegen for onnx_ir::node::arithmetic::AddNode {
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
                 let dtype_tokens = rhs_ty.elem_type().to_tokens();
                 quote! {
-                    Tensor::<B, 1, burn::tensor::Int>::from_data(
+                    Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#lhs as &[i64]),
                         (&self.device, #dtype_tokens)
                     ).add(#rhs)
@@ -90,7 +90,7 @@ impl NodeCodegen for onnx_ir::node::arithmetic::AddNode {
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
                 let dtype_tokens = lhs_ty.elem_type().to_tokens();
                 quote! {
-                    #lhs.add(Tensor::<B, 1, burn::tensor::Int>::from_data(
+                    #lhs.add(Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#rhs as &[i64]),
                         (&self.device, #dtype_tokens)
                     ))
@@ -125,7 +125,7 @@ mod tests {
             .output_tensor("output", 2, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 2>, rhs: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, lhs: Tensor<2>, rhs: Tensor<2>) -> Tensor<2> {
             let output = lhs.add(rhs);
             output
         }
@@ -140,7 +140,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 3>, rhs: Tensor<B, 2>) -> Tensor<B, 3> {
+        pub fn forward(&self, lhs: Tensor<3>, rhs: Tensor<2>) -> Tensor<3> {
             let output = lhs.add((rhs).unsqueeze_dims(&[0isize]));
             output
         }
@@ -155,7 +155,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 2>, rhs: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, lhs: Tensor<2>, rhs: Tensor<3>) -> Tensor<3> {
             let output = (lhs).unsqueeze_dims(&[0isize]).add(rhs);
             output
         }
@@ -170,7 +170,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 3>, rhs: Tensor<B, 1>) -> Tensor<B, 3> {
+        pub fn forward(&self, lhs: Tensor<3>, rhs: Tensor<1>) -> Tensor<3> {
             let output = lhs.add((rhs).unsqueeze_dims(&[0isize, 1isize]));
             output
         }
@@ -185,7 +185,7 @@ mod tests {
             .output_tensor("output", 3, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 1>, rhs: Tensor<B, 3>) -> Tensor<B, 3> {
+        pub fn forward(&self, lhs: Tensor<1>, rhs: Tensor<3>) -> Tensor<3> {
             let output = (lhs).unsqueeze_dims(&[0isize, 1isize]).add(rhs);
             output
         }
@@ -200,7 +200,7 @@ mod tests {
             .output_scalar_tensor("output", DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 1>, rhs: Tensor<B, 1>) -> Tensor<B, 1> {
+        pub fn forward(&self, lhs: Tensor<1>, rhs: Tensor<1>) -> Tensor<1> {
             let output = lhs.add(rhs);
             output
         }
@@ -217,7 +217,7 @@ mod tests {
             .output_tensor("output", 2, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 2>, rhs: f32) -> Tensor<B, 2> {
+        pub fn forward(&self, lhs: Tensor<2>, rhs: f32) -> Tensor<2> {
             let output = lhs.add_scalar(rhs);
             output
         }
@@ -232,7 +232,7 @@ mod tests {
             .output_tensor("output", 2, DType::F32)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: f32, rhs: Tensor<B, 2>) -> Tensor<B, 2> {
+        pub fn forward(&self, lhs: f32, rhs: Tensor<2>) -> Tensor<2> {
             let output = lhs + rhs;
             output
         }
@@ -311,10 +311,10 @@ mod tests {
             .output_shape("output", 4)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<B, 1, Int>) -> [i64; 4] {
+        pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<1, Int>) -> [i64; 4] {
             let output = {
                 let mut result = lhs;
-                let __scalar = rhs.into_scalar().elem::<i64>();
+                let __scalar = (rhs).into_scalar::<i64>();
                 for result_item in result.iter_mut() {
                     *result_item = result_item.saturating_add(__scalar);
                 }
@@ -355,10 +355,10 @@ mod tests {
             .output_shape("output", 4)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 1, Int>, rhs: [i64; 4]) -> [i64; 4] {
+        pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 4]) -> [i64; 4] {
             let output = {
                 let mut result = rhs;
-                let __scalar = lhs.into_scalar().elem::<i64>();
+                let __scalar = (lhs).into_scalar::<i64>();
                 for result_item in result.iter_mut() {
                     *result_item = result_item.saturating_add(__scalar);
                 }
@@ -379,9 +379,8 @@ mod tests {
             .output_tensor("output", 1, DType::I64)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<B, 1, Int>) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<1, Int>) -> Tensor<1, Int> {
             let output = Tensor::<
-                B,
                 1,
                 burn::tensor::Int,
             >::from_data(
@@ -402,11 +401,10 @@ mod tests {
             .output_tensor("output", 1, DType::I64)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: Tensor<B, 1, Int>, rhs: [i64; 4]) -> Tensor<B, 1, Int> {
+        pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 4]) -> Tensor<1, Int> {
             let output = lhs
                 .add(
                     Tensor::<
-                        B,
                         1,
                         burn::tensor::Int,
                     >::from_data(
