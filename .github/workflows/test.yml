@@ -35,7 +35,12 @@ env:
   # - model-checks: require externally downloaded ONNX files
   # - onnx-official-tests: has its own dedicated job (see below)
   # - raspberry-pi-pico: embedded no_std example, requires ARM target
-  CI_EXCLUDE: "burn-onnx-model-checks-*,model-checks-common,onnx-official-tests,raspberry-pi-pico"
+  # - image-classification-web: enables the `webgpu` burn feature which, under
+  #   workspace feature unification, switches the default backend to cubecl/wgpu
+  #   inside other crates' test binaries. cubecl's Bool path then rejects
+  #   `Bool(Native)` tensor data and several onnx-tests panic. Building it on
+  #   its own (or via `cargo check -p image-classification-web`) is fine.
+  CI_EXCLUDE: "burn-onnx-model-checks-*,model-checks-common,onnx-official-tests,raspberry-pi-pico,image-classification-web"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
