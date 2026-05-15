@@ -229,7 +229,7 @@ For example, the squeeze operation in `crates/onnx-ir/src/node/squeeze.rs` conta
      host-side values only. Never use for `ScalarTensor` inputs (it skips clone tracking)
 
    **Scalar type system**: ONNX scalar constants are represented as two `ArgType` variants:
-   - `ScalarTensor(DType)` - A `Tensor<B, 1>` on device (rank 1). Default for scalar constants.
+   - `ScalarTensor(DType)` - A `Tensor<1>` on device (rank 1). Default for scalar constants.
      Participates in tensor arithmetic via broadcasting. Use `scope.arg()` to access
    - `ScalarNative(DType)` - A native Rust scalar (`f32`, `i64`, etc., rank 0). Used for shape
      computation, control flow conditions, array indices. Use `arg_to_ident()` to access
@@ -721,12 +721,11 @@ include_models!(my_new_op);
 mod tests {
     use super::*;
     use burn::tensor::{Shape, Tensor};
-    use crate::backend::TestBackend;
 
     #[test]
     fn my_new_op() {
         let device = Default::default();
-        let model = my_new_op::Model::<TestBackend>::new(&device);
+        let model = my_new_op::Model::new(&device);
 
         let input = Tensor::ones([1, 3, 224, 224], &device);
         let output = model.forward(input);
@@ -902,7 +901,7 @@ model_checks_common::backend_type!();
 
 let device = model_checks_common::best_device!();
 let weights_path = concat!(env!("OUT_DIR"), "/model/<model-name>.bpk");
-let model: Model<MyBackend> = Model::from_file(weights_path, &device);
+let model: Model = Model::from_file(weights_path, &device);
 ```
 
 ## Resources

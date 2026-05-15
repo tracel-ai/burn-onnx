@@ -94,7 +94,7 @@ Not every `pass` entry turns into a `#[test]` function. `build.rs` skips harness
 runs codegen, so the generated `Model` compiles) for a few edge cases:
 
 - **Rank-0 (scalar) I/O.** `burn-onnx` lowers scalars to `ScalarNative` or `ScalarTensor` rather
-  than `Tensor<B, 0>`; the harness doesn't yet cover that branch.
+  than `Tensor<0>`; the harness doesn't yet cover that branch.
 - **Exotic dtypes** in inputs or outputs (FLOAT16, BFLOAT16, FLOAT8*, INT4, UINT4, FLOAT4E2M1,
   STRING, COMPLEX*). `pb_loader` decodes only the dtype set burn supports natively.
 - **Non-tensor forward return types** such as `[i64; N]` that `burn-onnx` emits for ONNX

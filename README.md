@@ -63,10 +63,9 @@ pub mod my_model {
 Then use the model:
 
 ```rust
-use burn::backend::Flex;
 use crate::model::my_model::Model;
 
-let model: Model<Flex> = Model::default();
+let model: Model = Model::default();
 let output = model.forward(input_tensor);
 ```
 

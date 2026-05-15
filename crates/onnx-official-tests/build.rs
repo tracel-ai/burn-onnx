@@ -222,10 +222,10 @@ impl Dtype {
 
     /// The concrete Rust element type to use as the type parameter for
     /// `TensorData::assert_approx_eq::<T>`. Matching the source dtype
-    /// avoids two problems: (a) a backend default `FloatElem<TestBackend>`
-    /// that differs from the TensorData dtype would cause a type mismatch,
-    /// and (b) using a narrower type than the decoded values would
-    /// compare at reduced precision.
+    /// avoids two problems: (a) a device-default float dtype that differs
+    /// from the TensorData dtype would cause a type mismatch, and
+    /// (b) using a narrower type than the decoded values would compare
+    /// at reduced precision.
     fn assert_elem_type(self) -> &'static str {
         match self {
             // burn-tensor re-exports `half::f16` / `half::bf16` at its
@@ -336,7 +336,7 @@ fn introspect(model_path: &Path) -> Result<TestMeta, SkipReason> {
 
     // Rank-0 I/O collides with burn's scalar-vs-tensor distinction;
     // burn-onnx may emit `ScalarNative` or `ScalarTensor` instead of
-    // `Tensor<B, 0>` depending on the op, and the harness doesn't yet
+    // `Tensor<0>` depending on the op, and the harness doesn't yet
     // cover that branch. Skip these loudly so we know which tests to
     // come back to.
     if inputs.iter().any(|i| i.rank == 0) || outputs.iter().any(|o| o.rank == 0) {

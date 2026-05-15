@@ -67,7 +67,7 @@ impl NodeProcessor for FlattenProcessor {
             }
         };
 
-        // Burn cannot represent Tensor<B, 0>, so reject rank-0 scalars.
+        // Burn cannot represent Tensor<0>, so reject rank-0 scalars.
         // Rank-1 is valid per ONNX spec: axis=0 -> [1, d], axis=1 -> [d, 1].
         if tensor.rank == 0 {
             return Err(ProcessError::Custom(

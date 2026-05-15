@@ -82,10 +82,12 @@ Key principles:
 - Scope temporary variables in block expressions to avoid name collisions
 - `insta` snapshot tests for ALL codegen branches (inline snapshots only:
   `assert_snapshot!(code, @r"...")`)
-- **Always specify explicit dtypes in generated code.** Never rely on Burn's default element types
-  (`IntElem`, `FloatElem`) because they vary by backend (defaults differ across CPU/GPU backends):
+- **Always specify explicit dtypes in generated code.** Never rely on the device's default
+  float/int dtypes (`DeviceSettings::float_dtype` / `int_dtype`) because they vary across
+  CPU/GPU devices:
   - Use `.cast(DType::XX)` after `.int()` or `.float()` to preserve the ONNX-specified dtype
-  - When creating tensors, use `from_data_dtype` instead of `from_data` to specify the exact dtype
+  - When creating tensors, pin the dtype with `Tensor::from_data(data, (&device, dtype))`
+    rather than the bare `&device` overload, which would resolve to the device's default
   - Never use bare `.int()` or `.float()` without a following `.cast(target_dtype)`
   - When multiple tensors interact in binary ops, ensure they share the same dtype (cast to a
     common dtype first)
@@ -111,7 +113,7 @@ Key principles:
 - Use `Model::from_file(bpk_path, &device)` instead — it constructs via `new` then runs
   `load_from(BurnpackStore)`, which is a no-op when there are no `Param` fields, so it is safe
   for graphs without constants too
-- `Model::default()` works but pins the device to `B::Device::default()` and embeds the absolute
+- `Model::default()` works but pins the device to `Device::default()` and embeds the absolute
   bpk path captured at codegen time; prefer the explicit `from_file` form
 - Test harnesses and demo binaries that construct generated models must follow this rule. The
   symptom of getting it wrong is "compare passes for ops that touch no constants, fails for

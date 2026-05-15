@@ -71,19 +71,18 @@ https://huggingface.co/datasets/ylecun/mnist/viewer/mnist/test?row=15
 
    ```rust
    use burn::tensor;
-   use burn::backend::Flex;
 
    use onnx_inference::mnist::Model;
 
    fn main() {
-       // Get a default device for the models's backend
+       // Default device for the active backend (chosen via Cargo features).
        let device = Default::default();
 
-       // Create a new model and load weights from target dir default device
-       let model: Model<Flex> = Model::default();
+       // Create a new model and load weights from the target dir default location.
+       let model: Model = Model::default();
 
        // Create a new input tensor (all zeros for demonstration purposes)
-       let input = tensor::Tensor::<Flex, 4>::zeros([1, 1, 28, 28], &device);
+       let input = tensor::Tensor::<4>::zeros([1, 1, 28, 28], &device);
 
        // Run the model
        let output = model.forward(input);
