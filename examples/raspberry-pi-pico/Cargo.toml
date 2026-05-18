@@ -18,7 +18,7 @@ embassy-usb-logger = { version = "0.6.0" }
 embassy-rp = { version = "0.10.0", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xb", "binary-info"] }
 
 defmt = "1.0.1"
-defmt-rtt = "1.1.0"
+defmt-rtt = "1.2.0"
 
 log = "0.4"
 
