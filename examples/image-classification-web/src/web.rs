@@ -9,10 +9,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::model::{label::LABELS, normalizer::Normalizer, squeezenet::Model as SqueezenetModel};
 
-use burn::{
-    prelude::*,
-    tensor::{FlexDevice, WgpuDevice, activation::softmax},
-};
+use burn::{prelude::*, tensor::activation::softmax};
 
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -45,7 +42,7 @@ impl ImageClassifier {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         log::info!("Initializing the image classifier");
-        let device: Device = FlexDevice.into();
+        let device = Device::flex();
         Self {
             model: Model::new(&device),
         }
@@ -68,7 +65,7 @@ impl ImageClassifier {
     pub async fn set_backend_flex(&mut self) -> Result<(), JsValue> {
         log::info!("Loading the model to the Flex backend");
         let start = Instant::now();
-        let device: Device = FlexDevice.into();
+        let device = Device::flex();
         self.model = Model::new(&device);
         let duration = start.elapsed();
         log::debug!("Model is loaded to the Flex backend in {duration:?}");
@@ -79,13 +76,12 @@ impl ImageClassifier {
     pub async fn set_backend_wgpu(&mut self) -> Result<(), JsValue> {
         log::info!("Loading the model to the Wgpu backend");
         let start = Instant::now();
-        let wgpu_device = WgpuDevice::default();
 
         // First-time wgpu device init is handled internally by the new burn dispatch.
         // The compare_exchange guard keeps the original "init once" contract in case
         // we need to add an explicit setup hook later.
         let _ = WGPU_INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst);
-        let device: Device = wgpu_device.into();
+        let device = Device::webgpu(DeviceKind::default());
         self.model = Model::new(&device);
         let duration = start.elapsed();
         log::debug!("Model is loaded to the Wgpu backend in {duration:?}");
