@@ -75,7 +75,12 @@ impl BurnGraph {
         BurnpackWriter::new(snapshots)
             .with_metadata("producer", "burn-onnx")
             .write_to_file(&burnpack_file)
-            .expect("Failed to write burnpack file");
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to write burnpack file {}: {e}",
+                    burnpack_file.display()
+                )
+            });
 
         // Register the loading code based on strategy
         if strategy != LoadStrategy::None {
@@ -550,8 +555,14 @@ impl BurnGraph {
                     /// Load model weights from a burnpack file.
                     pub fn from_file<P: AsRef<std::path::Path>>(file: P, device: &Device) -> Self {
                         let mut model = Self::new(device);
-                        let mut store = BurnpackStore::from_file(file);
-                        model.load_from(&mut store).expect("Failed to load burnpack file");
+                        let mut store = BurnpackStore::from_file(&file);
+                        model.load_from(&mut store)
+                            .unwrap_or_else(|e| {
+                                panic!(
+                                    "Failed to load burnpack file {}: {e}",
+                                    file.as_ref().display()
+                                )
+                            });
                         model
                     }
                     _blank_!();
@@ -559,7 +570,12 @@ impl BurnGraph {
             }
             LoadStrategy::Embedded => {
                 let file_size = std::fs::metadata(&file)
-                    .expect("Failed to read burnpack file metadata")
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to read burnpack file metadata {}: {e}",
+                            file.display()
+                        )
+                    })
                     .len() as usize;
                 let file = file.to_str().unwrap();
                 statics = quote! {
@@ -1094,7 +1110,7 @@ mod tests {
             };
             let out_name = format!("t{}", i);
 
-            let node = AbsNodeBuilder::new(&format!("abs{}", i))
+            let node = AbsNodeBuilder::new(format!("abs{}", i))
                 .input_tensor(&in_name, 2, DType::F32)
                 .output_tensor(&out_name, 2, DType::F32)
                 .build();
