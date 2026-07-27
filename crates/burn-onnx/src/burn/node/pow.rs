@@ -102,6 +102,25 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                 quote! { #base.powf(#rhs) }
             }
             (PowerType::Int, ArgType::ScalarNative(dtype), rhs_ty)
+                if rhs_ty.is_on_device() && dtype.is_int() =>
+            {
+                let dtype_tokens = dtype.to_tokens();
+                let rhs_rank = rhs_ty.rank();
+                let base = quote! {
+                    Tensor::<1, Int>::from_data(
+                        burn::tensor::TensorData::from([#lhs as i64]),
+                        (&self.device, #dtype_tokens)
+                    )
+                };
+                let base = if rhs_rank > 1 {
+                    let dims: Vec<isize> = (0..rhs_rank - 1).map(|i| i as isize).collect();
+                    quote! { #base.unsqueeze_dims(&[#(#dims),*]) }
+                } else {
+                    base
+                };
+                quote! { #base.powi(#rhs) }
+            }
+            (PowerType::Int, ArgType::ScalarNative(dtype), rhs_ty)
                 if rhs_ty.is_on_device() && dtype.is_float() =>
             {
                 let dtype_tokens = dtype.to_tokens();
