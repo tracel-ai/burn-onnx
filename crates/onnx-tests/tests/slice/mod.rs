@@ -20,6 +20,7 @@ include_models!(
     slice_tensor_to_split,
     slice_axes,
     slice_with_steps,
+    slice_reverse_open_ended,
     slice_shape_with_steps,
     slice_empty
 );
@@ -427,6 +428,31 @@ mod tests {
         // The model should extract shape [2, 3, 4, 5, 6, 7]
         // Then slice it with [0:6:2] to get [2, 4, 6]
         assert_eq!(output, [2i64, 4, 6]);
+    }
+
+    #[test]
+    fn slice_reverse_open_ended() {
+        let model: slice_reverse_open_ended::Model = slice_reverse_open_ended::Model::default();
+        let device = Default::default();
+
+        let data: alloc::vec::Vec<f32> = (0..24).map(|value| value as f32).collect();
+        let input =
+            Tensor::<1>::from_data(TensorData::from(data.as_slice()), &device).reshape([2, 3, 4]);
+
+        let output = model.forward(input);
+
+        assert_eq!(output.dims(), [2, 3, 4]);
+
+        let expected = TensorData::from([
+            [[8f32, 9., 10., 11.], [4., 5., 6., 7.], [0., 1., 2., 3.]],
+            [
+                [20., 21., 22., 23.],
+                [16., 17., 18., 19.],
+                [12., 13., 14., 15.],
+            ],
+        ]);
+
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]

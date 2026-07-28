@@ -487,6 +487,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/slice/slice_tensor_to_split.onnx")
         .input("tests/slice/slice_axes.onnx")
         .input("tests/slice/slice_with_steps.onnx")
+        .input("tests/slice/slice_reverse_open_ended.onnx")
         .input("tests/slice/slice_shape_with_steps.onnx")
         .input("tests/slice/slice_empty.onnx")
         .input("tests/selu/selu.onnx")

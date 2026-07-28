@@ -69,29 +69,8 @@ fn generate_tensor_slice(
                     if let Some(&axis) = axes.get(idx) {
                         let axis_idx = axis as usize;
                         if axis_idx < rank {
-                            let start = start.to_tokens();
                             let step = *steps.get(idx).expect("Step value missing for axis");
-
-                            // Check for i64::MAX which means "to the end"
-                            // Slice indices are i32
-                            if *end == i64::MAX {
-                                if step == 1 {
-                                    ranges[axis_idx] = quote! { #start.. };
-                                } else {
-                                    let step = step.to_tokens();
-                                    ranges[axis_idx] = quote! { #start..;#step };
-                                }
-                            } else if *end > i32::MAX as i64 {
-                                panic!("Slice end index {} exceeds i32::MAX", end);
-                            } else {
-                                let end = end.to_tokens();
-                                if step == 1 {
-                                    ranges[axis_idx] = quote! { #start..#end };
-                                } else {
-                                    let step = step.to_tokens();
-                                    ranges[axis_idx] = quote! { #start..#end;#step };
-                                }
-                            }
+                            ranges[axis_idx] = static_tensor_slice_range(*start, *end, step);
                         }
                     }
                 }
@@ -99,29 +78,8 @@ fn generate_tensor_slice(
                 // No axes provided - use default behavior (slice first dimensions)
                 let limit = starts.len().min(ends.len()).min(rank);
                 for (i, range) in ranges.iter_mut().enumerate().take(limit) {
-                    let start = starts[i].to_tokens();
                     let step = *steps.get(i).expect("Step value missing for dimension");
-
-                    // Check for i64::MAX which means "to the end"
-                    // Slice indices are i32
-                    if ends[i] == i64::MAX {
-                        if step == 1 {
-                            *range = quote! { #start.. };
-                        } else {
-                            let step = step.to_tokens();
-                            *range = quote! { #start..;#step };
-                        }
-                    } else if ends[i] > i32::MAX as i64 {
-                        panic!("Slice end index {} exceeds i32::MAX", ends[i]);
-                    } else {
-                        let end = ends[i].to_tokens();
-                        if step == 1 {
-                            *range = quote! { #start..#end };
-                        } else {
-                            let step = step.to_tokens();
-                            *range = quote! { #start..#end;#step };
-                        }
-                    }
+                    *range = static_tensor_slice_range(starts[i], ends[i], step);
                 }
             }
         }
@@ -456,8 +414,9 @@ fn generate_tensor_slice(
                             let axis_idx = axes[i] as usize;
                             if axis_idx < rank {
                                 let idx = proc_macro2::Literal::usize_unsuffixed(i);
-                                let end = ends[i].to_tokens();
-                                ranges[axis_idx] = quote! { #start_name[#idx]..#end };
+                                let start = quote! { #start_name[#idx] };
+                                ranges[axis_idx] =
+                                    tensor_slice_range_with_static_end(start, ends[i], 1);
                             }
                         }
                     } else {
@@ -466,8 +425,8 @@ fn generate_tensor_slice(
                         let num_dims = start_rank.min(&ends_len).min(&rank);
                         for (i, range) in ranges.iter_mut().enumerate().take(*num_dims) {
                             let idx = proc_macro2::Literal::usize_unsuffixed(i);
-                            let end = ends[i].to_tokens();
-                            *range = quote! { #start_name[#idx]..#end };
+                            let start = quote! { #start_name[#idx] };
+                            *range = tensor_slice_range_with_static_end(start, ends[i], 1);
                         }
                     }
                 }
@@ -484,10 +443,8 @@ fn generate_tensor_slice(
                         .map(|i| {
                             let idx = proc_macro2::Literal::usize_unsuffixed(i);
                             if i < ends.len() {
-                                let end = Literal::i64_suffixed(ends[i]);
-                                quote! {
-                                    #start_vec_var[#idx] as usize..#end as usize
-                                }
+                                let start = quote! { #start_vec_var[#idx] as usize };
+                                tensor_slice_range_with_static_end(start, ends[i], 1)
                             } else {
                                 quote! { .. }
                             }
@@ -510,6 +467,49 @@ fn generate_tensor_slice(
     quote! {
         let #output = #input.slice(s![#(#ranges),*]);
     }
+}
+
+fn static_tensor_slice_range(start: i64, end: i64, step: i64) -> TokenStream {
+    if is_backward_open_end(end, step) {
+        return reverse_open_tensor_slice_range(start, step);
+    }
+
+    let start = start.to_tokens();
+    tensor_slice_range_with_static_end(start, end, step)
+}
+
+fn tensor_slice_range_with_static_end(start: TokenStream, end: i64, step: i64) -> TokenStream {
+    let end = static_tensor_slice_end(end);
+    let step = (step != 1).then(|| step.to_tokens());
+
+    match (end, step) {
+        (Some(end), Some(step)) => quote! { #start..#end;#step },
+        (Some(end), None) => quote! { #start..#end },
+        (None, Some(step)) => quote! { #start..;#step },
+        (None, None) => quote! { #start.. },
+    }
+}
+
+fn static_tensor_slice_end(end: i64) -> Option<TokenStream> {
+    if end == i64::MAX {
+        return None;
+    }
+
+    if !(i32::MIN as i64..=i32::MAX as i64).contains(&end) {
+        panic!("Slice end index {} exceeds supported i32 range", end);
+    }
+
+    Some(end.to_tokens())
+}
+
+fn is_backward_open_end(end: i64, step: i64) -> bool {
+    step < 0 && end <= i64::MIN + 1
+}
+
+fn reverse_open_tensor_slice_range(start: i64, step: i64) -> TokenStream {
+    let start = start.to_tokens();
+    let step = step.to_tokens();
+    quote! { ..=#start;#step }
 }
 
 fn generate_shape_slice(
@@ -875,6 +875,28 @@ mod tests {
         pub fn forward(&self, data: Tensor<3>) -> Tensor<3> {
             let every_third = data.slice(s![.., 0..; 3, ..]);
             every_third
+        }
+        ");
+    }
+
+    #[test]
+    fn test_slice_static_reverse_open_ended() {
+        let config = SliceConfig {
+            starts: SliceInput::Static(vec![-1]),
+            ends: SliceInput::Static(vec![i64::MIN + 1]),
+            axes: Some(SliceInput::Static(vec![1])),
+            steps: Some(SliceInput::Static(vec![-1])),
+        };
+        let node = SliceNodeBuilder::new("slice1")
+            .input_tensor("data", 3, DType::F32)
+            .output_tensor("reversed", 3, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, data: Tensor<3>) -> Tensor<3> {
+            let reversed = data.slice(s![.., ..= - 1; - 1, ..]);
+            reversed
         }
         ");
     }

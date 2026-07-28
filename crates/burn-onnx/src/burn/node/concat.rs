@@ -96,25 +96,37 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
                 }
                 let output_rank = shape;
 
-                // Generate code to concatenate shape arrays
-                // Handle scalar inputs by converting them to single-element arrays
-                let mut shape_parts = Vec::new();
-                for input in &self.inputs {
-                    let input_name = arg_to_ident(input);
-                    if input.ty.is_scalar() {
-                        // Scalar: wrap in array and slice
-                        shape_parts.push(quote! { &[#input_name][..] });
-                    } else {
-                        // Shape or tensor: already an array, just slice
-                        shape_parts.push(quote! { &#input_name[..] });
-                    }
-                }
+                // Generate code to concatenate shape arrays. Runtime tensor fragments can appear
+                // after ConstantOfShape/Range shape computation, so convert those to host i64.
+                let shape_parts = self.inputs.iter().map(shape_concat_part);
 
                 quote! {
-                    let #output: [i64; #output_rank] = [#(#shape_parts),*].concat().try_into().unwrap();
+                    let #output: [i64; #output_rank] = {
+                        let mut __shape_parts = alloc::vec::Vec::<i64>::new();
+                        #(#shape_parts)*
+                        __shape_parts.try_into().unwrap()
+                    };
                 }
             }
             _ => panic!("Concat only supports Tensor or Shape outputs"),
+        }
+    }
+}
+
+fn shape_concat_part(input: &Argument) -> TokenStream {
+    let input_name = arg_to_ident(input);
+    if input.ty.is_scalar() {
+        quote! {
+            __shape_parts.extend_from_slice(&[#input_name]);
+        }
+    } else if matches!(input.ty, ArgType::Tensor(_)) {
+        quote! {
+            let __data = #input_name.to_data().convert::<i64>();
+            __shape_parts.extend(__data.into_vec::<i64>().unwrap());
+        }
+    } else {
+        quote! {
+            __shape_parts.extend_from_slice(&#input_name);
         }
     }
 }
