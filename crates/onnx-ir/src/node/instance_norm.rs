@@ -81,7 +81,7 @@ impl NodeProcessor for InstanceNormProcessor {
         // TODO: Validate that input tensor is at least 3D (N x C x D1 ...) - Spec requires minimum rank of 3 - burn/crates/onnx-ir/src/node/instance_norm.rs:88
 
         // Validate attributes before extracting config
-        for (key, _value) in node.attrs.iter() {
+        for key in node.attrs.keys() {
             match key.as_str() {
                 "epsilon" => {}
                 _ => {

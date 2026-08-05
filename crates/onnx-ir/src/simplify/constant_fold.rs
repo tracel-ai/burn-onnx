@@ -602,10 +602,8 @@ fn compute_reshape_target(node: &RawNode, data: &TensorData) -> Option<Vec<usize
             // Get axes from attributes (opset < 13) or from input (opset >= 13)
             let axes = if let Some(attr) = node.attrs.get("axes") {
                 attr.clone().into_i64s()
-            } else if let Some(axes_input) = node.inputs.get(1) {
-                axes_input.value()?.to_i64_vec().ok()?
             } else {
-                return None;
+                node.inputs.get(1)?.value()?.to_i64_vec().ok()?
             };
 
             let output_rank = data.shape.len() + axes.len();

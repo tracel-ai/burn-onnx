@@ -791,6 +791,7 @@ name = "burn-onnx"
 version = "0.22.0-pre.1"
 dependencies = [
  "burn",
+ "burn-pack",
  "burn-store",
  "clap",
  "derive-new",

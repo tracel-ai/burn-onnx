@@ -273,20 +273,14 @@ fn extract_constant_shape_slice(
 
     // Extract optional axes (default: [0])
     let axes: Vec<i64> = if slice.inputs.len() > 3 {
-        match slice.inputs[3].value() {
-            Some(data) => data.to_i64_vec().ok()?,
-            None => return None,
-        }
+        slice.inputs[3].value()?.to_i64_vec().ok()?
     } else {
         (0..starts.len() as i64).collect()
     };
 
     // Extract optional steps (default: [1, 1, ...])
     let steps: Vec<i64> = if slice.inputs.len() > 4 {
-        match slice.inputs[4].value() {
-            Some(data) => data.to_i64_vec().ok()?,
-            None => return None,
-        }
+        slice.inputs[4].value()?.to_i64_vec().ok()?
     } else {
         vec![1; starts.len()]
     };

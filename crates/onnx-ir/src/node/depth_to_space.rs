@@ -79,7 +79,7 @@ impl NodeProcessor for DepthToSpaceProcessor {
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
         // Validate unexpected attributes before config extraction
-        for (key, _value) in node.attrs.iter() {
+        for key in node.attrs.keys() {
             match key.as_str() {
                 "blocksize" | "mode" => {}
                 _ => {

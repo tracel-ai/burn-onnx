@@ -67,7 +67,7 @@ impl NodeProcessor for LogSoftmaxProcessor {
 
         // TODO: Validate unexpected attributes before config extraction
         // The spec only supports "axis" attribute
-        for (key, _value) in node.attrs.iter() {
+        for key in node.attrs.keys() {
             match key.as_str() {
                 "axis" => {}
                 _ => {

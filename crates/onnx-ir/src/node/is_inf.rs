@@ -57,7 +57,7 @@ impl NodeProcessor for IsInfProcessor {
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
         // Validate unexpected attributes before config extraction
-        for (key, _value) in node.attrs.iter() {
+        for key in node.attrs.keys() {
             match key.as_str() {
                 "detect_negative" | "detect_positive" => {}
                 _ => {

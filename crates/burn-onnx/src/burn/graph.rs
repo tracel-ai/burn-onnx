@@ -4,7 +4,8 @@ use crate::burn::node::NodeCodegen;
 use crate::burn::partition::{
     MIN_GRAPH_SIZE, Partition, reorder_constants_to_consumers, try_partition,
 };
-use burn_store::{BurnpackWriter, TensorSnapshot};
+use burn_pack::{Tensor, Writer};
+use burn_store::TensorSnapshot;
 use onnx_ir::{Node, ir::ArgType};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -70,9 +71,28 @@ impl BurnGraph {
         // Collect all tensor snapshots from nodes
         let snapshots = self.collect_all_snapshots();
 
+        // Materialize snapshots into the tensor-agnostic burnpack representation.
+        // This is currently eager because burn-pack doesn't accept lazy tensor providers.
+        // See https://github.com/tracel-ai/burn/issues/5219.
+        // FIXME: this is a regression that should be fixed for the official release
+        let tensors = snapshots
+            .iter()
+            .map(|snapshot| {
+                let data = snapshot.to_data()?;
+                Ok(Tensor::new(
+                    snapshot.full_path(),
+                    snapshot.dtype,
+                    snapshot.shape.clone(),
+                    snapshot.tensor_id.map(|id| id.val()),
+                    data.bytes,
+                ))
+            })
+            .collect::<Result<Vec<_>, burn_store::TensorSnapshotError>>()
+            .expect("Failed to materialize tensor snapshots");
+
         // Write burnpack file
         let burnpack_file = out_file.with_extension("bpk");
-        BurnpackWriter::new(snapshots)
+        Writer::new(tensors)
             .with_metadata("producer", "burn-onnx")
             .write_to_file(&burnpack_file)
             .expect("Failed to write burnpack file");

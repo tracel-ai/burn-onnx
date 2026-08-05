@@ -68,7 +68,7 @@ impl NodeProcessor for LeakyReluProcessor {
 
         // TODO: Validate unexpected attributes before config extraction
         // The spec only supports "alpha" attribute
-        for (key, _value) in node.attrs.iter() {
+        for key in node.attrs.keys() {
             match key.as_str() {
                 "alpha" => {}
                 _ => {

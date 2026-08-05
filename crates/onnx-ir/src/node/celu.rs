@@ -56,7 +56,7 @@ impl NodeProcessor for CeluProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        for (key, _value) in node.attrs.iter() {
+        for key in node.attrs.keys() {
             match key.as_str() {
                 "alpha" => {}
                 _ => {
