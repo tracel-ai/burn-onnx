@@ -354,7 +354,7 @@ impl ModelGen {
         create_dir_all(&out_dir).unwrap();
 
         for input in self.inputs.iter() {
-            let file_name = input.file_stem().unwrap();
+            let file_name = input.file_name().unwrap();
             let out_file: PathBuf = out_dir.join(file_name);
 
             log::info!("Converting {input:?}");
