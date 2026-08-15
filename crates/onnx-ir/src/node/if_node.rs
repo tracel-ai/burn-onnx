@@ -173,7 +173,7 @@ impl NodeProcessor for IfProcessor {
                 deferred
                     .build_graph_with_outer_scope(outer_scope.clone())
                     .map_err(|e| {
-                        ProcessError::Custom(format!("Failed to build then_branch: {:?}", e))
+                        ProcessError::Custom(format!("Failed to build then_branch: {}", e))
                     })?
             }
             crate::ir::AttributeValue::Graph(g) => g,
@@ -194,7 +194,7 @@ impl NodeProcessor for IfProcessor {
                 deferred
                     .build_graph_with_outer_scope(outer_scope)
                     .map_err(|e| {
-                        ProcessError::Custom(format!("Failed to build else_branch: {:?}", e))
+                        ProcessError::Custom(format!("Failed to build else_branch: {}", e))
                     })?
             }
             crate::ir::AttributeValue::Graph(g) => g,

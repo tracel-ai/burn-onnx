@@ -25,6 +25,7 @@ mmap = ["onnx-ir/mmap"]
 onnx-ir = { workspace = true }
 
 burn = { workspace = true, features = ["std", "flex"] }
+burn-pack = { workspace = true, features = ["std"] }
 burn-store = { workspace = true, features = [
     "std",
     "burnpack",

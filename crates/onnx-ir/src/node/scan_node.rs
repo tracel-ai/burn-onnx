@@ -179,7 +179,7 @@ impl NodeProcessor for ScanProcessor {
                 deferred
                     .build_graph_with_outer_scope(outer_scope)
                     .map_err(|e| {
-                        ProcessError::Custom(format!("Failed to build Scan body: {:?}", e))
+                        ProcessError::Custom(format!("Failed to build Scan body: {}", e))
                     })?
             }
             crate::ir::AttributeValue::Graph(g) => g,

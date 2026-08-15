@@ -267,6 +267,14 @@ impl ProcessorRegistry {
             Box::new(crate::node::identity::IdentityProcessor),
         );
 
+        // Custom (non-built-in) operations: hook-free half. Builds the
+        // Node::Custom view; type inference is overridden by user hooks when
+        // registered (see node/custom.rs).
+        registry.register(
+            NodeType::Custom,
+            Box::new(crate::node::custom::CustomProcessor),
+        );
+
         // Unsupported/placeholder operations
         registry.register(
             NodeType::GlobalMaxPool,

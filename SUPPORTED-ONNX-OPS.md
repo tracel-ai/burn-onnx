@@ -431,3 +431,27 @@ into single optimized operations:
   (Transpose + MatMul + Div/Mul + Softmax + MatMul) exported by PyTorch's ONNX
   exporter are coalesced into a single Attention node, enabling Burn's optimized
   attention primitives.
+
+## Extending burn-onnx
+
+Operators outside this table (custom domains like `com.microsoft`, or unknown
+op_types in the default domain) do not fail the import. They parse as custom
+nodes, and you supply their behavior with hooks registered on `ModelGen`:
+
+- **`CustomOp`** (via `ModelGen::register_custom_op`): handles a custom
+  operator, matched by ONNX identity `(op_type, domain)`. The hook implements
+  type inference (`infer_output_types`) and code generation (`forward`), with
+  optional imports, module fields, and weight snapshots. Constant inputs are
+  readable via `node.inputs[i].value()`.
+- **`OpOverride`** (via `ModelGen::register_op_override`): replaces the
+  generated code for a *built-in* operator (e.g. route `MatMul` to your own
+  kernel). Type inference still comes from the built-in processor.
+
+Everything a hook needs is exported from the single `burn_onnx::ext` module,
+including the `proc_macro2`/`quote` re-exports used to build the emitted code.
+If a model contains custom ops with no covering hook, `ModelGen` fails fast
+with a list of the missing `(domain, op_type)` pairs. Custom ops and override
+targets inside `If`/`Loop`/`Scan` subgraph bodies are not supported yet and
+are rejected with a clear error. See the "Custom Operators and Overrides"
+section of `DEVELOPMENT-GUIDE.md` for the full reference, and
+`examples/custom-op-hooks/` for a runnable example.

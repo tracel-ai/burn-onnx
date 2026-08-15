@@ -10,7 +10,8 @@
 
 **Import ONNX models into the [Burn](https://burn.dev) deep learning framework.**
 
-[Repository](https://github.com/tracel-ai/burn-onnx) | [Burn Repository](https://github.com/tracel-ai/burn)
+[Repository](https://github.com/tracel-ai/burn-onnx) |
+[Burn Repository](https://github.com/tracel-ai/burn)
 
 </div>
 
@@ -26,6 +27,8 @@ TensorFlow, and other frameworks on any Burn backend - from WebAssembly to CUDA.
 - Works with any Burn backend (CPU, GPU, WebGPU, embedded)
 - Supports both `std` and `no_std` environments
 - Full opset compliance: all supported operators work across ONNX opset versions 1 through 24
+- Extensible: hook operators outside the supported set (custom/vendor domains) to your own Rust
+  kernels, or override the generated code for a built-in operator
 - Graph simplification (enabled by default): attention coalescing, constant folding, constant shape
   propagation, idempotent-op elimination, identity-element elimination, CSE, dead code elimination,
   and permute-reshape detection
@@ -72,16 +75,48 @@ let output = model.forward(input_tensor);
 For detailed usage instructions, see the
 [ONNX Import Guide](https://burn.dev/books/burn/onnx-import.html) in the Burn Book.
 
+## Custom Operators
+
+Operators outside the [supported set](SUPPORTED-ONNX-OPS.md) do not have to block an import. That
+covers vendor domains such as `com.microsoft`, ops from a framework's custom export, and op types
+not implemented yet. Register a hook and supply the Rust yourself:
+
+```rust
+// build.rs
+ModelGen::new()
+    .input("src/model/my_model.onnx")
+    .out_dir("model/")
+    .register_custom_op(FftReal)      // handles my_domain::FftReal
+    .register_op_override(MyMatMul)   // replaces the generated code for every MatMul
+    .run_from_script();
+```
+
+- **`CustomOp`** supplies type inference and code generation for one ONNX `(op_type, domain)`. It
+  can read the node's attributes and its constant inputs.
+- **`OpOverride`** replaces the generated code for a built-in operator, to route it to a fused,
+  quantized, or hardware-specific kernel of your own. Type inference still comes from the built-in.
+
+Everything a hook needs is re-exported from `burn_onnx::ext`, so implementing one does not mean
+depending on `onnx-ir` or matching `proc-macro2`/`quote` versions by hand.
+
+Not sure which operators a given model needs? Run the import with no hooks registered: it fails with
+a list of every unsupported operator, its domain, and how many nodes use it.
+
+Runnable example: [custom-op-hooks](examples/custom-op-hooks). Full reference: "Custom Operators and
+Overrides" in the [Development Guide](DEVELOPMENT-GUIDE.md).
+
 ## Examples
 
-| Example                                                       | Description                         |
-| ------------------------------------------------------------- | ----------------------------------- |
-| [onnx-inference](examples/onnx-inference)                     | Basic ONNX model inference          |
-| [image-classification-web](examples/image-classification-web) | WebAssembly/WebGPU image classifier |
+| Example                                                       | Description                                    |
+| ------------------------------------------------------------- | ---------------------------------------------- |
+| [onnx-inference](examples/onnx-inference)                     | Basic ONNX model inference                     |
+| [image-classification-web](examples/image-classification-web) | WebAssembly/WebGPU image classifier            |
+| [custom-op-hooks](examples/custom-op-hooks)                   | Hooks for custom ops and built-in op overrides |
 
 ## Model Validation
 
-We validate burn-onnx against [26 real-world models](https://github.com/tracel-ai/burn-onnx/tree/main/crates/model-checks)
+We validate burn-onnx against
+[26 real-world models](https://github.com/tracel-ai/burn-onnx/tree/main/crates/model-checks)
 spanning image classification, object detection, depth estimation, NLP, speech, and generative AI.
 Each model check verifies the full pipeline: ONNX import, Rust codegen, weight loading, and
 numerical accuracy against ONNX Runtime reference outputs.
@@ -89,7 +124,8 @@ numerical accuracy against ONNX Runtime reference outputs.
 ## Supported Operators
 
 See the [Supported ONNX Operators](SUPPORTED-ONNX-OPS.md) table for the complete list of supported
-operators.
+operators. Anything outside that table can still be imported by registering a hook — see
+[Custom Operators](#custom-operators) above.
 
 ## Contributing
 

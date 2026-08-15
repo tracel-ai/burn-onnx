@@ -311,6 +311,7 @@ fn build_attention_node(
     }
 
     RawNode {
+        custom_identity: None,
         node_type: NodeType::Attention,
         name: format!("{}_attention", final_matmul.name),
         inputs,
@@ -558,6 +559,7 @@ fn try_prescaled_qk_pattern(
     corrective_perm.swap(rank - 1, rank - 2);
 
     let corrective_transpose = RawNode {
+        custom_identity: None,
         node_type: NodeType::Transpose,
         name: corrected_k_name,
         inputs: vec![k_combined.clone()],
@@ -699,6 +701,7 @@ mod tests {
 
     fn transpose_node(name: &str, input: &str, output: &str, perm: Vec<i64>) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type: NodeType::Transpose,
             name: name.to_string(),
             inputs: vec![tensor4(input)],
@@ -711,6 +714,7 @@ mod tests {
 
     fn matmul_node(name: &str, a: &str, b: &str, output: &str) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type: NodeType::MatMul,
             name: name.to_string(),
             inputs: vec![tensor4(a), tensor4(b)],
@@ -721,6 +725,7 @@ mod tests {
 
     fn softmax_node(name: &str, input: &str, output: &str, axis: i64) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type: NodeType::Softmax,
             name: name.to_string(),
             inputs: vec![tensor4(input)],
@@ -733,6 +738,7 @@ mod tests {
 
     fn binary_node(name: &str, op: NodeType, a: Argument, b: Argument, output: &str) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type: op,
             name: name.to_string(),
             inputs: vec![a, b],

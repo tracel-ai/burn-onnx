@@ -47,6 +47,7 @@ pub mod conv_transpose;
 pub mod cos;
 pub mod cosh;
 pub mod cumsum;
+pub mod custom_ops;
 pub mod deform_conv;
 pub mod depth_to_space;
 pub mod dequantize_linear;

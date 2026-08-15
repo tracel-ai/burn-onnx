@@ -12,12 +12,18 @@ use crate::burn::BurnImports;
 /// A field in the generated model struct
 #[derive(Debug, Clone)]
 pub struct Field {
+    /// Field name in the generated struct.
     pub name: Ident,
+    /// Field type as tokens, e.g. `Linear<B>`.
     pub ty: TokenStream,
+    /// Initialization expression assigned to the field in `new()`.
     pub init: TokenStream,
 }
 
 impl Field {
+    /// Create a field from a name, type tokens, and initialization tokens.
+    ///
+    /// Panics if `name` is empty.
     pub fn new<S: AsRef<str>>(name: S, ty: TokenStream, init: TokenStream) -> Self {
         if name.as_ref().is_empty() {
             panic!("Field with type {ty:?} was passed with empty name");

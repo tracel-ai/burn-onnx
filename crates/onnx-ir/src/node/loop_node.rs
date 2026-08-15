@@ -296,7 +296,7 @@ impl NodeProcessor for LoopProcessor {
                 deferred
                     .build_graph_with_outer_scope(outer_scope)
                     .map_err(|e| {
-                        ProcessError::Custom(format!("Failed to build Loop body: {:?}", e))
+                        ProcessError::Custom(format!("Failed to build Loop body: {}", e))
                     })?
             }
             crate::ir::AttributeValue::Graph(g) => g,

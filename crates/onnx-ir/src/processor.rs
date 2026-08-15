@@ -713,6 +713,7 @@ mod tests {
         let processor = TestProcessor;
         let prefs = OutputPreferences::new();
         let mut node = RawNode {
+            custom_identity: None,
             node_type: NodeType::Add,
             name: "test_node".to_string(),
             inputs: vec![Argument {
@@ -762,6 +763,7 @@ mod tests {
         let processor = DefaultProcessor;
         let prefs = OutputPreferences::new();
         let mut node = RawNode {
+            custom_identity: None,
             node_type: NodeType::Relu,
             name: "test_relu".to_string(),
             inputs: vec![Argument {

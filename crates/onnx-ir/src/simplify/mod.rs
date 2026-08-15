@@ -182,6 +182,7 @@ pub(crate) mod tests {
 
     pub fn node(name: &str, node_type: NodeType, inputs: &[&str], outputs: &[&str]) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type,
             name: name.to_string(),
             inputs: inputs.iter().map(|n| arg(n)).collect(),

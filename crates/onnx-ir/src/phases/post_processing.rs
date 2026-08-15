@@ -283,6 +283,7 @@ mod tests {
 
     fn create_identity_node(name: &str, input_name: &str, output_name: &str) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type: NodeType::Identity,
             name: name.to_string(),
             inputs: vec![Argument {
@@ -311,6 +312,7 @@ mod tests {
 
     fn create_add_node(name: &str, input1: &str, input2: &str, output: &str) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type: NodeType::Add,
             name: name.to_string(),
             inputs: vec![

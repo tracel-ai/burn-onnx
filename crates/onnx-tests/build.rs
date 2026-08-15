@@ -1,4 +1,9 @@
 use burn_onnx::ModelGen;
+use burn_onnx::ext::proc_macro2::TokenStream;
+use burn_onnx::ext::{
+    ArgType, CodegenContext, CustomNode, CustomOp, Imports, Node, NodeType, OpOverride,
+    ProcessError, arg_to_ident, quote::quote,
+};
 
 fn main() {
     // Re-run this build script if the onnx-tests directory changes.
@@ -9,6 +14,18 @@ fn main() {
     model_gen.simplify(false);
     add_all_inputs(&mut model_gen);
     model_gen.out_dir("model/").run_from_script();
+
+    // Custom (non-built-in) op models: need registered CustomOp hooks.
+    let mut custom = ModelGen::new();
+    custom
+        .simplify(false)
+        .input("tests/custom_ops/custom_ops.onnx")
+        .register_custom_op(ScaleShiftOp)
+        .register_custom_op(AddWindowOp)
+        .register_custom_op(MyIdentityOp)
+        .register_op_override(ReluOverride)
+        .out_dir("model/")
+        .run_from_script();
 
     // Generate simplified models for comparison testing.
     let mut simplified = ModelGen::new();
@@ -458,6 +475,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/scaler/scaler.onnx")
         .input("tests/scaler/scaler_per_feature_3d.onnx")
         .input("tests/scaler/scaler_i64.onnx")
+        .input("tests/scaler/scaler_ml_domain_only.onnx")
         .input("tests/shape/shape.onnx")
         .input("tests/shape/shape_of_shape.onnx")
         .input("tests/shape/shape_slice.onnx")
@@ -576,6 +594,175 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/subgraph/outer_scope_loop.onnx")
         .input("tests/subgraph/outer_scope_scan.onnx")
         .input("tests/subgraph/outer_scope_constant.onnx");
+}
+
+/// `test.custom::ScaleShift`: y = x * scale + shift (scale/shift are FLOAT attrs).
+///
+/// Exercises attribute access and hook-registered imports: the emitted call
+/// relies on `use crate::custom_ops::ops;` registered below.
+struct ScaleShiftOp;
+
+impl CustomOp for ScaleShiftOp {
+    fn op_type(&self) -> &str {
+        "ScaleShift"
+    }
+
+    fn domain(&self) -> &str {
+        "test.custom"
+    }
+
+    fn infer_output_types(&self, node: &CustomNode) -> Result<Vec<ArgType>, ProcessError> {
+        let input = node
+            .inputs
+            .first()
+            .ok_or_else(|| ProcessError::MissingInput("x".to_string()))?;
+        // Validate attributes here, where errors surface as friendly parse
+        // failures; forward() can then rely on them.
+        for attr in ["scale", "shift"] {
+            node.attrs
+                .get_f32(attr)
+                .ok_or_else(|| ProcessError::MissingAttribute(attr.to_string()))?;
+        }
+        Ok(vec![input.ty.clone()])
+    }
+
+    fn forward(
+        &self,
+        node: &CustomNode,
+        ctx: &mut CodegenContext<'_, '_>,
+    ) -> Result<TokenStream, ProcessError> {
+        let input = ctx.arg(&node.inputs[0]);
+        let out = arg_to_ident(&node.outputs[0]);
+        let scale = node
+            .attrs
+            .get_f32("scale")
+            .ok_or_else(|| ProcessError::MissingAttribute("scale".to_string()))?;
+        let shift = node
+            .attrs
+            .get_f32("shift")
+            .ok_or_else(|| ProcessError::MissingAttribute("shift".to_string()))?;
+        Ok(quote! {
+            let #out = ops::scale_shift(#input, #scale, #shift);
+        })
+    }
+
+    fn register_imports(&self, imports: &mut Imports<'_>) {
+        imports.register("crate::custom_ops::ops");
+    }
+}
+
+/// `test.custom::AddWindow`: y = x + window (broadcast over rows).
+///
+/// The window is a constant initializer input, read at codegen time via
+/// `Argument::value()` and inlined into the generated call.
+struct AddWindowOp;
+
+impl CustomOp for AddWindowOp {
+    fn op_type(&self) -> &str {
+        "AddWindow"
+    }
+
+    fn domain(&self) -> &str {
+        "test.custom"
+    }
+
+    fn infer_output_types(&self, node: &CustomNode) -> Result<Vec<ArgType>, ProcessError> {
+        let input = node
+            .inputs
+            .first()
+            .ok_or_else(|| ProcessError::MissingInput("x".to_string()))?;
+        // Check presence AND dtype during inference so codegen never fails on
+        // a window the model declared with the wrong element type.
+        let window = node
+            .inputs
+            .get(1)
+            .and_then(|arg| arg.value())
+            .ok_or_else(|| {
+                ProcessError::Custom("AddWindow requires a constant window input".to_string())
+            })?;
+        window.to_vec::<f32>().map_err(|_| {
+            ProcessError::Custom("AddWindow window constant must be f32".to_string())
+        })?;
+        Ok(vec![input.ty.clone()])
+    }
+
+    fn forward(
+        &self,
+        node: &CustomNode,
+        ctx: &mut CodegenContext<'_, '_>,
+    ) -> Result<TokenStream, ProcessError> {
+        let input = ctx.arg(&node.inputs[0]);
+        let out = arg_to_ident(&node.outputs[0]);
+        let window = node.inputs[1]
+            .value()
+            .ok_or_else(|| ProcessError::Custom("window constant missing".to_string()))?
+            .to_vec::<f32>()
+            .map_err(|_| ProcessError::Custom("window constant must be f32".to_string()))?;
+        Ok(quote! {
+            let #out = crate::custom_ops::ops::add_window(#input, &[#(#window),*], &self.device);
+        })
+    }
+}
+
+/// `MyIdentity` (default ONNX domain): unknown op_type, passes input through.
+struct MyIdentityOp;
+
+impl CustomOp for MyIdentityOp {
+    fn op_type(&self) -> &str {
+        "MyIdentity"
+    }
+
+    fn infer_output_types(&self, node: &CustomNode) -> Result<Vec<ArgType>, ProcessError> {
+        let input = node
+            .inputs
+            .first()
+            .ok_or_else(|| ProcessError::MissingInput("input".to_string()))?;
+        Ok(vec![input.ty.clone()])
+    }
+
+    fn forward(
+        &self,
+        node: &CustomNode,
+        ctx: &mut CodegenContext<'_, '_>,
+    ) -> Result<TokenStream, ProcessError> {
+        let input = ctx.arg(&node.inputs[0]);
+        let out = arg_to_ident(&node.outputs[0]);
+        Ok(quote! {
+            let #out = #input;
+        })
+    }
+}
+
+/// Codegen override for the built-in Relu: reroutes to a user kernel.
+/// Type inference still comes from the built-in Relu processor.
+///
+/// `my_relu` deliberately deviates from relu (it adds 1.0) so the runtime
+/// test can prove the override was dispatched: with a faithful kernel the
+/// built-in codegen would produce identical numbers and a dispatch
+/// regression would be invisible.
+struct ReluOverride;
+
+impl OpOverride for ReluOverride {
+    fn target(&self) -> NodeType {
+        NodeType::Relu
+    }
+
+    fn forward(
+        &self,
+        node: &Node,
+        ctx: &mut CodegenContext<'_, '_>,
+    ) -> Result<TokenStream, ProcessError> {
+        let Node::Relu(relu) = node else {
+            return Err(ProcessError::Custom(
+                "ReluOverride received a non-Relu node".to_string(),
+            ));
+        };
+        let input = ctx.arg(&relu.inputs[0]);
+        let out = arg_to_ident(&relu.outputs[0]);
+        Ok(quote! {
+            let #out = crate::custom_ops::ops::my_relu(#input);
+        })
+    }
 }
 
 fn add_simplify_inputs(model_gen: &mut ModelGen) {

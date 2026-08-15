@@ -7,7 +7,8 @@
 # ]
 # ///
 
-# used to generate models: scaler.onnx, scaler_per_feature_3d.onnx, scaler_i64.onnx
+# used to generate models: scaler.onnx, scaler_per_feature_3d.onnx, scaler_i64.onnx,
+# scaler_ml_domain_only.onnx
 
 import numpy as np
 import onnx
@@ -17,20 +18,19 @@ from onnx.reference import ReferenceEvaluator
 OPSET_VERSION = 1
 
 
-def make_model(node, input_info, output_info):
+def make_model(node, input_info, output_info, opset_imports=None):
     graph = helper.make_graph(
         [node],
         "scaler_test",
         [input_info],
         [output_info],
     )
-    return helper.make_model(
-        graph,
-        opset_imports=[
+    if opset_imports is None:
+        opset_imports = [
             helper.make_operatorsetid("ai.onnx.ml", OPSET_VERSION),
             helper.make_operatorsetid("", 17),
-        ],
-    )
+        ]
+    return helper.make_model(graph, opset_imports=opset_imports)
 
 
 def gen_scaler():
@@ -122,10 +122,42 @@ def gen_scaler_i64():
     print("expected:\n", expected)
 
 
+def gen_scaler_ml_domain_only():
+    """Imports only ai.onnx.ml, with no default-domain opset entry.
+
+    Legal per the ONNX spec (the graph uses no default-domain operators) and
+    accepted by onnx.checker; this is the shape of the OnnxMLTools H2O export in
+    issue #434. Regression test for that issue.
+    """
+    input_data = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float32)
+
+    node = helper.make_node(
+        "Scaler",
+        ["input"],
+        ["output"],
+        domain="ai.onnx.ml",
+        scale=[2.0],
+        offset=[1.0],
+    )
+    model = make_model(
+        node,
+        helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 3]),
+        helper.make_tensor_value_info("output", TensorProto.FLOAT, [2, 3]),
+        opset_imports=[helper.make_operatorsetid("ai.onnx.ml", OPSET_VERSION)],
+    )
+    onnx.checker.check_model(model, full_check=True)
+    onnx.save(model, "scaler_ml_domain_only.onnx")
+
+    sess = ReferenceEvaluator(model)
+    result = sess.run(None, {"input": input_data})[0]
+    print("scaler_ml_domain_only.onnx output:\n", result)
+
+
 def main():
     gen_scaler()
     gen_scaler_per_feature_3d()
     gen_scaler_i64()
+    gen_scaler_ml_domain_only()
 
 
 if __name__ == "__main__":

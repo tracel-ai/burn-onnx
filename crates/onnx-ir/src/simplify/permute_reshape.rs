@@ -47,6 +47,7 @@ pub(crate) fn simplify_permute_reshape(mut nodes: Vec<RawNode>) -> Vec<RawNode> 
         attrs.insert("perm".to_string(), AttributeValue::Int64s(perm.clone()));
 
         nodes[*ri] = RawNode {
+            custom_identity: None,
             node_type: NodeType::Transpose,
             name: nodes[*ri].name.clone(),
             inputs: vec![nodes[*ri].inputs[0].clone()],
@@ -197,6 +198,7 @@ mod tests {
         attrs: HashMap<String, AttributeValue>,
     ) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type,
             name: name.to_string(),
             inputs,

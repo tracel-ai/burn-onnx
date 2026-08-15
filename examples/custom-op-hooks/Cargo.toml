@@ -1,0 +1,16 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "custom-op-hooks"
+publish = false
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+burn = { workspace = true, features = ["flex"] }
+burn-store = { workspace = true, features = ["std", "burnpack"] }
+
+[build-dependencies]
+burn-onnx = { workspace = true, features = ["default"] }

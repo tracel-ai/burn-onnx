@@ -154,6 +154,7 @@ mod tests {
         out: &str,
     ) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type: op,
             name: name.to_string(),
             inputs: vec![lhs, rhs],

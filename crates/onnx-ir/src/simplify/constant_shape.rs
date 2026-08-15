@@ -126,6 +126,7 @@ fn make_constant_node(
     let input_name = format!("{}_const", output_name);
 
     RawNode {
+        custom_identity: None,
         node_type: NodeType::Constant,
         name: node_name.to_string(),
         inputs: vec![Argument {
@@ -273,20 +274,14 @@ fn extract_constant_shape_slice(
 
     // Extract optional axes (default: [0])
     let axes: Vec<i64> = if slice.inputs.len() > 3 {
-        match slice.inputs[3].value() {
-            Some(data) => data.to_i64_vec().ok()?,
-            None => return None,
-        }
+        slice.inputs[3].value()?.to_i64_vec().ok()?
     } else {
         (0..starts.len() as i64).collect()
     };
 
     // Extract optional steps (default: [1, 1, ...])
     let steps: Vec<i64> = if slice.inputs.len() > 4 {
-        match slice.inputs[4].value() {
-            Some(data) => data.to_i64_vec().ok()?,
-            None => return None,
-        }
+        slice.inputs[4].value()?.to_i64_vec().ok()?
     } else {
         vec![1; starts.len()]
     };
@@ -412,6 +407,7 @@ mod tests {
         attrs: HashMap<String, AttributeValue>,
     ) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type,
             name: name.to_string(),
             inputs,

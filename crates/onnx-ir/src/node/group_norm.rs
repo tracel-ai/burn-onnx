@@ -73,7 +73,7 @@ impl NodeProcessor for GroupNormProcessor {
         // TODO: Validate scale and bias tensors have rank 1 and size matches num_channels - Missing shape validation
 
         // Validate attributes before extracting config
-        for (key, _value) in node.attrs.iter() {
+        for key in node.attrs.keys() {
             match key.as_str() {
                 "epsilon" | "num_groups" | "stash_type" => {}
                 _ => {

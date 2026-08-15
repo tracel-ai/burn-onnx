@@ -110,6 +110,7 @@ mod tests {
         let processor = SumProcessor;
 
         let mut node = crate::ir::RawNode {
+            custom_identity: None,
             node_type: NodeType::Sum,
             name: "test_sum".to_string(),
             inputs: vec![
@@ -157,6 +158,7 @@ mod tests {
         let processor = SumProcessor;
 
         let mut node = crate::ir::RawNode {
+            custom_identity: None,
             node_type: NodeType::Sum,
             name: "test_sum".to_string(),
             inputs: vec![
@@ -214,6 +216,7 @@ mod tests {
         let processor = SumProcessor;
 
         let mut node = crate::ir::RawNode {
+            custom_identity: None,
             node_type: NodeType::Sum,
             name: "test_sum".to_string(),
             inputs: vec![Argument {
@@ -249,6 +252,7 @@ mod tests {
         let processor = SumProcessor;
 
         let mut node = crate::ir::RawNode {
+            custom_identity: None,
             node_type: NodeType::Sum,
             name: "test_sum".to_string(),
             inputs: vec![
@@ -306,6 +310,7 @@ mod tests {
         let processor = SumProcessor;
 
         let mut node = crate::ir::RawNode {
+            custom_identity: None,
             node_type: NodeType::Sum,
             name: "test_sum".to_string(),
             inputs: vec![
@@ -363,6 +368,7 @@ mod tests {
         let processor = SumProcessor;
 
         let mut node = crate::ir::RawNode {
+            custom_identity: None,
             node_type: NodeType::Sum,
             name: "test_sum".to_string(),
             inputs: vec![
@@ -433,6 +439,7 @@ mod tests {
             .collect();
 
         let mut node = crate::ir::RawNode {
+            custom_identity: None,
             node_type: NodeType::Sum,
             name: "test_sum_many".to_string(),
             inputs,

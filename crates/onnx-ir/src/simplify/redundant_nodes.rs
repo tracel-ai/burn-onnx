@@ -58,6 +58,12 @@ pub(crate) fn eliminate_redundant_nodes(mut nodes: Vec<RawNode>) -> Vec<RawNode>
 ///
 /// Nodes with graph-valued attributes get a unique key (not eligible for CSE).
 fn cse_key(node: &RawNode) -> String {
+    // Custom ops have unknown semantics (possibly stateful or random), so two
+    // identical-looking custom nodes must never be merged.
+    if node.node_type == crate::ir::NodeType::Custom {
+        return format!("__unique__:{}", node.name);
+    }
+
     // Skip nodes with graph attributes (too complex to compare)
     for value in node.attrs.values() {
         if matches!(
@@ -113,6 +119,23 @@ mod tests {
         let add = result.iter().find(|n| n.name == "add").unwrap();
         assert_eq!(add.inputs[0].name, "r1_out");
         assert_eq!(add.inputs[1].name, "r1_out"); // was r2_out, now r1_out
+    }
+
+    #[test]
+    fn test_custom_nodes_never_merged() {
+        // Identical-looking custom nodes have unknown semantics (possibly
+        // stateful or random) and must not be CSE-merged.
+        let nodes = vec![
+            node("custom_1", NodeType::Custom, &["input"], &["c1_out"]),
+            node("custom_2", NodeType::Custom, &["input"], &["c2_out"]),
+            node("add", NodeType::Add, &["c1_out", "c2_out"], &["output"]),
+        ];
+
+        let result = eliminate_redundant_nodes(nodes);
+
+        let add = result.iter().find(|n| n.name == "add").unwrap();
+        assert_eq!(add.inputs[0].name, "c1_out");
+        assert_eq!(add.inputs[1].name, "c2_out");
     }
 
     #[test]

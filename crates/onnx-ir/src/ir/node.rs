@@ -3,7 +3,7 @@
 //! This module contains types for representing ONNX nodes, including their types,
 //! configuration, inputs, outputs, and attributes.
 
-use strum::{Display, EnumString};
+use strum::EnumString;
 
 use super::argument::Argument;
 use super::attribute::Attributes;
@@ -38,6 +38,20 @@ impl RawNode {
     }
 }
 
+/// Raw ONNX identity of a custom (non-built-in) operator.
+///
+/// Present only on nodes whose `node_type` is [`NodeType::Custom`]. Built-in and
+/// synthetic nodes do not carry it: their identity is the `NodeType` itself.
+#[derive(Debug, Clone)]
+pub(crate) struct CustomIdentity {
+    /// Raw ONNX op_type, e.g. "FftReal"
+    pub op_type: String,
+    /// Raw ONNX domain, e.g. "custom_domain" ("" = default domain)
+    pub domain: String,
+    /// Opset version of `domain` from the model's opset_import
+    pub domain_opset: usize,
+}
+
 /// Nodes produced by the ONNX parser
 #[derive(Clone, Debug)]
 pub(crate) struct RawNode {
@@ -56,6 +70,9 @@ pub(crate) struct RawNode {
 
     /// ONNX attributes (opset-specific parameters)
     pub(crate) attrs: Attributes,
+
+    /// Raw (op_type, domain, domain opset) for custom ops; `None` for built-ins.
+    pub custom_identity: Option<CustomIdentity>,
 }
 
 // ============================================================================
@@ -65,8 +82,15 @@ pub(crate) struct RawNode {
 use crate::node::*;
 
 /// Macro to define both NodeType and Node enums from a single source
+///
+/// The `@custom` sentinel entry declares the variant used for ops outside the
+/// built-in set (non-standard domains or unknown default-domain op_types). It is
+/// emitted with `#[strum(disabled)]` so `NodeType::from_str` can never resolve to
+/// it by string match; the only way to obtain it is the parser's explicit
+/// fallback in `proto_conversion`.
 macro_rules! define_node_enum {
     (
+        @custom $custom_variant:ident => $custom_type:ty,
         $(
             $(#[$variant_meta:meta])*
             $variant:ident => $node_type:ty
@@ -78,13 +102,31 @@ macro_rules! define_node_enum {
         ///
         /// Note: Some operators have dimensional variants (e.g., Conv1d, Conv2d, Conv3d) that are
         /// Burn-specific extensions for better type safety and code generation.
-        #[derive(Debug, Hash, Eq, PartialEq, EnumString, Clone, Display)]
+        #[derive(Debug, Hash, Eq, PartialEq, EnumString, Clone)]
         #[strum(ascii_case_insensitive)]
         pub enum NodeType {
+            /// Sentinel for ops outside the built-in set. Never produced by
+            /// `from_str`; assigned only by the parser's domain-aware fallback.
+            #[strum(disabled)]
+            $custom_variant,
             $(
                 $(#[$variant_meta])*
                 $variant,
             )*
+        }
+
+        // Display is hand-written (not the strum derive) so the disabled
+        // `Custom` variant is guaranteed printable: it is used in node
+        // renaming and logging.
+        impl ::core::fmt::Display for NodeType {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                match self {
+                    NodeType::$custom_variant => f.write_str(stringify!($custom_variant)),
+                    $(
+                        NodeType::$variant => f.write_str(stringify!($variant)),
+                    )*
+                }
+            }
         }
 
         /// Enum-based node representation
@@ -93,6 +135,8 @@ macro_rules! define_node_enum {
         /// the operation-specific node struct.
         #[derive(Debug, Clone)]
         pub enum Node {
+            /// A custom (non-built-in) op, preserved with its raw ONNX identity.
+            $custom_variant($custom_type),
             $(
                 $(#[$variant_meta])*
                 $variant($node_type),
@@ -103,6 +147,7 @@ macro_rules! define_node_enum {
             /// Get the node name
             pub fn name(&self) -> &str {
                 match self {
+                    Node::$custom_variant(inner) => &inner.name,
                     $(
                         Node::$variant(inner) => &inner.name,
                     )*
@@ -112,6 +157,7 @@ macro_rules! define_node_enum {
             /// Get the node inputs
             pub fn inputs(&self) -> &[Argument] {
                 match self {
+                    Node::$custom_variant(inner) => &inner.inputs,
                     $(
                         Node::$variant(inner) => &inner.inputs,
                     )*
@@ -121,6 +167,7 @@ macro_rules! define_node_enum {
             /// Get mutable node inputs (internal use only)
             pub(crate) fn inputs_mut(&mut self) -> &mut Vec<Argument> {
                 match self {
+                    Node::$custom_variant(inner) => &mut inner.inputs,
                     $(
                         Node::$variant(inner) => &mut inner.inputs,
                     )*
@@ -130,6 +177,7 @@ macro_rules! define_node_enum {
             /// Get the node outputs
             pub fn outputs(&self) -> &[Argument] {
                 match self {
+                    Node::$custom_variant(inner) => &inner.outputs,
                     $(
                         Node::$variant(inner) => &inner.outputs,
                     )*
@@ -139,8 +187,19 @@ macro_rules! define_node_enum {
             /// Get mutable node outputs (internal use only)
             pub(crate) fn outputs_mut(&mut self) -> &mut Vec<Argument> {
                 match self {
+                    Node::$custom_variant(inner) => &mut inner.outputs,
                     $(
                         Node::$variant(inner) => &mut inner.outputs,
+                    )*
+                }
+            }
+
+            /// Get the NodeType corresponding to this node's variant
+            pub fn node_type(&self) -> NodeType {
+                match self {
+                    Node::$custom_variant(_) => NodeType::$custom_variant,
+                    $(
+                        Node::$variant(_) => NodeType::$variant,
                     )*
                 }
             }
@@ -149,6 +208,7 @@ macro_rules! define_node_enum {
         impl ::core::fmt::Display for Node {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 match self {
+                    Node::$custom_variant(inner) => write!(f, "{inner}"),
                     $(
                         Node::$variant(inner) => write!(f, "{inner}"),
                     )*
@@ -159,6 +219,9 @@ macro_rules! define_node_enum {
 }
 
 define_node_enum! {
+    // CUSTOM (non-built-in) OPERATIONS
+    @custom Custom => custom::CustomNode,
+
     // ARITHMETIC & BASIC OPERATIONS
     Add => arithmetic::AddNode,
     Sub => arithmetic::SubNode,
@@ -434,6 +497,7 @@ mod tests {
 
     fn make_raw_node(inputs: Vec<Argument>) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type: NodeType::Pad,
             name: "test".to_string(),
             inputs,

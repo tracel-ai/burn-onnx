@@ -10,7 +10,7 @@ use std::{cell::RefCell, collections::HashMap, iter::Peekable, rc::Rc, slice::It
 use crate::{
     graph_state::GraphState,
     ir::{ArgType, AttributeValue, NodeType, RawNode, TensorData, TensorDataExt},
-    pipeline::Error,
+    pipeline::{DomainOpsets, Error, PipelineHooks},
     processor::get_processor_registry,
     proto_conversion::convert_node_proto,
     protos::{GraphProto, NodeProto},
@@ -25,8 +25,10 @@ pub(crate) fn convert_nodes_from_graph(
     graph: &GraphProto,
     state_rc: &Rc<RefCell<GraphState>>,
     opset_version: usize,
+    domain_opsets: &DomainOpsets,
+    hooks: &PipelineHooks,
 ) -> Result<(), Error> {
-    convert_nodes_impl(&graph.node, state_rc, opset_version)
+    convert_nodes_impl(&graph.node, state_rc, opset_version, domain_opsets, hooks)
 }
 
 /// Internal implementation for node conversion
@@ -38,6 +40,8 @@ fn convert_nodes_impl(
     nodes: &[NodeProto],
     state_rc: &Rc<RefCell<GraphState>>,
     opset_version: usize,
+    domain_opsets: &DomainOpsets,
+    hooks: &PipelineHooks,
 ) -> Result<(), Error> {
     let mut node_name_counter: HashMap<NodeType, usize> = HashMap::new();
 
@@ -65,7 +69,7 @@ fn convert_nodes_impl(
     let mut node_iter = nodes.iter().peekable();
 
     while let Some(node_proto) = node_iter.next() {
-        let mut node = convert_node_proto(node_proto, &state_rc.borrow());
+        let mut node = convert_node_proto(node_proto, &state_rc.borrow(), domain_opsets);
 
         // Handle graph attributes for control flow nodes (If, Loop, Scan)
         if matches!(
@@ -153,8 +157,10 @@ fn convert_nodes_impl(
             let graph_attrs = crate::proto_conversion::convert_graph_attributes(
                 node_proto,
                 opset_version,
+                domain_opsets,
                 Some(parent_registry),
                 base_path.as_deref(),
+                hooks.inference(),
             );
             // Merge graph attributes with existing attributes
             for (key, value) in graph_attrs {
@@ -180,7 +186,12 @@ fn convert_nodes_impl(
         let node_type_before = node.node_type.clone();
 
         // Coalesce with following nodes (fusion)
-        coalesce(&mut node, &mut node_iter, &mut state_rc.borrow_mut());
+        coalesce(
+            &mut node,
+            &mut node_iter,
+            &mut state_rc.borrow_mut(),
+            domain_opsets,
+        );
 
         // Re-attach value_stores after coalesce (may have added inputs)
         attach_value_stores(&mut node, state_rc);
@@ -423,12 +434,13 @@ fn coalesce(
     node: &mut RawNode,
     nodes_iter: &mut Peekable<Iter<NodeProto>>,
     graph_data: &mut GraphState,
+    domain_opsets: &DomainOpsets,
 ) {
     #[allow(clippy::single_match)]
     match node.node_type {
         NodeType::Gemm => convert_gemm_to_linear(node),
         NodeType::MatMul => {
-            convert_matmul_to_linear(node, nodes_iter, graph_data);
+            convert_matmul_to_linear(node, nodes_iter, graph_data, domain_opsets);
         }
         _ => {}
     }
@@ -498,6 +510,7 @@ fn convert_matmul_to_linear(
     node: &mut RawNode,
     iter_mut: &mut Peekable<Iter<NodeProto>>,
     graph_data: &mut GraphState,
+    domain_opsets: &DomainOpsets,
 ) {
     if node.inputs.len() != 2 {
         panic!("MatMul node must have 2 inputs");
@@ -537,7 +550,7 @@ fn convert_matmul_to_linear(
 
     // Check the next node for potential conversion
     if let Some(peek_node) = iter_mut.peek() {
-        let peek_node = convert_node_proto(peek_node, graph_data);
+        let peek_node = convert_node_proto(peek_node, graph_data, domain_opsets);
         if is_add_node_with_bias(&peek_node, node, graph_data) {
             convert_and_remove_add_node(&peek_node, node);
             log::debug!("Fused Add bias into Linear node {}", node.name);
@@ -704,7 +717,8 @@ mod tests {
         let mut iter = empty_nodes.iter().peekable();
 
         // This should NOT panic - it should gracefully skip conversion
-        convert_matmul_to_linear(&mut node, &mut iter, &mut graph_state);
+        let domain_opsets = DomainOpsets::new(Default::default(), 16);
+        convert_matmul_to_linear(&mut node, &mut iter, &mut graph_state, &domain_opsets);
 
         // Node type should remain MatMul (not converted to Linear)
         assert_eq!(node.node_type, NodeType::MatMul);

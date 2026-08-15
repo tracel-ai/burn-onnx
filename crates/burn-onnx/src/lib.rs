@@ -14,6 +14,8 @@ mod logger;
 /// The module for generating the burn code.
 pub mod burn;
 
+pub mod ext;
+
 mod formatter;
 mod model_gen;
 

@@ -2,9 +2,15 @@ use std::{
     env,
     fs::{self, create_dir_all},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
-use crate::{burn::graph::BurnGraph, format_tokens, logger::init_log};
+use crate::{
+    burn::custom_op::{CustomOp, HookRegistry, OpOverride},
+    burn::graph::BurnGraph,
+    format_tokens,
+    logger::init_log,
+};
 
 use onnx_ir::{OnnxGraphBuilder, ir::OnnxGraph};
 
@@ -95,6 +101,9 @@ pub struct ModelGen {
     simplify: bool,
     /// Whether to partition large models into submodules (default: true)
     partition: bool,
+    /// User hooks for custom (non-built-in) ops. Shared with the onnx-ir
+    /// parse pipeline (type inference) and the codegen dispatch.
+    hooks: Arc<HookRegistry>,
 }
 
 impl Default for ModelGen {
@@ -106,6 +115,7 @@ impl Default for ModelGen {
             load_strategy: LoadStrategy::default(),
             simplify: true,
             partition: true,
+            hooks: Arc::new(HookRegistry::default()),
         }
     }
 }
@@ -249,6 +259,39 @@ impl ModelGen {
         self
     }
 
+    /// Register a codegen hook for a custom (non-built-in) ONNX operator.
+    ///
+    /// The hook is matched by ONNX operator identity `(op_type, domain)` and
+    /// supplies both type inference (during parsing) and code generation for
+    /// matching nodes. See [`crate::ext::CustomOp`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if a hook for the same `(op_type, domain)` is already registered.
+    pub fn register_custom_op(&mut self, op: impl CustomOp) -> &mut Self {
+        Arc::get_mut(&mut self.hooks)
+            .expect("register_custom_op must be called before running the generation")
+            .add_custom_op(Box::new(op));
+        self
+    }
+
+    /// Register a codegen override for a built-in ONNX operator.
+    ///
+    /// The built-in processor still performs type inference; the override
+    /// replaces only the generated code for nodes of the target type. See
+    /// [`crate::ext::OpOverride`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if an override for the same target is already registered, or if
+    /// the target is `NodeType::Custom`.
+    pub fn register_op_override(&mut self, over: impl OpOverride) -> &mut Self {
+        Arc::get_mut(&mut self.hooks)
+            .expect("register_op_override must be called before running the generation")
+            .add_override(Box::new(over));
+        self
+    }
+
     /// Runs code generation from a build script context.
     ///
     /// Use this method when calling from `build.rs`. The output directory will be
@@ -311,7 +354,7 @@ impl ModelGen {
         create_dir_all(&out_dir).unwrap();
 
         for input in self.inputs.iter() {
-            let file_name = input.file_stem().unwrap();
+            let file_name = input.file_name().unwrap();
             let out_file: PathBuf = out_dir.join(file_name);
 
             log::info!("Converting {input:?}");
@@ -343,10 +386,15 @@ impl ModelGen {
         log::debug!("Development mode: {:?}", self.development);
         log::debug!("Output file: {out_file:?}");
 
+        // The registry is passed even when empty: with hooks present (any
+        // registry at all), the pipeline's coverage pre-pass reports ALL
+        // uncovered custom ops in one friendly summary instead of failing
+        // deep inside type inference.
         let graph = OnnxGraphBuilder::new()
             .simplify(self.simplify)
+            .with_custom_op_inference(self.hooks.clone())
             .parse_file(input)
-            .unwrap_or_else(|e| panic!("Failed to parse ONNX file '{}': {}", input.display(), e));
+            .unwrap_or_else(|e| panic!("{}", parse_error_message(input, &e)));
 
         if self.development {
             self.write_debug_file(&out_file, "onnx.txt", &graph);
@@ -384,11 +432,53 @@ impl ModelGen {
         let bpk_file = out_file.with_extension("bpk");
         graph
             .into_burn()
+            .with_hooks(self.hooks.clone())
             .with_burnpack(bpk_file, self.load_strategy)
             .with_blank_space(true)
             .with_top_comment(top_comment)
             .with_partition(self.partition)
             .codegen()
+    }
+}
+
+/// User-facing message for a parse failure, with hook-registration guidance
+/// appended for the missing-hook case (the onnx-ir error text itself does not
+/// name ModelGen).
+fn parse_error_message(input: &Path, error: &onnx_ir::Error) -> String {
+    let base = format!("Failed to parse ONNX file '{}': {}", input.display(), error);
+    match error {
+        onnx_ir::Error::MissingCustomOpHooks(_) => {
+            format!("{base}\nRegister hooks via ModelGen::register_custom_op.")
+        }
+        _ => base,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use onnx_ir::{MissingHook, MissingReason};
+
+    #[test]
+    fn missing_hook_parse_error_appends_registration_hint() {
+        let error = onnx_ir::Error::MissingCustomOpHooks(vec![MissingHook::new(
+            "SelectiveScan",
+            "mamba",
+            12,
+            3,
+            MissingReason::NoHook,
+        )]);
+        let msg = parse_error_message(Path::new("mamba.onnx"), &error);
+        assert!(msg.contains("mamba::SelectiveScan"), "got: {msg}");
+        assert!(msg.contains("used by 12 node(s)"), "got: {msg}");
+        assert!(msg.contains("ModelGen::register_custom_op"), "got: {msg}");
+    }
+
+    #[test]
+    fn other_parse_errors_have_no_hook_hint() {
+        let error = onnx_ir::Error::MissingOpsetVersion;
+        let msg = parse_error_message(Path::new("m.onnx"), &error);
+        assert!(!msg.contains("register_custom_op"), "got: {msg}");
     }
 }
 

@@ -18,6 +18,8 @@ pipeline. The resulting IR provides:
 - **Pre-extracted configuration**: Attributes are parsed into strongly-typed config structs
 - **Static tensor data**: Constant values are available for constant folding
 - **Support for 100+ ONNX operators**: Including control flow (`If`, `Loop`, `Scan`)
+- **Tolerant of unknown operators**: Operators from custom or vendor domains parse as
+  `Node::Custom` rather than failing, so any model can be inspected
 
 For detailed architecture information, see the
 [Development Guide](https://github.com/tracel-ai/burn-onnx/blob/main/DEVELOPMENT-GUIDE.md).
@@ -48,10 +50,39 @@ for node in &graph.nodes {
         Node::Conv2d(conv_node) => {
             println!("  Conv2d with kernel size {:?}", conv_node.config.kernel_size);
         }
+        // Operators this crate does not implement keep their ONNX identity
+        Node::Custom(custom) => {
+            println!("  {}::{} (opset {})", custom.domain, custom.op_type, custom.opset);
+        }
         _ => {}
     }
 }
 ```
+
+## Unknown and Custom Operators
+
+An operator is resolved by its full ONNX identity `(domain, op_type)`. Op types in the standard
+domains (`""`, `ai.onnx`, `ai.onnx.ml`) map to built-in `Node` variants; anything else — a vendor
+domain like `com.microsoft`, or an op type this crate does not implement — becomes
+`Node::Custom`, carrying its raw op type, domain, per-domain opset, attributes, and inputs
+(including readable constant data). Parsing does not fail, so unknown models stay inspectable.
+
+Type inference for those nodes falls back to a best-effort guess. To supply real inference,
+implement `CustomOpInference` and register it:
+
+```rust
+let graph = OnnxGraphBuilder::new()
+    .with_custom_op_inference(Arc::new(my_hooks))
+    .parse_file("path/to/model.onnx")?;
+```
+
+With hooks registered, a pre-pass reports every custom operator they do not cover in one error
+(`Error::MissingCustomOpHooks`) before type inference runs, rather than failing later on a
+cascading type error.
+
+Code generation for custom operators lives in `burn-onnx`, whose `CustomOp` trait pairs inference
+with emitted Rust; see its
+[Development Guide](https://github.com/tracel-ai/burn-onnx/blob/main/DEVELOPMENT-GUIDE.md).
 
 ## Memory-Mapped Loading
 

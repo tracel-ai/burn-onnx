@@ -3,8 +3,8 @@ use std::str::{FromStr, from_utf8};
 
 use super::graph_state::GraphState;
 use super::ir::{
-    ArgType, Argument, AttributeValue, Attributes, NodeType, RawNode, TensorData, TensorDataExt,
-    TensorType,
+    ArgType, Argument, AttributeValue, Attributes, CustomIdentity, NodeType, RawNode, TensorData,
+    TensorDataExt, TensorType,
 };
 use super::protos::{
     AttributeProto, NodeProto, TensorProto, ValueInfoProto,
@@ -580,7 +580,21 @@ pub fn convert_vec_attrs_proto(attrs: Vec<AttributeProto>) -> Attributes {
     result
 }
 
-pub fn convert_node_proto(node: &NodeProto, graph_data: &GraphState) -> RawNode {
+/// Standard ONNX domains whose op_types map to built-in NodeTypes.
+///
+/// Anything else (e.g. "com.microsoft", "custom_domain") resolves to
+/// `NodeType::Custom`, even if the op_type collides with a built-in name:
+/// ONNX operator identity is `(domain, op_type)`, so `custom_domain::MatMul`
+/// is not the built-in `MatMul`.
+fn is_standard_domain(domain: &str) -> bool {
+    matches!(domain, "" | "ai.onnx" | "ai.onnx.ml")
+}
+
+pub(crate) fn convert_node_proto(
+    node: &NodeProto,
+    graph_data: &GraphState,
+    domain_opsets: &crate::pipeline::DomainOpsets,
+) -> RawNode {
     let name = sanitize_name(&node.name);
 
     let inputs = node.input.iter().map(|x| graph_data.init_in(x)).collect();
@@ -604,9 +618,47 @@ pub fn convert_node_proto(node: &NodeProto, graph_data: &GraphState) -> RawNode 
 
     let attrs = convert_vec_attrs_proto(node.attribute.clone());
 
-    let node_type = NodeType::from_str(&node.op_type).expect("Unknown node type");
+    // ONNX operator identity is (domain, op_type). Standard-domain op_types
+    // map to built-in NodeTypes; everything unrecognized becomes Custom and is
+    // handled by user hooks (or a friendly error) instead of a parse panic.
+    let node_type = if is_standard_domain(&node.domain) {
+        NodeType::from_str(&node.op_type).unwrap_or(NodeType::Custom)
+    } else {
+        NodeType::Custom
+    };
+
+    let custom_identity = (node_type == NodeType::Custom).then(|| {
+        // Canonicalize the identity: "ai.onnx" and "" are the same domain, and
+        // hooks are matched by exact (op_type, domain), so storing the raw
+        // spelling would leave a hook registered for "" not covering a node
+        // whose model happens to spell it out.
+        let domain = crate::pipeline::normalize_domain(&node.domain);
+        // Unknown op in the DEFAULT domain is the surprising case (possibly a
+        // newer standard operator this crate does not implement yet), so it
+        // warns; custom-domain ops are expected to be custom.
+        if domain.is_empty() {
+            log::warn!(
+                "Unrecognized default-domain op '{}' (node '{}'); treating as custom op",
+                node.op_type,
+                name
+            );
+        } else {
+            log::info!(
+                "Custom-domain op '{}::{}' (node '{}'); treating as custom op",
+                domain,
+                node.op_type,
+                name
+            );
+        }
+        CustomIdentity {
+            op_type: node.op_type.clone(),
+            domain: domain.to_string(),
+            domain_opset: domain_opsets.opset_for(&node.domain),
+        }
+    });
 
     RawNode {
+        custom_identity,
         node_type,
         name,
         inputs,
@@ -814,11 +866,13 @@ pub fn extract_node_outer_scope_references(
 /// Otherwise, a new registry is created for sibling subgraphs.
 ///
 /// The `base_path` is inherited from the parent graph for external data resolution.
-pub fn convert_graph_attributes(
+pub(crate) fn convert_graph_attributes(
     node_proto: &NodeProto,
     opset_version: usize,
+    domain_opsets: &crate::pipeline::DomainOpsets,
     parent_registry: Option<crate::graph_state::NameRegistry>,
     base_path: Option<&Path>,
+    custom_op_inference: Option<std::sync::Arc<dyn crate::node::custom::CustomOpInference>>,
 ) -> Attributes {
     use crate::ir::DeferredGraph;
     use std::sync::Arc;
@@ -838,8 +892,10 @@ pub fn convert_graph_attributes(
                         let deferred = DeferredGraph {
                             proto: Arc::new(graph_proto.clone()),
                             opset_version,
+                            domain_opsets: domain_opsets.clone(),
                             name_registry: Some(name_registry.clone()),
                             base_path: base_path.map(|p| p.to_path_buf()),
+                            custom_op_inference: custom_op_inference.clone(),
                         };
                         result.insert(attr.name.clone(), AttributeValue::DeferredGraph(deferred));
                     }
@@ -851,8 +907,10 @@ pub fn convert_graph_attributes(
                         .map(|graph_proto| DeferredGraph {
                             proto: Arc::new(graph_proto.clone()),
                             opset_version,
+                            domain_opsets: domain_opsets.clone(),
                             name_registry: Some(name_registry.clone()),
                             base_path: base_path.map(|p| p.to_path_buf()),
+                            custom_op_inference: custom_op_inference.clone(),
                         })
                         .collect();
                     result.insert(

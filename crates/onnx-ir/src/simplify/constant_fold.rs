@@ -124,6 +124,7 @@ fn make_constant_node(
     let input_name = format!("{}_const", output_name);
 
     RawNode {
+        custom_identity: None,
         node_type: NodeType::Constant,
         name: node_name.to_string(),
         inputs: vec![Argument {
@@ -602,10 +603,8 @@ fn compute_reshape_target(node: &RawNode, data: &TensorData) -> Option<Vec<usize
             // Get axes from attributes (opset < 13) or from input (opset >= 13)
             let axes = if let Some(attr) = node.attrs.get("axes") {
                 attr.clone().into_i64s()
-            } else if let Some(axes_input) = node.inputs.get(1) {
-                axes_input.value()?.to_i64_vec().ok()?
             } else {
-                return None;
+                node.inputs.get(1)?.value()?.to_i64_vec().ok()?
             };
 
             let output_rank = data.shape.len() + axes.len();
@@ -753,6 +752,7 @@ mod tests {
         outputs: Vec<Argument>,
     ) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type,
             name: name.to_string(),
             inputs,
@@ -769,6 +769,7 @@ mod tests {
         attrs: std::collections::HashMap<String, AttributeValue>,
     ) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type,
             name: name.to_string(),
             inputs,

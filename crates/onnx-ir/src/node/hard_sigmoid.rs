@@ -62,7 +62,7 @@ impl NodeProcessor for HardSigmoidProcessor {
     ) -> Result<(), ProcessError> {
         // TODO: Validate unexpected attributes before config extraction
         // The spec only supports "alpha" and "beta" attributes
-        for (key, _value) in node.attrs.iter() {
+        for key in node.attrs.keys() {
             match key.as_str() {
                 "alpha" | "beta" => {}
                 _ => {

@@ -524,6 +524,7 @@ fn create_constant_node(
     data_id: DataId,
 ) -> RawNode {
     RawNode {
+        custom_identity: None,
         node_type: NodeType::Constant,
         name: node_name,
         inputs: vec![Argument {

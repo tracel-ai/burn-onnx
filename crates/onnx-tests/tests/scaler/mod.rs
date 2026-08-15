@@ -1,6 +1,11 @@
 // Include the models for this node type
 use crate::include_models;
-include_models!(scaler, scaler_per_feature_3d, scaler_i64);
+include_models!(
+    scaler,
+    scaler_per_feature_3d,
+    scaler_i64,
+    scaler_ml_domain_only
+);
 
 #[cfg(test)]
 mod tests {
@@ -55,6 +60,25 @@ mod tests {
             [[1.0f32, 2.0, 0.5], [4.0, 8.0, 2.0]],
             [[7.0, 14.0, 3.5], [10.0, 20.0, 5.0]],
         ]);
+
+        output.to_data().assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn test_scaler_ml_domain_only() {
+        // Model imports only ai.onnx.ml and declares no default-domain opset,
+        // which is legal because the graph uses no default-domain operators.
+        // Regression test for issue #434, where parsing rejected these outright.
+        // Same scale/offset as scaler.onnx: Y = (X - 1.0) * 2.0
+        let model: scaler_ml_domain_only::Model = scaler_ml_domain_only::Model::default();
+
+        let device = Default::default();
+
+        let input = Tensor::<2>::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
+
+        let output = model.forward(input);
+
+        let expected = TensorData::from([[0.0f32, 2.0, 4.0], [6.0, 8.0, 10.0]]);
 
         output.to_data().assert_eq(&expected, true);
     }

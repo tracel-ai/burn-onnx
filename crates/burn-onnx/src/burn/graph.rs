@@ -1,14 +1,19 @@
 use super::{BurnImports, Scope, ToTokens};
 use crate::LoadStrategy;
+use crate::burn::custom_op::HookRegistry;
 use crate::burn::node::NodeCodegen;
+use crate::burn::node_codegen::{
+    node_collect_snapshots, node_field, node_forward, node_register_imports,
+};
 use crate::burn::partition::{
     MIN_GRAPH_SIZE, Partition, reorder_constants_to_consumers, try_partition,
 };
-use burn_store::{BurnpackWriter, TensorSnapshot};
+use burn_pack::{Tensor, Writer};
+use burn_store::TensorSnapshot;
 use onnx_ir::{Node, ir::ArgType};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 /// Burn graph intermediate representation of modules and tensor operations.
 #[derive(Debug)]
@@ -31,6 +36,8 @@ pub struct BurnGraph {
     /// - Inputs: `Tensor::from_data([name as T], &self.device)` after the params
     boundary_output_conversions: HashMap<String, onnx_ir::ir::DType>,
     boundary_input_conversions: HashMap<String, onnx_ir::ir::DType>,
+    /// User codegen hooks for custom (non-built-in) ops
+    hooks: Arc<HookRegistry>,
 }
 
 impl Default for BurnGraph {
@@ -48,6 +55,7 @@ impl Default for BurnGraph {
             cached_partition: None,
             boundary_output_conversions: HashMap::new(),
             boundary_input_conversions: HashMap::new(),
+            hooks: Arc::new(HookRegistry::default()),
         }
     }
 }
@@ -67,12 +75,35 @@ impl BurnGraph {
     ///
     /// The [`LoadStrategy`] controls which constructors are generated on the `Model` struct.
     pub fn with_burnpack(mut self, out_file: PathBuf, strategy: LoadStrategy) -> Self {
+        // Snapshot collection consults the hooks, so the subgraph guard must
+        // run before it (codegen() re-checks for direct codegen users).
+        self.validate_hooks_in_subgraphs();
+
         // Collect all tensor snapshots from nodes
         let snapshots = self.collect_all_snapshots();
 
+        // Materialize snapshots into the tensor-agnostic burnpack representation.
+        // This is currently eager because burn-pack doesn't accept lazy tensor providers.
+        // See https://github.com/tracel-ai/burn/issues/5219.
+        // FIXME: this is a regression that should be fixed for the official release
+        let tensors = snapshots
+            .iter()
+            .map(|snapshot| {
+                let data = snapshot.to_data()?;
+                Ok(Tensor::new(
+                    snapshot.full_path(),
+                    snapshot.dtype,
+                    snapshot.shape.clone(),
+                    snapshot.tensor_id.map(|id| id.val()),
+                    data.bytes,
+                ))
+            })
+            .collect::<Result<Vec<_>, burn_store::TensorSnapshotError>>()
+            .expect("Failed to materialize tensor snapshots");
+
         // Write burnpack file
         let burnpack_file = out_file.with_extension("bpk");
-        BurnpackWriter::new(snapshots)
+        Writer::new(tensors)
             .with_metadata("producer", "burn-onnx")
             .write_to_file(&burnpack_file)
             .unwrap_or_else(|e| {
@@ -129,7 +160,13 @@ impl BurnGraph {
     fn collect_snapshots_flat(&self) -> Vec<TensorSnapshot> {
         let mut snapshots = Vec::new();
         let mut field_name_counts: HashMap<String, usize> = HashMap::new();
-        collect_snapshots_from_nodes(&self.nodes, "", &mut field_name_counts, &mut snapshots);
+        collect_snapshots_from_nodes(
+            &self.nodes,
+            "",
+            &mut field_name_counts,
+            &mut snapshots,
+            &self.hooks,
+        );
         snapshots
     }
 
@@ -146,6 +183,7 @@ impl BurnGraph {
                 &prefix,
                 &mut field_name_counts,
                 &mut snapshots,
+                &self.hooks,
             );
         }
         snapshots
@@ -173,8 +211,68 @@ impl BurnGraph {
         self
     }
 
+    /// Set the codegen hooks for custom (non-built-in) ops.
+    ///
+    /// Must be applied before `with_burnpack`, which collects snapshots and
+    /// therefore consults the hooks for `Node::Custom` fields.
+    pub(crate) fn with_hooks(mut self, hooks: Arc<HookRegistry>) -> Self {
+        self.hooks = hooks;
+        self
+    }
+
+    /// Reject hook-relevant nodes inside If/Loop/Scan subgraph bodies.
+    ///
+    /// Subgraph body codegen dispatches through the hook-free `NodeCodegen`
+    /// path (see `subgraph_helper`), so a custom op or an overridden built-in
+    /// inside a body would silently emit the wrong code or fail to compile.
+    /// Until subgraph codegen is hook-aware, fail up front with a message
+    /// naming the node instead.
+    fn validate_hooks_in_subgraphs(&self) {
+        fn check_body(body: &onnx_ir::OnnxGraph, hooks: &HookRegistry) {
+            for node in &body.nodes {
+                if let Node::Custom(c) = node {
+                    panic!(
+                        "Custom op '{}' (node '{}') is inside an If/Loop/Scan body; \
+                         custom op codegen inside subgraphs is not supported yet",
+                        c, c.name
+                    );
+                }
+                if self_override_matches(hooks, node) {
+                    panic!(
+                        "OpOverride for {:?} matches node '{}' inside an If/Loop/Scan body; \
+                         overriding ops inside subgraphs is not supported yet",
+                        node.node_type(),
+                        node.name()
+                    );
+                }
+                recurse(node, hooks);
+            }
+        }
+
+        fn self_override_matches(hooks: &HookRegistry, node: &Node) -> bool {
+            hooks.override_for(&node.node_type()).is_some()
+        }
+
+        fn recurse(node: &Node, hooks: &HookRegistry) {
+            match node {
+                Node::If(n) => {
+                    check_body(&n.config.then_branch, hooks);
+                    check_body(&n.config.else_branch, hooks);
+                }
+                Node::Loop(n) => check_body(&n.config.body, hooks),
+                Node::Scan(n) => check_body(&n.config.body, hooks),
+                _ => {}
+            }
+        }
+
+        for node in &self.nodes {
+            recurse(node, &self.hooks);
+        }
+    }
+
     /// Generate tokens representing the graph with Burn modules and tensor operations.
     pub fn codegen(mut self) -> TokenStream {
+        self.validate_hooks_in_subgraphs();
         self.register_imports();
 
         let partition = self.compute_partition();
@@ -319,7 +417,7 @@ impl BurnGraph {
             }
 
             // Collect fields from this chunk's nodes
-            let chunk_fields = collect_fields_for_nodes(chunk_nodes);
+            let chunk_fields = collect_fields_for_nodes(chunk_nodes, &self.hooks);
 
             // Generate the submodule struct body
             let struct_fields: Vec<_> = chunk_fields
@@ -345,7 +443,7 @@ impl BurnGraph {
             let mut forward_body = quote! {};
             for (local_pos, node) in chunk_nodes.iter().enumerate() {
                 let mut scope_at_pos = scope.at_position(local_pos);
-                let code = NodeCodegen::forward(node, &mut scope_at_pos);
+                let code = node_forward(node, &mut scope_at_pos, &self.hooks);
                 forward_body.extend(code);
             }
 
@@ -477,7 +575,7 @@ impl BurnGraph {
         // Register imports from nodes
         self.nodes
             .iter()
-            .for_each(|node| NodeCodegen::register_imports(node, &mut self.imports));
+            .for_each(|node| node_register_imports(node, &mut self.imports, &self.hooks));
     }
 
     /// Build the scope state to make sure tensor clones are added where needed.
@@ -639,7 +737,7 @@ impl BurnGraph {
 
     /// Recursively collect all fields from nodes, including subgraph nodes in If/Loop/Scan
     fn collect_all_fields(&self) -> Vec<FieldTuple> {
-        collect_fields_for_nodes(&self.nodes)
+        collect_fields_for_nodes(&self.nodes, &self.hooks)
     }
 
     fn codegen_struct(&self) -> TokenStream {
@@ -701,7 +799,7 @@ impl BurnGraph {
         let mut body = quote! {};
         for (index, node) in self.nodes.iter().enumerate() {
             let mut scope_at_pos = self.scope.at_position(index);
-            let code = NodeCodegen::forward(node, &mut scope_at_pos);
+            let code = node_forward(node, &mut scope_at_pos, &self.hooks);
             body.extend(code);
         }
 
@@ -888,10 +986,15 @@ impl BurnGraph {
 type FieldTuple = (proc_macro2::Ident, TokenStream, Option<TokenStream>);
 
 /// Collect fields from a slice of nodes (including If/Loop subgraph fields).
-fn collect_fields_for_nodes(nodes: &[Node]) -> Vec<FieldTuple> {
+fn collect_fields_for_nodes(nodes: &[Node], hooks: &HookRegistry) -> Vec<FieldTuple> {
     let mut field_name_counts: HashMap<String, usize> = HashMap::new();
     let mut all_fields: Vec<FieldTuple> = Vec::new();
 
+    // Subgraph bodies are deliberately hook-FREE: their forward codegen goes
+    // through the built-in NodeCodegen path (subgraph_helper), and
+    // validate_hooks_in_subgraphs rejects any body node a hook would affect.
+    // Consulting hooks here while forward does not would desynchronize
+    // fields from the emitted code.
     fn collect_subgraph_fields_recursive(
         subgraph: &onnx_ir::OnnxGraph,
         field_name_counts: &mut HashMap<String, usize>,
@@ -951,7 +1054,7 @@ fn collect_fields_for_nodes(nodes: &[Node]) -> Vec<FieldTuple> {
     }
 
     for node in nodes {
-        if let Some(field) = NodeCodegen::field(node) {
+        if let Some(field) = node_field(node, hooks) {
             all_fields.push((field.name, field.ty, Some(field.init)));
         }
 
@@ -986,7 +1089,11 @@ fn collect_snapshots_from_nodes(
     prefix: &str,
     field_name_counts: &mut HashMap<String, usize>,
     snapshots: &mut Vec<TensorSnapshot>,
+    hooks: &HookRegistry,
 ) {
+    // Hook-free for the same reason as collect_subgraph_fields_recursive:
+    // subgraph forward codegen is hook-free, and hook-relevant body nodes
+    // are rejected up front.
     fn collect_subgraph_snapshots_recursive(
         subgraph: &onnx_ir::OnnxGraph,
         prefix: &str,
@@ -1039,7 +1146,7 @@ fn collect_snapshots_from_nodes(
     }
 
     for node in nodes {
-        if let Some(field) = NodeCodegen::field(node) {
+        if let Some(field) = node_field(node, hooks) {
             let base_name = field.name.to_string();
             let count = field_name_counts.entry(base_name.clone()).or_insert(0);
             *count += 1;
@@ -1055,7 +1162,7 @@ fn collect_snapshots_from_nodes(
             } else {
                 format!("{}.{}", prefix, unique_name)
             };
-            let node_snapshots = NodeCodegen::collect_snapshots(node, &full_name);
+            let node_snapshots = node_collect_snapshots(node, &full_name, hooks);
             snapshots.extend(node_snapshots);
         }
 
@@ -1096,6 +1203,305 @@ mod tests {
         formatter
             .format_tokens(tokens)
             .unwrap_or_else(|_| "FORMATTING FAILED".to_string())
+    }
+
+    /// input -> FftLike (custom, domain my.domain) -> output
+    fn build_custom_op_graph() -> BurnGraph {
+        use onnx_ir::ir::TensorType;
+
+        let mut graph = BurnGraph::default();
+
+        let custom = onnx_ir::CustomNode::new(
+            "fftlike1",
+            "FftLike",
+            "my.domain",
+            vec![onnx_ir::Argument::new(
+                "input",
+                ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+            )],
+            vec![onnx_ir::Argument::new(
+                "t0",
+                ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+            )],
+            Default::default(),
+            3,
+        );
+        graph.register(Node::Custom(custom));
+
+        graph.register_input_output(vec!["input".to_string()], vec!["t0".to_string()], &[], &[]);
+
+        graph
+    }
+
+    /// Hook that emits a call into a user crate for FftLike nodes.
+    struct FftLikeOp;
+
+    impl crate::ext::CustomOp for FftLikeOp {
+        fn op_type(&self) -> &str {
+            "FftLike"
+        }
+
+        fn domain(&self) -> &str {
+            "my.domain"
+        }
+
+        fn infer_output_types(
+            &self,
+            node: &onnx_ir::CustomNode,
+        ) -> Result<Vec<ArgType>, onnx_ir::ProcessError> {
+            Ok(vec![node.inputs[0].ty.clone()])
+        }
+
+        fn forward(
+            &self,
+            node: &onnx_ir::CustomNode,
+            ctx: &mut crate::ext::CodegenContext<'_, '_>,
+        ) -> Result<TokenStream, onnx_ir::ProcessError> {
+            let input = ctx.arg(&node.inputs[0]);
+            let out = crate::burn::node_traits::arg_to_ident(&node.outputs[0]);
+            Ok(quote! {
+                let #out = my_crate::ops::fft_like(#input);
+            })
+        }
+
+        fn register_imports(&self, imports: &mut crate::ext::Imports<'_>) {
+            imports.register("my_crate::ops");
+        }
+    }
+
+    #[test]
+    fn custom_op_codegen_dispatches_to_hook() {
+        let mut registry = HookRegistry::default();
+        registry.add_custom_op(Box::new(FftLikeOp));
+
+        let graph = build_custom_op_graph().with_hooks(Arc::new(registry));
+        let code = format_tokens(graph.codegen());
+
+        // Hook-emitted forward line and hook-registered import
+        assert!(
+            code.contains("let t0 = my_crate::ops::fft_like(input);"),
+            "generated code missing hook output:\n{code}"
+        );
+        assert!(
+            code.contains("use my_crate::ops;"),
+            "generated code missing hook import:\n{code}"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "has no registered hook")]
+    fn custom_op_without_hook_panics_with_clear_message() {
+        let graph = build_custom_op_graph();
+        graph.codegen();
+    }
+
+    /// Custom op that declares a module field and a weight snapshot,
+    /// exercising the node_field / node_collect_snapshots dispatch.
+    struct StatefulFftOp;
+
+    impl crate::ext::CustomOp for StatefulFftOp {
+        fn op_type(&self) -> &str {
+            "FftLike"
+        }
+
+        fn domain(&self) -> &str {
+            "my.domain"
+        }
+
+        fn infer_output_types(
+            &self,
+            node: &onnx_ir::CustomNode,
+        ) -> Result<Vec<ArgType>, onnx_ir::ProcessError> {
+            Ok(vec![node.inputs[0].ty.clone()])
+        }
+
+        fn forward(
+            &self,
+            node: &onnx_ir::CustomNode,
+            ctx: &mut crate::ext::CodegenContext<'_, '_>,
+        ) -> Result<TokenStream, onnx_ir::ProcessError> {
+            let input = ctx.arg(&node.inputs[0]);
+            let out = crate::burn::node_traits::arg_to_ident(&node.outputs[0]);
+            Ok(quote! {
+                let #out = my_crate::ops::stateful_fft(#input, self.fft_state.val());
+            })
+        }
+
+        fn field(
+            &self,
+            _node: &onnx_ir::CustomNode,
+        ) -> Result<Option<crate::burn::Field>, onnx_ir::ProcessError> {
+            Ok(Some(crate::burn::Field::new(
+                "fft_state",
+                quote! { burn::module::Param<Tensor<1>> },
+                quote! {
+                    let fft_state = burn::module::Param::from_tensor(
+                        Tensor::zeros([4], device),
+                    );
+                },
+            )))
+        }
+
+        fn collect_snapshots(
+            &self,
+            _node: &onnx_ir::CustomNode,
+            field_name: &str,
+        ) -> Result<Vec<TensorSnapshot>, onnx_ir::ProcessError> {
+            use burn::module::ParamId;
+            use burn::tensor::TensorData;
+            let data_fn =
+                std::rc::Rc::new(|| Ok(TensorData::new(vec![0.5f32, 1.0, 1.5, 2.0], [4usize])));
+            Ok(vec![TensorSnapshot::from_closure(
+                data_fn,
+                burn::tensor::DType::F32,
+                [4usize].into(),
+                vec![field_name.to_string(), "state".to_string()],
+                vec!["Struct:StatefulFft".to_string()],
+                ParamId::new(),
+            )])
+        }
+    }
+
+    #[test]
+    fn custom_op_field_and_snapshots_dispatch_to_hook() {
+        let mut registry = HookRegistry::default();
+        registry.add_custom_op(Box::new(StatefulFftOp));
+        let registry = Arc::new(registry);
+
+        // Snapshot collection consults the hook's field and collect_snapshots
+        let graph = build_custom_op_graph().with_hooks(registry.clone());
+        let node = &graph.nodes[0];
+        let field =
+            crate::burn::node_codegen::node_field(node, &registry).expect("hook-declared field");
+        assert_eq!(field.name.to_string(), "fft_state");
+        let snapshots =
+            crate::burn::node_codegen::node_collect_snapshots(node, "fft_state", &registry);
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].full_path(), "fft_state.state");
+
+        // The generated struct and forward reference the hook's field
+        let code = format_tokens(graph.codegen());
+        assert!(
+            code.contains("fft_state: burn::module::Param<Tensor<1>>"),
+            "struct field missing:\n{code}"
+        );
+        assert!(
+            code.contains("self.fft_state.val()"),
+            "forward does not use the field:\n{code}"
+        );
+    }
+
+    /// Parse a committed fixture (shared with onnx-ir's integration tests)
+    /// and wire it into a BurnGraph the way ModelGen does.
+    fn build_graph_from_fixture(name: &str) -> BurnGraph {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../onnx-ir/tests/fixtures")
+            .join(name);
+        let parsed = onnx_ir::OnnxGraphBuilder::new()
+            .simplify(false)
+            .parse_file(&path)
+            .expect("fixture should parse");
+
+        let mut graph = BurnGraph::default();
+        let input_names: Vec<_> = parsed.inputs.iter().map(|a| a.name.clone()).collect();
+        let output_names: Vec<_> = parsed.outputs.iter().map(|a| a.name.clone()).collect();
+        graph.register_input_output(input_names, output_names, &parsed.inputs, &parsed.outputs);
+        for node in parsed.nodes {
+            graph.register(node);
+        }
+        graph
+    }
+
+    #[test]
+    #[should_panic(expected = "inside an If/Loop/Scan body")]
+    fn custom_op_in_subgraph_is_rejected_at_codegen() {
+        build_graph_from_fixture("custom_in_if.onnx").codegen();
+    }
+
+    /// Override stub targeting Relu, for the subgraph rejection test.
+    struct ReluOverrideStub;
+
+    impl crate::ext::OpOverride for ReluOverrideStub {
+        fn target(&self) -> onnx_ir::NodeType {
+            onnx_ir::NodeType::Relu
+        }
+
+        fn forward(
+            &self,
+            _node: &Node,
+            _ctx: &mut crate::ext::CodegenContext<'_, '_>,
+        ) -> Result<TokenStream, onnx_ir::ProcessError> {
+            Ok(TokenStream::new())
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "inside an If/Loop/Scan body")]
+    fn override_target_in_subgraph_is_rejected_at_codegen() {
+        let mut registry = HookRegistry::default();
+        registry.add_override(Box::new(ReluOverrideStub));
+        build_graph_from_fixture("relu_in_if.onnx")
+            .with_hooks(Arc::new(registry))
+            .codegen();
+    }
+
+    /// Override that reroutes built-in Abs through a user kernel.
+    struct AbsOverride;
+
+    impl crate::ext::OpOverride for AbsOverride {
+        fn target(&self) -> onnx_ir::NodeType {
+            onnx_ir::NodeType::Abs
+        }
+
+        fn forward(
+            &self,
+            node: &Node,
+            ctx: &mut crate::ext::CodegenContext<'_, '_>,
+        ) -> Result<TokenStream, onnx_ir::ProcessError> {
+            let Node::Abs(abs) = node else {
+                panic!("expected Abs node");
+            };
+            let input = ctx.arg(&abs.inputs[0]);
+            let out = crate::burn::node_traits::arg_to_ident(&abs.outputs[0]);
+            Ok(quote! {
+                let #out = my_crate::kernels::fast_abs(#input);
+            })
+        }
+
+        fn register_imports(&self, imports: &mut crate::ext::Imports<'_>) {
+            imports.register("my_crate::kernels");
+        }
+    }
+
+    #[test]
+    fn op_override_replaces_builtin_codegen() {
+        let mut registry = HookRegistry::default();
+        registry.add_override(Box::new(AbsOverride));
+
+        let graph = build_abs_chain(2).with_hooks(Arc::new(registry));
+        let code = format_tokens(graph.codegen());
+
+        assert!(
+            code.contains("let t0 = my_crate::kernels::fast_abs(input);"),
+            "override output missing:\n{code}"
+        );
+        assert!(
+            code.contains("let t1 = my_crate::kernels::fast_abs(t0);"),
+            "override output missing for second node:\n{code}"
+        );
+        assert!(
+            code.contains("use my_crate::kernels;"),
+            "override import missing:\n{code}"
+        );
+        // The built-in Abs codegen must not appear anywhere
+        assert!(!code.contains(".abs()"), "builtin abs leaked:\n{code}");
+    }
+
+    #[test]
+    fn builtin_codegen_unchanged_without_override() {
+        let graph = build_abs_chain(1);
+        let code = format_tokens(graph.codegen());
+        assert!(code.contains(".abs()"), "builtin abs missing:\n{code}");
     }
 
     /// Build a chain of N abs nodes: input -> t0 -> t1 -> ... -> t{N-1}

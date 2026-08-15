@@ -566,6 +566,7 @@ impl TestNodeBuilder {
     /// Build the node
     pub(crate) fn build(self) -> RawNode {
         RawNode {
+            custom_identity: None,
             node_type: self.node_type,
             name: self.name,
             inputs: self.inputs,
