@@ -89,7 +89,7 @@ impl BurnGraph {
         let tensors = snapshots
             .iter()
             .map(|snapshot| {
-                let data = snapshot.to_data()?;
+                let data = snapshot.to_data().map_err(|e| (snapshot.full_path(), e))?;
                 Ok(Tensor::new(
                     snapshot.full_path(),
                     snapshot.dtype,
@@ -98,8 +98,10 @@ impl BurnGraph {
                     data.bytes,
                 ))
             })
-            .collect::<Result<Vec<_>, burn_store::TensorSnapshotError>>()
-            .expect("Failed to materialize tensor snapshots");
+            .collect::<Result<Vec<_>, (String, burn_store::TensorSnapshotError)>>()
+            .unwrap_or_else(|(path, e)| {
+                panic!("Failed to materialize tensor snapshot {path}: {e}")
+            });
 
         // Write burnpack file
         let burnpack_file = out_file.with_extension("bpk");
@@ -634,7 +636,7 @@ impl BurnGraph {
 
         match strategy {
             LoadStrategy::File => {
-                let file = file.to_str().unwrap();
+                let file = path_to_str(&file);
                 statics = quote! {
                     // `from_file` requires `std::path::Path`; opt into std so this
                     // also works when included from `#![no_std]` crates.
@@ -675,7 +677,7 @@ impl BurnGraph {
                         )
                     })
                     .len() as usize;
-                let file = file.to_str().unwrap();
+                let file = path_to_str(&file);
                 statics = quote! {
                     // Align embedded data to 256-byte boundary to match burnpack's internal alignment.
                     // This ensures tensor data remains properly aligned for zero-copy loading,
@@ -991,6 +993,19 @@ impl BurnGraph {
 // ============================================================================
 
 type FieldTuple = (proc_macro2::Ident, TokenStream, Option<TokenStream>);
+
+/// Render a burnpack path as `&str` for embedding into generated source.
+///
+/// The path is baked into the generated code as a string literal (`from_file(#file)`,
+/// `include_bytes!(#file)`), so a non-UTF-8 path cannot be represented at all.
+fn path_to_str(path: &std::path::Path) -> &str {
+    path.to_str().unwrap_or_else(|| {
+        panic!(
+            "Burnpack path is not valid UTF-8 and cannot be embedded in generated code: {}",
+            path.display()
+        )
+    })
+}
 
 /// Collect fields from a slice of nodes (including If/Loop subgraph fields).
 fn collect_fields_for_nodes(nodes: &[Node], hooks: &HookRegistry) -> Vec<FieldTuple> {
