@@ -707,7 +707,13 @@ impl BurnGraph {
                     pub fn from_embedded(device: &Device) -> Self {
                         let mut model = Self::new(device);
                         let mut store = BurnpackStore::from_static(EMBEDDED_STATES);
-                        model.load_from(&mut store).expect("Failed to load embedded burnpack");
+                        model.load_from(&mut store)
+                            .unwrap_or_else(|e| {
+                                panic!(
+                                    "Failed to load embedded burnpack (built from {}): {e}",
+                                    #file
+                                )
+                            });
                         model
                     }
                     _blank_!();
@@ -728,7 +734,8 @@ impl BurnGraph {
                 pub fn from_bytes(bytes: Bytes, device: &Device) -> Self {
                     let mut model = Self::new(device);
                     let mut store = BurnpackStore::from_bytes(Some(bytes));
-                    model.load_from(&mut store).expect("Failed to load burnpack bytes");
+                    model.load_from(&mut store)
+                        .unwrap_or_else(|e| panic!("Failed to load burnpack bytes: {e}"));
                     model
                 }
             }
@@ -1767,6 +1774,10 @@ mod tests {
         assert!(code.contains("impl Default for Model"));
         assert!(code.contains("Self::from_file("));
         assert!(!code.contains("from_embedded"));
+        // A load failure must name the offending file and the underlying error;
+        // "Failed to load burnpack file" alone sends users hunting for the wrong path.
+        assert!(code.contains("Failed to load burnpack file {}: {e}"));
+        assert!(code.contains("Failed to load burnpack bytes: {e}"));
         // `from_file` references `std::path::Path`, which is not resolvable from
         // `#![no_std]` consumers unless std is explicitly linked. Pin the opt-in.
         assert!(code.contains("extern crate std;"));
@@ -1786,6 +1797,8 @@ mod tests {
         assert!(code.contains("include_bytes!"));
         assert!(!code.contains("from_file"));
         assert!(!code.contains("extern crate std"));
+        // Embedded data has no runtime path, so report the build-time source instead.
+        assert!(code.contains("Failed to load embedded burnpack (built from {}): {e}"));
     }
 
     #[test]
