@@ -6,12 +6,12 @@ use std::{
 };
 
 use burn::module::{Module, Param};
-use burn_onnx::export::{AxisSpec, InputSpec, OnnxExporter};
 use burn::tensor::{Device, Tensor, TensorData};
 use burn::tensor::{
     module::interpolate,
     ops::{InterpolateMode, InterpolateOptions},
 };
+use burn_onnx::export::{AxisSpec, InputSpec, OnnxExporter};
 
 mod models;
 use models::resnet::ResNet18;

@@ -466,7 +466,13 @@ fn boundary_shapes(graph: &GraphIr, ids: &[TensorId]) -> Result<Vec<Vec<usize>>,
 
 fn reshapes(
     graph: &GraphIr,
-) -> impl Iterator<Item = (usize, &burn::backend::ir::TensorIr, &burn::backend::ir::TensorIr)> {
+) -> impl Iterator<
+    Item = (
+        usize,
+        &burn::backend::ir::TensorIr,
+        &burn::backend::ir::TensorIr,
+    ),
+> {
     graph
         .operations
         .iter()
@@ -492,11 +498,11 @@ fn tensor(graph: &GraphIr, id: TensorId) -> Option<&burn::backend::ir::TensorIr>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::backend::{DType, Shape};
     use burn::backend::ir::{
         FullOpIr, InterpolateModeIr, InterpolateOpIr, InterpolateOptionsIr, ScalarIr, ShapeOpIr,
         TensorIr,
     };
+    use burn::backend::{DType, Shape};
 
     fn tensor(id: u64, shape: &[usize]) -> TensorIr {
         TensorIr::uninit(

@@ -6,12 +6,12 @@ use burn::nn::{
     conv::{Conv2d, Conv2dConfig},
     pool::{MaxPool2d, MaxPool2dConfig},
 };
-use burn_onnx::export::{AxisSpec, InputSpec, OnnxExporter};
 use burn::tensor::{Device, Tensor, TensorData, Tolerance};
 use burn::tensor::{
     module::interpolate,
     ops::{InterpolateMode, InterpolateOptions, PadMode},
 };
+use burn_onnx::export::{AxisSpec, InputSpec, OnnxExporter};
 use onnx_ir::ModelProto;
 use ort::{session::Session, value::Tensor as OrtTensor};
 use protobuf::Message;

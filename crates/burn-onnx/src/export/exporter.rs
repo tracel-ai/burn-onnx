@@ -1,8 +1,8 @@
 use std::{string::String, vec::Vec};
 
 use burn::backend::capture::{CaptureBackend, CaptureDevice, CapturedGraph, GraphCapture};
-use burn::module::{Module, ModuleVisitor, Param};
 use burn::backend::ir::{OperationIr, TensorId};
+use burn::module::{Module, ModuleVisitor, Param};
 use burn::tensor::{Bool, Device, Float, Int, Tensor};
 use hashbrown::{HashMap, HashSet};
 

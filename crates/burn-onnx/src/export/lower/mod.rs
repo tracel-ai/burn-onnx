@@ -16,8 +16,8 @@ mod module;
 mod numeric;
 mod patterns;
 
-use burn::backend::{DType, TensorData};
 use burn::backend::ir::{OperationIr, ScalarIr, TensorId, TensorIr};
+use burn::backend::{DType, TensorData};
 use context::LoweringContext;
 use hashbrown::{HashMap, HashSet};
 use onnx_ir::{GraphProto, TensorProto, TypeProto, ValueInfoProto};
