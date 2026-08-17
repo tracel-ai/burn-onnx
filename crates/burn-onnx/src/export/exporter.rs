@@ -1,10 +1,9 @@
 use std::{string::String, vec::Vec};
 
-use burn_capture::{CaptureClient, CaptureDevice, CapturedGraph, GraphCapture};
-use burn_core::module::{Module, ModuleVisitor, Param};
-use burn_ir::{OperationIr, TensorId};
-use burn_router::RouterTensor;
-use burn_tensor::{Bool, Device, Float, Int, Tensor};
+use burn::backend::capture::{CaptureBackend, CaptureDevice, CapturedGraph, GraphCapture};
+use burn::module::{Module, ModuleVisitor, Param};
+use burn::backend::ir::{OperationIr, TensorId};
+use burn::tensor::{Bool, Device, Float, Int, Tensor};
 use hashbrown::{HashMap, HashSet};
 
 use crate::export::{
@@ -77,19 +76,13 @@ pub trait ExportInput: ExportValues + sealed::SealedExportInput {}
 
 impl<T: sealed::SealedExportInput> ExportInput for T {}
 
-impl sealed::SealedExportValues for RouterTensor<CaptureClient> {
-    fn collect_tensor_ids(&self, ids: &mut Vec<TensorId>) {
-        ids.push(self.id());
-    }
-}
-
 macro_rules! impl_tensor_value {
     ($kind:ty) => {
         impl<const D: usize> sealed::SealedExportValues for Tensor<D, $kind> {
             fn collect_tensor_ids(&self, ids: &mut Vec<TensorId>) {
                 let primitive = self
                     .clone()
-                    .try_into_primitive::<burn_capture::CaptureBackend>()
+                    .try_into_primitive::<CaptureBackend>()
                     .expect("export tensor must be on the capture device");
                 ids.push(primitive.id());
             }
@@ -192,7 +185,7 @@ impl ModuleVisitor for ParameterNameVisitor {
     fn visit_float<const D: usize>(&mut self, param: &Param<Tensor<D>>) {
         let tensor = param
             .val()
-            .try_into_primitive::<burn_capture::CaptureBackend>()
+            .try_into_primitive::<CaptureBackend>()
             .expect("module parameter must be on the capture device");
         self.record(tensor.id());
     }
@@ -200,7 +193,7 @@ impl ModuleVisitor for ParameterNameVisitor {
     fn visit_int<const D: usize>(&mut self, param: &Param<Tensor<D, Int>>) {
         let tensor = param
             .val()
-            .try_into_primitive::<burn_capture::CaptureBackend>()
+            .try_into_primitive::<CaptureBackend>()
             .expect("module parameter must be on the capture device");
         self.record(tensor.id());
     }
@@ -208,7 +201,7 @@ impl ModuleVisitor for ParameterNameVisitor {
     fn visit_bool<const D: usize>(&mut self, param: &Param<Tensor<D, Bool>>) {
         let tensor = param
             .val()
-            .try_into_primitive::<burn_capture::CaptureBackend>()
+            .try_into_primitive::<CaptureBackend>()
             .expect("module parameter must be on the capture device");
         self.record(tensor.id());
     }
@@ -425,9 +418,8 @@ fn validate_capture(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn_core as burn;
-    use burn_core::module::Param;
-    use burn_nn::{Linear, LinearConfig, Relu};
+    use burn::module::Param;
+    use burn::nn::{Linear, LinearConfig, Relu};
     use core::cell::Cell;
     use onnx_ir::ModelProto;
     use protobuf::Message;

@@ -10,7 +10,6 @@ test-wgpu = ["burn/wgpu"]
 test-flex = ["burn/flex"]
 test-tch = ["burn/tch"]
 test-metal = ["burn/metal"]
-test-candle = ["burn/candle"]
 
 [dev-dependencies]
 burn = { workspace = true }

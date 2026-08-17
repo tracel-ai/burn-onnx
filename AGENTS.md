@@ -128,7 +128,7 @@ Read `DEVELOPMENT-GUIDE.md` for the full walkthrough with code examples. Checkli
    - Define config struct, implement `NodeProcessor`
    - Register in: `node/mod.rs`, `ir/node.rs` (macro), `registry.rs`
 
-2. **burn-onnx**: `crates/burn-onnx/src/burn/node/<op>.rs`
+2. **burn-onnx**: `crates/burn-onnx/src/import/burn/node/<op>.rs`
    - Implement `NodeCodegen`, add `insta` snapshot tests
    - Register in: `node/mod.rs`, `node_codegen.rs` (dispatch macro)
 
@@ -166,9 +166,9 @@ cargo insta review                  # Review snapshot changes
 - `crates/onnx-ir/src/processor.rs` - `NodeProcessor` trait, `ProcessError`, `DefaultProcessor`
 - `crates/onnx-ir/src/registry.rs` - Processor registration
 - `crates/onnx-ir/src/ir/node.rs` - `Node` enum and `define_node_enum!` macro
-- `crates/burn-onnx/src/burn/node_codegen.rs` - Codegen dispatch macro
-- `crates/burn-onnx/src/burn/graph.rs` - Graph code generation
-- `crates/burn-onnx/src/burn/partition.rs` - Submodule partitioning for large models
+- `crates/burn-onnx/src/import/burn/node_codegen.rs` - Codegen dispatch macro
+- `crates/burn-onnx/src/import/burn/graph.rs` - Graph code generation
+- `crates/burn-onnx/src/import/burn/partition.rs` - Submodule partitioning for large models
 - `DEVELOPMENT-GUIDE.md` - Full implementation guide with code examples
 - `SUPPORTED-ONNX-OPS.md` - Operator support table
 - `onnx-spec/ops/<OpName>.md` - Official ONNX operator specs

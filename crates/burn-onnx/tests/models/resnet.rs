@@ -5,14 +5,13 @@
 
 use core::f64::consts::SQRT_2;
 
-use burn_core as burn;
-use burn_core::module::Module;
-use burn_nn::{
+use burn::module::Module;
+use burn::nn::{
     BatchNorm, BatchNormConfig, Initializer, Linear, LinearConfig, PaddingConfig2d, Relu,
     conv::{Conv2d, Conv2dConfig},
     pool::{AdaptiveAvgPool2d, AdaptiveAvgPool2dConfig, MaxPool2d, MaxPool2dConfig},
 };
-use burn_tensor::{Device, Tensor};
+use burn::tensor::{Device, Tensor};
 
 #[derive(Module, Debug)]
 struct Downsample {

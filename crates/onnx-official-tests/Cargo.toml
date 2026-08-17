@@ -12,7 +12,6 @@ test-flex = ["burn/flex"]
 test-wgpu = ["burn/wgpu"]
 test-tch = ["burn/tch"]
 test-metal = ["burn/metal"]
-test-candle = ["burn/candle"]
 
 [dependencies]
 half = { workspace = true }

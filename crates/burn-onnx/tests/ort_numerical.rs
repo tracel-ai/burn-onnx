@@ -1,15 +1,14 @@
 #![cfg(feature = "export")]
 
-use burn_core as burn;
-use burn_core::module::{Module, Param};
-use burn_nn::{
+use burn::module::{Module, Param};
+use burn::nn::{
     Linear, LinearConfig, Relu,
     conv::{Conv2d, Conv2dConfig},
     pool::{MaxPool2d, MaxPool2dConfig},
 };
 use burn_onnx::export::{AxisSpec, InputSpec, OnnxExporter};
-use burn_tensor::{Device, Tensor, TensorData, Tolerance};
-use burn_tensor::{
+use burn::tensor::{Device, Tensor, TensorData, Tolerance};
+use burn::tensor::{
     module::interpolate,
     ops::{InterpolateMode, InterpolateOptions, PadMode},
 };

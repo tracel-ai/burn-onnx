@@ -4,7 +4,7 @@
 //! They should disappear as dedicated Burn IR operations replace the
 //! decompositions they recognize.
 
-use burn_ir::{BaseOperationIr, FullOpIr, NumericOperationIr, OperationIr, SliceAssignOpIr};
+use burn::backend::ir::{BaseOperationIr, FullOpIr, NumericOperationIr, OperationIr, SliceAssignOpIr};
 
 /// A decomposed constant-padding pattern recognized in captured Burn IR.
 pub(super) struct ConstantPad<'a> {

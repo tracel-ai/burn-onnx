@@ -1,10 +1,10 @@
-//! Lowering for fused operations from [`burn_ir::ModuleOperationIr`].
+//! Lowering for fused operations from [`burn::backend::ir::ModuleOperationIr`].
 //!
 //! A Burn module operation may emit one or several ONNX nodes. This module also
 //! owns opset-specific attributes for convolution, normalization, resize, and
 //! pooling operations.
 
-use burn_ir::{InterpolateModeIr, ModuleOperationIr, OperationIr};
+use burn::backend::ir::{InterpolateModeIr, ModuleOperationIr, OperationIr};
 
 use crate::export::ExportError;
 

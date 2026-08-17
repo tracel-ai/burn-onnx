@@ -3,7 +3,7 @@
 //! This family contains operations requiring ONNX-specific operands or
 //! attributes, including reshape shape expressions and concatenation axes.
 
-use burn_ir::{BaseOperationIr, OperationIr};
+use burn::backend::ir::{BaseOperationIr, OperationIr};
 
 use crate::export::{ExportError, ShapeExpr};
 

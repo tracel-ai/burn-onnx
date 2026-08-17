@@ -1,4 +1,4 @@
-use burn_ir::TensorId;
+use burn::backend::ir::TensorId;
 use thiserror::Error;
 
 /// Errors produced while capturing, resolving, or lowering an export graph.

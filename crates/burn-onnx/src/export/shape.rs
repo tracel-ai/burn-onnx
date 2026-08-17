@@ -1,4 +1,4 @@
-use burn_ir::{
+use burn::backend::ir::{
     BaseOperationIr, GraphIr, ModuleOperationIr, NumericOperationIr, OperationIr, TensorId,
 };
 
@@ -367,8 +367,8 @@ fn validate_shape_sensitive_operations(
 }
 
 fn first_different_dimension(
-    sample: &burn_backend::Shape,
-    validation: &burn_backend::Shape,
+    sample: &burn::backend::Shape,
+    validation: &burn::backend::Shape,
 ) -> usize {
     sample
         .iter()
@@ -466,7 +466,7 @@ fn boundary_shapes(graph: &GraphIr, ids: &[TensorId]) -> Result<Vec<Vec<usize>>,
 
 fn reshapes(
     graph: &GraphIr,
-) -> impl Iterator<Item = (usize, &burn_ir::TensorIr, &burn_ir::TensorIr)> {
+) -> impl Iterator<Item = (usize, &burn::backend::ir::TensorIr, &burn::backend::ir::TensorIr)> {
     graph
         .operations
         .iter()
@@ -481,7 +481,7 @@ fn reshapes(
         })
 }
 
-fn tensor(graph: &GraphIr, id: TensorId) -> Option<&burn_ir::TensorIr> {
+fn tensor(graph: &GraphIr, id: TensorId) -> Option<&burn::backend::ir::TensorIr> {
     graph
         .operations
         .iter()
@@ -492,8 +492,8 @@ fn tensor(graph: &GraphIr, id: TensorId) -> Option<&burn_ir::TensorIr> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn_backend::{DType, Shape};
-    use burn_ir::{
+    use burn::backend::{DType, Shape};
+    use burn::backend::ir::{
         FullOpIr, InterpolateModeIr, InterpolateOpIr, InterpolateOptionsIr, ScalarIr, ShapeOpIr,
         TensorIr,
     };
@@ -684,7 +684,7 @@ mod tests {
 
     #[test]
     fn validator_rejects_static_attribute_changes() {
-        use burn_ir::SwapDimsOpIr;
+        use burn::backend::ir::SwapDimsOpIr;
         let sample = GraphIr::new(vec![OperationIr::BaseFloat(BaseOperationIr::SwapDims(
             SwapDimsOpIr {
                 input: tensor(1, &[2, 3]),

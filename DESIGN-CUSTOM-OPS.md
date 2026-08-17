@@ -614,7 +614,7 @@ not reachable either. Rather than blanket-exposing those modules, introduce a
 single curated `burn_onnx::ext` module:
 
 ```rust
-// crates/burn-onnx/src/ext.rs (new) -- the ONLY entry point users import
+// crates/burn-onnx/src/import/ext.rs (new) -- the ONLY entry point users import
 pub use crate::burn::custom_op::{CustomOp, OpOverride};
 pub use crate::burn::node_traits::{arg_to_ident, create_lazy_snapshot, Field};
 
@@ -694,7 +694,7 @@ into the onnx-ir pipeline as `Arc<dyn CustomOpInference>`.
 All trait inputs and outputs come from the public `ext` surface (4.6, 5.0).
 
 ```rust
-// crates/burn-onnx/src/burn/custom_op.rs (new)
+// crates/burn-onnx/src/import/burn/custom_op.rs (new)
 use crate::ext::{
     ArgType, CodegenContext, CustomNode, Field, Imports, ProcessError, TensorSnapshot,
 };

@@ -3,7 +3,7 @@
 //! Scalar operands and creation shapes are materialized as ONNX initializers
 //! before their corresponding nodes are emitted.
 
-use burn_ir::{NumericOperationIr, OperationIr, ScalarOpIr};
+use burn::backend::ir::{NumericOperationIr, OperationIr, ScalarOpIr};
 
 use crate::export::ExportError;
 

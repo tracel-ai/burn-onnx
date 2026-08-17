@@ -1,5 +1,5 @@
-use burn_backend::Shape;
-use burn_ir::{
+use burn::backend::Shape;
+use burn::backend::ir::{
     BaseOperationIr, GraphIr, IrVisitorMut, ModuleOperationIr, OperationIr, TensorId, TensorIr,
 };
 use hashbrown::{HashMap, HashSet};

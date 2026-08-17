@@ -21,6 +21,8 @@ workspace = true
 default = ["import", "mmap"]
 import = [
     "dep:burn",
+    "burn/flex",
+    "burn/std",
     "dep:burn-pack",
     "dep:burn-store",
     "dep:clap",
@@ -35,28 +37,21 @@ import = [
     "dep:tracing-subscriber",
 ]
 export = [
-    "dep:burn-backend",
-    "dep:burn-capture",
-    "dep:burn-core",
-    "dep:burn-ir",
-    "dep:burn-router",
-    "dep:burn-tensor",
+    "dep:burn",
     "dep:bytes",
     "dep:hashbrown",
     "dep:onnx-ir",
     "dep:protobuf",
     "dep:thiserror",
-    "burn-capture/std",
-    "burn-core/std",
-    "burn-tensor/capture",
-    "burn-tensor/extension",
+    "burn/capture",
+    "burn/std",
 ]
 mmap = ["import", "onnx-ir/mmap"]
 
 [dependencies]
 onnx-ir = { workspace = true, optional = true }
 
-burn = { workspace = true, optional = true, features = ["std", "flex"] }
+burn = { workspace = true, optional = true }
 burn-pack = { workspace = true, optional = true, features = ["std"] }
 burn-store = { workspace = true, optional = true, features = [
     "std",
@@ -77,20 +72,12 @@ tracing-subscriber = { workspace = true, optional = true, features = [
 ] }
 syn = { workspace = true, optional = true, features = ["parsing"] }
 
-burn-backend = { workspace = true, optional = true }
-burn-capture = { workspace = true, optional = true }
-burn-core = { workspace = true, optional = true }
-burn-ir = { workspace = true, optional = true }
-burn-router = { workspace = true, optional = true }
-burn-tensor = { version = "0.22.0-pre.2", git = "https://github.com/tracel-ai/burn", rev = "87d51161d0100571a700b722773a27d036410997", default-features = false, optional = true }
-
 bytes = { workspace = true, optional = true }
 hashbrown = { workspace = true, optional = true }
 protobuf = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 
 [dev-dependencies]
-burn-nn = { workspace = true, features = ["default"] }
 insta = { workspace = true }
 ort = { workspace = true }
 tempfile = { workspace = true }

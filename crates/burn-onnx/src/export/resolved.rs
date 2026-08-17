@@ -5,7 +5,7 @@
 //! need to know whether they came from static, paired-trace, or future symbolic
 //! resolution.
 
-use burn_ir::{GraphIr, TensorId};
+use burn::backend::ir::{GraphIr, TensorId};
 
 /// Symbolic axis attached to a captured runtime input or graph output.
 #[derive(Debug, Clone, PartialEq, Eq)]

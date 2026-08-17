@@ -16,8 +16,8 @@ mod module;
 mod numeric;
 mod patterns;
 
-use burn_backend::{DType, TensorData};
-use burn_ir::{OperationIr, ScalarIr, TensorId, TensorIr};
+use burn::backend::{DType, TensorData};
+use burn::backend::ir::{OperationIr, ScalarIr, TensorId, TensorIr};
 use context::LoweringContext;
 use hashbrown::{HashMap, HashSet};
 use onnx_ir::{GraphProto, TensorProto, TypeProto, ValueInfoProto};
@@ -314,8 +314,8 @@ fn scalar_tensor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn_backend::Shape;
-    use burn_ir::{BinaryOpIr, GraphIr, NumericOperationIr};
+    use burn::backend::Shape;
+    use burn::backend::ir::{BinaryOpIr, GraphIr, NumericOperationIr};
     use onnx_ir::ModelProto;
     use protobuf::Message;
 

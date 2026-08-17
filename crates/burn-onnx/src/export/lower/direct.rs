@@ -1,8 +1,8 @@
 //! Lowering for operations that map directly to one ONNX node.
 //!
-//! Input and output ordering is taken directly from [`burn_ir::OperationIr`].
+//! Input and output ordering is taken directly from [`burn::backend::ir::OperationIr`].
 
-use burn_ir::{ActivationOperationIr, FloatOperationIr, IntOperationIr, OperationIr};
+use burn::backend::ir::{ActivationOperationIr, FloatOperationIr, IntOperationIr, OperationIr};
 
 use crate::export::ExportError;
 

@@ -5,11 +5,10 @@ use std::{
     process::{Command, Stdio},
 };
 
-use burn_core as burn;
-use burn_core::module::{Module, Param};
+use burn::module::{Module, Param};
 use burn_onnx::export::{AxisSpec, InputSpec, OnnxExporter};
-use burn_tensor::{Device, Tensor, TensorData};
-use burn_tensor::{
+use burn::tensor::{Device, Tensor, TensorData};
+use burn::tensor::{
     module::interpolate,
     ops::{InterpolateMode, InterpolateOptions},
 };

@@ -4,8 +4,8 @@
 //! construction here prevents operation-family modules from each implementing
 //! subtly different protobuf behavior.
 
-use burn_backend::DType;
-use burn_ir::{ScalarIr, TensorId};
+use burn::backend::DType;
+use burn::backend::ir::{ScalarIr, TensorId};
 use hashbrown::HashMap;
 use onnx_ir::{GraphProto, ModelProto, TensorProto};
 use protobuf::{EnumOrUnknown, Message, MessageField};

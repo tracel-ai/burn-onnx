@@ -162,7 +162,7 @@ For example, the squeeze operation in `crates/onnx-ir/src/node/squeeze.rs` conta
 
 ### Step 2: Code Generation in burn-onnx
 
-1. Create a new file named `<operation_name>.rs` in the `crates/burn-onnx/src/burn/node/` directory.
+1. Create a new file named `<operation_name>.rs` in the `crates/burn-onnx/src/import/burn/node/` directory.
    This file implements code generation for your operation by implementing the `NodeCodegen` trait
    directly on the onnx-ir node type.
 
@@ -272,7 +272,7 @@ For example, the squeeze operation in `crates/onnx-ir/src/node/squeeze.rs` conta
 
 ### Step 3: Register in Module System
 
-Add the module declaration to `crates/burn-onnx/src/burn/node/mod.rs`:
+Add the module declaration to `crates/burn-onnx/src/import/burn/node/mod.rs`:
 
 ```rust
 // ... other node modules
@@ -284,7 +284,7 @@ The modules are automatically made visible through re-exports in the same file.
 
 ### Step 4: Register in Code Generation Dispatch
 
-Add your operation to the dispatch macro in `crates/burn-onnx/src/burn/node_codegen.rs`. The
+Add your operation to the dispatch macro in `crates/burn-onnx/src/import/burn/node_codegen.rs`. The
 `impl_node_codegen_dispatch!` macro generates the trait implementation that dispatches to your
 node-specific code.
 
@@ -472,7 +472,7 @@ Large models (>200 nodes) are automatically partitioned into `SubmoduleN` struct
 generation. Without partitioning, the generated `forward()` method becomes a single enormous
 function that takes very long to compile.
 
-The algorithm (in `crates/burn-onnx/src/burn/partition.rs`):
+The algorithm (in `crates/burn-onnx/src/import/burn/partition.rs`):
 
 1. **Constant reordering**: Moves each constant node to just before its first consumer. ONNX
    exporters typically cluster constants at the top of the graph, which inflates cut widths at
