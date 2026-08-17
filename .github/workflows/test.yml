@@ -202,6 +202,36 @@ jobs:
       - name: Tests
         run: xtask test ${{ env.TEST_RELEASE_FLAG }} -x ${{ env.CI_EXCLUDE }}
 
+  onnx-export-tests:
+    # Export requires burn's graph-capture feature and python for ONNX checks,
+    # so it is opt-in and tested separately from the released import stack.
+    runs-on: ubuntu-22.04
+    needs: [prepare-checks, code-quality]
+    env:
+      CARGO_PROFILE_TEST_INCREMENTAL: 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      # --------------------------------------------------------------------------------
+      - name: Install Rust
+        uses: tracel-ai/github-actions/install-rust@v9
+        with:
+          rust-toolchain: stable
+          cache-key: ""
+          shared-key: stable-linux-onnx-export
+      # --------------------------------------------------------------------------------
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-python: true
+      # --------------------------------------------------------------------------------
+      - name: Install ONNX checker
+        run: uv pip install --system onnx
+      # --------------------------------------------------------------------------------
+      - name: Export tests
+        run: cargo test -p burn-onnx --no-default-features --features export ${{ env.TEST_RELEASE_FLAG }}
+
   onnx-official-tests:
     # Dedicated regression gate against the upstream ONNX backend test
     # suite vendored under crates/onnx-official-tests/. Kept separate
