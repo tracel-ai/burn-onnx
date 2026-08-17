@@ -3,7 +3,7 @@ authors = [
     "Dilshod Tadjibaev (@antimora)",
     "Nathaniel Simard (@nathanielsimard)",
 ]
-description = "Library for importing ONNX models into the Burn framework"
+description = "Import and export ONNX models with the Burn framework"
 edition.workspace = true
 license.workspace = true
 name = "burn-onnx"
@@ -18,36 +18,88 @@ default-run = "onnx2burn"
 workspace = true
 
 [features]
-default = ["mmap"]
-mmap = ["onnx-ir/mmap"]
+default = ["import", "mmap"]
+import = [
+    "dep:burn",
+    "dep:burn-pack",
+    "dep:burn-store",
+    "dep:clap",
+    "dep:derive-new",
+    "dep:log",
+    "dep:onnx-ir",
+    "dep:proc-macro2",
+    "dep:quote",
+    "dep:rust-format",
+    "dep:syn",
+    "dep:tracing-core",
+    "dep:tracing-subscriber",
+]
+export = [
+    "dep:burn-backend",
+    "dep:burn-capture",
+    "dep:burn-core",
+    "dep:burn-ir",
+    "dep:burn-router",
+    "dep:burn-tensor",
+    "dep:bytes",
+    "dep:hashbrown",
+    "dep:onnx-ir",
+    "dep:protobuf",
+    "dep:thiserror",
+    "burn-capture/std",
+    "burn-core/std",
+    "burn-tensor/capture",
+    "burn-tensor/extension",
+]
+mmap = ["import", "onnx-ir/mmap"]
 
 [dependencies]
-onnx-ir = { workspace = true }
+onnx-ir = { workspace = true, optional = true }
 
-burn = { workspace = true, features = ["std", "flex"] }
-burn-pack = { workspace = true, features = ["std"] }
-burn-store = { workspace = true, features = [
+burn = { workspace = true, optional = true, features = ["std", "flex"] }
+burn-pack = { workspace = true, optional = true, features = ["std"] }
+burn-store = { workspace = true, optional = true, features = [
     "std",
     "burnpack",
 ] }
 
-clap = { version = "4", features = ["derive"] }
-derive-new = { workspace = true }
-log = { workspace = true }
-proc-macro2 = { workspace = true }
-quote = { workspace = true }
-rust-format = { workspace = true, features = ["pretty_please", "post_process"] }
-tracing-core = { workspace = true }
-tracing-subscriber = { workspace = true, features = [
+clap = { version = "4", optional = true, features = ["derive"] }
+derive-new = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
+proc-macro2 = { workspace = true, optional = true }
+quote = { workspace = true, optional = true }
+rust-format = { workspace = true, optional = true, features = ["pretty_please", "post_process"] }
+tracing-core = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true, features = [
     "default",
     "fmt",
     "env-filter",
 ] }
-syn = { workspace = true, features = ["parsing"] }
+syn = { workspace = true, optional = true, features = ["parsing"] }
+
+burn-backend = { workspace = true, optional = true }
+burn-capture = { workspace = true, optional = true }
+burn-core = { workspace = true, optional = true }
+burn-ir = { workspace = true, optional = true }
+burn-router = { workspace = true, optional = true }
+burn-tensor = { version = "0.22.0-pre.2", git = "https://github.com/tracel-ai/burn", rev = "87d51161d0100571a700b722773a27d036410997", default-features = false, optional = true }
+
+bytes = { workspace = true, optional = true }
+hashbrown = { workspace = true, optional = true }
+protobuf = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
 
 [dev-dependencies]
+burn-nn = { workspace = true, features = ["default"] }
 insta = { workspace = true }
+ort = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "onnx2burn"
+path = "src/bin/onnx2burn.rs"
+required-features = ["import"]
 
 [package.metadata.docs.rs]
-features = ["default"]
+features = ["default", "export"]
 rustdoc-args = ["--cfg", "docsrs"]

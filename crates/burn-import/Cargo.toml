@@ -17,7 +17,7 @@ workspace = true
 
 [features]
 default = ["onnx"]
-onnx = []
+onnx = ["burn-onnx/import"]
 mmap = ["burn-onnx/mmap"]
 
 [dependencies]

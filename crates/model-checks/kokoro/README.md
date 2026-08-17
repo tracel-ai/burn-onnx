@@ -42,7 +42,7 @@ near-zero values amplified the f32-epsilon error into 24% relative error,
 which then propagated through `Exp` (log-magnitude → linear magnitude) as
 a 20-25× spike in the resulting audio.
 
-**Fix:** the matrix-DFT path in `crates/burn-onnx/src/burn/node/stft.rs`
+**Fix:** the matrix-DFT path in `crates/burn-onnx/src/import/burn/node/stft.rs`
 now casts the windowed signal to f64, computes twiddles in f64, performs
 the matmul in f64, and casts back to f32. f64 epsilon is small enough that
 near-zero spectrum elements stay close to zero, so the downstream

@@ -226,9 +226,7 @@ mod tests {
     use super::super::test_helpers::*;
     use burn::tensor::DType;
     use insta::assert_snapshot;
-    use onnx_ir::svmregressor::{
-        SVMKernelType, SVMPostTransform, SVMRegressorConfig, SVMRegressorNodeBuilder,
-    };
+    use onnx_ir::svmregressor::{SVMRegressorConfig, SVMRegressorNodeBuilder};
 
     fn make_node(
         kernel: &str,

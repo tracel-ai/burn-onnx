@@ -1,23 +1,28 @@
 #![warn(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-//! `burn-onnx` is a crate designed to simplify the process of importing models trained in other
-//! machine learning frameworks into the Burn framework via the ONNX format. It generates the Rust
-//! source code that aligns the imported model with Burn and converts tensor data into a compatible
-//! format.
+//! Import and export ONNX models with Burn.
+//!
+//! The `burn_onnx::import` module converts ONNX models into Burn Rust source code and
+//! Burnpack weight files. Its public API is also re-exported from the crate root
+//! for backwards compatibility.
+//!
+//! The optional `burn_onnx::export` module captures a Burn module's forward graph and
+//! serializes it as an ONNX model. Enable the `export` feature to use it.
 
+#[cfg(feature = "import")]
 #[macro_use]
 extern crate derive_new;
 
-mod logger;
+/// ONNX-to-Burn import and code generation.
+#[cfg(feature = "import")]
+#[cfg_attr(docsrs, doc(cfg(feature = "import")))]
+pub mod import;
 
-/// The module for generating the burn code.
-pub mod burn;
+#[cfg(feature = "import")]
+pub use import::*;
 
-pub mod ext;
-
-mod formatter;
-mod model_gen;
-
-pub use formatter::*;
-pub use model_gen::*;
+/// Burn-to-ONNX graph capture and export.
+#[cfg(feature = "export")]
+#[cfg_attr(docsrs, doc(cfg(feature = "export")))]
+pub mod export;

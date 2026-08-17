@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
+use crate::import::{
     burn::custom_op::{CustomOp, HookRegistry, OpOverride},
     burn::graph::BurnGraph,
     format_tokens,
