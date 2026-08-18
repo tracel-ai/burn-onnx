@@ -1,6 +1,6 @@
 use std::{string::String, vec::Vec};
 
-use burn::backend::capture::{CaptureBackend, CaptureDevice, CapturedGraph, GraphCapture};
+use burn::backend::capture::{CaptureBackend, CapturedGraph};
 use burn::backend::ir::{OperationIr, TensorId};
 use burn::module::{Module, ModuleVisitor, Param};
 use burn::tensor::{Bool, Device, Float, Int, Tensor};
@@ -235,12 +235,6 @@ impl OnnxExporter {
         self.opset
     }
 
-    /// Create an isolated capture device for one forward pass.
-    fn capture() -> (Device, GraphCapture) {
-        let (device, capture) = CaptureDevice::capture();
-        (Device::new(device), capture)
-    }
-
     /// Capture one module forward pass and return a static-shape ONNX model.
     pub fn export<M, I, O, F>(
         &self,
@@ -254,7 +248,8 @@ impl OnnxExporter {
         O: ExportValues,
         F: FnOnce(&M, I) -> O,
     {
-        let captured = self.capture_forward(module, inputs, forward)?;
+        let device = Device::capture();
+        let captured = self.capture_forward(&device, module, inputs, forward)?;
         let resolved = StaticShapeResolver {
             graph: &captured.captured.graph,
         }
@@ -290,8 +285,9 @@ impl OnnxExporter {
         let sample_shapes = sample_inputs.input_shapes();
         let validation_shapes = validation_inputs.input_shapes();
         validate_input_specs(input_specs, &sample_shapes, &validation_shapes)?;
-        let sample = self.capture_forward(module, sample_inputs, &forward)?;
-        let validation = self.capture_forward(module, validation_inputs, &forward)?;
+        let device = Device::capture();
+        let sample = self.capture_forward(&device, module, sample_inputs, &forward)?;
+        let validation = self.capture_forward(&device, module, validation_inputs, &forward)?;
         let resolved = PairedTraceShapeResolver {
             sample: &sample.captured.graph,
             validation: &validation.captured.graph,
@@ -309,6 +305,7 @@ impl OnnxExporter {
 
     fn capture_forward<M, I, O, F>(
         &self,
+        device: &Device,
         module: &M,
         inputs: I,
         forward: F,
@@ -319,25 +316,36 @@ impl OnnxExporter {
         O: ExportValues,
         F: FnOnce(&M, I) -> O,
     {
-        let (device, capture) = Self::capture();
-        let module = module.clone().to_device(&device);
-        let mut visitor = ParameterNameVisitor::default();
-        module.visit(&mut visitor);
-        let inputs = inputs.to_capture_device(&device);
-        let input_ids = inputs.tensor_ids();
-        let output_ids = forward(&module, inputs).tensor_ids();
-        let mut captured = capture
-            .finish(input_ids.iter().copied(), output_ids)
+        let mut capture_metadata = None;
+        let mut captured = device
+            .capture_scope(|scope| {
+                // Module parameters, runtime inputs, and the forward pass must all use the client
+                // installed for this scope. Operations outside the scope have no capture session.
+                let module = module.clone().to_device(device);
+                let mut visitor = ParameterNameVisitor::default();
+                module.visit(&mut visitor);
+                let inputs = inputs.to_capture_device(device);
+                let input_ids = inputs.tensor_ids();
+                let output_ids = forward(&module, inputs).tensor_ids();
+
+                capture_metadata = Some((input_ids.clone(), visitor.names));
+                scope.complete(input_ids, output_ids)
+            })
             .map_err(|error| ExportError::InvalidBoundary(error.to_string()))?;
+        let Some((input_ids, parameter_names)) = capture_metadata else {
+            return Err(ExportError::InvalidBoundary(
+                "capture scope did not execute".into(),
+            ));
+        };
         captured
             .graph
             .operations
-            .retain(|operation| !matches!(operation, OperationIr::Init(_) | OperationIr::Drop(_)));
-        validate_capture(&captured, &input_ids, &visitor.names)?;
+            .retain(|operation| !matches!(operation, OperationIr::Init(_)));
+        validate_capture(&captured, &input_ids, &parameter_names)?;
         Ok(CapturedForward {
             captured,
             input_ids,
-            parameter_names: visitor.names,
+            parameter_names,
         })
     }
 }
