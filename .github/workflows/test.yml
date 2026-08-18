@@ -227,9 +227,14 @@ jobs:
           cache-python: true
       # --------------------------------------------------------------------------------
       - name: Install ONNX checker
-        run: uv pip install --system onnx
+        run: |
+          uv venv "$RUNNER_TEMP/onnx-venv"
+          uv pip install --python "$RUNNER_TEMP/onnx-venv/bin/python" onnx
+          echo "$RUNNER_TEMP/onnx-venv/bin" >> "$GITHUB_PATH"
       # --------------------------------------------------------------------------------
       - name: Export tests
+        env:
+          BURN_ONNX_PYTHON_REQUIRED: '1'
         run: cargo test -p burn-onnx --no-default-features --features export ${{ env.TEST_RELEASE_FLAG }}
 
   onnx-official-tests:
