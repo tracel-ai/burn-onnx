@@ -16,6 +16,8 @@ mod module;
 mod numeric;
 mod patterns;
 
+use std::collections::BTreeMap;
+
 use burn::backend::ir::{OperationIr, ScalarIr, TensorId, TensorIr};
 use burn::backend::{DType, TensorData};
 use context::LoweringContext;
@@ -37,7 +39,12 @@ pub const MAX_EMBEDDED_PROTOBUF_BYTES: u64 = i32::MAX as u64;
 /// This low-level API intentionally accepts no Burn module. Parameters can be
 /// added as initializers once capture supplies their tensor data and bindings.
 pub fn export_graph(graph: &ResolvedExportGraph) -> Result<OnnxModel, ExportError> {
-    export_graph_with_bindings(graph, &HashMap::new(), &graph.graph.inputs, &HashMap::new())
+    export_graph_with_bindings(
+        graph,
+        &BTreeMap::new(),
+        &graph.graph.inputs,
+        &HashMap::new(),
+    )
 }
 
 /// Lower a resolved graph with concrete initialized values.
@@ -46,7 +53,7 @@ pub fn export_graph(graph: &ResolvedExportGraph) -> Result<OnnxModel, ExportErro
 /// embedded. Every other value is emitted as an ONNX initializer.
 pub fn export_graph_with_values(
     graph: &ResolvedExportGraph,
-    values: &HashMap<TensorId, TensorData>,
+    values: &BTreeMap<TensorId, TensorData>,
     runtime_inputs: &[TensorId],
 ) -> Result<OnnxModel, ExportError> {
     export_graph_with_bindings(graph, values, runtime_inputs, &HashMap::new())
@@ -58,7 +65,7 @@ pub fn export_graph_with_values(
 /// their module paths. Unnamed initialized values retain deterministic tensor-ID names.
 pub fn export_graph_with_bindings(
     graph: &ResolvedExportGraph,
-    values: &HashMap<TensorId, TensorData>,
+    values: &BTreeMap<TensorId, TensorData>,
     runtime_inputs: &[TensorId],
     initializer_names: &HashMap<TensorId, String>,
 ) -> Result<OnnxModel, ExportError> {
@@ -73,7 +80,7 @@ pub fn export_graph_with_bindings(
 
 pub(crate) fn export_graph_with_bindings_and_opset(
     graph: &ResolvedExportGraph,
-    values: &HashMap<TensorId, TensorData>,
+    values: &BTreeMap<TensorId, TensorData>,
     runtime_inputs: &[TensorId],
     initializer_names: &HashMap<TensorId, String>,
     opset: Opset,
@@ -144,7 +151,7 @@ fn lower_operation(
 
 fn validate_bindings(
     graph: &ResolvedExportGraph,
-    values: &HashMap<TensorId, TensorData>,
+    values: &BTreeMap<TensorId, TensorData>,
     runtime_inputs: &[TensorId],
     initializer_names: &HashMap<TensorId, String>,
 ) -> Result<(), ExportError> {

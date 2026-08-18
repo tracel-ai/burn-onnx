@@ -44,6 +44,8 @@ export = [
     "dep:protobuf",
     "dep:thiserror",
     "burn/capture",
+    "burn/extension",
+    "burn/ir",
     "burn/std",
 ]
 mmap = ["import", "onnx-ir/mmap"]
