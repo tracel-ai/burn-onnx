@@ -1776,6 +1776,17 @@ mod tests {
     }
 
     #[test]
+    fn generated_code_binds_the_alloc_crate() {
+        // Node codegen writes bare `alloc::` paths for runtime-sized data, and
+        // `alloc` is in no crate's extern prelude. Without this binding the file
+        // only compiles where the consumer happens to declare it themselves,
+        // which is what every test crate here does (issue #438).
+        let code = format_tokens(build_abs_chain(1).codegen());
+
+        assert!(code.contains("extern crate alloc;"));
+    }
+
+    #[test]
     fn load_strategy_file_generates_from_file_and_from_bytes() {
         let bpk = temp_bpk();
         let graph = build_abs_chain(1).with_burnpack(bpk.clone(), LoadStrategy::File);

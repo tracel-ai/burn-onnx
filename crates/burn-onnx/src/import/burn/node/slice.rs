@@ -719,6 +719,9 @@ fn get_scalar_expr(
             // before reading. The runtime length check guards the case where
             // the IR couldn't statically prove the bound is 1 element.
             let tensor = scope.arg(arg);
+            // The bound is bound to a local before the block ends: the iterator
+            // borrows `bound_data`, and only edition 2024 drops that temporary
+            // before the block's locals.
             quote! {
                 {
                     let bound_data = #tensor.clone()
@@ -729,8 +732,9 @@ fn get_scalar_expr(
                         "Slice runtime bound must contain exactly one element, got {}",
                         bound_data.num_elements()
                     );
-                    bound_data.iter::<i64>().next()
-                        .expect("Slice runtime bound iter empty after num_elements==1 check")
+                    let bound_value = bound_data.iter::<i64>().next()
+                        .expect("Slice runtime bound iter empty after num_elements==1 check");
+                    bound_value
                 }
             }
         }
@@ -1226,6 +1230,75 @@ mod tests {
             reversed
         }
         ");
+    }
+
+    #[test]
+    fn test_slice_shape_runtime_tensor_bound() {
+        // A bound that is a rank-1 tensor is read back on host. The value has
+        // to be bound to a local: the iterator borrows the tensor data, which
+        // pre-2024 editions drop after, not before, the block's locals.
+        let config = SliceConfig {
+            starts: SliceInput::Static(vec![1]),
+            ends: SliceInput::Runtime(RuntimeInputRef {
+                name: "end".to_string(),
+                input_index: 1,
+            }),
+            axes: None,
+            steps: None,
+        };
+        let node = SliceNodeBuilder::new("slice1")
+            .input_shape("shape_data", 3)
+            .input_tensor("end", 1, DType::I64)
+            .output_tensor("sliced_shape", 1, DType::I64)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        // Spelled out separately from the snapshot: accepting a regenerated
+        // snapshot must not quietly drop the binding and re-break edition 2021.
+        assert!(code.contains("let bound_value ="));
+        assert_snapshot!(code, @r#"
+        pub fn forward(&self, shape_data: [i64; 3], end: Tensor<1, Int>) -> Tensor<1, Int> {
+            let sliced_shape: Tensor<1, Int> = {
+                let start_val = 1 as i64;
+                let end_val = {
+                    let bound_data = end.clone().cast(burn::tensor::DType::I64).to_data();
+                    assert_eq!(
+                        bound_data.num_elements(), 1,
+                        "Slice runtime bound must contain exactly one element, got {}",
+                        bound_data.num_elements()
+                    );
+                    let bound_value = bound_data
+                        .iter::<i64>()
+                        .next()
+                        .expect("Slice runtime bound iter empty after num_elements==1 check");
+                    bound_value
+                } as i64;
+                let start_idx = if start_val < 0 {
+                    (3i64 + start_val).max(0) as usize
+                } else {
+                    (start_val as usize).min(3)
+                };
+                let end_idx = if end_val == i64::MAX {
+                    3
+                } else if end_val < 0 {
+                    (3i64 + end_val).max(0) as usize
+                } else {
+                    (end_val as usize).min(3)
+                };
+                let end_idx = end_idx.max(start_idx);
+                let len = end_idx - start_idx;
+                let slice_data: alloc::vec::Vec<i64> = shape_data[start_idx..end_idx].to_vec();
+                Tensor::<
+                    1,
+                    Int,
+                >::from_data(
+                    burn::tensor::TensorData::new(slice_data, [len]),
+                    (&self.device, burn::tensor::DType::I64),
+                )
+            };
+            sliced_shape
+        }
+        "#);
     }
 
     #[test]

@@ -1,8 +1,6 @@
 // Bisection harness: runs the kokoro-v1-debug model (which exposes intermediate
 // tensors) and compares per-tensor stats against ORT (bisect_taps.json).
 
-extern crate alloc;
-
 use burn::prelude::*;
 use serde::Deserialize;
 use std::fs;

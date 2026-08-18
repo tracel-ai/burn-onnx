@@ -4,6 +4,7 @@ include_models!(
     concat,
     concat_shape,
     concat_shape_with_constant,
+    concat_shape_with_tensor,
     concat_mixed_single_element,
     concat_mixed_three_elements,
     concat_multiple_mixed,
@@ -50,6 +51,37 @@ mod tests {
         // The output should be an array [i64; 6] containing [2, 3, 4, 5, 6, 7]
         let expected: [i64; 6] = [2, 3, 4, 5, 6, 7];
         assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn concat_shape_with_tensor() {
+        // A Shape output concatenated with a runtime rank-1 tensor: the tensor
+        // values are read back on host to build the shape array (issue #438).
+        let device = Default::default();
+        let model: concat_shape_with_tensor::Model = concat_shape_with_tensor::Model::default();
+
+        let input = Tensor::<3>::zeros([3, 16, 8], &device);
+        let extra = Tensor::<1, burn::tensor::Int>::from_data([9i64, 11], &device);
+
+        let output = model.forward(input, extra);
+
+        let expected: [i64; 5] = [3, 16, 8, 9, 11];
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    #[should_panic(expected = "expected 5 shape elements")]
+    fn concat_shape_with_tensor_wrong_length_panics() {
+        // The array size comes from the length the ONNX graph declares for
+        // `extra`. A tensor carries no compile-time length, so a caller can
+        // contradict it; the generated code says so instead of dumping a vec.
+        let model: concat_shape_with_tensor::Model = concat_shape_with_tensor::Model::default();
+        let device = Default::default();
+
+        let input = Tensor::<3>::zeros([3, 16, 8], &device);
+        let extra = Tensor::<1, burn::tensor::Int>::from_data([9i64, 11, 13], &device);
+
+        let _ = model.forward(input, extra);
     }
 
     #[test]

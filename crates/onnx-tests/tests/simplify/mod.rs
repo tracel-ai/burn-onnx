@@ -22,6 +22,7 @@ include_simplified_models!(
     simplify_gather_shape_chain,
     simplify_permute_via_shape_gather,
     simplify_sdpa_coalesce,
+    simplify_sdpa_prescale_alias,
     simplify_constant_fold
 );
 
@@ -227,6 +228,41 @@ mod tests {
             ]],
             &device,
         );
+        let s_out = s.forward(q.clone(), k.clone(), v.clone());
+        let u_out = u.forward(q, k, v);
+        s_out
+            .to_data()
+            .assert_approx_eq::<f32>(&u_out.to_data(), Tolerance::default());
+    }
+
+    /// Q is pre-scaled behind an Add(0) that only a later pass removes, so attention
+    /// coalescing never sees the scale. The Attention node must not fall back to
+    /// 1/sqrt(head_dim) on top of the retained pre-scale.
+    ///
+    /// Built with `from_file` rather than `new` because the result hinges on the value
+    /// of a constant: `new` leaves non-scalar constants zeroed, which would make both
+    /// models agree on garbage and pass vacuously.
+    #[test]
+    fn sdpa_prescale_alias() {
+        use burn::tensor::Tolerance;
+        let device = Default::default();
+        let s = simplified::simplify_sdpa_prescale_alias::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model_simplified/simplify_sdpa_prescale_alias.bpk"
+            ),
+            &device,
+        );
+        let u = unsimplified::simplify_sdpa_prescale_alias::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model_unsimplified/simplify_sdpa_prescale_alias.bpk"
+            ),
+            &device,
+        );
+        let q = Tensor::<4>::from_floats([[[[1.0, 2.0, 3.0, 4.0], [0.5, 1.5, 2.5, 3.5]]]], &device);
+        let k = Tensor::<4>::from_floats([[[[0.5, 1.0, 1.5, 2.0], [2.0, 1.5, 1.0, 0.5]]]], &device);
+        let v = Tensor::<4>::from_floats([[[[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]]]], &device);
         let s_out = s.forward(q.clone(), k.clone(), v.clone());
         let u_out = u.forward(q, k, v);
         s_out
@@ -503,6 +539,41 @@ mod tests {
                         None,
                         burn::tensor::ops::AttentionModuleOptions {
                             scale: Some(0.5f64),
+                            softcap: None,
+                            is_causal: false,
+                        },
+                    );
+                    (matmul2_out1,)
+                };
+                matmul2_out1
+            }
+        }
+        ");
+    }
+
+    #[test]
+    fn codegen_sdpa_prescale_alias() {
+        let s = simplified_source::simplify_sdpa_prescale_alias();
+        let u = unsimplified_source::simplify_sdpa_prescale_alias();
+        assert_codegen_differs(s, u, "sdpa_prescale_alias");
+        // The retained Q pre-scale must be paired with an explicit unit scale
+        insta::assert_snapshot!(extract_forward(s), @r"
+        pub fn forward(&self, q: Tensor<4>, k: Tensor<4>, v: Tensor<4>) -> Tensor<4> {
+                let constant1_out1 = self.constant1.val();
+                let mul1_out1 = q
+                    .mul((constant1_out1).unsqueeze_dims(&[0isize, 1isize, 2isize]));
+                let (matmul2_out1,) = {
+                    let q = mul1_out1;
+                    let k = k;
+                    let v = v;
+                    let matmul2_out1 = burn::tensor::module::attention(
+                        q,
+                        k,
+                        v,
+                        None,
+                        None,
+                        burn::tensor::ops::AttentionModuleOptions {
+                            scale: Some(1f64),
                             softcap: None,
                             is_causal: false,
                         },

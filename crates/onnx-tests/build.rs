@@ -127,6 +127,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/concat/concat.onnx")
         .input("tests/concat/concat_shape.onnx")
         .input("tests/concat/concat_shape_with_constant.onnx")
+        .input("tests/concat/concat_shape_with_tensor.onnx")
         .input("tests/concat/concat_mixed_single_element.onnx")
         .input("tests/concat/concat_mixed_three_elements.onnx")
         .input("tests/concat/concat_multiple_mixed.onnx")
@@ -496,6 +497,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/slice/slice_shape_runtime_bounds_i32.onnx")
         .input("tests/slice/slice_shape_runtime_bounds_negative.onnx")
         .input("tests/slice/slice_shape_runtime_bounds_reshape.onnx")
+        .input("tests/slice/slice_shape_runtime_bounds_concat.onnx")
+        .input("tests/slice/slice_shape_runtime_bounds_concat_reshape.onnx")
         .input("tests/slice/slice_shape_multi.onnx")
         .input("tests/slice/slice_shape_negative.onnx")
         .input("tests/slice/slice_shape_negative_range.onnx")
@@ -780,5 +783,6 @@ fn add_simplify_inputs(model_gen: &mut ModelGen) {
         .input("tests/simplify/simplify_gather_shape_chain.onnx")
         .input("tests/simplify/simplify_permute_via_shape_gather.onnx")
         .input("tests/simplify/simplify_sdpa_coalesce.onnx")
+        .input("tests/simplify/simplify_sdpa_prescale_alias.onnx")
         .input("tests/simplify/simplify_constant_fold.onnx");
 }

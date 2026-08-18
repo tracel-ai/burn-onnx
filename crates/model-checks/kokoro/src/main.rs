@@ -1,5 +1,3 @@
-extern crate alloc;
-
 use burn::prelude::*;
 use serde::Deserialize;
 use std::fs;

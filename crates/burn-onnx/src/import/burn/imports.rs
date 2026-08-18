@@ -35,6 +35,12 @@ impl BurnImports {
         }
 
         quote! {
+            // Runtime-sized data is built with `alloc::vec` (shape slices, tile
+            // repeats and gather indices among others). `alloc` is in no crate's
+            // extern prelude, std or no_std alike, so bind it for the generated
+            // module rather than relying on the consumer to declare it.
+            extern crate alloc;
+
             use burn::prelude::*;
 
             #(use #import_tokens;)*

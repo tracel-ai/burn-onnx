@@ -26,6 +26,16 @@ use crate::ir::{ArgType, Argument, AttributeValue, NodeType, RawNode, TensorData
 /// enabling Burn's optimized attention primitives. Orphaned nodes are cleaned up by
 /// dead node elimination.
 ///
+/// ## Scale semantics
+///
+/// An absent `scale` attribute means `1/sqrt(head_dim)`, not "unscaled", so every
+/// branch must record the scale it actually observed: `Some(1.0)` when the matched
+/// nodes apply none. Q, K and post-MatMul factors are all multiplicative on the
+/// scores and are folded into one value. The sole exception is the pre-scaled
+/// pattern with a runtime shared scalar, where the default is assumed because the
+/// factor cannot be read. A branch that can neither read nor preserve a factor must
+/// decline to match rather than emit an incomplete scale.
+///
 /// Seeds on Softmax nodes (invariant anchor in every SDPA variant), then traces
 /// backward/forward to match the full pattern.
 pub(crate) fn coalesce_attention(mut nodes: Vec<RawNode>) -> Vec<RawNode> {
@@ -50,9 +60,17 @@ pub(crate) fn coalesce_attention(mut nodes: Vec<RawNode>) -> Vec<RawNode> {
     // Apply replacements
     for (idx, replacement) in replacements {
         if replacement.node_type == NodeType::Attention {
+            // Report the scale: it is the one field of this rewrite that can silently
+            // change numerics, and the generated code is otherwise the only record.
+            let scale = match replacement.attrs.get("scale") {
+                Some(AttributeValue::Float32(scale)) => scale.to_string(),
+                Some(other) => format!("{other:?}"),
+                None => "default 1/sqrt(head_dim)".to_string(),
+            };
             log::info!(
-                "Simplification: coalescing SDPA pattern into Attention node '{}'",
+                "Simplification: coalescing SDPA pattern into Attention node '{}' (scale: {})",
                 replacement.name,
+                scale,
             );
         }
         nodes[idx] = replacement;
@@ -89,6 +107,11 @@ fn try_match_sdpa(
     let mut pre_softmax_name: &str = &softmax.inputs[0].name;
     let mut mask_arg: Option<&Argument> = None;
     let mut scale_value: Option<f64> = None;
+    // Set only by the pre-scaled QK branch (4b), when the scalar shared by the Q and K
+    // Muls has no static value. Nothing else may set it: every other branch either
+    // folds the factor it found into `scale_value` or declines to match, because
+    // guessing a scale is how a coalesced graph silently changes numerics.
+    let mut assume_default_scale = false;
 
     // Check for optional Add(mask) before Softmax
     if let Some(&add_idx) = producer.get(pre_softmax_name) {
@@ -132,29 +155,51 @@ fn try_match_sdpa(
     let (q_arg, k_arg, extra_replacements) = if let Some((q, k, prescale)) =
         try_standard_k_pattern(qk_matmul, nodes, producer, consumer)
     {
-        // Pre-scaled pattern: extract prescale and unwrap Q from its Mul.
-        // Only use when no post-scale was already found.
-        if scale_value.is_none()
-            && let Some(prescale) = prescale
-        {
-            scale_value = Some(prescale.scale);
-            (prescale.q_real, k, vec![])
-        } else {
-            if scale_value.is_some() && prescale.is_some() {
-                log::warn!(
-                    "Attention pattern has both post-scale and pre-scale; \
-                     pre-scale will be ignored"
-                );
+        // Q pre-scale, K pre-scale and post-MatMul scale are all multiplicative on the
+        // scores, so they fold into one factor:
+        //   (Q*qs) @ (K*ks)^T * post == Q @ K^T * (qs*ks*post)
+        // Folding is not optional for K: try_standard_k_pattern always unwraps k_arg
+        // past its Mul, so a discarded pre-scale would take ks with it.
+        match prescale {
+            Some(prescale) => {
+                scale_value = Some(scale_value.unwrap_or(1.0) * prescale.scale);
+                (prescale.q_real, k, vec![])
             }
-            (q, k, vec![])
+            None => (q, k, vec![]),
         }
     }
     // 4b. Pre-scaled: both inputs from Mul(same_scalar), K has combined transpose
     else if let Some((q, k, prescale, extras)) =
         try_prescaled_qk_pattern(qk_matmul, qk_matmul_idx, nodes, producer, consumer)
     {
-        if prescale.is_some() {
-            scale_value = prescale;
+        match prescale {
+            // Both Muls are bypassed here, so their shared factor folds into the scale
+            // alongside any post-MatMul scale.
+            Some(prescale) => scale_value = Some(scale_value.unwrap_or(1.0) * prescale),
+            None if scale_value.is_some() => {
+                // Dynamic shared scalar plus a post-scale: the product cannot be
+                // computed, and emitting either term alone would drop the other.
+                log::debug!(
+                    "Attention pattern '{}' has a dynamic pre-scale and a post-scale; \
+                     leaving the graph decomposed",
+                    qk_matmul.name
+                );
+                return None;
+            }
+            None => {
+                // Both Muls are bypassed and their shared scalar has no static value,
+                // typically because the exporter derives it from the head dim at
+                // runtime. Assume the ONNX convention of pre-scaling both operands by
+                // sqrt(scale) with the default scale, which is what the Attention node
+                // applies when the attribute is absent. A model pre-scaling by sqrt(s)
+                // for some other dynamic s gets the wrong scale here.
+                log::warn!(
+                    "Attention pattern '{}' pre-scales Q and K by a runtime scalar; \
+                     assuming the default 1/sqrt(head_dim)",
+                    qk_matmul.name
+                );
+                assume_default_scale = true;
+            }
         }
         (q, k, extras)
     } else {
@@ -188,9 +233,30 @@ fn try_match_sdpa(
         return None;
     }
 
-    // 6. Build the Attention RawNode
-    let attention_node =
-        build_attention_node(final_matmul, &q_arg, &k_arg, v_arg, mask_arg, scale_value);
+    // 6. Build the Attention RawNode.
+    //
+    // An absent `scale` attribute means 1/sqrt(head_dim), not "unscaled" (see
+    // onnx-spec/ops/Attention.md and AttentionModuleOptions::scale), so a pattern that
+    // carries no scaling of its own must say so explicitly. Q may still be scaled by an
+    // upstream node the trace could not reach (e.g. behind an Add(0) that a later pass
+    // removes); that node stays in the graph and keeps applying its own factor.
+    //
+    // The choice is final. Once the Attention node replaces the final MatMul, later
+    // fixed-point iterations no longer match this Softmax, so a scale that becomes
+    // visible after a subsequent pass cannot be folded in retroactively.
+    let attention_scale = match scale_value {
+        Some(scale) => Some(scale),
+        None if assume_default_scale => None,
+        None => Some(1.0),
+    };
+    let attention_node = build_attention_node(
+        final_matmul,
+        &q_arg,
+        &k_arg,
+        v_arg,
+        mask_arg,
+        attention_scale,
+    );
 
     let mut replacements = extra_replacements;
     replacements.push((final_matmul_idx, attention_node));
@@ -290,6 +356,11 @@ fn try_extract_scale<'a>(
 }
 
 /// Build an Attention RawNode that replaces the final MatMul.
+///
+/// `scale: None` omits the attribute, which both the ONNX spec and Burn's
+/// `AttentionModuleOptions` read as `1/sqrt(head_dim)`, not as "unscaled". Pass
+/// `Some(1.0)` for a pattern that carries no scaling of its own; pass `None` only
+/// where that default is genuinely the intended value.
 fn build_attention_node(
     final_matmul: &RawNode,
     q: &Argument,
@@ -920,8 +991,10 @@ mod tests {
         assert_eq!(attention.inputs[1].name, "k");
         assert_eq!(attention.inputs[2].name, "v");
 
-        // No explicit scale -> defaults handled by Attention processor
-        assert!(attention.attrs.get("scale").is_none());
+        // The graph applies no scaling, and an absent scale attribute would mean
+        // 1/sqrt(head_dim), so unit scale must be recorded explicitly
+        let scale = attention.attrs.get("scale").unwrap().clone().into_f32();
+        assert!((scale - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -1034,7 +1107,8 @@ mod tests {
 
         assert_eq!(attention.inputs.len(), 4);
         assert_eq!(attention.inputs[3].name, "mask");
-        assert!(attention.attrs.get("scale").is_none());
+        let scale = attention.attrs.get("scale").unwrap().clone().into_f32();
+        assert!((scale - 1.0).abs() < 1e-6);
     }
 
     /// Build pre-scaled SDPA pattern with dynamic scalar:
@@ -1081,7 +1155,8 @@ mod tests {
         assert_eq!(attention.inputs[2].name, "v");
         assert_eq!(attention.outputs[0].name, "output");
 
-        // Dynamic scalar -> default scale (None)
+        // Dynamic shared pre-scale, so the Attention default is what is intended and
+        // an absent attribute is correct here
         assert!(attention.attrs.get("scale").is_none());
 
         // Verify corrective Transpose was inserted
@@ -1174,7 +1249,93 @@ mod tests {
         assert_eq!(attention.inputs[1].name, "qk_matmul_k_corrected");
         assert_eq!(attention.inputs[2].name, "v");
         assert_eq!(attention.inputs[3].name, "mask");
+        // Dynamic shared pre-scale, so the absent attribute is correct here
         assert!(attention.attrs.get("scale").is_none());
+    }
+
+    #[test]
+    fn test_prescaled_qk_with_post_scale_combines() {
+        // Pre-scaled QK bypasses both Muls, so their product must be folded together
+        // with the post-MatMul Div rather than replacing it.
+        let sqrt_scale = (0.125_f32).sqrt();
+        let nodes = vec![
+            transpose_node("transpose_q", "q", "q_t", vec![0, 2, 1, 3]),
+            transpose_node("transpose_k", "k", "k_t", vec![0, 2, 3, 1]),
+            binary_node(
+                "mul_q",
+                NodeType::Mul,
+                tensor4("q_t"),
+                const_f32("sqrt_scale", sqrt_scale),
+                "q_scaled",
+            ),
+            binary_node(
+                "mul_k",
+                NodeType::Mul,
+                tensor4("k_t"),
+                const_f32("sqrt_scale", sqrt_scale),
+                "k_scaled",
+            ),
+            matmul_node("qk_matmul", "q_scaled", "k_scaled", "qk"),
+            binary_node(
+                "div_post",
+                NodeType::Div,
+                tensor4("qk"),
+                const_f32("post_scale", 4.0),
+                "qk_scaled",
+            ),
+            softmax_node("softmax", "qk_scaled", "attn_weights", -1),
+            matmul_node("sv_matmul", "attn_weights", "v", "output"),
+        ];
+
+        let result = coalesce_attention(nodes);
+        let attention = result
+            .iter()
+            .find(|n| n.node_type == NodeType::Attention)
+            .expect("should produce an Attention node");
+
+        // sqrt_scale^2 * (1 / post_scale) = 0.125 * 0.25
+        let scale = attention.attrs.get("scale").unwrap().clone().into_f32();
+        assert!((scale - 0.03125).abs() < 1e-6, "got {scale}");
+    }
+
+    #[test]
+    fn test_prescaled_qk_dynamic_with_post_scale_not_matched() {
+        // Both Muls are bypassed and their shared scalar is dynamic, so the combined
+        // factor is unknowable. Declining to match leaves the graph correct.
+        let nodes = vec![
+            transpose_node("transpose_q", "q", "q_t", vec![0, 2, 1, 3]),
+            transpose_node("transpose_k", "k", "k_t", vec![0, 2, 3, 1]),
+            binary_node(
+                "mul_q",
+                NodeType::Mul,
+                tensor4("q_t"),
+                dynamic_scalar("sqrt_scale"),
+                "q_scaled",
+            ),
+            binary_node(
+                "mul_k",
+                NodeType::Mul,
+                tensor4("k_t"),
+                dynamic_scalar("sqrt_scale"),
+                "k_scaled",
+            ),
+            matmul_node("qk_matmul", "q_scaled", "k_scaled", "qk"),
+            binary_node(
+                "div_post",
+                NodeType::Div,
+                tensor4("qk"),
+                const_f32("post_scale", 4.0),
+                "qk_scaled",
+            ),
+            softmax_node("softmax", "qk_scaled", "attn_weights", -1),
+            matmul_node("sv_matmul", "attn_weights", "v", "output"),
+        ];
+
+        let result = coalesce_attention(nodes);
+        assert!(
+            !result.iter().any(|n| n.node_type == NodeType::Attention),
+            "should not match when a dynamic pre-scale meets a post-scale"
+        );
     }
 
     #[test]
@@ -1281,8 +1442,9 @@ mod tests {
     }
 
     #[test]
-    fn test_q_prescaled_sdpa_with_post_scale_prefers_post() {
-        // If there's both Q pre-scaling and post-scaling, the post-scale takes precedence
+    fn test_q_prescaled_sdpa_with_post_scale_combines() {
+        // Q pre-scale and post-scale are both multiplicative on the scores, so the
+        // coalesced node carries their product
         let nodes = vec![
             transpose_node("transpose_k", "k", "k_t", vec![0, 1, 3, 2]),
             binary_node(
@@ -1310,12 +1472,125 @@ mod tests {
             .find(|n| n.node_type == NodeType::Attention)
             .expect("should produce an Attention node");
 
-        // When post-scale exists, Q stays as Q_scaled (pre-scale is NOT extracted)
-        assert_eq!(attention.inputs[0].name, "q_scaled");
+        // Q is unwrapped from its Mul, whose factor is folded into the scale
+        assert_eq!(attention.inputs[0].name, "q");
 
-        // Post-scale takes precedence: Div by 8.0 -> scale = 0.125
+        // q_scale * (1 / post_scale) = 0.125 * 0.125
         let scale = attention.attrs.get("scale").unwrap().clone().into_f32();
-        assert!((scale - 0.125).abs() < 1e-6);
+        assert!((scale - 0.015625).abs() < 1e-6, "got {scale}");
+    }
+
+    #[test]
+    fn test_k_prescale_with_post_scale_combines() {
+        // K -> Transpose -> Mul(0.5) -> MatMul -> Div(2.0) -> Softmax -> MatMul.
+        // K is always unwrapped past its Mul, so that factor has nowhere to go but
+        // the scale attribute.
+        let nodes = vec![
+            transpose_node("transpose_k", "k", "k_t", vec![0, 1, 3, 2]),
+            binary_node(
+                "mul_k",
+                NodeType::Mul,
+                tensor4("k_t"),
+                const_f32("k_scale", 0.5),
+                "k_scaled",
+            ),
+            matmul_node("qk_matmul", "q", "k_scaled", "qk"),
+            binary_node(
+                "div_post",
+                NodeType::Div,
+                tensor4("qk"),
+                const_f32("post_scale", 2.0),
+                "qk_scaled",
+            ),
+            softmax_node("softmax", "qk_scaled", "attn_weights", -1),
+            matmul_node("sv_matmul", "attn_weights", "v", "output"),
+        ];
+
+        let result = coalesce_attention(nodes);
+        let attention = result
+            .iter()
+            .find(|n| n.node_type == NodeType::Attention)
+            .expect("should produce an Attention node");
+
+        assert_eq!(attention.inputs[0].name, "q");
+        assert_eq!(attention.inputs[1].name, "k");
+
+        // k_scale * (1 / post_scale) = 0.5 * 0.5
+        let scale = attention.attrs.get("scale").unwrap().clone().into_f32();
+        assert!((scale - 0.25).abs() < 1e-6, "got {scale}");
+    }
+
+    #[test]
+    fn test_q_prescale_dynamic_scalar_stays_wrapped() {
+        // Q's Mul carries a runtime scalar, so it cannot be folded. The Mul must stay
+        // in the graph and the coalesced node must claim no scaling of its own.
+        let nodes = vec![
+            transpose_node("transpose_k", "k", "k_t", vec![0, 1, 3, 2]),
+            binary_node(
+                "mul_q",
+                NodeType::Mul,
+                tensor4("q"),
+                dynamic_scalar("q_scale"),
+                "q_scaled",
+            ),
+            matmul_node("qk_matmul", "q_scaled", "k_t", "qk"),
+            softmax_node("softmax", "qk", "attn_weights", -1),
+            matmul_node("sv_matmul", "attn_weights", "v", "output"),
+        ];
+
+        let result = coalesce_attention(nodes);
+        let attention = result
+            .iter()
+            .find(|n| n.node_type == NodeType::Attention)
+            .expect("should produce an Attention node");
+
+        assert_eq!(attention.inputs[0].name, "q_scaled");
+        let scale = attention.attrs.get("scale").unwrap().clone().into_f32();
+        assert!((scale - 1.0).abs() < 1e-6, "got {scale}");
+    }
+
+    #[test]
+    fn test_q_prescale_behind_identity_element() {
+        // Q pre-scale hidden behind Add(x, 0). In the real pipeline the identity
+        // element pass removes that Add, but it runs after coalescing, so the
+        // coalescer sees Add -> MatMul and cannot reach the Mul. It must not then
+        // fall back to the Attention default scale of 1/sqrt(head_dim).
+        let nodes = vec![
+            transpose_node("transpose_k", "k", "k_t", vec![0, 1, 3, 2]),
+            binary_node(
+                "mul_q",
+                NodeType::Mul,
+                tensor4("q"),
+                const_f32("scale", 0.5),
+                "q_scaled",
+            ),
+            binary_node(
+                "add_zero",
+                NodeType::Add,
+                tensor4("q_scaled"),
+                const_f32("zero", 0.0),
+                "q_noop",
+            ),
+            matmul_node("qk_matmul", "q_noop", "k_t", "qk"),
+            softmax_node("softmax", "qk", "attn_weights", -1),
+            matmul_node("sv_matmul", "attn_weights", "v", "output"),
+        ];
+
+        let result = coalesce_attention(nodes);
+        let attention = result
+            .iter()
+            .find(|n| n.node_type == NodeType::Attention)
+            .expect("should produce an Attention node");
+
+        // Attention consumes the Add(0) output, so both the Add and the Mul are
+        // retained and the pre-scale still applies
+        assert_eq!(attention.inputs[0].name, "q_noop");
+
+        let scale = attention.attrs.get("scale").unwrap().clone().into_f32();
+        assert!(
+            (scale - 1.0).abs() < 1e-6,
+            "expected unit scale, got {scale}"
+        );
     }
 
     /// Build symmetric pre-scaled SDPA (DepthPro pattern):
