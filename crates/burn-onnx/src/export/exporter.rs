@@ -248,8 +248,7 @@ impl OnnxExporter {
         O: ExportValues,
         F: FnOnce(&M, I) -> O,
     {
-        let device = Device::capture();
-        let captured = self.capture_forward(&device, module, inputs, forward)?;
+        let captured = self.capture_forward(module, inputs, forward)?;
         let resolved = StaticShapeResolver {
             graph: &captured.captured.graph,
         }
@@ -285,9 +284,8 @@ impl OnnxExporter {
         let sample_shapes = sample_inputs.input_shapes();
         let validation_shapes = validation_inputs.input_shapes();
         validate_input_specs(input_specs, &sample_shapes, &validation_shapes)?;
-        let device = Device::capture();
-        let sample = self.capture_forward(&device, module, sample_inputs, &forward)?;
-        let validation = self.capture_forward(&device, module, validation_inputs, &forward)?;
+        let sample = self.capture_forward(module, sample_inputs, &forward)?;
+        let validation = self.capture_forward(module, validation_inputs, &forward)?;
         let resolved = PairedTraceShapeResolver {
             sample: &sample.captured.graph,
             validation: &validation.captured.graph,
@@ -305,7 +303,6 @@ impl OnnxExporter {
 
     fn capture_forward<M, I, O, F>(
         &self,
-        device: &Device,
         module: &M,
         inputs: I,
         forward: F,
@@ -316,15 +313,18 @@ impl OnnxExporter {
         O: ExportValues,
         F: FnOnce(&M, I) -> O,
     {
+        // Capture clients are scope-local. A distinct logical device prevents multi-backend
+        // bridge caches from returning tensors owned by an earlier, already-closed scope.
+        let device = Device::capture();
         let mut capture_metadata = None;
         let mut captured = device
             .capture_scope(|scope| {
                 // Module parameters, runtime inputs, and the forward pass must all use the client
                 // installed for this scope. Operations outside the scope have no capture session.
-                let module = module.clone().to_device(device);
+                let module = module.clone().to_device(&device);
                 let mut visitor = ParameterNameVisitor::default();
                 module.visit(&mut visitor);
-                let inputs = inputs.to_capture_device(device);
+                let inputs = inputs.to_capture_device(&device);
                 let input_ids = inputs.tensor_ids();
                 let output_ids = forward(&module, inputs).tensor_ids();
 

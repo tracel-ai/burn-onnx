@@ -1,5 +1,7 @@
 #![cfg(feature = "export")]
 
+use std::cell::RefCell;
+
 use burn::module::{Module, Param};
 use burn::nn::{
     Linear, LinearConfig, Relu,
@@ -25,6 +27,17 @@ const ATOL: f32 = 1.0e-5;
 #[derive(Module, Debug)]
 struct AddModule {
     weight: Param<Tensor<1>>,
+}
+
+#[derive(Module, Debug)]
+struct AddTensorModule {
+    offset: Tensor<1>,
+}
+
+impl AddTensorModule {
+    fn forward(&self, input: Tensor<1>) -> Tensor<1> {
+        input + self.offset.clone()
+    }
 }
 
 impl AddModule {
@@ -210,6 +223,40 @@ fn dynamic_reshape_matches_burn_at_third_shape() {
     let expected = module.forward(third).into_data();
     let actual = run_ort(model.as_bytes(), [7, 3, 4], third_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
+}
+
+#[test]
+fn dynamic_export_isolates_capture_devices() {
+    let device = Device::default();
+    let module = AddTensorModule {
+        offset: Tensor::from_floats([2.0], &device),
+    };
+    let sample = Tensor::<1>::from_floats([1.0, 2.0], &device);
+    let validation = Tensor::<1>::from_floats([1.0, 2.0, 3.0], &device);
+    let capture_devices = RefCell::new(Vec::new());
+
+    let model = OnnxExporter::new()
+        .export_dynamic(
+            &module,
+            sample,
+            validation,
+            &[InputSpec::new([AxisSpec::dynamic("batch_size")])],
+            |module, input| {
+                capture_devices.borrow_mut().push(input.device());
+                module.forward(input)
+            },
+        )
+        .unwrap();
+
+    let capture_devices = capture_devices.into_inner();
+    assert_eq!(capture_devices.len(), 2);
+    assert_ne!(capture_devices[0], capture_devices[1]);
+
+    let third_values = vec![4.0, 5.0, 6.0, 7.0];
+    let third = Tensor::<1>::from_floats(third_values.as_slice(), &device);
+    let expected = module.forward(third).into_data();
+    let actual = run_ort(model.as_bytes(), [4], third_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
 }
 
 #[test]
