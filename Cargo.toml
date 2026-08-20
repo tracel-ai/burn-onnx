@@ -109,7 +109,7 @@ burn-store = { version = "0.22.0-pre.1", default-features = false }
 burn-tensor = { version = "0.22.0-pre.1", default-features = false }
 
 ### For xtask crate ###
-tracel-xtask = "=4.19.0"
+tracel-xtask = { version = "=5.0.0" }
 # ### For local development. ###
 # tracel-xtask = { path = "../xtask/crates/tracel-xtask", default-features = false }
 
