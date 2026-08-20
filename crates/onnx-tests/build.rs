@@ -684,7 +684,7 @@ impl CustomOp for AddWindowOp {
             .ok_or_else(|| {
                 ProcessError::Custom("AddWindow requires a constant window input".to_string())
             })?;
-        window.to_vec::<f32>().map_err(|_| {
+        window.try_into_vec::<f32>().map_err(|_| {
             ProcessError::Custom("AddWindow window constant must be f32".to_string())
         })?;
         Ok(vec![input.ty.clone()])
@@ -700,7 +700,7 @@ impl CustomOp for AddWindowOp {
         let window = node.inputs[1]
             .value()
             .ok_or_else(|| ProcessError::Custom("window constant missing".to_string()))?
-            .to_vec::<f32>()
+            .try_into_vec::<f32>()
             .map_err(|_| ProcessError::Custom("window constant must be f32".to_string()))?;
         Ok(quote! {
             let #out = crate::custom_ops::ops::add_window(#input, &[#(#window),*], &self.device);

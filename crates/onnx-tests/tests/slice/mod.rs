@@ -444,7 +444,7 @@ mod tests {
 
         // Verify some values
         let output_data = output.to_data();
-        let values = output_data.to_vec::<f32>().unwrap();
+        let values = output_data.try_into_vec::<f32>().unwrap();
 
         // First element should be from [0, 1, 11] (reversed last dim)
         // [0, 1, 11] -> 0*100 + 1*10 + 11 = 21

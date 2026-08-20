@@ -83,7 +83,7 @@ mod tests {
         // Check that interpolation is working correctly by verifying corner values
         // The corners should match the original corners
         let output_data = output.to_data();
-        let values: Vec<f32> = output_data.to_vec().unwrap();
+        let values: Vec<f32> = output_data.try_into_vec().unwrap();
 
         // Check first channel corners
         assert_eq!(values[0], 0.0); // Top-left of first channel
@@ -137,7 +137,7 @@ mod tests {
 
         // With nearest neighbor and downsampling by 2, we should get corners
         let output_data = output.to_data();
-        let values: Vec<f32> = output_data.to_vec().unwrap();
+        let values: Vec<f32> = output_data.try_into_vec().unwrap();
 
         // For nearest neighbor with 2x downsampling, we expect to sample at positions (0,0), (0,2), (2,0), (2,2)
         // First channel should have values [1, 3, 9, 11]
@@ -194,7 +194,7 @@ mod tests {
 
         // Reference from ONNX ReferenceEvaluator: sum = 480.0
         let output_data = output.to_data();
-        let values: Vec<f32> = output_data.to_vec().unwrap();
+        let values: Vec<f32> = output_data.try_into_vec().unwrap();
         let output_sum: f32 = values.iter().sum();
         assert!(480.0f32.approx_eq(output_sum, (1.0e-4, 2)));
 
