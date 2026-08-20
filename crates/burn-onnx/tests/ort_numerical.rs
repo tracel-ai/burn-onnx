@@ -107,6 +107,17 @@ impl AddFull {
 }
 
 #[derive(Module, Debug)]
+struct AddDynamicFull;
+
+impl AddDynamicFull {
+    fn forward(&self, input: Tensor<2>) -> Tensor<2> {
+        let [batch, width] = input.dims();
+        let full = Tensor::full([batch, width], 2.5, &input.device());
+        input + full
+    }
+}
+
+#[derive(Module, Debug)]
 struct ConstantPad;
 
 impl ConstantPad {
@@ -318,6 +329,35 @@ fn full_matches_burn() {
 }
 
 #[test]
+fn dynamic_full_matches_burn_at_third_shape() {
+    let device = Device::default();
+    let sample_values = (0..6).map(|value| value as f32).collect::<Vec<_>>();
+    let validation_values = (0..15).map(|value| value as f32).collect::<Vec<_>>();
+    let sample = Tensor::<2>::from_data(TensorData::new(sample_values, [2, 3]), &device);
+    let validation = Tensor::<2>::from_data(TensorData::new(validation_values, [5, 3]), &device);
+    let specs = [InputSpec::new([
+        AxisSpec::dynamic("batch_size"),
+        AxisSpec::Static,
+    ])];
+
+    let model = OnnxExporter::new()
+        .export_dynamic(
+            &AddDynamicFull,
+            sample,
+            validation,
+            &specs,
+            AddDynamicFull::forward,
+        )
+        .unwrap();
+
+    let third_values = (0..21).map(|value| value as f32).collect::<Vec<_>>();
+    let third = Tensor::<2>::from_data(TensorData::new(third_values.clone(), [7, 3]), &device);
+    let expected = AddDynamicFull.forward(third).into_data();
+    let actual = run_ort(model.as_bytes(), [7, 3], third_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+}
+
+#[test]
 fn constant_pad_matches_burn() {
     let device = Device::default();
     let input_values = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
@@ -329,6 +369,38 @@ fn constant_pad_matches_burn() {
         .unwrap();
 
     let actual = run_ort(model.as_bytes(), [1, 1, 2, 3], input_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+}
+
+#[test]
+fn dynamic_constant_pad_matches_burn_at_third_shape() {
+    let device = Device::default();
+    let sample = Tensor::<4>::from_data(TensorData::zeros::<f32, _>([1, 1, 2, 3]), &device);
+    let validation = Tensor::<4>::from_data(TensorData::zeros::<f32, _>([2, 1, 4, 5]), &device);
+    let specs = [InputSpec::new([
+        AxisSpec::dynamic("batch_size"),
+        AxisSpec::Static,
+        AxisSpec::dynamic("height"),
+        AxisSpec::dynamic("width"),
+    ])];
+
+    let model = OnnxExporter::new()
+        .export_dynamic(
+            &ConstantPad,
+            sample,
+            validation,
+            &specs,
+            ConstantPad::forward,
+        )
+        .unwrap();
+
+    let third_values = (0..3 * 6 * 7)
+        .map(|value| value as f32 / 10.0)
+        .collect::<Vec<_>>();
+    let third =
+        Tensor::<4>::from_data(TensorData::new(third_values.clone(), [3, 1, 6, 7]), &device);
+    let expected = ConstantPad.forward(third).into_data();
+    let actual = run_ort(model.as_bytes(), [3, 1, 6, 7], third_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
 }
 

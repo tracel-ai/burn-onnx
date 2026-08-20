@@ -5,7 +5,7 @@
 
 use burn::backend::ir::{BaseOperationIr, OperationIr};
 
-use crate::export::{ExportError, ShapeExpr};
+use crate::export::ExportError;
 
 use super::{context::LoweringContext, patterns};
 
@@ -44,78 +44,7 @@ pub(super) fn lower(
     };
     match base {
         BaseOperationIr::Reshape(reshape) => {
-            let resolved = context
-                .graph
-                .shapes
-                .iter()
-                .find(|shape| shape.operation == index)
-                .ok_or_else(|| ExportError::DynamicShapeLost {
-                    tensor: reshape.out.id,
-                    axis: 0,
-                    reason: "reshape has no resolved shape operand".into(),
-                })?;
-            let shape_name = format!("node_{index}_shape");
-            if resolved
-                .dimensions
-                .iter()
-                .all(|dimension| matches!(dimension, ShapeExpr::Static(_) | ShapeExpr::Infer))
-            {
-                let dimensions = resolved
-                    .dimensions
-                    .iter()
-                    .map(|dimension| match dimension {
-                        ShapeExpr::Static(value) => *value as i64,
-                        ShapeExpr::Infer => -1,
-                        _ => unreachable!(),
-                    })
-                    .collect::<Vec<_>>();
-                context.i64_initializer(shape_name.clone(), &dimensions);
-            } else {
-                let mut parts = Vec::with_capacity(resolved.dimensions.len());
-                for (dimension_index, dimension) in resolved.dimensions.iter().enumerate() {
-                    let part = format!("node_{index}_shape_part_{dimension_index}");
-                    match dimension {
-                        ShapeExpr::Static(value) => {
-                            context.i64_initializer(part.clone(), &[*value as i64]);
-                        }
-                        ShapeExpr::Infer => {
-                            context.i64_initializer(part.clone(), &[-1]);
-                        }
-                        ShapeExpr::InputDim { input, axis }
-                        | ShapeExpr::TensorDim {
-                            tensor: input,
-                            axis,
-                        } => {
-                            let source_shape =
-                                format!("node_{index}_source_shape_{dimension_index}");
-                            let input = context.tensor_name(*input);
-                            context.node(
-                                source_shape.clone(),
-                                "Shape",
-                                vec![input],
-                                vec![source_shape.clone()],
-                            );
-                            let indices = format!("node_{index}_shape_index_{dimension_index}");
-                            context.i64_initializer(indices.clone(), &[*axis as i64]);
-                            context.node(
-                                part.clone(),
-                                "Gather",
-                                vec![source_shape, indices],
-                                vec![part.clone()],
-                            );
-                            context.int_attribute("axis", 0);
-                        }
-                    }
-                    parts.push(part);
-                }
-                context.node(
-                    shape_name.clone(),
-                    "Concat",
-                    parts,
-                    vec![shape_name.clone()],
-                );
-                context.int_attribute("axis", 0);
-            }
+            let shape_name = context.shape_input(index, reshape.out.id)?;
             let input = context.tensor_name(reshape.input.id);
             let output = context.tensor_name(reshape.out.id);
             context.node(

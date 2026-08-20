@@ -14,7 +14,7 @@ mod context;
 mod direct;
 mod module;
 mod numeric;
-mod patterns;
+pub(crate) mod patterns;
 
 use std::collections::BTreeMap;
 

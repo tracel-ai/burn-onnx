@@ -7,7 +7,7 @@ use burn::backend::ir::{NumericOperationIr, OperationIr, ScalarOpIr};
 
 use crate::export::ExportError;
 
-use super::{context::LoweringContext, scalar_tensor};
+use super::{context::LoweringContext, patterns, scalar_tensor};
 
 pub(super) fn lower(
     context: &mut LoweringContext<'_>,
@@ -21,16 +21,10 @@ pub(super) fn lower(
         _ => return Ok(false),
     };
     if let NumericOperationIr::Full(full) = numeric {
-        let shape_name = format!("node_{index}_shape");
-        context.i64_initializer(
-            shape_name.clone(),
-            &full
-                .out
-                .shape
-                .iter()
-                .map(|dimension| *dimension as i64)
-                .collect::<Vec<_>>(),
-        );
+        if patterns::is_constant_pad_full(&context.graph.graph.operations, index) {
+            return Ok(true);
+        }
+        let shape_name = context.shape_input(index, full.out.id)?;
         let output = context.tensor_name(full.out.id);
         context.node(
             format!("node_{index}"),

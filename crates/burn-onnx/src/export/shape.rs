@@ -7,6 +7,8 @@ use crate::export::{
     ShapeExpr,
 };
 
+use super::lower::patterns;
+
 /// Annotation for one runtime input axis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AxisSpec {
@@ -48,7 +50,7 @@ pub(crate) trait ShapeResolver {
     fn resolve(&self) -> Result<ResolvedExportGraph, ExportError>;
 }
 
-/// Resolves every captured reshape dimension as a constant.
+/// Resolves every captured shape-sensitive operation as constants.
 pub(crate) struct StaticShapeResolver<'a> {
     /// Captured graph.
     pub(crate) graph: &'a GraphIr,
@@ -58,11 +60,12 @@ impl ShapeResolver for StaticShapeResolver<'_> {
     fn resolve(&self) -> Result<ResolvedExportGraph, ExportError> {
         Ok(ResolvedExportGraph {
             graph: self.graph.clone(),
-            shapes: reshapes(self.graph)
-                .map(|(operation, _, output)| ResolvedShape {
-                    operation,
-                    tensor: output.id,
-                    dimensions: output
+            shapes: shape_operations(self.graph)
+                .map(|operation| ResolvedShape {
+                    operation: operation.index,
+                    tensor: operation.output.id,
+                    dimensions: operation
+                        .output
                         .shape
                         .iter()
                         .copied()
@@ -182,11 +185,14 @@ impl ShapeResolver for PairedTraceShapeResolver<'_> {
                 });
             }
         }
-        let validation_reshapes: Vec<_> = reshapes(self.validation).collect();
+        let validation_shape_operations: Vec<_> = shape_operations(self.validation).collect();
         let mut shapes = Vec::new();
-        for ((operation, source, output), (_, validation_source, validation_output)) in
-            reshapes(self.sample).zip(validation_reshapes)
+        for (sample_operation, validation_operation) in
+            shape_operations(self.sample).zip(validation_shape_operations)
         {
+            let operation = sample_operation.index;
+            let output = sample_operation.output;
+            let validation_output = validation_operation.output;
             let mut dimensions = Vec::new();
             let mut unresolved = Vec::new();
             for (axis, (&sample_dim, &validation_dim)) in output
@@ -219,14 +225,17 @@ impl ShapeResolver for PairedTraceShapeResolver<'_> {
                         }
                     }
                 }
-                if candidates.is_empty() {
-                    for (source_axis, (&a, &b)) in source
+                if candidates.is_empty()
+                    && let (Some(source), Some(validation_source)) =
+                        (sample_operation.source, validation_operation.source)
+                {
+                    for (source_axis, (&source_dim, &validation_source_dim)) in source
                         .shape
                         .iter()
                         .zip(validation_source.shape.iter())
                         .enumerate()
                     {
-                        if a == sample_dim && b == validation_dim {
+                        if source_dim == sample_dim && validation_source_dim == validation_dim {
                             candidates.push(ShapeExpr::TensorDim {
                                 tensor: source.id,
                                 axis: source_axis,
@@ -237,6 +246,14 @@ impl ShapeResolver for PairedTraceShapeResolver<'_> {
                 candidates.dedup();
                 match candidates.len() {
                     1 => dimensions.push(candidates.pop().unwrap()),
+                    0 if sample_operation.source.is_none() => {
+                        return Err(ExportError::DynamicShapeLost {
+                            tensor: output.id,
+                            axis,
+                            reason: "Full dimension does not match an annotated dynamic input axis"
+                                .into(),
+                        });
+                    }
                     0 => {
                         unresolved.push(axis);
                         dimensions.push(ShapeExpr::Infer);
@@ -283,28 +300,13 @@ fn validate_shape_sensitive_operations(
     sample: &GraphIr,
     validation: &GraphIr,
 ) -> Result<(), ExportError> {
-    for (index, (sample, validation)) in sample
+    for (index, (sample_operation, validation_operation)) in sample
         .operations
         .iter()
         .zip(&validation.operations)
         .enumerate()
     {
-        match (sample, validation) {
-            (
-                OperationIr::NumericFloat(_, NumericOperationIr::Full(sample))
-                | OperationIr::NumericInt(_, NumericOperationIr::Full(sample)),
-                OperationIr::NumericFloat(_, NumericOperationIr::Full(validation))
-                | OperationIr::NumericInt(_, NumericOperationIr::Full(validation)),
-            ) if sample.out.shape != validation.out.shape => {
-                let axis = first_different_dimension(&sample.out.shape, &validation.out.shape);
-                return Err(ExportError::DynamicShapeLost {
-                    tensor: sample.out.id,
-                    axis,
-                    reason: format!(
-                        "operation {index} creates a tensor with a varying shape, but dynamic Full shapes are not resolved"
-                    ),
-                });
-            }
+        match (sample_operation, validation_operation) {
             (
                 OperationIr::Module(ModuleOperationIr::Interpolate(sample)),
                 OperationIr::Module(ModuleOperationIr::Interpolate(validation)),
@@ -343,19 +345,29 @@ fn validate_shape_sensitive_operations(
                 });
             }
             (
-                OperationIr::BaseFloat(BaseOperationIr::SliceAssign(sample))
-                | OperationIr::BaseInt(BaseOperationIr::SliceAssign(sample)),
-                OperationIr::BaseFloat(BaseOperationIr::SliceAssign(validation))
-                | OperationIr::BaseInt(BaseOperationIr::SliceAssign(validation)),
-            ) if sample.ranges != validation.ranges => {
-                let axis = sample
+                OperationIr::BaseFloat(BaseOperationIr::SliceAssign(sample_slice))
+                | OperationIr::BaseInt(BaseOperationIr::SliceAssign(sample_slice)),
+                OperationIr::BaseFloat(BaseOperationIr::SliceAssign(validation_slice))
+                | OperationIr::BaseInt(BaseOperationIr::SliceAssign(validation_slice)),
+            ) if sample_slice.ranges != validation_slice.ranges => {
+                if matches!(
+                    (
+                        patterns::constant_pad(&sample.operations, index),
+                        patterns::constant_pad(&validation.operations, index),
+                    ),
+                    (Some(sample_pad), Some(validation_pad))
+                        if sample_pad.pads == validation_pad.pads
+                ) {
+                    continue;
+                }
+                let axis = sample_slice
                     .ranges
                     .iter()
-                    .zip(&validation.ranges)
+                    .zip(&validation_slice.ranges)
                     .position(|(sample, validation)| sample != validation)
                     .unwrap_or(0);
                 return Err(ExportError::DynamicShapeLost {
-                    tensor: sample.out.id,
+                    tensor: sample_slice.out.id,
                     axis,
                     reason: format!("operation {index} has varying slice-assignment bounds"),
                 });
@@ -364,17 +376,6 @@ fn validate_shape_sensitive_operations(
         }
     }
     Ok(())
-}
-
-fn first_different_dimension(
-    sample: &burn::backend::Shape,
-    validation: &burn::backend::Shape,
-) -> usize {
-    sample
-        .iter()
-        .zip(validation.iter())
-        .position(|(sample, validation)| sample != validation)
-        .unwrap_or_else(|| sample.num_dims().min(validation.num_dims()))
 }
 
 pub(crate) fn validate_input_specs(
@@ -464,15 +465,13 @@ fn boundary_shapes(graph: &GraphIr, ids: &[TensorId]) -> Result<Vec<Vec<usize>>,
         .collect()
 }
 
-fn reshapes(
-    graph: &GraphIr,
-) -> impl Iterator<
-    Item = (
-        usize,
-        &burn::backend::ir::TensorIr,
-        &burn::backend::ir::TensorIr,
-    ),
-> {
+struct ShapeOperation<'a> {
+    index: usize,
+    source: Option<&'a burn::backend::ir::TensorIr>,
+    output: &'a burn::backend::ir::TensorIr,
+}
+
+fn shape_operations(graph: &GraphIr) -> impl Iterator<Item = ShapeOperation<'_>> {
     graph
         .operations
         .iter()
@@ -480,8 +479,20 @@ fn reshapes(
         .filter_map(|(index, operation)| match operation {
             OperationIr::BaseFloat(BaseOperationIr::Reshape(op))
             | OperationIr::BaseInt(BaseOperationIr::Reshape(op))
-            | OperationIr::BaseBool(BaseOperationIr::Reshape(op)) => {
-                Some((index, &op.input, &op.out))
+            | OperationIr::BaseBool(BaseOperationIr::Reshape(op)) => Some(ShapeOperation {
+                index,
+                source: Some(&op.input),
+                output: &op.out,
+            }),
+            OperationIr::NumericFloat(_, NumericOperationIr::Full(op))
+            | OperationIr::NumericInt(_, NumericOperationIr::Full(op)) => {
+                (!patterns::is_constant_pad_full(&graph.operations, index)).then_some(
+                    ShapeOperation {
+                        index,
+                        source: None,
+                        output: &op.out,
+                    },
+                )
             }
             _ => None,
         })

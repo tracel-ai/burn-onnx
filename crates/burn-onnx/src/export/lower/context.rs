@@ -10,7 +10,7 @@ use hashbrown::HashMap;
 use onnx_ir::{GraphProto, ModelProto, TensorProto};
 use protobuf::{EnumOrUnknown, Message, MessageField};
 
-use crate::export::{ExportError, OnnxModel, Opset, ResolvedExportGraph};
+use crate::export::{ExportError, OnnxModel, Opset, ResolvedExportGraph, ShapeExpr};
 
 use super::{ONNX_IR_VERSION, scalar_tensor};
 
@@ -93,6 +93,86 @@ impl<'a> LoweringContext<'a> {
         }
         tensor.raw_data = bytes::Bytes::from(raw);
         self.proto.initializer.push(tensor);
+    }
+
+    /// Materialize a resolved shape expression as an ONNX shape tensor.
+    pub(super) fn shape_input(
+        &mut self,
+        index: usize,
+        tensor: TensorId,
+    ) -> Result<String, ExportError> {
+        let dimensions = self
+            .graph
+            .shapes
+            .iter()
+            .find(|shape| shape.operation == index && shape.tensor == tensor)
+            .map(|shape| shape.dimensions.clone())
+            .ok_or_else(|| ExportError::DynamicShapeLost {
+                tensor,
+                axis: 0,
+                reason: "shape-sensitive operation has no resolved shape operand".into(),
+            })?;
+        let shape_name = format!("node_{index}_shape");
+        if dimensions
+            .iter()
+            .all(|dimension| matches!(dimension, ShapeExpr::Static(_) | ShapeExpr::Infer))
+        {
+            let dimensions = dimensions
+                .iter()
+                .map(|dimension| match dimension {
+                    ShapeExpr::Static(value) => *value as i64,
+                    ShapeExpr::Infer => -1,
+                    _ => unreachable!(),
+                })
+                .collect::<Vec<_>>();
+            self.i64_initializer(shape_name.clone(), &dimensions);
+            return Ok(shape_name);
+        }
+
+        let mut parts = Vec::with_capacity(dimensions.len());
+        for (dimension_index, dimension) in dimensions.iter().enumerate() {
+            let part = format!("node_{index}_shape_part_{dimension_index}");
+            match dimension {
+                ShapeExpr::Static(value) => {
+                    self.i64_initializer(part.clone(), &[*value as i64]);
+                }
+                ShapeExpr::Infer => {
+                    self.i64_initializer(part.clone(), &[-1]);
+                }
+                ShapeExpr::InputDim { input, axis }
+                | ShapeExpr::TensorDim {
+                    tensor: input,
+                    axis,
+                } => {
+                    let source_shape = format!("node_{index}_source_shape_{dimension_index}");
+                    let input = self.tensor_name(*input);
+                    self.node(
+                        source_shape.clone(),
+                        "Shape",
+                        vec![input],
+                        vec![source_shape.clone()],
+                    );
+                    let indices = format!("node_{index}_shape_index_{dimension_index}");
+                    self.i64_initializer(indices.clone(), &[*axis as i64]);
+                    self.node(
+                        part.clone(),
+                        "Gather",
+                        vec![source_shape, indices],
+                        vec![part.clone()],
+                    );
+                    self.int_attribute("axis", 0);
+                }
+            }
+            parts.push(part);
+        }
+        self.node(
+            shape_name.clone(),
+            "Concat",
+            parts,
+            vec![shape_name.clone()],
+        );
+        self.int_attribute("axis", 0);
+        Ok(shape_name)
     }
 
     /// Append a scalar initializer encoded according to its Burn dtype.
