@@ -13,7 +13,7 @@ use burn::tensor::{
     module::interpolate,
     ops::{InterpolateMode, InterpolateOptions, PadMode},
 };
-use burn_onnx::export::{AxisSpec, InputSpec, OnnxExporter};
+use burn_onnx::export::{AxisSpec, ExportError, InputSpec, OnnxExporter};
 use onnx_ir::ModelProto;
 use ort::{session::Session, value::Tensor as OrtTensor};
 use protobuf::Message;
@@ -56,6 +56,15 @@ struct Mlp {
 #[derive(Module, Debug)]
 struct Flatten;
 
+#[derive(Module, Debug)]
+struct Identity;
+
+impl Identity {
+    fn forward(&self, input: Tensor<2>) -> Tensor<2> {
+        input
+    }
+}
+
 impl Flatten {
     fn forward(&self, input: Tensor<3>) -> Tensor<2> {
         let [batch, channels, width] = input.dims();
@@ -68,6 +77,32 @@ struct SmallCnn {
     conv: Conv2d,
     activation: Relu,
     pool: MaxPool2d,
+}
+
+#[derive(Module, Debug)]
+struct PoolAndReshape {
+    pool: MaxPool2d,
+}
+
+impl PoolAndReshape {
+    fn forward(&self, input: Tensor<4>) -> Tensor<2> {
+        let pooled = self.pool.forward(input);
+        let [_, _, height, width] = pooled.dims();
+        pooled.reshape([height, width])
+    }
+}
+
+#[derive(Module, Debug)]
+struct PoolAndFull {
+    pool: MaxPool2d,
+}
+
+impl PoolAndFull {
+    fn forward(&self, input: Tensor<4>) -> Tensor<2> {
+        let pooled = self.pool.forward(input);
+        let [_, _, height, width] = pooled.dims();
+        Tensor::full([height, width], 1.0, &pooled.device())
+    }
 }
 
 #[derive(Module, Debug)]
@@ -136,6 +171,15 @@ impl CatChannels {
 }
 
 #[derive(Module, Debug)]
+struct CatWidths;
+
+impl CatWidths {
+    fn forward(&self, inputs: (Tensor<2>, Tensor<2>)) -> Tensor<2> {
+        Tensor::cat(vec![inputs.0, inputs.1], 1)
+    }
+}
+
+#[derive(Module, Debug)]
 struct Neg;
 
 impl Neg {
@@ -190,6 +234,22 @@ fn add_matches_burn() {
 
     let actual = run_ort(model.as_bytes(), [2], input_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
+}
+
+#[test]
+fn pass_through_matches_burn() {
+    let device = Device::default();
+    let input = Tensor::<1, Int>::arange(0..6, &device)
+        .float()
+        .reshape([2, 3]);
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
+    let expected = Identity.forward(input.clone()).into_data();
+    let model = OnnxExporter::new()
+        .export(&Identity, input, Identity::forward)
+        .unwrap();
+
+    let actual = run_ort(model.as_bytes(), [2, 3], input_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
 }
 
 #[test]
@@ -507,6 +567,134 @@ fn dynamic_small_cnn_matches_burn_at_runtime_shape() {
     let expected = module.forward(runtime_input).into_data();
     let actual = run_ort(model.as_bytes(), [3, 1, 9, 9], runtime_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
+}
+
+#[test]
+fn dynamic_pool_reshape_handles_colliding_capture_shapes() {
+    let device = Device::default();
+    let module = PoolAndReshape {
+        pool: MaxPool2dConfig::new([2, 1]).with_strides([2, 1]).init(),
+    };
+    // Heights 4 and 5 both pool to 2, but the runtime height 6 pools to 3.
+    let sample = Tensor::<4>::zeros([1, 1, 4, 4], &device);
+    let validation = Tensor::<4>::zeros([1, 1, 5, 4], &device);
+    let specs = [InputSpec::new([
+        AxisSpec::Static,
+        AxisSpec::Static,
+        AxisSpec::dynamic("height"),
+        AxisSpec::Static,
+    ])];
+    let model = OnnxExporter::new()
+        .export_dynamic(&module, sample, validation, &specs, PoolAndReshape::forward)
+        .unwrap();
+
+    let runtime_input = Tensor::<1, Int>::arange(0..24, &device)
+        .float()
+        .reshape([1, 1, 6, 4]);
+    let runtime_values = runtime_input
+        .clone()
+        .into_data()
+        .try_to_vec::<f32>()
+        .unwrap();
+    let expected = module.forward(runtime_input).into_data();
+    let actual = run_ort(model.as_bytes(), [1, 1, 6, 4], runtime_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+
+    let model = ModelProto::parse_from_bytes(model.as_bytes()).unwrap();
+    let output_shape = &model.graph.output[0]
+        .type_
+        .as_ref()
+        .unwrap()
+        .tensor_type()
+        .shape
+        .dim;
+    assert!(output_shape[0].has_dim_param());
+}
+
+#[test]
+fn dynamic_cat_handles_colliding_capture_shapes() {
+    let device = Device::default();
+    // The two dynamic widths vary inversely, so both captures concatenate to width 7.
+    let sample = (
+        Tensor::<2>::zeros([1, 2], &device),
+        Tensor::<2>::zeros([1, 5], &device),
+    );
+    let validation = (
+        Tensor::<2>::zeros([1, 3], &device),
+        Tensor::<2>::zeros([1, 4], &device),
+    );
+    let specs = [
+        InputSpec::new([AxisSpec::Static, AxisSpec::dynamic("first_width")]),
+        InputSpec::new([AxisSpec::Static, AxisSpec::dynamic("second_width")]),
+    ];
+    let model = OnnxExporter::new()
+        .export_dynamic(&CatWidths, sample, validation, &specs, CatWidths::forward)
+        .unwrap();
+
+    let first = Tensor::<1, Int>::arange(0..4, &device)
+        .float()
+        .reshape([1, 4]);
+    let second = (Tensor::<1, Int>::arange(0..6, &device).float() + 10.0).reshape([1, 6]);
+    let first_values = first.clone().into_data().try_to_vec::<f32>().unwrap();
+    let second_values = second.clone().into_data().try_to_vec::<f32>().unwrap();
+    let expected = CatWidths.forward((first, second)).into_data();
+
+    let mut session = Session::builder()
+        .unwrap()
+        .commit_from_memory(model.as_bytes())
+        .unwrap();
+    let outputs = session
+        .run(ort::inputs![
+            OrtTensor::from_array(([1, 4], first_values)).unwrap(),
+            OrtTensor::from_array(([1, 6], second_values)).unwrap(),
+        ])
+        .unwrap();
+    let (shape, values) = outputs[0].try_extract_tensor::<f32>().unwrap();
+    let actual = TensorData::new(
+        values.to_vec(),
+        shape
+            .iter()
+            .map(|dimension| *dimension as usize)
+            .collect::<Vec<_>>(),
+    );
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+
+    let model = ModelProto::parse_from_bytes(model.as_bytes()).unwrap();
+    let output_shape = &model.graph.output[0]
+        .type_
+        .as_ref()
+        .unwrap()
+        .tensor_type()
+        .shape
+        .dim;
+    assert_eq!(output_shape[1].dim_param(), "output_0_dim_1");
+}
+
+#[test]
+fn dynamic_full_rejects_colliding_capture_shapes() {
+    let device = Device::default();
+    let module = PoolAndFull {
+        pool: MaxPool2dConfig::new([2, 1]).with_strides([2, 1]).init(),
+    };
+    let sample = Tensor::<4>::zeros([1, 1, 4, 4], &device);
+    let validation = Tensor::<4>::zeros([1, 1, 5, 4], &device);
+    let specs = [InputSpec::new([
+        AxisSpec::Static,
+        AxisSpec::Static,
+        AxisSpec::dynamic("height"),
+        AxisSpec::Static,
+    ])];
+
+    assert!(matches!(
+        OnnxExporter::new().export_dynamic(
+            &module,
+            sample,
+            validation,
+            &specs,
+            PoolAndFull::forward,
+        ),
+        Err(ExportError::DynamicShapeLost { axis: 0, .. })
+    ));
 }
 
 #[test]

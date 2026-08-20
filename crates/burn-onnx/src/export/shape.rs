@@ -1,6 +1,8 @@
 use burn::backend::ir::{
-    BaseOperationIr, GraphIr, ModuleOperationIr, NumericOperationIr, OperationIr, TensorId,
+    ActivationOperationIr, BaseOperationIr, FloatOperationIr, GraphIr, IntOperationIr,
+    ModuleOperationIr, NumericOperationIr, OperationIr, TensorId, TensorIr,
 };
+use hashbrown::HashSet;
 
 use crate::export::{
     DynamicAxis, ExportError, GraphStructureValidator, ResolvedExportGraph, ResolvedShape,
@@ -133,6 +135,8 @@ impl ShapeResolver for PairedTraceShapeResolver<'_> {
                 }
             }
         }
+        let potentially_dynamic =
+            potentially_dynamic_axes(self.sample, self.validation, self.inputs);
         for (position, (&sample_id, &validation_id)) in self
             .sample
             .outputs
@@ -150,7 +154,7 @@ impl ShapeResolver for PairedTraceShapeResolver<'_> {
                 .zip(validation_output.shape.iter())
                 .enumerate()
             {
-                if sample_dim == validation_dim {
+                if !potentially_dynamic.contains(&(sample_id, axis)) {
                     continue;
                 }
                 let mut symbols = Vec::new();
@@ -174,6 +178,12 @@ impl ShapeResolver for PairedTraceShapeResolver<'_> {
                 }
                 symbols.sort();
                 symbols.dedup();
+                if dynamic_axes
+                    .iter()
+                    .any(|dynamic| dynamic.tensor == sample_id && dynamic.axis == axis)
+                {
+                    continue;
+                }
                 dynamic_axes.push(DynamicAxis {
                     tensor: sample_id,
                     axis,
@@ -201,10 +211,6 @@ impl ShapeResolver for PairedTraceShapeResolver<'_> {
                 .zip(validation_output.shape.iter())
                 .enumerate()
             {
-                if sample_dim == validation_dim {
-                    dimensions.push(ShapeExpr::Static(sample_dim));
-                    continue;
-                }
                 let mut candidates = Vec::new();
                 for (position, spec) in self.inputs.iter().enumerate() {
                     let sample_id = self.sample.inputs[position];
@@ -235,7 +241,10 @@ impl ShapeResolver for PairedTraceShapeResolver<'_> {
                         .zip(validation_source.shape.iter())
                         .enumerate()
                     {
-                        if source_dim == sample_dim && validation_source_dim == validation_dim {
+                        if potentially_dynamic.contains(&(source.id, source_axis))
+                            && source_dim == sample_dim
+                            && validation_source_dim == validation_dim
+                        {
                             candidates.push(ShapeExpr::TensorDim {
                                 tensor: source.id,
                                 axis: source_axis,
@@ -246,6 +255,42 @@ impl ShapeResolver for PairedTraceShapeResolver<'_> {
                 candidates.dedup();
                 match candidates.len() {
                     1 => dimensions.push(candidates.pop().unwrap()),
+                    0 if sample_dim == validation_dim => {
+                        if let Some(source) = sample_operation.source {
+                            let has_static_source_match = source.shape.iter().enumerate().any(
+                                |(source_axis, &source_dim)| {
+                                    source_dim == sample_dim
+                                        && !potentially_dynamic.contains(&(source.id, source_axis))
+                                },
+                            );
+                            let has_dynamic_source =
+                                source.shape.iter().enumerate().any(|(source_axis, _)| {
+                                    potentially_dynamic.contains(&(source.id, source_axis))
+                                });
+                            if has_static_source_match || !has_dynamic_source {
+                                dimensions.push(ShapeExpr::Static(sample_dim));
+                            } else {
+                                unresolved.push(axis);
+                                dimensions.push(ShapeExpr::Infer);
+                            }
+                        } else if aligned_static_input_dimension(
+                            sample_dim,
+                            axis,
+                            output.shape.num_dims(),
+                            self.sample,
+                            self.inputs,
+                        ) || !has_dynamic_inputs(self.inputs)
+                        {
+                            dimensions.push(ShapeExpr::Static(sample_dim));
+                        } else {
+                            return Err(ExportError::DynamicShapeLost {
+                                tensor: output.id,
+                                axis,
+                                reason: "equal Full dimensions cannot be proven static from two captures"
+                                    .into(),
+                            });
+                        }
+                    }
                     0 if sample_operation.source.is_none() => {
                         return Err(ExportError::DynamicShapeLost {
                             tensor: output.id,
@@ -376,6 +421,369 @@ fn validate_shape_sensitive_operations(
         }
     }
     Ok(())
+}
+
+/// Conservatively propagate axes whose sizes can depend on a declared dynamic input.
+///
+/// Differing observations prove an axis is dynamic. Operation-specific transfer rules retain
+/// dependencies when two observations happen to produce the same concrete size. Reshape is
+/// handled separately because it can move axes or combine them.
+fn potentially_dynamic_axes(
+    sample: &GraphIr,
+    validation: &GraphIr,
+    specs: &[InputSpec],
+) -> HashSet<(TensorId, usize)> {
+    let mut dynamic = HashSet::new();
+    for (position, spec) in specs.iter().enumerate() {
+        let Some(&input) = sample.inputs.get(position) else {
+            continue;
+        };
+        for (axis, axis_spec) in spec.axes.iter().enumerate() {
+            if matches!(axis_spec, AxisSpec::Dynamic { .. }) {
+                dynamic.insert((input, axis));
+            }
+        }
+    }
+
+    for (sample_operation, validation_operation) in
+        sample.operations.iter().zip(&validation.operations)
+    {
+        let sample_outputs = sample_operation.outputs().collect::<Vec<_>>();
+        let validation_outputs = validation_operation.outputs().collect::<Vec<_>>();
+        for (sample_output, validation_output) in sample_outputs.iter().zip(&validation_outputs) {
+            for (axis, (&sample_dim, &validation_dim)) in sample_output
+                .shape
+                .iter()
+                .zip(validation_output.shape.iter())
+                .enumerate()
+            {
+                if sample_dim != validation_dim {
+                    dynamic.insert((sample_output.id, axis));
+                }
+            }
+        }
+
+        propagate_dynamic_axes(sample_operation, &mut dynamic);
+
+        let (Some((source, output)), Some((validation_source, validation_output))) = (
+            reshape_tensors(sample_operation),
+            reshape_tensors(validation_operation),
+        ) else {
+            continue;
+        };
+        let source_has_dynamic = source
+            .shape
+            .iter()
+            .enumerate()
+            .any(|(axis, _)| dynamic.contains(&(source.id, axis)));
+        for (output_axis, (&output_dim, &validation_output_dim)) in output
+            .shape
+            .iter()
+            .zip(validation_output.shape.iter())
+            .enumerate()
+        {
+            if dynamic.contains(&(output.id, output_axis)) {
+                continue;
+            }
+            let dynamic_source_match = source
+                .shape
+                .iter()
+                .zip(validation_source.shape.iter())
+                .enumerate()
+                .any(|(source_axis, (&source_dim, &validation_source_dim))| {
+                    dynamic.contains(&(source.id, source_axis))
+                        && source_dim == output_dim
+                        && validation_source_dim == validation_output_dim
+                });
+            let static_source_match =
+                source
+                    .shape
+                    .iter()
+                    .enumerate()
+                    .any(|(source_axis, &source_dim)| {
+                        !dynamic.contains(&(source.id, source_axis)) && source_dim == output_dim
+                    });
+            if dynamic_source_match || (source_has_dynamic && !static_source_match) {
+                dynamic.insert((output.id, output_axis));
+            }
+        }
+    }
+    dynamic
+}
+
+/// Transfer dynamic-axis dependencies according to the shape semantics of exported operations.
+///
+/// Operations not listed here only gain dynamic axes from differing trace observations. This is
+/// deliberate: assuming that every equal-rank operation preserves axis positions incorrectly
+/// marks fixed dimensions for operations such as linear layers and adaptive pooling.
+fn propagate_dynamic_axes(operation: &OperationIr, dynamic: &mut HashSet<(TensorId, usize)>) {
+    match operation {
+        OperationIr::BaseFloat(operation)
+        | OperationIr::BaseInt(operation)
+        | OperationIr::BaseBool(operation) => match operation {
+            BaseOperationIr::SwapDims(operation) => {
+                for output_axis in 0..operation.out.shape.num_dims() {
+                    let input_axis = if output_axis == operation.dim1 {
+                        operation.dim2
+                    } else if output_axis == operation.dim2 {
+                        operation.dim1
+                    } else {
+                        output_axis
+                    };
+                    propagate_axis(
+                        &operation.input,
+                        input_axis,
+                        &operation.out,
+                        output_axis,
+                        dynamic,
+                    );
+                }
+            }
+            BaseOperationIr::Permute(operation) => {
+                for (output_axis, &input_axis) in operation.axes.iter().enumerate() {
+                    propagate_axis(
+                        &operation.input,
+                        input_axis,
+                        &operation.out,
+                        output_axis,
+                        dynamic,
+                    );
+                }
+            }
+            BaseOperationIr::Flip(operation) => {
+                propagate_same_axes(&operation.input, &operation.out, dynamic);
+            }
+            BaseOperationIr::Expand(operation) => {
+                propagate_broadcast_axes(&operation.input, &operation.out, dynamic);
+            }
+            BaseOperationIr::RepeatDim(operation) => {
+                propagate_same_axes(&operation.tensor, &operation.out, dynamic);
+            }
+            BaseOperationIr::Cat(operation) => {
+                for input in &operation.tensors {
+                    propagate_same_axes(input, &operation.out, dynamic);
+                }
+            }
+            BaseOperationIr::Cast(operation) => {
+                propagate_same_axes(&operation.input, &operation.out, dynamic);
+            }
+            BaseOperationIr::AllDim(operation) | BaseOperationIr::AnyDim(operation) => {
+                propagate_reduced_axes(&operation.input, &operation.out, operation.axis, dynamic);
+            }
+            // Reshape has a separate value-aware transfer below. Other base operations are not
+            // currently lowered directly by this exporter.
+            _ => {}
+        },
+        OperationIr::NumericFloat(_, operation) | OperationIr::NumericInt(_, operation) => {
+            match operation {
+                NumericOperationIr::Add(operation)
+                | NumericOperationIr::Sub(operation)
+                | NumericOperationIr::Mul(operation)
+                | NumericOperationIr::Div(operation) => {
+                    propagate_broadcast_axes(&operation.lhs, &operation.out, dynamic);
+                    propagate_broadcast_axes(&operation.rhs, &operation.out, dynamic);
+                }
+                NumericOperationIr::AddScalar(operation)
+                | NumericOperationIr::SubScalar(operation)
+                | NumericOperationIr::MulScalar(operation)
+                | NumericOperationIr::DivScalar(operation) => {
+                    propagate_same_axes(&operation.lhs, &operation.out, dynamic);
+                }
+                NumericOperationIr::Abs(operation) | NumericOperationIr::Neg(operation) => {
+                    propagate_same_axes(&operation.input, &operation.out, dynamic);
+                }
+                NumericOperationIr::MeanDim(operation)
+                | NumericOperationIr::SumDim(operation)
+                | NumericOperationIr::ProdDim(operation) => {
+                    propagate_reduced_axes(
+                        &operation.input,
+                        &operation.out,
+                        operation.axis,
+                        dynamic,
+                    );
+                }
+                _ => {}
+            }
+        }
+        OperationIr::Float(_, operation) => match operation {
+            FloatOperationIr::Exp(operation)
+            | FloatOperationIr::Log(operation)
+            | FloatOperationIr::Sqrt(operation)
+            | FloatOperationIr::Tanh(operation) => {
+                propagate_same_axes(&operation.input, &operation.out, dynamic);
+            }
+            FloatOperationIr::Matmul(operation) => {
+                propagate_matmul_axes(&operation.lhs, &operation.rhs, &operation.out, dynamic);
+            }
+            _ => {}
+        },
+        OperationIr::Int(IntOperationIr::Matmul(operation)) => {
+            propagate_matmul_axes(&operation.lhs, &operation.rhs, &operation.out, dynamic);
+        }
+        OperationIr::Activation(
+            ActivationOperationIr::Relu(operation) | ActivationOperationIr::Sigmoid(operation),
+        ) => {
+            propagate_same_axes(&operation.input, &operation.out, dynamic);
+        }
+        OperationIr::Module(operation) => match operation {
+            ModuleOperationIr::Conv2d(operation) => {
+                propagate_axis(&operation.x, 0, &operation.out, 0, dynamic);
+                propagate_axis(&operation.x, 2, &operation.out, 2, dynamic);
+                propagate_axis(&operation.x, 3, &operation.out, 3, dynamic);
+            }
+            ModuleOperationIr::BatchNorm(operation) => {
+                propagate_same_axes(&operation.x, &operation.out, dynamic);
+            }
+            ModuleOperationIr::Interpolate(operation) => {
+                propagate_axis(&operation.x, 0, &operation.out, 0, dynamic);
+                propagate_axis(&operation.x, 1, &operation.out, 1, dynamic);
+            }
+            ModuleOperationIr::AdaptiveAvgPool2d(operation) => {
+                propagate_axis(&operation.x, 0, &operation.out, 0, dynamic);
+                propagate_axis(&operation.x, 1, &operation.out, 1, dynamic);
+            }
+            ModuleOperationIr::MaxPool2d(operation) => {
+                propagate_same_axes(&operation.x, &operation.out, dynamic);
+            }
+            ModuleOperationIr::AvgPool2d(operation) => {
+                propagate_same_axes(&operation.x, &operation.out, dynamic);
+            }
+            ModuleOperationIr::Linear(operation) => {
+                for axis in 0..operation.out.shape.num_dims().saturating_sub(1) {
+                    propagate_axis(&operation.x, axis, &operation.out, axis, dynamic);
+                }
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+}
+
+fn propagate_same_axes(
+    input: &TensorIr,
+    output: &TensorIr,
+    dynamic: &mut HashSet<(TensorId, usize)>,
+) {
+    for axis in 0..input.shape.num_dims().min(output.shape.num_dims()) {
+        propagate_axis(input, axis, output, axis, dynamic);
+    }
+}
+
+fn propagate_broadcast_axes(
+    input: &TensorIr,
+    output: &TensorIr,
+    dynamic: &mut HashSet<(TensorId, usize)>,
+) {
+    let Some(offset) = output.shape.num_dims().checked_sub(input.shape.num_dims()) else {
+        return;
+    };
+    for input_axis in 0..input.shape.num_dims() {
+        propagate_axis(input, input_axis, output, offset + input_axis, dynamic);
+    }
+}
+
+fn propagate_reduced_axes(
+    input: &TensorIr,
+    output: &TensorIr,
+    reduced_axis: usize,
+    dynamic: &mut HashSet<(TensorId, usize)>,
+) {
+    for axis in 0..input.shape.num_dims().min(output.shape.num_dims()) {
+        if axis != reduced_axis {
+            propagate_axis(input, axis, output, axis, dynamic);
+        }
+    }
+}
+
+fn propagate_matmul_axes(
+    lhs: &TensorIr,
+    rhs: &TensorIr,
+    output: &TensorIr,
+    dynamic: &mut HashSet<(TensorId, usize)>,
+) {
+    let output_rank = output.shape.num_dims();
+    let lhs_rank = lhs.shape.num_dims();
+    let rhs_rank = rhs.shape.num_dims();
+    if output_rank < 2 || lhs_rank < 2 || rhs_rank < 2 {
+        return;
+    }
+
+    let output_batch_rank = output_rank - 2;
+    let lhs_batch_rank = lhs_rank - 2;
+    let rhs_batch_rank = rhs_rank - 2;
+    for axis in 0..lhs_batch_rank {
+        propagate_axis(
+            lhs,
+            axis,
+            output,
+            output_batch_rank - lhs_batch_rank + axis,
+            dynamic,
+        );
+    }
+    for axis in 0..rhs_batch_rank {
+        propagate_axis(
+            rhs,
+            axis,
+            output,
+            output_batch_rank - rhs_batch_rank + axis,
+            dynamic,
+        );
+    }
+    propagate_axis(lhs, lhs_rank - 2, output, output_rank - 2, dynamic);
+    propagate_axis(rhs, rhs_rank - 1, output, output_rank - 1, dynamic);
+}
+
+fn propagate_axis(
+    input: &TensorIr,
+    input_axis: usize,
+    output: &TensorIr,
+    output_axis: usize,
+    dynamic: &mut HashSet<(TensorId, usize)>,
+) {
+    if dynamic.contains(&(input.id, input_axis)) {
+        dynamic.insert((output.id, output_axis));
+    }
+}
+
+fn reshape_tensors(
+    operation: &OperationIr,
+) -> Option<(&burn::backend::ir::TensorIr, &burn::backend::ir::TensorIr)> {
+    match operation {
+        OperationIr::BaseFloat(BaseOperationIr::Reshape(operation))
+        | OperationIr::BaseInt(BaseOperationIr::Reshape(operation))
+        | OperationIr::BaseBool(BaseOperationIr::Reshape(operation)) => {
+            Some((&operation.input, &operation.out))
+        }
+        _ => None,
+    }
+}
+
+fn aligned_static_input_dimension(
+    value: usize,
+    axis: usize,
+    rank: usize,
+    sample: &GraphIr,
+    specs: &[InputSpec],
+) -> bool {
+    specs.iter().enumerate().any(|(position, spec)| {
+        let Some(input) = sample
+            .inputs
+            .get(position)
+            .and_then(|&input| tensor(sample, input))
+        else {
+            return false;
+        };
+        input.shape.num_dims() == rank
+            && matches!(spec.axes.get(axis), Some(AxisSpec::Static))
+            && input.shape.get(axis) == Some(&value)
+    })
+}
+
+fn has_dynamic_inputs(specs: &[InputSpec]) -> bool {
+    specs
+        .iter()
+        .flat_map(|spec| &spec.axes)
+        .any(|axis| matches!(axis, AxisSpec::Dynamic { .. }))
 }
 
 pub(crate) fn validate_input_specs(
@@ -510,8 +918,8 @@ fn tensor(graph: &GraphIr, id: TensorId) -> Option<&burn::backend::ir::TensorIr>
 mod tests {
     use super::*;
     use burn::backend::ir::{
-        FullOpIr, InterpolateModeIr, InterpolateOpIr, InterpolateOptionsIr, ScalarIr, ShapeOpIr,
-        TensorIr,
+        AdaptiveAvgPool2dOpIr, FullOpIr, InterpolateModeIr, InterpolateOpIr, InterpolateOptionsIr,
+        MatmulOpIr, ScalarIr, ShapeOpIr, SwapDimsOpIr, TensorIr,
     };
     use burn::backend::{DType, Shape};
 
@@ -574,7 +982,7 @@ mod tests {
     }
 
     #[test]
-    fn paired_resolver_preserves_inserted_static_axis() {
+    fn paired_resolver_infers_unproven_inserted_axis() {
         let sample = reshape(1, 2, &[2, 5, 7], &[2, 1, 5, 7]);
         let validation = reshape(11, 12, &[3, 6, 8], &[3, 1, 6, 8]);
         let specs = [InputSpec::new([
@@ -596,7 +1004,7 @@ mod tests {
                     input: TensorId::new(1),
                     axis: 0,
                 },
-                ShapeExpr::Static(1),
+                ShapeExpr::Infer,
                 ShapeExpr::InputDim {
                     input: TensorId::new(1),
                     axis: 1,
@@ -700,8 +1108,110 @@ mod tests {
     }
 
     #[test]
+    fn dynamic_axes_follow_swapped_axis_positions_without_marking_the_old_position() {
+        let sample_input = tensor(1, &[2, 3]);
+        let sample_output = tensor(2, &[3, 2]);
+        let validation_input = tensor(11, &[4, 3]);
+        let validation_output = tensor(12, &[3, 4]);
+        let mut sample = GraphIr::new(vec![OperationIr::BaseFloat(BaseOperationIr::SwapDims(
+            SwapDimsOpIr {
+                input: sample_input,
+                out: sample_output,
+                dim1: 0,
+                dim2: 1,
+            },
+        ))]);
+        sample.inputs = vec![TensorId::new(1)];
+        sample.outputs = vec![TensorId::new(2)];
+        let mut validation = GraphIr::new(vec![OperationIr::BaseFloat(BaseOperationIr::SwapDims(
+            SwapDimsOpIr {
+                input: validation_input,
+                out: validation_output,
+                dim1: 0,
+                dim2: 1,
+            },
+        ))]);
+        validation.inputs = vec![TensorId::new(11)];
+        validation.outputs = vec![TensorId::new(12)];
+        let specs = [InputSpec::new([
+            AxisSpec::dynamic("rows"),
+            AxisSpec::Static,
+        ])];
+
+        let dynamic = potentially_dynamic_axes(&sample, &validation, &specs);
+
+        assert!(dynamic.contains(&(TensorId::new(2), 1)));
+        assert!(!dynamic.contains(&(TensorId::new(2), 0)));
+    }
+
+    #[test]
+    fn dynamic_axes_do_not_propagate_through_matmul_contraction() {
+        let mut sample = GraphIr::new(vec![OperationIr::Float(
+            burn::backend::DType::F32,
+            FloatOperationIr::Matmul(MatmulOpIr {
+                lhs: tensor(1, &[2, 3]),
+                rhs: tensor(2, &[3, 5]),
+                out: tensor(3, &[2, 5]),
+            }),
+        )]);
+        sample.inputs = vec![TensorId::new(1), TensorId::new(2)];
+        sample.outputs = vec![TensorId::new(3)];
+        let mut validation = GraphIr::new(vec![OperationIr::Float(
+            burn::backend::DType::F32,
+            FloatOperationIr::Matmul(MatmulOpIr {
+                lhs: tensor(11, &[2, 4]),
+                rhs: tensor(12, &[4, 5]),
+                out: tensor(13, &[2, 5]),
+            }),
+        )]);
+        validation.inputs = vec![TensorId::new(11), TensorId::new(12)];
+        validation.outputs = vec![TensorId::new(13)];
+        let specs = [
+            InputSpec::new([AxisSpec::Static, AxisSpec::dynamic("contract")]),
+            InputSpec::new([AxisSpec::dynamic("contract"), AxisSpec::Static]),
+        ];
+
+        let dynamic = potentially_dynamic_axes(&sample, &validation, &specs);
+
+        assert!(!dynamic.contains(&(TensorId::new(3), 0)));
+        assert!(!dynamic.contains(&(TensorId::new(3), 1)));
+    }
+
+    #[test]
+    fn dynamic_axes_do_not_mark_adaptive_pool_spatial_outputs() {
+        let mut sample = GraphIr::new(vec![OperationIr::Module(
+            ModuleOperationIr::AdaptiveAvgPool2d(AdaptiveAvgPool2dOpIr {
+                x: tensor(1, &[1, 2, 4, 5]),
+                output_size: [1, 1],
+                out: tensor(2, &[1, 2, 1, 1]),
+            }),
+        )]);
+        sample.inputs = vec![TensorId::new(1)];
+        sample.outputs = vec![TensorId::new(2)];
+        let mut validation = GraphIr::new(vec![OperationIr::Module(
+            ModuleOperationIr::AdaptiveAvgPool2d(AdaptiveAvgPool2dOpIr {
+                x: tensor(11, &[1, 2, 6, 7]),
+                output_size: [1, 1],
+                out: tensor(12, &[1, 2, 1, 1]),
+            }),
+        )]);
+        validation.inputs = vec![TensorId::new(11)];
+        validation.outputs = vec![TensorId::new(12)];
+        let specs = [InputSpec::new([
+            AxisSpec::Static,
+            AxisSpec::Static,
+            AxisSpec::dynamic("height"),
+            AxisSpec::dynamic("width"),
+        ])];
+
+        let dynamic = potentially_dynamic_axes(&sample, &validation, &specs);
+
+        assert!(!dynamic.contains(&(TensorId::new(2), 2)));
+        assert!(!dynamic.contains(&(TensorId::new(2), 3)));
+    }
+
+    #[test]
     fn validator_rejects_static_attribute_changes() {
-        use burn::backend::ir::SwapDimsOpIr;
         let sample = GraphIr::new(vec![OperationIr::BaseFloat(BaseOperationIr::SwapDims(
             SwapDimsOpIr {
                 input: tensor(1, &[2, 3]),

@@ -337,10 +337,20 @@ impl OnnxExporter {
                 "capture scope did not execute".into(),
             ));
         };
+        let boundaries = captured
+            .graph
+            .inputs
+            .iter()
+            .chain(&captured.graph.outputs)
+            .copied()
+            .collect::<HashSet<_>>();
         captured
             .graph
             .operations
-            .retain(|operation| !matches!(operation, OperationIr::Init(_)));
+            .retain(|operation| match operation {
+                OperationIr::Init(operation) => boundaries.contains(&operation.out.id),
+                _ => true,
+            });
         validate_capture(&captured, &input_ids, &parameter_names)?;
         Ok(CapturedForward {
             captured,

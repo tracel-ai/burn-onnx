@@ -106,7 +106,11 @@ pub(crate) fn export_graph_with_bindings_and_opset(
     }
     for &id in &graph.graph.outputs {
         let tensor = find_tensor(graph, id).ok_or(ExportError::MissingValue(id))?;
-        proto.output.push(value_info(tensor, &graph.dynamic_axes)?);
+        let mut output = value_info(tensor, &graph.dynamic_axes)?;
+        if graph.graph.inputs.contains(&id) {
+            output.name = pass_through_output_name(id);
+        }
+        proto.output.push(output);
     }
     let mut initializers: Vec<_> = values
         .iter()
@@ -125,6 +129,17 @@ pub(crate) fn export_graph_with_bindings_and_opset(
     }
 
     let mut context = LoweringContext::new(graph, proto, initializer_names, opset);
+    for (position, &id) in graph.graph.outputs.iter().enumerate() {
+        if graph.graph.inputs.contains(&id) {
+            let input = context.tensor_name(id);
+            context.node(
+                format!("output_{position}_identity"),
+                "Identity",
+                vec![input],
+                vec![pass_through_output_name(id)],
+            );
+        }
+    }
     for (index, operation) in graph.graph.operations.iter().enumerate() {
         lower_operation(&mut context, index, operation)?;
     }
@@ -136,6 +151,11 @@ fn lower_operation(
     index: usize,
     operation: &OperationIr,
 ) -> Result<(), ExportError> {
+    // Init records carry tensor metadata and initialized values, but do not represent an ONNX
+    // computation. Keeping them in the graph also preserves metadata for pass-through boundaries.
+    if matches!(operation, OperationIr::Init(_)) {
+        return Ok(());
+    }
     if numeric::lower(context, index, operation)?
         || base::lower(context, index, operation)?
         || module::lower(context, index, operation)?
@@ -284,6 +304,10 @@ fn find_tensor(graph: &ResolvedExportGraph, id: TensorId) -> Option<&TensorIr> {
 
 fn name(id: TensorId) -> String {
     format!("tensor_{}", id.value())
+}
+
+fn pass_through_output_name(id: TensorId) -> String {
+    format!("{}_output", name(id))
 }
 
 fn tensor_name(id: TensorId, initializer_names: &HashMap<TensorId, String>) -> String {
