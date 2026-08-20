@@ -205,7 +205,9 @@ jobs:
   onnx-export-tests:
     # Export requires burn's graph-capture feature and python for ONNX checks,
     # so it is opt-in and tested separately from the released import stack.
-    runs-on: ubuntu-22.04
+    # ort rc.13 downloads ONNX Runtime 1.28 binaries built against glibc 2.38+
+    # and a newer libstdc++; Ubuntu 22.04 only provides glibc 2.35.
+    runs-on: ubuntu-24.04
     needs: [prepare-checks, code-quality]
     env:
       CARGO_PROFILE_TEST_INCREMENTAL: 'false'
