@@ -169,6 +169,7 @@ pub mod topk;
 pub mod transpose;
 pub mod trilu;
 pub mod unsqueeze;
+pub mod upsample;
 pub mod where_op;
 pub mod xor;
 

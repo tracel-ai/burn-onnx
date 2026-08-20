@@ -5824,8 +5824,7 @@ status = "pass"
 status = "pass"
 
 [test_upsample_nearest]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): Upsample (node 'upsample1')"
+status = "pass"
 
 [test_where_example]
 status = "pass"

@@ -5,162 +5,105 @@ Prioritized work queue derived from a measured sweep of the open issues and the
 entry in `crates/onnx-official-tests/expectations.toml` through `onnx2burn`, then compile-checking
 the output against `burn 0.22.0-pre.1` with the `flex` backend.
 
-Items 1, 2 and 4 are done on this branch. Counts below are stated against the post-re-triage
-baseline unless the text says otherwise.
+The `Size` codegen fix and the scoreboard re-triage that produced this baseline landed in #457, and
+the domain-aware unsupported-op error (#433) turned out to be already fixed on `main`. Counts below
+are the current state of `expectations.toml`, including this branch's Upsample promotion.
 
 ## Scoreboard baseline
 
-`expectations.toml` has 1615 entries. Current state, after the item 2 re-triage:
+`expectations.toml` has 1615 entries:
 
 | Status         | Rows |
 | -------------- | ---: |
-| `pass`         |  811 |
+| `pass`         |  812 |
 | `fail-compare` |  216 |
-| `skip-codegen` |  485 |
+| `skip-codegen` |  484 |
 | `skip-compile` |  103 |
 
-709 of those execute as harness tests. The rest are codegen-only: build.rs skips harness generation
+710 of those execute as harness tests. The rest are codegen-only: build.rs skips harness generation
 for dynamic shapes, rank-0 I/O, and dtypes the `.pb` loader cannot construct.
 
-### Why it had drifted
+### Why skip counts rot
 
 `build.rs` only verifies `pass` and `fail-compare` entries. `skip-codegen`, `skip-compile` and
-`flaky` rows are read as documentation and never exercised, so they rot the moment someone fixes the
-bug behind them, always in the pessimistic direction. Measured on `main` before this branch:
+`flaky` rows are read as documentation and never exercised, so they go stale the moment someone
+fixes the bug behind them, always in the pessimistic direction. Measured on `main` before #457: of
+230 claimed `skip-compile` rows, 192 built fine and 101 of those went on to pass, while 38 were not
+compile failures at all but codegen failures wearing the wrong status.
 
-| Claimed            | Measured                                                                                            |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| 230 `skip-compile` | 192 codegen fine; 101 of those went on to pass                                                      |
-| 230 `skip-compile` | 38 actually failed codegen (wrong status, not just wrong reason)                                     |
-| 484 `skip-codegen` | 37 codegen fine (33 Mod-Shape, 4 QLinearMatMul)                                                     |
-| 15 `skip-codegen`  | reason string stale: they now fail on training-domain ops, not the opset-domain check fixed in #434 |
-
-`cargo xtask retriage` now re-checks every `skip-*` row, so this cannot silently recur.
+`cargo xtask retriage` now re-checks every `skip-*` row, so this cannot silently recur — but nothing
+runs it automatically. Run it before trusting a skip count, and after any fix that could plausibly
+unblock a family.
 
 ### What "pass" does and does not mean
 
-811 rows are marked `pass`; 705 of them execute as harness tests. The other 106 are codegen-only:
+812 rows are marked `pass`; 706 of them execute as harness tests. The other 106 are codegen-only:
 `build.rs` skips harness generation for dynamic shapes, rank-0 I/O, and dtypes the `.pb` loader
 cannot construct, and `update-expectations` can only demote a row whose test failed. A codegen-only
 row is therefore unfalsifiable once promoted, and its output is never compared against the
-reference tensors. `retriage` now counts them separately when reporting promotions rather than
-folding them into the total.
+reference tensors. `retriage` counts them separately when reporting promotions rather than folding
+them into the total.
 
-37 of this branch's 105 promotions are codegen-only, including `test_size` and `test_size_example`
-(the Size fix is verified by the `crates/onnx-tests/tests/size/` integration tests, not by the
-official suite) and 26 `test_castlike_*` rows converting to FLOAT8/INT4 variants. Extending the
-harness to cover them is separate work; the honest reading of 811 is "811 compile, 705 match".
+`test_size` and `test_size_example` are in that group (the Size fix is verified by the
+`crates/onnx-tests/tests/size/` integration tests, not by the official suite), as are 26
+`test_castlike_*` rows converting to FLOAT8/INT4 variants. Extending the harness to cover them is
+separate work; the honest reading of 812 is "812 compile, 706 match".
 
 ## Tier 1
 
-### 1. Fix `Size` codegen
-
-`crates/burn-onnx/src/burn/node/size.rs:17` emits:
-
-```rust
-let #output = #input.shape.num_elements();
-```
-
-`shape` is a method on `Tensor`, not a field, and `num_elements()` returns `usize` while the
-generated signature declares `-> i64`. Every model containing an ONNX `Size` node produces Rust that
-does not compile.
-
-For a `Shape(N)` input it is worse: the generated code calls `.shape` on an `[i64; N]` array, which
-has no such member. The answer there is the compile-time constant `N`.
-
-Why it survived: the inline snapshot at `size.rs:38` asserts the broken output, and while
-`tests/size/size.onnx` *is* registered in `crates/onnx-tests/build.rs`, `tests/test_mod.rs` never
-declared `pub mod size;`. build.rs therefore generated the model on every build and nothing ever
-`include!`d it, so rustc never saw the broken code. It is the only test directory in the repo
-missing from `test_mod.rs` (`loop` and `mod` are there as raw idents).
-
-Unblocks 21 official tests: `test_size`, `test_size_example`, and 19 `rms_normalization_*_expanded`.
-
-**Status: done.** `size.rs` now branches on input type: Tensor -> `.shape().num_elements() as i64`,
-`Shape(N)` -> the constant `N`, either scalar form -> 1. A new `Size(Shape(N)) -> constant N` rule
-in `simplify/constant_shape.rs` folds the pattern away entirely and lets dead-node elimination drop
-the feeding `Shape` node. Unlike the Gather and Slice rules it never consults `static_shape`, only
-the rank, so it is safe under dynamic dimensions. `tests/size/` is wired up with the existing `size`
-model plus a new `size_shape` model. Scoreboard moved 21 rows off `skip-compile`: 8 to `pass`, 13 to
-`fail-compare` (see item 5).
-
-### 2. Re-triage the scoreboard
-
-Promote the clean and stale rows, correct the wrong reason strings, and demote the mislabeled
-`skip-compile` rows to `skip-codegen`. Add a `cargo xtask retriage` that re-runs every `skip-*` row,
-so the file cannot drift again.
-
-**Status: done.** `cargo xtask retriage` runs codegen per row in its own process, promotes what
-succeeds, then builds the test crate and demotes anything rustc rejects, carrying the diagnostic as
-the row's reason. It converged on all 693 skipped rows in two compile rounds:
-
-| Transition | Rows |
-|---|---:|
-| skip-compile -> pass | 101 |
-| skip-compile -> skip-codegen (mislabeled) | 38 |
-| skip-codegen -> skip-compile | 33 |
-| skip-codegen -> pass | 4 |
-
-`cargo xtask update-expectations` then demoted the 24 promotions whose output did not match the
-reference tensors. Net against `main`:
-
-| Status | Before | After |
-|---|---:|---:|
-| pass | 722 | 811 |
-| fail-compare | 179 | 216 |
-| skip-codegen | 484 | 485 |
-| skip-compile | 230 | 103 |
-
-Harness tests actually executing and passing went from 663 to 709. The reasons are worth more than
-the counts: the single 207-row bucket reading "burn-onnx emits uncompilable generated code
-(references alloc::\* from no_std, or emits unresolved variable bindings)" is gone, replaced by
-exact rustc diagnostics. Item 8's clusters can now be read straight out of the file — the largest
-being 34 rows of `expected Tensor<1, Bool>, found Tensor<1, Int>`, 22 of `expected f32, found
-Tensor<0>`, and 22 of `expected f16, found f32`.
-
-Two supporting fixes fell out of the sweep:
-
-- retriage attributes errors in the generated `harness.rs` to the enclosing `fn`, not just errors in
-  a generated model. Three `constantofshape` rows compile fine but the driver cannot call them: a
-  Shape-typed graph input arrives as `[i64; N]` where the driver built a `Tensor<1, Int>`. Without
-  the attribution the sweep aborted with "no error attributed to a promoted model".
-- The `fail-compare` harness body in `onnx-official-tests/build.rs` now guards model construction
-  with `catch_unwind`. `test_gru_batchwise` panics in `from_file` (the bpk is missing every
-  `GateController` weight, which is its own bug worth a ticket), and that panic escaped the
-  per-comparison guard and took down `verify_fail_compare_still_fails` for every other entry.
-
-### 3. Upsample (#415)
+### 1. Upsample (#415)
 
 A user is blocked importing a public model (`fastdepth_7.onnx`). Upsample is deprecated but common
 in older exports, and is a strict subset of Resize (opset 7: `scales` attribute; opset 9: `scales`
-input; modes nearest/linear). Currently a placeholder in
-`crates/onnx-ir/src/node/unsupported.rs:94`.
+input; modes nearest/linear).
 
-### 4. Domain-aware unsupported-op error (#433)
+**Status: done.** ONNX deprecated Upsample *into* Resize: Resize opset 10 is Upsample with the
+coordinate mapping (`asymmetric`) and nearest rounding (`floor`) spelled out as attributes. So
+`node/upsample.rs` extracts Upsample's own attributes across all three shapes it has had -
+`height_scale`/`width_scale` (opset 1), the `scales` float-list attribute (opset 7), the `scales`
+input (opset 9+, static or runtime) - and builds a `ResizeNode` with those two modes pinned. The
+enum entry is `Upsample => resize::ResizeNode` and burn-onnx just lists `Upsample` in its dispatch
+macro, so there is no second copy of the interpolate codegen. Node naming still comes from the
+`RawNode`, so generated code reads `self.upsample1`, not `resize1`.
 
-`Unknown node type: VariantNotFound` for `TreeEnsembleRegressor` gives the user nothing to act on;
-the reporter had to work out on their own that `ai.onnx.ml` is a separate domain.
+Beyond what Resize does today, the processor computes the output static shape as
+`floor(dim * scale)` rather than copying the input's, rejects scaling the batch or channel
+dimension instead of silently dropping those scales, and rejects ranks Burn's interpolate cannot
+serve (anything but 3 and 4, or anything but 4 when the scales are a runtime input) rather than
+emitting code that references a field that was never created.
 
-**Status: already fixed on main**, after the 0.21.0 release the issue was filed against.
-`proto_conversion.rs` now maps any unrecognised standard-domain op to `NodeType::Custom` rather
-than unwrapping a `FromStr`, and the custom-op coverage check reports it by domain. Checked with a
-hand-built `ai.onnx.ml::TreeEnsembleRegressor` model:
+A multi-agent review caught a wrong claim in the first draft of this work, which said nearest mode
+was exact and only linear diverged. Both halves were wrong, and the corrected behavior is the more
+interesting part of the change:
 
-```
-INFO onnx_ir::proto_conversion: Custom-domain op 'ai.onnx.ml::TreeEnsembleRegressor'
-  (node 'tree1'); treating as custom op
-...
-model contains 1 custom op(s) with no covering inference hook:
-  - ai.onnx.ml::TreeEnsembleRegressor used by 1 node(s)
-Register hooks via ModelGen::register_custom_op.
-```
+- **`mode="linear"` is refused**, not warned about. Burn's bilinear samples at half-pixel
+  coordinates (ONNX's `half_pixel`); Upsample mandates `asymmetric`. Every interior sample differs
+  at every scale other than 1, so this is "always wrong", not "may differ". A `log::warn!` was also
+  the wrong channel: cargo swallows build-script stdout unless the line is `cargo:warning=`
+  prefixed, so the primary `build.rs` path showed the user nothing at all.
+- **Nearest is refused when a scale does not divide its dimension evenly.** ONNX picks a source
+  element by scale, `floor(o / scale)`; Burn's kernel picks it by output size,
+  `floor(o * in / out)` with `out = floor(in * scale)`. Those agree only when `in * scale` is
+  whole. Verified end to end: `scale=1.75` on width 5 gives Burn `[0,0,1,1,2,3,3,4]` against
+  onnxruntime's `[0,0,1,1,2,2,3,4]`. Where the product is provable the model is rejected with the
+  dimension, the scale and the reason; where it is not (runtime scales, dynamic dims) it warns.
+  Integer scales, which is what fastdepth and most real exports use, are unaffected.
 
-Remaining work is issue hygiene: confirm against the reporter's attached model, then close #433
-against the next release and fold the operator request into #162.
+Every test in the first draft used an integer scale, which is exactly the case where the two
+formulas coincide, so the suite could not have caught this. `ReferenceEvaluator` cannot either: its
+Upsample is `np.repeat` and raises on non-integer scales, making onnxruntime the only usable oracle.
+
+Two smaller review fixes: opset 1 spells linear mode `bilinear` (the rename came at opset 7), which
+was being rejected as an unknown mode rather than for the real reason; and spatial scales are now
+checked against the spec's "greater than or equal to 1", since a scale below 1 or a NaN reaches
+`as usize` in generated code and saturates to a zero-size dimension.
+
+Scoreboard: `test_upsample_nearest` moved from `skip-codegen` to `pass`. Opset compliance grew from
+472 to 476 op-version combinations (Upsample at opsets 1, 7, 9, 10).
 
 ## Tier 2
 
-### 5. Reduce family comparison failures (99 tests)
+### 2. Reduce family comparison failures (99 tests)
 
 The largest `fail-compare` bucket, and the worst failure mode to leave sitting: these compile and
 run, and produce wrong numbers. The re-triage grew this from 88 to 99 by promoting reduce rows that
@@ -179,7 +122,7 @@ turned out to compile and then miscompare.
 
 Likely a shared root cause in keepdims / empty-axes / `noop_with_empty_axes`.
 
-Item 1 produced a sharp reproducer for part of this. Once the 19 `rms_normalization_*_expanded`
+The Size fix produced a sharp reproducer for part of this. Once the 19 `rms_normalization_*_expanded`
 models compile, exactly 6 pass: the `axis0` and `axis_negative_<rank>` variants. Every other axis is
 off by a uniform relative factor. The generated code is
 
@@ -189,7 +132,7 @@ let reducemean1_out1 = { mul1_out1.mean().expand([1; 2usize]) };
 
 `mean()` with no argument reduces over *all* elements, so it is only correct when `axis` names the
 first dimension and the reduction therefore covers the whole tensor. It should reduce over the axes
-from `axis` onward. Those 13 are now tracked as `fail-compare` against #311.
+from `axis` onward. Those 13 are tracked as `fail-compare` against #311.
 
 Filed as **#459**: opset 18 moved `axes` from an attribute to an input, and a runtime `axes` input
 leaves `ReduceConfig::dims` empty (`onnx-ir/src/node/reduce.rs:275`), which burn-onnx cannot tell
@@ -198,22 +141,22 @@ rest of this 99-row bucket shares that cause is unverified, but it is the cheape
 `noop_with_empty_axes` is a third unhandled meaning for empty axes and should be settled in the same
 fix.
 
-### 6. Runtime weight inputs: LayerNorm (#352, 19 tests) + Conv/ConvTranspose (#346, 12 tests)
+### 3. Runtime weight inputs: LayerNorm (#352, 19 tests) + Conv/ConvTranspose (#346, 12 tests)
 
 Both are the same fix: route through the functional API (`burn::tensor::module::conv2d`) instead of
 a baked-in `Param` field. Five ops have now hit this pattern; extract the shared
 `runtime_scalar_to_native(arg, target_dtype, scope)` helper in `argument_helpers.rs` proposed in the
 #314 thread before doing these two.
 
-### 7. RMSNormalization (19 tests, +19 more via item 1)
+### 4. RMSNormalization (19 tests, +19 more once item 2 lands)
 
 Burn has `RmsNorm` natively and ONNX 23 made this a first-class op. High real-world relevance:
 Llama, Qwen and Gemma all use it.
 
-### 8. Remaining compile-error clusters
+### 5. Remaining compile-error clusters
 
-All 103 remaining `skip-compile` rows now carry the rustc diagnostic that produced them, so this
-table is a `grep` of `expectations.toml` rather than an estimate. Sorted by blast radius:
+All 103 remaining `skip-compile` rows carry the rustc diagnostic that produced them, so this table
+is a `grep` of `expectations.toml` rather than an estimate. Sorted by blast radius:
 
 | Rows | Diagnostic | Example | Read |
 | ---: | --- | --- | --- |
@@ -235,9 +178,9 @@ The `half::f16` problem noted during the first sweep is not in this table: gener
 name `half::f16`, but `onnx-official-tests` happens to depend on `half` already. It still bites a
 consuming crate that does not, and is worth fixing independently of these rows.
 
-### 9. GRU/LSTM/RNN discard runtime weights (#458)
+### 6. GRU/LSTM/RNN discard runtime weights (#458)
 
-Surfaced by the item 2 sweep, previously hidden behind a `skip-compile` row. `test_gru_batchwise`
+Surfaced by the re-triage, previously hidden behind a `skip-compile` row. `test_gru_batchwise`
 compiles, then panics in `Model::from_file`:
 
 ```
@@ -265,7 +208,7 @@ pub fn forward(&self, x: Tensor<3>, w: Tensor<3>, r: Tensor<3>) -> Tensor<3> {
 
 `from_file` panics on the missing tensors, but `Model::new` does not: `GruConfig::init` gives the
 module fully random weights and inference proceeds. That silent path is the reason this is a bug
-rather than a gap. Same family as items 6's Conv/LayerNorm runtime weights (#346, #352), except
+rather than a gap. Same family as item 3's Conv/LayerNorm runtime weights (#346, #352), except
 those reject the model with a clear error instead of accepting it and computing nonsense.
 
 ## Tier 3
@@ -273,6 +216,29 @@ those reject the model with a clear error instead of accepting it and computing 
 - **#50 / #51 metal backend.** Dozens of ops fail and YOLO11x diverges by 295 max-abs. Correctness
   on the backend people ship on outweighs op-count wins. Root cause probably belongs upstream in
   burn, but it surfaces here.
+- **Resize shares every gap Upsample just closed (surfaced by the item 1 review).** None of it is
+  new and none of it blocked item 1, but it is all in `crates/burn-onnx/src/burn/node/resize.rs`
+  and its processor:
+  - Accepts `asymmetric` linear and computes half-pixel values (#311 already tracks
+    `test_resize_upsample_scales_cubic_asymmetric` as `fail-compare`).
+  - Does not validate that a nearest scale divides its dimension, so it has the same silent pixel
+    shift Upsample now refuses.
+  - The runtime path emits `input_dims[3]` unconditionally, so a rank-3 runtime-scales Resize emits
+    code that does not compile.
+  - Drops `scales[0]`/`scales[1]` in the runtime path, so a batch or channel scale that the static
+    path hard-rejects is silently ignored when the same tensor arrives as a graph input.
+  - Leaves `nearest_mode` at the opset 11 default on its opset 10 path, where the spec says floor.
+
+  Note `coordinate_transformation_mode` and `nearest_mode` are recorded but never read by codegen
+  (only `align_corners` is derived), so pinning them documents intent without changing behavior.
+- **`build_node` cannot report an error, so late-lifted constants panic.** `lift_constants` runs
+  again after identity elimination (`post_processing.rs:265`) and type inference does not re-run
+  after it, so `Constant -> Identity -> Op` reaches `build_node` with a value that was Dynamic
+  during `infer_types`. Any validation that first becomes possible there can only panic:
+  `NodeProcessor::build_node` returns `Node`, not `Result<Node>`. Every processor in the crate has
+  this shape (`.expect("Config extraction failed")`); Upsample is just the first to have checks
+  that can realistically fire there. Reproduced with a `Constant -> Identity -> Upsample` graph
+  carrying scales of 1.75.
 - **#280 shape propagation through Where/Mul/ConstantOfShape.** Blocks RF-DETR without an `onnxsim`
   pre-pass.
 - **#371 Kokoro residual 1.3x.** Established as f32 drift through HiFi-GAN resblocks, not fixable
@@ -283,18 +249,21 @@ those reject the model with a clear error instead of accepting it and computing 
 - **NegativeLogLikelihoodLoss (52) + SoftmaxCrossEntropyLoss (34) + nllloss fail-compare (12).** 98
   tests, but training-loss ops in an inference-focused importer. Large count, small user value.
 - **#433 TreeEnsembleRegressor / #162 ONNX-ML.** The reporter reached the right conclusion
-  themselves, and the error message they hit is already fixed (item 4). Close #433 against the next
-  release; the operator request itself belongs in #162.
+  themselves, and the error message they hit is already fixed on `main`: `proto_conversion.rs` maps
+  any unrecognised standard-domain op to `NodeType::Custom` instead of unwrapping a `FromStr`, and
+  the custom-op coverage check reports it by domain. Remaining work is issue hygiene: confirm
+  against the reporter's attached model, close #433 against the next release, and fold the operator
+  request into #162.
 - **Float8 / Float4 / INT4 cast tests (~30).** Blocked on backend dtype support, not on burn-onnx.
 
 ## Order
 
-Items 1 and 2 are done; 4 turned out to be already fixed on `main`. Item 3 is next.
+Item 1 is done. Item 2 (reduce family) is next.
 
-Then 5 -> 6 -> 7, each now measurable against an honest baseline. Items 5 and 9 now have issues (#459, #458); both are
-silent-wrong-answer bugs, which argues for pulling them ahead of the pure test-count work. #460
-(non-deterministic attribute errors) should land early too: it is small, and until it does, every
-`retriage` run churns a couple of rows for no reason.
+Then 3 -> 4, each measurable against an honest baseline. Items 2 and 6 are both
+silent-wrong-answer bugs (#459, #458), which argues for pulling them ahead of the pure test-count
+work. #460 (non-deterministic attribute errors) should land early too: it is small, and until it
+does, every `retriage` run churns a couple of rows for no reason.
 
-Item 8's top three rows (34 + 22 + 22 = 78 of the 103 remaining `skip-compile` rows) are probably
-two fixes, which makes that bucket competitive with item 5 on effort-per-test.
+Item 5's top three rows (34 + 22 + 22 = 78 of the 103 remaining `skip-compile` rows) are probably
+two fixes, which makes that bucket competitive with item 2 on effort-per-test.

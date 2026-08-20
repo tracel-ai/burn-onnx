@@ -170,6 +170,7 @@ pub mod transpose;
 pub mod trilu;
 pub mod unsqueeze;
 pub mod unsupported;
+pub mod upsample;
 pub mod where_op;
 pub mod window_common;
 pub mod xor;

@@ -51,7 +51,7 @@ jobs:
 
       - name: Install Rust
         if: steps.check.outputs.skip == 'false'
-        uses: tracel-ai/github-actions/install-rust@v9
+        uses: tracel-ai/github-actions/install-rust@v11
         with:
           rust-toolchain: stable
           cache-key: bump-burn

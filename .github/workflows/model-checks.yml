@@ -43,7 +43,7 @@ jobs:
           key: model-checks-${{ hashFiles('crates/model-checks/*/get_model.py') }}
 
       - name: Install Rust
-        uses: tracel-ai/github-actions/install-rust@v9
+        uses: tracel-ai/github-actions/install-rust@v11
         with:
           rust-toolchain: stable
           cache-key: ""

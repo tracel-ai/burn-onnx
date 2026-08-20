@@ -350,6 +350,7 @@ impl_node_codegen_dispatch! {
     DepthToSpace,
     SpaceToDepth,
     Resize,
+    Upsample,
     GridSample,
 
     // Linear algebra ops

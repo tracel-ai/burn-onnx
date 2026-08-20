@@ -91,7 +91,6 @@ define_placeholder_node! {
     TensorScatterNode,
     TfIdfVectorizerNode,
     UniqueNode,
-    UpsampleNode,
 }
 
 /// Generic processor for unsupported operations

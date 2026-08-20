@@ -154,6 +154,7 @@ MIN_OPSET = {
     "EyeLike": 9,
     "Range": 11,
     "Resize": 10,
+    "Upsample": 1,
     "GridSample": 16,
     # Random
     "RandomNormal": 1,

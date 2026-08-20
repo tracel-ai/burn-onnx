@@ -190,6 +190,7 @@ SUPPORTED_OPS = {
     "EyeLike": "eyelike",
     "Range": "range_op",
     "Resize": "resize",
+    "Upsample": "upsample",
     "GridSample": "grid_sample",
     # Random
     "RandomNormal": "random_normal",
@@ -840,6 +841,22 @@ def make_resize(op_name: str, opset: int):
         return [node], [inp], [out], [scales]
 
 
+
+def make_upsample(op_name: str, opset: int):
+    inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [1, 1, 2, 2])
+    out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.FLOAT, None)
+    if opset >= 9:
+        scales = numpy_helper.from_array(np.array([1.0, 1.0, 2.0, 2.0], dtype=np.float32), name=_p(op_name, "scales"))
+        node = helper.make_node(op_name, [_p(op_name, "input"), _p(op_name, "scales")], [_p(op_name, "output")], name=_p(op_name, "node"), mode="nearest")
+        return [node], [inp], [out], [scales]
+    elif opset >= 7:
+        node = helper.make_node(op_name, [_p(op_name, "input")], [_p(op_name, "output")], name=_p(op_name, "node"), mode="nearest", scales=[1.0, 1.0, 2.0, 2.0])
+        return [node], [inp], [out], []
+    else:
+        # Opset 1 predates the scales attribute and is 4-D only
+        node = helper.make_node(op_name, [_p(op_name, "input")], [_p(op_name, "output")], name=_p(op_name, "node"), mode="nearest", height_scale=2.0, width_scale=2.0)
+        return [node], [inp], [out], []
+
 def make_grid_sample(op_name: str, opset: int):
     inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [1, 1, 3, 3])
     grid = helper.make_tensor_value_info(_p(op_name, "grid"), TensorProto.FLOAT, [1, 2, 2, 2])
@@ -1172,6 +1189,7 @@ GENERATORS = {
     "eyelike": make_eyelike,
     "range_op": make_range_op,
     "resize": make_resize,
+    "upsample": make_upsample,
     "grid_sample": make_grid_sample,
     "random_normal": make_random_normal,
     "random_uniform": make_random_uniform,

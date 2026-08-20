@@ -214,7 +214,7 @@ functionality.
 | [Transpose][187]                 | ✅             | ✅           |
 | [Trilu][188]                     | ✅             | ✅           |
 | [Unique][189]                    | ❌             | ❌           |
-| [Upsample][190]                  | ❌             | ❌           |
+| [Upsample][190]                  | ✅             | ✅           |
 | [Where][191]                     | ✅             | ✅           |
 | [Xor][192]                       | ✅             | ✅           |
 | [Unsqueeze][193]                 | ✅             | ✅           |

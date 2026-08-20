@@ -240,3 +240,35 @@ fn top_k(graph: &OnnxGraph) {
         }
     "#);
 }
+
+#[rstest]
+fn upsample(graph: &OnnxGraph) {
+    let node = find_node(graph, "upsample");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Resize "upsample1"
+      Inputs:
+        upsample_input: F32[1, 1, 2, 2]
+        _: F32[4] [static(5)]
+      Outputs:
+        upsample1_out1: F32[1, 1, 4, 4]
+      Config:
+        ResizeConfig {
+            mode: Nearest,
+            scales: Some(
+                Static(
+                    [
+                        2.0,
+                        2.0,
+                    ],
+                ),
+            ),
+            sizes: None,
+            coordinate_transformation_mode: Asymmetric,
+            cubic_coeff_a: -0.75,
+            nearest_mode: Floor,
+            exclude_outside: 0,
+            extrapolation_value: 0.0,
+            antialias: 0,
+        }
+    "#);
+}

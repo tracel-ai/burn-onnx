@@ -376,7 +376,6 @@ impl AttributeValue {
         }
     }
 
-    #[allow(dead_code)]
     pub fn into_f32s(self) -> Vec<f32> {
         if let AttributeValue::Float32s(elem) = self {
             elem
