@@ -8,7 +8,7 @@ use burn::nn::{
     conv::{Conv2d, Conv2dConfig},
     pool::{MaxPool2d, MaxPool2dConfig},
 };
-use burn::tensor::{Device, Tensor, TensorData, Tolerance};
+use burn::tensor::{Device, Int, Tensor, TensorData, Tolerance};
 use burn::tensor::{
     module::interpolate,
     ops::{InterpolateMode, InterpolateOptions, PadMode},
@@ -212,13 +212,15 @@ fn small_mlp_matches_burn() {
 }
 
 #[test]
-fn dynamic_reshape_matches_burn_at_third_shape() {
+fn dynamic_reshape_matches_burn_at_runtime_shape() {
     let device = Device::default();
     let module = Flatten;
-    let sample_values = (0..24).map(|value| value as f32).collect::<Vec<_>>();
-    let validation_values = (0..60).map(|value| value as f32).collect::<Vec<_>>();
-    let sample = Tensor::<3>::from_data(TensorData::new(sample_values, [2, 3, 4]), &device);
-    let validation = Tensor::<3>::from_data(TensorData::new(validation_values, [5, 3, 4]), &device);
+    let sample = Tensor::<1, Int>::arange(0..24, &device)
+        .float()
+        .reshape([2, 3, 4]);
+    let validation = Tensor::<1, Int>::arange(0..60, &device)
+        .float()
+        .reshape([5, 3, 4]);
     let specs = [InputSpec::new([
         AxisSpec::dynamic("batch"),
         AxisSpec::Static,
@@ -229,10 +231,16 @@ fn dynamic_reshape_matches_burn_at_third_shape() {
         .export_dynamic(&module, sample, validation, &specs, Flatten::forward)
         .unwrap();
 
-    let third_values = (0..84).map(|value| value as f32).collect::<Vec<_>>();
-    let third = Tensor::<3>::from_data(TensorData::new(third_values.clone(), [7, 3, 4]), &device);
-    let expected = module.forward(third).into_data();
-    let actual = run_ort(model.as_bytes(), [7, 3, 4], third_values);
+    let runtime_input = Tensor::<1, Int>::arange(0..84, &device)
+        .float()
+        .reshape([7, 3, 4]);
+    let runtime_values = runtime_input
+        .clone()
+        .into_data()
+        .try_to_vec::<f32>()
+        .unwrap();
+    let expected = module.forward(runtime_input).into_data();
+    let actual = run_ort(model.as_bytes(), [7, 3, 4], runtime_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
 }
 
@@ -263,10 +271,10 @@ fn dynamic_export_isolates_capture_devices() {
     assert_eq!(capture_devices.len(), 2);
     assert_ne!(capture_devices[0], capture_devices[1]);
 
-    let third_values = vec![4.0, 5.0, 6.0, 7.0];
-    let third = Tensor::<1>::from_floats(third_values.as_slice(), &device);
-    let expected = module.forward(third).into_data();
-    let actual = run_ort(model.as_bytes(), [4], third_values);
+    let runtime_values = vec![4.0, 5.0, 6.0, 7.0];
+    let runtime_input = Tensor::<1>::from_floats(runtime_values.as_slice(), &device);
+    let expected = module.forward(runtime_input).into_data();
+    let actual = run_ort(model.as_bytes(), [4], runtime_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
 }
 
@@ -278,9 +286,8 @@ fn small_cnn_matches_burn() {
         activation: Relu::new(),
         pool: MaxPool2dConfig::new([2, 2]).init(),
     };
-    let input_values = (0..25).map(|value| value as f32 / 10.0).collect::<Vec<_>>();
-    let input =
-        Tensor::<4>::from_data(TensorData::new(input_values.clone(), [1, 1, 5, 5]), &device);
+    let input = (Tensor::<1, Int>::arange(0..25, &device).float() / 10.0).reshape([1, 1, 5, 5]);
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
     let expected = module.forward(input.clone()).into_data();
     let model = OnnxExporter::new()
         .export(&module, input, SmallCnn::forward)
@@ -293,10 +300,10 @@ fn small_cnn_matches_burn() {
 #[test]
 fn interpolate_matches_burn() {
     let device = Device::default();
-    let input_values = (0..12).map(|value| value as f32).collect::<Vec<_>>();
-
-    let input =
-        Tensor::<4>::from_data(TensorData::new(input_values.clone(), [1, 1, 3, 4]), &device);
+    let input = Tensor::<1, Int>::arange(0..12, &device)
+        .float()
+        .reshape([1, 1, 3, 4]);
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
     let expected = BilinearResize.forward(input.clone()).into_data();
     let model = OnnxExporter::new()
         .export(&BilinearResize, input, BilinearResize::forward)
@@ -304,8 +311,9 @@ fn interpolate_matches_burn() {
     let actual = run_ort(model.as_bytes(), [1, 1, 3, 4], input_values.clone());
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
 
-    let input =
-        Tensor::<4>::from_data(TensorData::new(input_values.clone(), [1, 1, 3, 4]), &device);
+    let input = Tensor::<1, Int>::arange(0..12, &device)
+        .float()
+        .reshape([1, 1, 3, 4]);
     let expected = NearestResize.forward(input.clone()).into_data();
     let model = OnnxExporter::new()
         .export(&NearestResize, input, NearestResize::forward)
@@ -329,12 +337,14 @@ fn full_matches_burn() {
 }
 
 #[test]
-fn dynamic_full_matches_burn_at_third_shape() {
+fn dynamic_full_matches_burn_at_runtime_shape() {
     let device = Device::default();
-    let sample_values = (0..6).map(|value| value as f32).collect::<Vec<_>>();
-    let validation_values = (0..15).map(|value| value as f32).collect::<Vec<_>>();
-    let sample = Tensor::<2>::from_data(TensorData::new(sample_values, [2, 3]), &device);
-    let validation = Tensor::<2>::from_data(TensorData::new(validation_values, [5, 3]), &device);
+    let sample = Tensor::<1, Int>::arange(0..6, &device)
+        .float()
+        .reshape([2, 3]);
+    let validation = Tensor::<1, Int>::arange(0..15, &device)
+        .float()
+        .reshape([5, 3]);
     let specs = [InputSpec::new([
         AxisSpec::dynamic("batch_size"),
         AxisSpec::Static,
@@ -350,10 +360,16 @@ fn dynamic_full_matches_burn_at_third_shape() {
         )
         .unwrap();
 
-    let third_values = (0..21).map(|value| value as f32).collect::<Vec<_>>();
-    let third = Tensor::<2>::from_data(TensorData::new(third_values.clone(), [7, 3]), &device);
-    let expected = AddDynamicFull.forward(third).into_data();
-    let actual = run_ort(model.as_bytes(), [7, 3], third_values);
+    let runtime_input = Tensor::<1, Int>::arange(0..21, &device)
+        .float()
+        .reshape([7, 3]);
+    let runtime_values = runtime_input
+        .clone()
+        .into_data()
+        .try_to_vec::<f32>()
+        .unwrap();
+    let expected = AddDynamicFull.forward(runtime_input).into_data();
+    let actual = run_ort(model.as_bytes(), [7, 3], runtime_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
 }
 
@@ -373,10 +389,10 @@ fn constant_pad_matches_burn() {
 }
 
 #[test]
-fn dynamic_constant_pad_matches_burn_at_third_shape() {
+fn dynamic_constant_pad_matches_burn_at_runtime_shape() {
     let device = Device::default();
-    let sample = Tensor::<4>::from_data(TensorData::zeros::<f32, _>([1, 1, 2, 3]), &device);
-    let validation = Tensor::<4>::from_data(TensorData::zeros::<f32, _>([2, 1, 4, 5]), &device);
+    let sample = Tensor::<4>::zeros([1, 1, 2, 3], &device);
+    let validation = Tensor::<4>::zeros([2, 1, 4, 5], &device);
     let specs = [InputSpec::new([
         AxisSpec::dynamic("batch_size"),
         AxisSpec::Static,
@@ -394,13 +410,15 @@ fn dynamic_constant_pad_matches_burn_at_third_shape() {
         )
         .unwrap();
 
-    let third_values = (0..3 * 6 * 7)
-        .map(|value| value as f32 / 10.0)
-        .collect::<Vec<_>>();
-    let third =
-        Tensor::<4>::from_data(TensorData::new(third_values.clone(), [3, 1, 6, 7]), &device);
-    let expected = ConstantPad.forward(third).into_data();
-    let actual = run_ort(model.as_bytes(), [3, 1, 6, 7], third_values);
+    let runtime_input =
+        (Tensor::<1, Int>::arange(0..3 * 6 * 7, &device).float() / 10.0).reshape([3, 1, 6, 7]);
+    let runtime_values = runtime_input
+        .clone()
+        .into_data()
+        .try_to_vec::<f32>()
+        .unwrap();
+    let expected = ConstantPad.forward(runtime_input).into_data();
+    let actual = run_ort(model.as_bytes(), [3, 1, 6, 7], runtime_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
 }
 
@@ -460,15 +478,15 @@ fn neg_matches_burn() {
 }
 
 #[test]
-fn dynamic_small_cnn_matches_burn_at_third_shape() {
+fn dynamic_small_cnn_matches_burn_at_runtime_shape() {
     let device = Device::default();
     let module = SmallCnn {
         conv: Conv2dConfig::new([1, 2], [3, 3]).init(&device),
         activation: Relu::new(),
         pool: MaxPool2dConfig::new([2, 2]).init(),
     };
-    let sample = Tensor::<4>::from_data(TensorData::zeros::<f32, _>([1, 1, 5, 5]), &device);
-    let validation = Tensor::<4>::from_data(TensorData::zeros::<f32, _>([2, 1, 7, 7]), &device);
+    let sample = Tensor::<4>::zeros([1, 1, 5, 5], &device);
+    let validation = Tensor::<4>::zeros([2, 1, 7, 7], &device);
     let specs = [InputSpec::new([
         AxisSpec::dynamic("batch"),
         AxisSpec::Static,
@@ -479,13 +497,15 @@ fn dynamic_small_cnn_matches_burn_at_third_shape() {
         .export_dynamic(&module, sample, validation, &specs, SmallCnn::forward)
         .unwrap();
 
-    let third_values = (0..243)
-        .map(|value| value as f32 / 100.0)
-        .collect::<Vec<_>>();
-    let third =
-        Tensor::<4>::from_data(TensorData::new(third_values.clone(), [3, 1, 9, 9]), &device);
-    let expected = module.forward(third).into_data();
-    let actual = run_ort(model.as_bytes(), [3, 1, 9, 9], third_values);
+    let runtime_input =
+        (Tensor::<1, Int>::arange(0..243, &device).float() / 100.0).reshape([3, 1, 9, 9]);
+    let runtime_values = runtime_input
+        .clone()
+        .into_data()
+        .try_to_vec::<f32>()
+        .unwrap();
+    let expected = module.forward(runtime_input).into_data();
+    let actual = run_ort(model.as_bytes(), [3, 1, 9, 9], runtime_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
 }
 
@@ -515,5 +535,34 @@ fn resnet18_matches_burn() {
     assert_eq!(batch_norm_count, 20);
 
     let actual = run_ort(model.as_bytes(), [1, 3, 64, 64], input_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(1.0e-3, 1.0e-5));
+}
+
+#[test]
+fn dynamic_resnet18_matches_burn_at_runtime_shape() {
+    let device = Device::default();
+    let module = ResNet18::new(10, &device);
+    let sample = Tensor::<4>::zeros([1, 3, 32, 32], &device);
+    let validation = Tensor::<4>::zeros([2, 3, 40, 48], &device);
+    let specs = [InputSpec::new([
+        AxisSpec::dynamic("batch_size"),
+        AxisSpec::Static,
+        AxisSpec::dynamic("height"),
+        AxisSpec::dynamic("width"),
+    ])];
+    let runtime_values = (0..3 * 3 * 48 * 56)
+        .map(|value| (value % 251) as f32 / 251.0)
+        .collect::<Vec<_>>();
+    let runtime_input = Tensor::<4>::from_data(
+        TensorData::new(runtime_values.clone(), [3, 3, 48, 56]),
+        &device,
+    );
+    let expected = module.forward(runtime_input).into_data();
+
+    let model = OnnxExporter::new()
+        .export_dynamic(&module, sample, validation, &specs, ResNet18::forward)
+        .unwrap();
+
+    let actual = run_ort(model.as_bytes(), [3, 3, 48, 56], runtime_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(1.0e-3, 1.0e-5));
 }

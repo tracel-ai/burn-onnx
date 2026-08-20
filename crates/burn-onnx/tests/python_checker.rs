@@ -6,7 +6,7 @@ use std::{
 };
 
 use burn::module::{Module, Param};
-use burn::tensor::{Device, Tensor, TensorData};
+use burn::tensor::{Device, Tensor};
 use burn::tensor::{
     module::interpolate,
     ops::{InterpolateMode, InterpolateOptions},
@@ -109,8 +109,8 @@ fn checker_accepts_exported_forward() {
 fn checker_accepts_dynamic_reshape() {
     let Some(python) = checker() else { return };
     let device = Device::default();
-    let sample = Tensor::<3>::from_data(TensorData::zeros::<f32, _>([2, 3, 4]), &device);
-    let validation = Tensor::<3>::from_data(TensorData::zeros::<f32, _>([5, 3, 4]), &device);
+    let sample = Tensor::<3>::zeros([2, 3, 4], &device);
+    let validation = Tensor::<3>::zeros([5, 3, 4], &device);
     let specs = [InputSpec::new([
         AxisSpec::dynamic("batch"),
         AxisSpec::Static,
@@ -126,7 +126,7 @@ fn checker_accepts_dynamic_reshape() {
 fn checker_accepts_interpolate() {
     let Some(python) = checker() else { return };
     let device = Device::default();
-    let input = Tensor::<4>::from_data(TensorData::zeros::<f32, _>([1, 1, 3, 4]), &device);
+    let input = Tensor::<4>::zeros([1, 1, 3, 4], &device);
     let model = OnnxExporter::new()
         .export(&Resize, input, Resize::forward)
         .unwrap();
@@ -137,7 +137,7 @@ fn checker_accepts_interpolate() {
 fn checker_accepts_cat() {
     let Some(python) = checker() else { return };
     let device = Device::default();
-    let input = Tensor::<2>::from_data(TensorData::zeros::<f32, _>([2, 3]), &device);
+    let input = Tensor::<2>::zeros([2, 3], &device);
     let model = OnnxExporter::new()
         .export(&Cat, input, Cat::forward)
         .unwrap();
@@ -149,7 +149,7 @@ fn checker_accepts_resnet18() {
     let Some(python) = checker() else { return };
     let device = Device::default();
     let module = ResNet18::new(10, &device);
-    let input = Tensor::<4>::from_data(TensorData::zeros::<f32, _>([1, 3, 64, 64]), &device);
+    let input = Tensor::<4>::zeros([1, 3, 64, 64], &device);
     let model = OnnxExporter::new()
         .export(&module, input, ResNet18::forward)
         .unwrap();
