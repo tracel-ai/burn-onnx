@@ -7,7 +7,8 @@
 //!
 //! 1. **Attention coalescing** - decomposed SDPA pattern -> single Attention node
 //! 2. **Permute-reshape detection** - Shape+Gather+Unsqueeze+Concat+Reshape -> Transpose
-//! 3. **Constant shape propagation** - Shape->Gather and Shape->Slice elimination
+//! 3. **Constant shape propagation** - Shape->Gather and Shape->Slice elimination,
+//!    and Size of a Shape-typed value
 //! 4. **Constant folding** - evaluate nodes with all-constant inputs at compile time
 //! 5. **Idempotent op elimination** - f(f(x)) -> f(x) for Relu, Ceil, Floor, etc.
 //! 6. **Identity element elimination** - x+0, x*1, x/1, x**1 -> x
@@ -16,7 +17,7 @@
 //!
 //! All passes run in a fixed-point loop until the graph stabilizes.
 //!
-//! ## Design note: constant_shape only folds Shape->Gather and Shape->Slice
+//! ## Design note: constant_shape never folds a bare `Shape(x)`
 //!
 //! The constant shape pass intentionally does NOT replace bare `Shape(x)` nodes
 //! with constant arrays, even when all input dimensions are statically known.
@@ -24,10 +25,14 @@
 //! and may not match runtime shapes for models with dynamic spatial dimensions
 //! (e.g., rf-detr exports with fixed dims but runs with variable input sizes).
 //!
-//! Only `Shape->Gather(idx)` and `Shape->Slice(start,end)` are folded, because
-//! these patterns extract specific dimensions that are typically batch/channel/head
+//! `Shape->Gather(idx)` and `Shape->Slice(start,end)` are folded because these
+//! patterns extract specific dimensions that are typically batch/channel/head
 //! dims which remain constant across inputs. The constant_fold pass then cascades
 //! on these scalar/array constants (e.g., `Cast(const_3)`, `Sqrt(const_3.0)`).
+//!
+//! `Size` on a `Shape(N)`-typed input is folded on different grounds: it reads
+//! only the rank, never a dimension value, so no `static_shape` assumption is
+//! involved and dynamic dims cannot invalidate it.
 
 mod coalesce_attention;
 pub(crate) mod constant_fold;

@@ -487,6 +487,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/sin/sin.onnx")
         .input("tests/sinh/sinh.onnx")
         .input("tests/size/size.onnx")
+        .input("tests/size/size_shape.onnx")
         .input("tests/slice/slice.onnx")
         .input("tests/slice/slice_shape.onnx")
         .input("tests/slice/slice_scalar.onnx")

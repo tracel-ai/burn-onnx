@@ -7,7 +7,7 @@
 # ]
 # ///
 
-# used to generate model: size.onnx
+# used to generate model: size_shape.onnx
 
 import numpy as np
 import onnx
@@ -17,20 +17,29 @@ from onnx.reference import ReferenceEvaluator
 
 
 def build_model():
-    # Size returns the element count of the input as an INT64 scalar
-    input = onnx.helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 6, 2, 3])
+    # Size applied to the output of Shape. The Shape output is a 1-D INT64
+    # tensor with one element per input dimension, so Size is the input rank.
+    input = onnx.helper.make_tensor_value_info(
+        "input", TensorProto.FLOAT, [2, 6, 2, 3]
+    )
     output = onnx.helper.make_tensor_value_info("output", TensorProto.INT64, [])
 
+    shape = onnx.helper.make_node(
+        "Shape",
+        inputs=["input"],
+        outputs=["shape_out"],
+        name="ShapeNode",
+    )
     size = onnx.helper.make_node(
         "Size",
-        inputs=["input"],
+        inputs=["shape_out"],
         outputs=["output"],
         name="SizeNode",
     )
 
     graph = onnx.helper.make_graph(
-        [size],
-        "SizeModel",
+        [shape, size],
+        "SizeShapeModel",
         [input],
         [output],
     )
@@ -49,7 +58,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=8)
 
     onnx_model = build_model()
-    file_name = "size.onnx"
+    file_name = "size_shape.onnx"
 
     onnx.checker.check_model(onnx_model)
     onnx.save(onnx_model, file_name)

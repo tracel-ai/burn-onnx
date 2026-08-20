@@ -5,6 +5,7 @@ mod diff_expectations;
 mod expectations_schema;
 mod model_check;
 mod refresh_onnx_tests;
+mod retriage;
 mod update_expectations;
 
 use std::time::Instant;
@@ -47,6 +48,11 @@ pub enum Command {
     /// `expectations.toml` in place to demote any pass-listed tests
     /// that now fail. Supports `--dry-run` for preview mode.
     UpdateExpectations(update_expectations::UpdateExpectationsArgs),
+    /// Re-run the `skip-codegen` and `skip-compile` rows of
+    /// `expectations.toml` against the current tree and rewrite them to
+    /// match reality. Those rows are never exercised by the build, so
+    /// they go stale as the bugs behind them get fixed.
+    Retriage(retriage::RetriageArgs),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -71,6 +77,7 @@ fn main() -> anyhow::Result<()> {
         Command::RefreshOnnxTests(cmd_args) => refresh_onnx_tests::handle_command(cmd_args),
         Command::DiffExpectations(cmd_args) => diff_expectations::handle_command(cmd_args),
         Command::UpdateExpectations(cmd_args) => update_expectations::handle_command(cmd_args),
+        Command::Retriage(cmd_args) => retriage::handle_command(cmd_args),
         _ => dispatch_base_commands(args, environment),
     }?;
 

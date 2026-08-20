@@ -6,8 +6,9 @@
 //!
 //! 1. Fix a bug in burn-onnx (say, lift a restriction on a
 //!    previously-failing op).
-//! 2. Manually promote any tests you believe are now fixed by
-//!    editing their rows in `expectations.toml` to `status = "pass"`.
+//! 2. Run `cargo xtask retriage` to promote any `skip-*` row that now
+//!    gets through codegen and compiles, or hand-edit rows you already
+//!    know are fixed to `status = "pass"`.
 //! 3. Run `cargo xtask update-expectations`.
 //! 4. Commit the updated expectations alongside your fix.
 //!
@@ -22,11 +23,11 @@
 //!   `skip-compile`) because `cargo test` output does not distinguish
 //!   them.
 //!
-//! The command is intentionally demote-only in this direction.
-//! Promotions flow through manual edits (step 2 above) because
-//! automated promotion would require trying every `skip-codegen` /
-//! `fail-compare` entry against the full pipeline, which is
-//! prohibitively expensive at ~1600 tests.
+//! The command is intentionally demote-only. Promotion of `skip-*`
+//! rows is `cargo xtask retriage`'s job: it re-runs codegen per row
+//! and compiles what succeeds, which turned out to be affordable even
+//! though promoting through the *full* pipeline (every `skip-codegen`
+//! and `fail-compare` row, compiled and compared) is not.
 //!
 //! `--dry-run` prints the planned changes without writing the file.
 

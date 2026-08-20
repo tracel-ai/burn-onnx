@@ -146,6 +146,7 @@ pub mod sign;
 pub mod simplify;
 pub mod sin;
 pub mod sinh;
+pub mod size;
 pub mod slice;
 pub mod softmax;
 pub mod softplus;
