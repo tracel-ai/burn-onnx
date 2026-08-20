@@ -105,7 +105,7 @@ impl NodeProcessor for SplitProcessor {
         let split_sizes: Option<Vec<usize>> = if node.inputs.len() > 1 {
             node.inputs[1]
                 .value()
-                .and_then(|v| v.to_vec::<i64>().ok())
+                .and_then(|v| v.try_into_vec::<i64>().ok())
                 .map(|sizes| sizes.into_iter().map(|s| s as usize).collect())
         } else {
             // For opset < 13, split sizes are an attribute
@@ -306,7 +306,7 @@ impl NodeProcessor for SplitProcessor {
                     )))
                 }
                 Some(tensor_data) => {
-                    let sizes: Vec<i64> = tensor_data.to_vec().unwrap();
+                    let sizes: Vec<i64> = tensor_data.try_into_vec().unwrap();
 
                     // Validate that all split sizes are non-negative
                     for (i, &size) in sizes.iter().enumerate() {

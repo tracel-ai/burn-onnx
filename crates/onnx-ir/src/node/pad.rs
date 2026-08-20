@@ -187,7 +187,7 @@ impl NodeProcessor for PadProcessor {
         // Check pads input (input[1]) if it has static data
         if let Some(input) = node.get_input(1)
             && let Some(tensor_data) = input.value()
-            && let Ok(pad_values) = tensor_data.to_vec::<i64>()
+            && let Ok(pad_values) = tensor_data.try_into_vec::<i64>()
         {
             return pad_values.iter().all(|&p| p == 0);
         }

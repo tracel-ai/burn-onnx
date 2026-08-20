@@ -493,10 +493,10 @@ mod tests {
     fn tensor_accessors() {
         let attrs = PublicAttributesOwned::from_internal(&attrs_fixture());
         let window = attrs.get_tensor("window").unwrap();
-        assert_eq!(window.to_vec::<f32>().unwrap(), vec![0.25, 0.75]);
+        assert_eq!(window.try_to_vec::<f32>().unwrap(), vec![0.25, 0.75]);
         let windows = attrs.get_tensors("windows").unwrap();
         assert_eq!(windows.len(), 2);
-        assert_eq!(windows[1].to_vec::<i64>().unwrap(), vec![2, 3]);
+        assert_eq!(windows[1].try_to_vec::<i64>().unwrap(), vec![2, 3]);
     }
 
     #[test]

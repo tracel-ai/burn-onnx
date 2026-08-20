@@ -203,7 +203,7 @@ fn extract_scales_input(node: &RawNode, input_rank: usize, idx: usize) -> Option
                     // Check if it's a static value (lifted constant) or constant
                     match input.value() {
                         Some(tensor_data) => {
-                            let mut scales: Vec<f32> = tensor_data.to_vec().unwrap();
+                            let mut scales: Vec<f32> = tensor_data.try_into_vec().unwrap();
                             if scales.is_empty() {
                                 return None;
                             }
@@ -250,7 +250,7 @@ fn extract_sizes_input(node: &RawNode, input_rank: usize, idx: usize) -> Option<
                     // Check if it's a static value (lifted constant) or constant
                     match input.value() {
                         Some(tensor_data) => {
-                            let i64_sizes: Vec<i64> = tensor_data.to_vec().unwrap();
+                            let i64_sizes: Vec<i64> = tensor_data.try_into_vec().unwrap();
                             let mut sizes: Vec<usize> =
                                 i64_sizes.iter().map(|&x| x as usize).collect();
                             if sizes.is_empty() {
@@ -378,7 +378,7 @@ impl NodeProcessor for ResizeProcessor {
                 .get(1)
                 .map(|input| {
                     if let Some(tensor_data) = input.value() {
-                        tensor_data.to_vec().unwrap()
+                        tensor_data.try_into_vec().unwrap()
                     } else {
                         vec![]
                     }

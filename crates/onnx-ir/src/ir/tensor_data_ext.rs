@@ -90,7 +90,7 @@ impl TensorDataExt for burn_tensor::TensorData {
     fn to_i64_vec(&self) -> Result<Vec<i64>, burn_tensor::DataError> {
         use burn_tensor::DType;
         match self.dtype {
-            DType::I64 | DType::I32 => self.clone().convert::<i64>().to_vec(),
+            DType::I64 | DType::I32 => self.try_to_vec_as::<i64>(),
             other => Err(burn_tensor::DataError::UnsupportedConversion {
                 from: other,
                 to: DType::I64,
@@ -108,7 +108,7 @@ impl TensorDataExt for burn_tensor::TensorData {
             | DType::I32
             | DType::I8
             | DType::U8
-            | DType::U16 => self.clone().convert::<f32>().to_vec(),
+            | DType::U16 => self.try_to_vec_as::<f32>(),
             other => Err(burn_tensor::DataError::UnsupportedConversion {
                 from: other,
                 to: DType::F32,
@@ -126,7 +126,7 @@ impl TensorDataExt for burn_tensor::TensorData {
             | DType::I32
             | DType::I8
             | DType::U8
-            | DType::U16 => self.clone().convert::<f64>().to_vec(),
+            | DType::U16 => self.try_to_vec_as::<f64>(),
             other => Err(burn_tensor::DataError::UnsupportedConversion {
                 from: other,
                 to: DType::F64,

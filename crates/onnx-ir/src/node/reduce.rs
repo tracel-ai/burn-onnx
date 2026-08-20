@@ -273,7 +273,7 @@ impl NodeProcessor for ReduceProcessor {
 
         // Process axes from additional input (if available)
         if let Some(value) = node.inputs.get(1).and_then(|argument| argument.value()) {
-            axes = value.to_vec::<i64>().unwrap();
+            axes = value.try_into_vec::<i64>().unwrap();
         }
 
         let mut dims: Vec<usize> = axes

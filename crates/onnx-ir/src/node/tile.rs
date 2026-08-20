@@ -134,7 +134,7 @@ impl NodeProcessor for TileProcessor {
                         TileInput::Runtime(RuntimeInputRef::new(input.name.clone(), 1))
                     }
                     Some(tensor_data) => {
-                        let i64_values: Vec<i64> = tensor_data.to_vec().unwrap();
+                        let i64_values: Vec<i64> = tensor_data.try_into_vec().unwrap();
                         let repeats = i64_values.iter().map(|&x| x as usize).collect();
                         TileInput::Static(repeats)
                     }
