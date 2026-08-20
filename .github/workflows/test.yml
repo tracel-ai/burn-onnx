@@ -70,7 +70,7 @@ jobs:
         uses: actions/checkout@v7
       # --------------------------------------------------------------------------------
       - name: Install Rust
-        uses: tracel-ai/github-actions/install-rust@v9
+        uses: tracel-ai/github-actions/install-rust@v11
         with:
           rust-toolchain: ${{ matrix.toolchain }}
           cache-key: ""
@@ -91,7 +91,7 @@ jobs:
         run: xtask check lint
       # --------------------------------------------------------------------------------
       - name: Typos
-        uses: tracel-ai/github-actions/check-typos@v9
+        uses: tracel-ai/github-actions/check-typos@v11
 
   documentation:
     runs-on: ubuntu-22.04
@@ -107,7 +107,7 @@ jobs:
         uses: actions/checkout@v7
       # --------------------------------------------------------------------------------
       - name: Install Rust
-        uses: tracel-ai/github-actions/install-rust@v9
+        uses: tracel-ai/github-actions/install-rust@v11
         with:
           rust-toolchain: ${{ matrix.toolchain }}
           cache-key: ""
@@ -140,7 +140,7 @@ jobs:
         uses: actions/checkout@v7
       # --------------------------------------------------------------------------------
       - name: Install Rust
-        uses: tracel-ai/github-actions/install-rust@v9
+        uses: tracel-ai/github-actions/install-rust@v11
         with:
           rust-toolchain: ${{ matrix.toolchain }}
           cache-key: ""
@@ -166,7 +166,7 @@ jobs:
         uses: actions/checkout@v7
       # --------------------------------------------------------------------------------
       - name: Install Rust
-        uses: tracel-ai/github-actions/install-rust@v9
+        uses: tracel-ai/github-actions/install-rust@v11
         with:
           rust-toolchain: ${{ matrix.toolchain }}
           cache-key: ""
@@ -193,7 +193,7 @@ jobs:
         uses: actions/checkout@v7
       # --------------------------------------------------------------------------------
       - name: Install Rust
-        uses: tracel-ai/github-actions/install-rust@v9
+        uses: tracel-ai/github-actions/install-rust@v11
         with:
           rust-toolchain: ${{ matrix.toolchain }}
           cache-key: ""
@@ -234,7 +234,7 @@ jobs:
           fetch-depth: 0
       # --------------------------------------------------------------------------------
       - name: Install Rust
-        uses: tracel-ai/github-actions/install-rust@v9
+        uses: tracel-ai/github-actions/install-rust@v11
         with:
           rust-toolchain: stable
           cache-key: ""
