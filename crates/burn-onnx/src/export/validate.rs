@@ -19,11 +19,11 @@ use crate::export::ExportError;
 /// prove relationships between dynamic dimensions. Shape-sensitive operands
 /// are ignored here and must subsequently be resolved or rejected by a
 /// shape resolver.
-pub struct GraphStructureValidator;
+pub(crate) struct GraphStructureValidator;
 
 impl GraphStructureValidator {
     /// Compare two captures and return their first structural mismatch.
-    pub fn validate(sample: &GraphIr, validation: &GraphIr) -> Result<(), ExportError> {
+    pub(crate) fn validate(sample: &GraphIr, validation: &GraphIr) -> Result<(), ExportError> {
         validate_boundaries(sample, "sample")?;
         validate_boundaries(validation, "validation")?;
         if sample.operations.len() != validation.operations.len() {

@@ -28,55 +28,9 @@ use protobuf::MessageField;
 use crate::export::{ExportError, OnnxModel, Opset, ResolvedExportGraph};
 
 /// ONNX IR version emitted by this exporter.
-pub const ONNX_IR_VERSION: i64 = 8;
-/// Default ONNX operator set emitted by this exporter.
-pub const ONNX_OPSET_VERSION: i64 = Opset::V18.version();
+const ONNX_IR_VERSION: i64 = 8;
 /// Maximum protobuf payload supported by embedded ONNX tensor data.
-pub const MAX_EMBEDDED_PROTOBUF_BYTES: u64 = i32::MAX as u64;
-
-/// Lower an already captured and shape-resolved graph to an embedded ONNX model.
-///
-/// This low-level API intentionally accepts no Burn module. Parameters can be
-/// added as initializers once capture supplies their tensor data and bindings.
-pub fn export_graph(graph: &ResolvedExportGraph) -> Result<OnnxModel, ExportError> {
-    export_graph_with_bindings(
-        graph,
-        &BTreeMap::new(),
-        &graph.graph.inputs,
-        &HashMap::new(),
-    )
-}
-
-/// Lower a resolved graph with concrete initialized values.
-///
-/// Values belonging to `runtime_inputs` describe sample inputs and are not
-/// embedded. Every other value is emitted as an ONNX initializer.
-pub fn export_graph_with_values(
-    graph: &ResolvedExportGraph,
-    values: &BTreeMap<TensorId, TensorData>,
-    runtime_inputs: &[TensorId],
-) -> Result<OnnxModel, ExportError> {
-    export_graph_with_bindings(graph, values, runtime_inputs, &HashMap::new())
-}
-
-/// Lower a resolved graph with concrete values and stable initializer names.
-///
-/// `initializer_names` typically maps captured module parameter tensor IDs to
-/// their module paths. Unnamed initialized values retain deterministic tensor-ID names.
-pub fn export_graph_with_bindings(
-    graph: &ResolvedExportGraph,
-    values: &BTreeMap<TensorId, TensorData>,
-    runtime_inputs: &[TensorId],
-    initializer_names: &HashMap<TensorId, String>,
-) -> Result<OnnxModel, ExportError> {
-    export_graph_with_bindings_and_opset(
-        graph,
-        values,
-        runtime_inputs,
-        initializer_names,
-        Opset::default(),
-    )
-}
+const MAX_EMBEDDED_PROTOBUF_BYTES: u64 = i32::MAX as u64;
 
 pub(crate) fn export_graph_with_bindings_and_opset(
     graph: &ResolvedExportGraph,
@@ -102,11 +56,13 @@ pub(crate) fn export_graph_with_bindings_and_opset(
     proto.name = "burn_graph".into();
     for &id in &graph.graph.inputs {
         let tensor = find_tensor(graph, id).ok_or(ExportError::MissingValue(id))?;
-        proto.input.push(value_info(tensor, &graph.dynamic_axes)?);
+        proto
+            .input
+            .push(value_info(tensor, &graph.dynamic_axes, initializer_names)?);
     }
     for &id in &graph.graph.outputs {
         let tensor = find_tensor(graph, id).ok_or(ExportError::MissingValue(id))?;
-        let mut output = value_info(tensor, &graph.dynamic_axes)?;
+        let mut output = value_info(tensor, &graph.dynamic_axes, initializer_names)?;
         if graph.graph.inputs.contains(&id) {
             output.name = pass_through_output_name(id);
         }
@@ -248,9 +204,10 @@ fn validate_bindings(
 fn value_info(
     tensor: &TensorIr,
     dynamic_axes: &[crate::export::DynamicAxis],
+    initializer_names: &HashMap<TensorId, String>,
 ) -> Result<ValueInfoProto, ExportError> {
     let mut info = ValueInfoProto::new();
-    info.name = name(tensor.id);
+    info.name = tensor_name(tensor.id, initializer_names);
     let mut ty = TypeProto::new();
     let tensor_type = ty.mut_tensor_type();
     tensor_type.elem_type = onnx_dtype_parts(tensor.id, tensor.dtype)?;
@@ -364,15 +321,23 @@ mod tests {
                 out: tensor(3),
             }),
         )]);
-        let model = export_graph(&ResolvedExportGraph {
+        let graph = ResolvedExportGraph {
             graph,
             shapes: vec![],
             dynamic_axes: vec![],
-        })
+        };
+        let runtime_inputs = graph.graph.inputs.clone();
+        let model = export_graph_with_bindings_and_opset(
+            &graph,
+            &BTreeMap::new(),
+            &runtime_inputs,
+            &HashMap::new(),
+            Opset::default(),
+        )
         .unwrap();
         let model = ModelProto::parse_from_bytes(model.as_bytes()).unwrap();
         assert_eq!(model.ir_version, ONNX_IR_VERSION);
-        assert_eq!(model.opset_import[0].version, ONNX_OPSET_VERSION);
+        assert_eq!(model.opset_import[0].version, Opset::default().version());
         assert_eq!(model.graph.node[0].op_type, "Add");
         assert_eq!(model.graph.input.len(), 2);
         assert_eq!(model.graph.output.len(), 1);

@@ -182,9 +182,7 @@ impl<'a> PairedTraceAnalysis<'a> {
                 .ok_or(ExportError::MissingValue(sample_id))?;
             let validation = tensor(self.resolver.validation, validation_id)
                 .ok_or(ExportError::MissingValue(validation_id))?;
-            for (axis, (&sample_dim, &validation_dim)) in
-                sample.shape.iter().zip(validation.shape.iter()).enumerate()
-            {
+            for axis in 0..sample.shape.num_dims().min(validation.shape.num_dims()) {
                 if !self.potentially_dynamic.contains(sample_id, axis)
                     || axes
                         .iter()
@@ -195,7 +193,11 @@ impl<'a> PairedTraceAnalysis<'a> {
                 axes.push(DynamicAxis {
                     tensor: sample_id,
                     axis,
-                    symbol: self.output_symbol(position, axis, sample_dim, validation_dim),
+                    symbol: self
+                        .potentially_dynamic
+                        .symbol(sample_id, axis)
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| format!("output_{position}_dim_{axis}")),
                 });
             }
         }
@@ -221,41 +223,6 @@ impl<'a> PairedTraceAnalysis<'a> {
                     })
             })
             .collect()
-    }
-
-    fn output_symbol(
-        &self,
-        output_position: usize,
-        output_axis: usize,
-        sample_dim: usize,
-        validation_dim: usize,
-    ) -> String {
-        let mut symbols = self
-            .inputs
-            .iter()
-            .flat_map(|input| {
-                input
-                    .spec
-                    .axes
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(axis, spec)| match spec {
-                        AxisSpec::Dynamic { symbol }
-                            if input.sample.shape[axis] == sample_dim
-                                && input.validation.shape[axis] == validation_dim =>
-                        {
-                            Some(symbol.clone())
-                        }
-                        _ => None,
-                    })
-            })
-            .collect::<Vec<_>>();
-        symbols.sort();
-        symbols.dedup();
-        match symbols.as_slice() {
-            [symbol] => symbol.clone(),
-            _ => format!("output_{output_position}_dim_{output_axis}"),
-        }
     }
 
     fn resolve_shapes(&self) -> Result<Vec<ResolvedShape>, ExportError> {
@@ -454,6 +421,48 @@ fn validate_shape_sensitive_operations(
         .zip(&validation.operations)
         .enumerate()
     {
+        let constant_pad = match (
+            patterns::constant_pad(&sample.operations, index),
+            patterns::constant_pad(&validation.operations, index),
+        ) {
+            (Some(sample_pad), Some(validation_pad)) if sample_pad.pads == validation_pad.pads => {
+                true
+            }
+            (Some(sample_pad), Some(validation_pad)) => {
+                let rank = sample_pad.slice_assign.out.shape.num_dims();
+                let axis = sample_pad
+                    .pads
+                    .iter()
+                    .zip(&validation_pad.pads)
+                    .position(|(sample, validation)| sample != validation)
+                    .map(|position| position % rank)
+                    .unwrap_or(0);
+                return Err(ExportError::DynamicShapeLost {
+                    tensor: sample_pad.slice_assign.out.id,
+                    axis,
+                    reason: format!("operation {index} has varying constant-padding widths"),
+                });
+            }
+            (Some(sample_pad), None) => {
+                return Err(ExportError::DynamicShapeLost {
+                    tensor: sample_pad.slice_assign.out.id,
+                    axis: 0,
+                    reason: format!(
+                        "operation {index} is recognized as constant padding in only one trace"
+                    ),
+                });
+            }
+            (None, Some(validation_pad)) => {
+                return Err(ExportError::DynamicShapeLost {
+                    tensor: validation_pad.slice_assign.out.id,
+                    axis: 0,
+                    reason: format!(
+                        "operation {index} is recognized as constant padding in only one trace"
+                    ),
+                });
+            }
+            (None, None) => false,
+        };
         match (sample_operation, validation_operation) {
             (
                 OperationIr::Module(ModuleOperationIr::Interpolate(sample)),
@@ -498,14 +507,7 @@ fn validate_shape_sensitive_operations(
                 OperationIr::BaseFloat(BaseOperationIr::SliceAssign(validation_slice))
                 | OperationIr::BaseInt(BaseOperationIr::SliceAssign(validation_slice)),
             ) if sample_slice.ranges != validation_slice.ranges => {
-                if matches!(
-                    (
-                        patterns::constant_pad(&sample.operations, index),
-                        patterns::constant_pad(&validation.operations, index),
-                    ),
-                    (Some(sample_pad), Some(validation_pad))
-                        if sample_pad.pads == validation_pad.pads
-                ) {
+                if constant_pad {
                     continue;
                 }
                 let axis = sample_slice

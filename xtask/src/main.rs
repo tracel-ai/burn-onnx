@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate log;
 
+mod check;
 mod diff_expectations;
 mod expectations_schema;
 mod model_check;
@@ -86,6 +87,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     match args.command {
+        Command::Check(cmd_args) => check::handle_command(cmd_args, environment, args.context),
         Command::Build(cmd_args) => {
             base_commands::build::handle_command(cmd_args, environment, args.context)
         }

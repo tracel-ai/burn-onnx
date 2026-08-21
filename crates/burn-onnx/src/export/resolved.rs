@@ -9,18 +9,18 @@ use burn::backend::ir::{GraphIr, TensorId};
 
 /// Symbolic axis attached to a captured runtime input or graph output.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DynamicAxis {
+pub(crate) struct DynamicAxis {
     /// Tensor carrying the symbolic dimension.
-    pub tensor: TensorId,
+    pub(crate) tensor: TensorId,
     /// Axis within the tensor.
-    pub axis: usize,
+    pub(crate) axis: usize,
     /// ONNX symbolic dimension name.
-    pub symbol: String,
+    pub(crate) symbol: String,
 }
 
 /// An explicit ONNX-compatible dimension expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ShapeExpr {
+pub(crate) enum ShapeExpr {
     /// Constant dimension.
     Static(usize),
     /// Dimension of a declared runtime input.
@@ -43,13 +43,13 @@ pub enum ShapeExpr {
 
 /// Resolved shape operand for one shape-sensitive operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResolvedShape {
+pub(crate) struct ResolvedShape {
     /// Operation index in [`GraphIr::operations`].
-    pub operation: usize,
+    pub(crate) operation: usize,
     /// Output tensor receiving the shape.
-    pub tensor: TensorId,
+    pub(crate) tensor: TensorId,
     /// Dimension expressions in axis order.
-    pub dimensions: Vec<ShapeExpr>,
+    pub(crate) dimensions: Vec<ShapeExpr>,
 }
 
 /// Captured graph plus the explicit shape information required by lowering.
@@ -59,11 +59,11 @@ pub struct ResolvedShape {
 /// reshape targets, while `dynamic_axes` controls symbolic ONNX boundary
 /// dimensions.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ResolvedExportGraph {
+pub(crate) struct ResolvedExportGraph {
     /// Validated captured graph.
-    pub graph: GraphIr,
+    pub(crate) graph: GraphIr,
     /// Resolved shape-sensitive operands.
-    pub shapes: Vec<ResolvedShape>,
+    pub(crate) shapes: Vec<ResolvedShape>,
     /// Symbolic dimensions declared on graph boundaries.
-    pub dynamic_axes: Vec<DynamicAxis>,
+    pub(crate) dynamic_axes: Vec<DynamicAxis>,
 }

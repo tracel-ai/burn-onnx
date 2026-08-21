@@ -4,13 +4,13 @@ use burn::backend::ir::{
     ActivationOperationIr, BaseOperationIr, FloatOperationIr, GraphIr, IntOperationIr,
     ModuleOperationIr, NumericOperationIr, OperationIr, TensorId, TensorIr,
 };
-use hashbrown::HashSet;
+use hashbrown::HashMap;
 
 use super::{AxisSpec, InputSpec};
 
 /// Axes whose dimensions may depend on a declared dynamic input.
 pub(super) struct PotentiallyDynamicAxes {
-    axes: HashSet<(TensorId, usize)>,
+    axes: HashMap<(TensorId, usize), AxisDependency>,
 }
 
 impl PotentiallyDynamicAxes {
@@ -20,34 +20,48 @@ impl PotentiallyDynamicAxes {
         for (sample_operation, validation_operation) in
             sample.operations.iter().zip(&validation.operations)
         {
-            tracker.observe_changes(sample_operation, validation_operation);
             tracker.transfer(sample_operation);
             tracker.transfer_reshape(sample_operation, validation_operation);
+            tracker.observe_changes(sample_operation, validation_operation);
         }
         Self { axes: tracker.axes }
     }
 
     /// Whether one tensor axis can vary at runtime.
     pub(super) fn contains(&self, tensor: TensorId, axis: usize) -> bool {
-        self.axes.contains(&(tensor, axis))
+        self.axes.contains_key(&(tensor, axis))
     }
+
+    /// Input symbol preserved exactly by one output axis, if known.
+    pub(super) fn symbol(&self, tensor: TensorId, axis: usize) -> Option<&str> {
+        match self.axes.get(&(tensor, axis)) {
+            Some(AxisDependency::Exact(symbol)) => Some(symbol),
+            Some(AxisDependency::Derived) | None => None,
+        }
+    }
+}
+
+#[derive(Clone)]
+enum AxisDependency {
+    Exact(String),
+    Derived,
 }
 
 /// Mutable dependency set with reusable shape-transfer operations.
 struct AxisTracker {
-    axes: HashSet<(TensorId, usize)>,
+    axes: HashMap<(TensorId, usize), AxisDependency>,
 }
 
 impl AxisTracker {
     fn from_inputs(graph: &GraphIr, specs: &[InputSpec]) -> Self {
-        let mut axes = HashSet::new();
+        let mut axes = HashMap::new();
         for (position, spec) in specs.iter().enumerate() {
             let Some(&input) = graph.inputs.get(position) else {
                 continue;
             };
             for (axis, axis_spec) in spec.axes.iter().enumerate() {
-                if matches!(axis_spec, AxisSpec::Dynamic { .. }) {
-                    axes.insert((input, axis));
+                if let AxisSpec::Dynamic { symbol } = axis_spec {
+                    axes.insert((input, axis), AxisDependency::Exact(symbol.clone()));
                 }
             }
         }
@@ -55,11 +69,26 @@ impl AxisTracker {
     }
 
     fn contains(&self, tensor: &TensorIr, axis: usize) -> bool {
-        self.axes.contains(&(tensor.id, axis))
+        self.axes.contains_key(&(tensor.id, axis))
     }
 
-    fn mark(&mut self, tensor: &TensorIr, axis: usize) {
-        self.axes.insert((tensor.id, axis));
+    fn mark_derived(&mut self, tensor: &TensorIr, axis: usize) {
+        self.axes.insert((tensor.id, axis), AxisDependency::Derived);
+    }
+
+    fn merge(&mut self, tensor: &TensorIr, axis: usize, dependency: AxisDependency) {
+        self.axes
+            .entry((tensor.id, axis))
+            .and_modify(|current| {
+                if !matches!(
+                    (&*current, &dependency),
+                    (AxisDependency::Exact(current), AxisDependency::Exact(next))
+                        if current == next
+                ) {
+                    *current = AxisDependency::Derived;
+                }
+            })
+            .or_insert(dependency);
     }
 
     fn observe_changes(&mut self, sample: &OperationIr, validation: &OperationIr) {
@@ -71,7 +100,9 @@ impl AxisTracker {
                 .enumerate()
             {
                 if sample_dim != validation_dim {
-                    self.mark(sample_output, axis);
+                    self.axes
+                        .entry((sample_output.id, axis))
+                        .or_insert(AxisDependency::Derived);
                 }
             }
         }
@@ -119,11 +150,23 @@ impl AxisTracker {
                 self.broadcast_axes(&operation.input, &operation.out)
             }
             BaseOperationIr::RepeatDim(operation) => {
-                self.same_axes(&operation.tensor, &operation.out)
+                for axis in 0..operation.out.shape.num_dims() {
+                    if axis == operation.dim {
+                        self.derived_axis(&operation.tensor, axis, &operation.out, axis);
+                    } else {
+                        self.axis(&operation.tensor, axis, &operation.out, axis);
+                    }
+                }
             }
             BaseOperationIr::Cat(operation) => {
                 for input in &operation.tensors {
-                    self.same_axes(input, &operation.out);
+                    for axis in 0..operation.out.shape.num_dims() {
+                        if axis == operation.dim {
+                            self.derived_axis(input, axis, &operation.out, axis);
+                        } else {
+                            self.axis(input, axis, &operation.out, axis);
+                        }
+                    }
                 }
             }
             BaseOperationIr::Cast(operation) => self.same_axes(&operation.input, &operation.out),
@@ -179,8 +222,8 @@ impl AxisTracker {
         match operation {
             ModuleOperationIr::Conv2d(operation) => {
                 self.axis(&operation.x, 0, &operation.out, 0);
-                self.axis(&operation.x, 2, &operation.out, 2);
-                self.axis(&operation.x, 3, &operation.out, 3);
+                self.derived_axis(&operation.x, 2, &operation.out, 2);
+                self.derived_axis(&operation.x, 3, &operation.out, 3);
             }
             ModuleOperationIr::BatchNorm(operation) => self.same_axes(&operation.x, &operation.out),
             ModuleOperationIr::Interpolate(operation) => {
@@ -189,8 +232,16 @@ impl AxisTracker {
             ModuleOperationIr::AdaptiveAvgPool2d(operation) => {
                 self.leading_axes(&operation.x, &operation.out, 2)
             }
-            ModuleOperationIr::MaxPool2d(operation) => self.same_axes(&operation.x, &operation.out),
-            ModuleOperationIr::AvgPool2d(operation) => self.same_axes(&operation.x, &operation.out),
+            ModuleOperationIr::MaxPool2d(operation) => {
+                self.leading_axes(&operation.x, &operation.out, 2);
+                self.derived_axis(&operation.x, 2, &operation.out, 2);
+                self.derived_axis(&operation.x, 3, &operation.out, 3);
+            }
+            ModuleOperationIr::AvgPool2d(operation) => {
+                self.leading_axes(&operation.x, &operation.out, 2);
+                self.derived_axis(&operation.x, 2, &operation.out, 2);
+                self.derived_axis(&operation.x, 3, &operation.out, 3);
+            }
             ModuleOperationIr::Linear(operation) => self.leading_axes(
                 &operation.x,
                 &operation.out,
@@ -220,16 +271,23 @@ impl AxisTracker {
             if self.contains(output, output_axis) {
                 continue;
             }
-            let dynamic_source_match = source
+            let dynamic_source_matches = source
                 .shape
                 .iter()
                 .zip(validation_source.shape.iter())
                 .enumerate()
-                .any(|(source_axis, (&source_dim, &validation_source_dim))| {
-                    self.contains(source, source_axis)
-                        && source_dim == output_dim
-                        && validation_source_dim == validation_output_dim
-                });
+                .filter_map(|(source_axis, (&source_dim, &validation_source_dim))| {
+                    self.contains(source, source_axis).then_some((
+                        source_axis,
+                        source_dim,
+                        validation_source_dim,
+                    ))
+                })
+                .filter(|(_, source_dim, validation_source_dim)| {
+                    *source_dim == output_dim && *validation_source_dim == validation_output_dim
+                })
+                .map(|(source_axis, _, _)| source_axis)
+                .collect::<Vec<_>>();
             let static_source_match =
                 source
                     .shape
@@ -238,15 +296,33 @@ impl AxisTracker {
                     .any(|(source_axis, &source_dim)| {
                         !self.contains(source, source_axis) && source_dim == output_dim
                     });
-            if dynamic_source_match || (source_has_dynamic && !static_source_match) {
-                self.mark(output, output_axis);
+            if dynamic_source_matches.is_empty() {
+                if source_has_dynamic && !static_source_match {
+                    self.mark_derived(output, output_axis);
+                }
+            } else {
+                for source_axis in dynamic_source_matches {
+                    self.axis(source, source_axis, output, output_axis);
+                }
             }
         }
     }
 
     fn axis(&mut self, input: &TensorIr, input_axis: usize, output: &TensorIr, output_axis: usize) {
+        if let Some(dependency) = self.axes.get(&(input.id, input_axis)).cloned() {
+            self.merge(output, output_axis, dependency);
+        }
+    }
+
+    fn derived_axis(
+        &mut self,
+        input: &TensorIr,
+        input_axis: usize,
+        output: &TensorIr,
+        output_axis: usize,
+    ) {
         if self.contains(input, input_axis) {
-            self.mark(output, output_axis);
+            self.mark_derived(output, output_axis);
         }
     }
 

@@ -3,6 +3,7 @@ use thiserror::Error;
 
 /// Errors produced while capturing, resolving, or lowering an export graph.
 #[derive(Debug, Error, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ExportError {
     /// Two traces do not describe the same computation.
     #[error("dynamic graph differs at operation {operation}: {reason}")]

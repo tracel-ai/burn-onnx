@@ -93,11 +93,11 @@ tempfile = "3.24.0"
 thiserror = { version = "2", default-features = false }
 toml = { version = "1.1.2", default-features = false, features = ["parse", "serde"] }
 
-burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "e3b258cee0e314cd489177df42fa2d84ba450c46" }
-burn-flex = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "e3b258cee0e314cd489177df42fa2d84ba450c46" }
-burn-pack = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "e3b258cee0e314cd489177df42fa2d84ba450c46" }
-burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "e3b258cee0e314cd489177df42fa2d84ba450c46" }
-burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "e3b258cee0e314cd489177df42fa2d84ba450c46" }
+burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "9427458deb06e177f144aef3cfb422706c94d6cc" }
+burn-flex = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "9427458deb06e177f144aef3cfb422706c94d6cc" }
+burn-pack = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "9427458deb06e177f144aef3cfb422706c94d6cc" }
+burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "9427458deb06e177f144aef3cfb422706c94d6cc" }
+burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "9427458deb06e177f144aef3cfb422706c94d6cc" }
 
 ### For local development. ###
 # burn = { path = "../burn/crates/burn", default-features = false }

@@ -238,6 +238,9 @@ jobs:
         env:
           BURN_ONNX_PYTHON_REQUIRED: '1'
         run: cargo test -p burn-onnx --no-default-features --features export ${{ env.TEST_RELEASE_FLAG }}
+      # --------------------------------------------------------------------------------
+      - name: Combined import and export check
+        run: cargo check -p burn-onnx --features export
 
   onnx-official-tests:
     # Dedicated regression gate against the upstream ONNX backend test

@@ -65,7 +65,7 @@ pub(super) fn lower(
             let (mode, coordinate_mode, nearest_mode) = match interpolate.options.mode {
                 InterpolateModeIr::Nearest => ("nearest", "asymmetric", Some("floor")),
                 InterpolateModeIr::NearestExact => {
-                    ("nearest", "half_pixel", Some("round_prefer_floor"))
+                    ("nearest", "half_pixel", Some("round_prefer_ceil"))
                 }
                 InterpolateModeIr::Bilinear => (
                     "linear",

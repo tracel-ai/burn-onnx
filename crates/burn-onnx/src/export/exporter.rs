@@ -37,18 +37,18 @@ mod sealed {
     use super::*;
 
     #[doc(hidden)]
-    pub trait SealedExportValues {
-        fn collect_tensor_ids(&self, ids: &mut Vec<TensorId>);
+    pub trait SealedExportOutput {
+        fn collect_tensor_ids(&self, ids: &mut Vec<TensorId>) -> Result<(), ExportError>;
 
-        fn tensor_ids(&self) -> Vec<TensorId> {
+        fn tensor_ids(&self) -> Result<Vec<TensorId>, ExportError> {
             let mut ids = Vec::new();
-            self.collect_tensor_ids(&mut ids);
-            ids
+            self.collect_tensor_ids(&mut ids)?;
+            Ok(ids)
         }
     }
 
     #[doc(hidden)]
-    pub trait SealedExportInput: SealedExportValues + Sized {
+    pub trait SealedExportInput: SealedExportOutput + Sized {
         fn collect_input_shapes(&self, shapes: &mut Vec<Vec<usize>>);
 
         fn to_capture_device(self, device: &Device) -> Self;
@@ -61,30 +61,35 @@ mod sealed {
     }
 }
 
-/// Values accepted or returned by an exported forward function.
+/// Values returned by an exported forward function.
 ///
 /// This trait is sealed. The exporter supports Burn tensors, vectors, and
 /// tuples for which this crate provides implementations.
-pub trait ExportValues: sealed::SealedExportValues {}
+pub trait ExportOutput: sealed::SealedExportOutput {}
 
-impl<T: sealed::SealedExportValues> ExportValues for T {}
+impl<T: sealed::SealedExportOutput> ExportOutput for T {}
 
 /// Runtime input values which can be moved to the private capture device.
 ///
 /// This trait is sealed to the input forms supported by the exporter.
-pub trait ExportInput: ExportValues + sealed::SealedExportInput {}
+pub trait ExportInput: ExportOutput + sealed::SealedExportInput {}
 
 impl<T: sealed::SealedExportInput> ExportInput for T {}
 
 macro_rules! impl_tensor_value {
     ($kind:ty) => {
-        impl<const D: usize> sealed::SealedExportValues for Tensor<D, $kind> {
-            fn collect_tensor_ids(&self, ids: &mut Vec<TensorId>) {
+        impl<const D: usize> sealed::SealedExportOutput for Tensor<D, $kind> {
+            fn collect_tensor_ids(&self, ids: &mut Vec<TensorId>) -> Result<(), ExportError> {
                 let primitive = self
                     .clone()
                     .try_into_primitive::<CaptureBackend>()
-                    .expect("export tensor must be on the capture device");
+                    .map_err(|error| {
+                        ExportError::InvalidBoundary(format!(
+                            "export tensor must be on the capture device: {error:?}"
+                        ))
+                    })?;
                 ids.push(primitive.id());
+                Ok(())
             }
         }
 
@@ -104,11 +109,12 @@ impl_tensor_value!(Float);
 impl_tensor_value!(Int);
 impl_tensor_value!(Bool);
 
-impl<T: ExportValues> sealed::SealedExportValues for Vec<T> {
-    fn collect_tensor_ids(&self, ids: &mut Vec<TensorId>) {
+impl<T: ExportOutput> sealed::SealedExportOutput for Vec<T> {
+    fn collect_tensor_ids(&self, ids: &mut Vec<TensorId>) -> Result<(), ExportError> {
         for value in self {
-            value.collect_tensor_ids(ids);
+            value.collect_tensor_ids(ids)?;
         }
+        Ok(())
     }
 }
 
@@ -128,11 +134,12 @@ impl<T: ExportInput> sealed::SealedExportInput for Vec<T> {
 
 macro_rules! impl_export_tuple {
     ($($name:ident),+) => {
-        impl<$($name: ExportValues),+> sealed::SealedExportValues for ($($name,)+) {
+        impl<$($name: ExportOutput),+> sealed::SealedExportOutput for ($($name,)+) {
             #[allow(non_snake_case)]
-            fn collect_tensor_ids(&self, ids: &mut Vec<TensorId>) {
+            fn collect_tensor_ids(&self, ids: &mut Vec<TensorId>) -> Result<(), ExportError> {
                 let ($($name,)+) = self;
-                $($name.collect_tensor_ids(ids);)+
+                $($name.collect_tensor_ids(ids)?;)+
+                Ok(())
             }
         }
         impl<$($name: ExportInput),+> sealed::SealedExportInput for ($($name,)+) {
@@ -165,11 +172,20 @@ struct CapturedForward {
 struct ParameterNameVisitor {
     path: Vec<String>,
     names: HashMap<TensorId, String>,
+    error: Option<ExportError>,
 }
 
 impl ParameterNameVisitor {
     fn record(&mut self, id: TensorId) {
         self.names.entry(id).or_insert_with(|| self.path.join("."));
+    }
+
+    fn record_error(&mut self, error: impl core::fmt::Debug) {
+        if self.error.is_none() {
+            self.error = Some(ExportError::InvalidBoundary(format!(
+                "module parameter must be on the capture device: {error:?}"
+            )));
+        }
     }
 }
 
@@ -183,27 +199,24 @@ impl ModuleVisitor for ParameterNameVisitor {
     }
 
     fn visit_float<const D: usize>(&mut self, param: &Param<Tensor<D>>) {
-        let tensor = param
-            .val()
-            .try_into_primitive::<CaptureBackend>()
-            .expect("module parameter must be on the capture device");
-        self.record(tensor.id());
+        match param.val().try_into_primitive::<CaptureBackend>() {
+            Ok(tensor) => self.record(tensor.id()),
+            Err(error) => self.record_error(error),
+        }
     }
 
     fn visit_int<const D: usize>(&mut self, param: &Param<Tensor<D, Int>>) {
-        let tensor = param
-            .val()
-            .try_into_primitive::<CaptureBackend>()
-            .expect("module parameter must be on the capture device");
-        self.record(tensor.id());
+        match param.val().try_into_primitive::<CaptureBackend>() {
+            Ok(tensor) => self.record(tensor.id()),
+            Err(error) => self.record_error(error),
+        }
     }
 
     fn visit_bool<const D: usize>(&mut self, param: &Param<Tensor<D, Bool>>) {
-        let tensor = param
-            .val()
-            .try_into_primitive::<CaptureBackend>()
-            .expect("module parameter must be on the capture device");
-        self.record(tensor.id());
+        match param.val().try_into_primitive::<CaptureBackend>() {
+            Ok(tensor) => self.record(tensor.id()),
+            Err(error) => self.record_error(error),
+        }
     }
 }
 
@@ -245,7 +258,7 @@ impl OnnxExporter {
     where
         M: Module,
         I: ExportInput,
-        O: ExportValues,
+        O: ExportOutput,
         F: FnOnce(&M, I) -> O,
     {
         let captured = self.capture_forward(module, inputs, forward)?;
@@ -278,7 +291,7 @@ impl OnnxExporter {
     where
         M: Module,
         I: ExportInput,
-        O: ExportValues,
+        O: ExportOutput,
         F: Fn(&M, I) -> O,
     {
         let sample_shapes = sample_inputs.input_shapes();
@@ -310,33 +323,51 @@ impl OnnxExporter {
     where
         M: Module,
         I: ExportInput,
-        O: ExportValues,
+        O: ExportOutput,
         F: FnOnce(&M, I) -> O,
     {
         // Capture clients are scope-local. A distinct logical device prevents multi-backend
         // bridge caches from returning tensors owned by an earlier, already-closed scope.
         let device = Device::capture();
-        let mut capture_metadata = None;
-        let mut captured = device
-            .capture_scope(|scope| {
-                // Module parameters, runtime inputs, and the forward pass must all use the client
-                // installed for this scope. Operations outside the scope have no capture session.
-                let module = module.clone().to_device(&device);
-                let mut visitor = ParameterNameVisitor::default();
-                module.visit(&mut visitor);
-                let inputs = inputs.to_capture_device(&device);
-                let input_ids = inputs.tensor_ids();
-                let output_ids = forward(&module, inputs).tensor_ids();
+        let mut capture_metadata =
+            None::<Result<(Vec<TensorId>, HashMap<TensorId, String>), ExportError>>;
+        let captured = device.capture_scope(|scope| {
+            // Module parameters, runtime inputs, and the forward pass must all use the client
+            // installed for this scope. Operations outside the scope have no capture session.
+            let module = module.clone().to_device(&device);
+            let mut visitor = ParameterNameVisitor::default();
+            module.visit(&mut visitor);
+            if let Some(error) = visitor.error {
+                capture_metadata = Some(Err(error));
+                return scope.complete([], []);
+            }
+            let inputs = inputs.to_capture_device(&device);
+            let input_ids = match inputs.tensor_ids() {
+                Ok(ids) => ids,
+                Err(error) => {
+                    capture_metadata = Some(Err(error));
+                    return scope.complete([], []);
+                }
+            };
+            let output_ids = match forward(&module, inputs).tensor_ids() {
+                Ok(ids) => ids,
+                Err(error) => {
+                    capture_metadata = Some(Err(error));
+                    return scope.complete([], []);
+                }
+            };
 
-                capture_metadata = Some((input_ids.clone(), visitor.names));
-                scope.complete(input_ids, output_ids)
-            })
-            .map_err(|error| ExportError::InvalidBoundary(error.to_string()))?;
-        let Some((input_ids, parameter_names)) = capture_metadata else {
+            capture_metadata = Some(Ok((input_ids.clone(), visitor.names)));
+            scope.complete(input_ids, output_ids)
+        });
+        let Some(capture_metadata) = capture_metadata else {
             return Err(ExportError::InvalidBoundary(
                 "capture scope did not execute".into(),
             ));
         };
+        let (input_ids, parameter_names) = capture_metadata?;
+        let mut captured =
+            captured.map_err(|error| ExportError::InvalidBoundary(error.to_string()))?;
         let boundaries = captured
             .graph
             .inputs
@@ -461,7 +492,7 @@ mod tests {
         assert_eq!(exporter.selected_opset(), Opset::V18);
         assert_eq!(
             exporter.selected_opset().version(),
-            crate::export::ONNX_OPSET_VERSION
+            Opset::default().version()
         );
     }
 

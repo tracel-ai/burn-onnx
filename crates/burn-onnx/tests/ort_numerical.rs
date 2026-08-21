@@ -30,6 +30,11 @@ struct AddModule {
 }
 
 #[derive(Module, Debug)]
+struct ReturnWeight {
+    weight: Param<Tensor<1>>,
+}
+
+#[derive(Module, Debug)]
 struct AddTensorModule {
     offset: Tensor<1>,
 }
@@ -43,6 +48,12 @@ impl AddTensorModule {
 impl AddModule {
     fn forward(&self, input: Tensor<1>) -> Tensor<1> {
         input + self.weight.val()
+    }
+}
+
+impl ReturnWeight {
+    fn forward(&self, input: Tensor<1>) -> (Tensor<1>, Tensor<1>) {
+        (input + self.weight.val(), self.weight.val())
     }
 }
 
@@ -132,6 +143,19 @@ impl NearestResize {
 }
 
 #[derive(Module, Debug)]
+struct NearestExactDownsample;
+
+impl NearestExactDownsample {
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        interpolate(
+            input,
+            [2, 2],
+            InterpolateOptions::new(InterpolateMode::NearestExact),
+        )
+    }
+}
+
+#[derive(Module, Debug)]
 struct AddFull;
 
 impl AddFull {
@@ -162,6 +186,18 @@ impl ConstantPad {
 }
 
 #[derive(Module, Debug)]
+struct PadFromOtherInput;
+
+impl PadFromOtherInput {
+    fn forward(&self, inputs: (Tensor<4>, Tensor<2>)) -> Tensor<4> {
+        let [_, right] = inputs.1.dims();
+        inputs
+            .0
+            .pad([(0, 0), (0, 0), (0, 0), (0, right)], PadMode::Constant(0.0))
+    }
+}
+
+#[derive(Module, Debug)]
 struct CatChannels;
 
 impl CatChannels {
@@ -185,6 +221,24 @@ struct Neg;
 impl Neg {
     fn forward(&self, input: Tensor<2>) -> Tensor<2> {
         -input
+    }
+}
+
+#[derive(Module, Debug)]
+struct NegSpatial;
+
+impl NegSpatial {
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        -input
+    }
+}
+
+#[derive(Module, Debug)]
+struct MixedDeviceOutput;
+
+impl MixedDeviceOutput {
+    fn forward(&self, input: Tensor<1>) -> (Tensor<1>, Tensor<1>) {
+        (input, Tensor::zeros([2], &Device::default()))
     }
 }
 
@@ -234,6 +288,48 @@ fn add_matches_burn() {
 
     let actual = run_ort(model.as_bytes(), [2], input_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
+}
+
+#[test]
+fn parameter_output_matches_burn() {
+    let device = Device::default();
+    let module = ReturnWeight {
+        weight: Param::from_data([2.0f32, 3.0], &device),
+    };
+    let input_values = vec![5.0f32, 7.0];
+    let input = Tensor::<1>::from_floats(input_values.as_slice(), &device);
+    let (expected_sum, expected_weight) = module.forward(input.clone());
+    let model = OnnxExporter::new()
+        .export(&module, input, ReturnWeight::forward)
+        .unwrap();
+
+    let mut session = Session::builder()
+        .unwrap()
+        .commit_from_memory(model.as_bytes())
+        .unwrap();
+    let outputs = session
+        .run(ort::inputs![
+            OrtTensor::from_array(([2], input_values)).unwrap()
+        ])
+        .unwrap();
+    let (_, sum) = outputs[0].try_extract_tensor::<f32>().unwrap();
+    let (_, weight) = outputs[1].try_extract_tensor::<f32>().unwrap();
+    TensorData::new(sum.to_vec(), [2])
+        .assert_approx_eq::<f32>(&expected_sum.into_data(), Tolerance::default());
+    TensorData::new(weight.to_vec(), [2])
+        .assert_approx_eq::<f32>(&expected_weight.into_data(), Tolerance::default());
+}
+
+#[test]
+fn mixed_device_output_returns_error() {
+    let device = Device::default();
+    let input = Tensor::<1>::zeros([2], &device);
+
+    assert!(matches!(
+        OnnxExporter::new().export(&MixedDeviceOutput, input, MixedDeviceOutput::forward),
+        Err(ExportError::InvalidBoundary(reason))
+            if reason.contains("capture device")
+    ));
 }
 
 #[test]
@@ -383,6 +479,27 @@ fn interpolate_matches_burn() {
 }
 
 #[test]
+fn nearest_exact_downsample_uses_burn_rounding() {
+    let device = Device::default();
+    let input = Tensor::<1, Int>::arange(0..16, &device)
+        .float()
+        .reshape([1, 1, 4, 4]);
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
+    // Burn's nearest-exact rule selects source indices 1 and 3 on each axis.
+    let expected = TensorData::new(vec![5.0f32, 7.0, 13.0, 15.0], [1, 1, 2, 2]);
+    let model = OnnxExporter::new()
+        .export(
+            &NearestExactDownsample,
+            input,
+            NearestExactDownsample::forward,
+        )
+        .unwrap();
+
+    let actual = run_ort(model.as_bytes(), [1, 1, 4, 4], input_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+}
+
+#[test]
 fn full_matches_burn() {
     let device = Device::default();
     let input_values = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
@@ -480,6 +597,67 @@ fn dynamic_constant_pad_matches_burn_at_runtime_shape() {
     let expected = ConstantPad.forward(runtime_input).into_data();
     let actual = run_ort(model.as_bytes(), [3, 1, 6, 7], runtime_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+}
+
+#[test]
+fn dynamic_pad_from_other_input_is_rejected() {
+    let device = Device::default();
+    let sample = (
+        Tensor::<4>::zeros([1, 1, 2, 3], &device),
+        Tensor::<2>::zeros([1, 1], &device),
+    );
+    let validation = (
+        Tensor::<4>::zeros([1, 1, 2, 3], &device),
+        Tensor::<2>::zeros([1, 2], &device),
+    );
+    let specs = [
+        InputSpec::new([
+            AxisSpec::Static,
+            AxisSpec::Static,
+            AxisSpec::Static,
+            AxisSpec::Static,
+        ]),
+        InputSpec::new([AxisSpec::Static, AxisSpec::dynamic("right_pad")]),
+    ];
+
+    assert!(matches!(
+        OnnxExporter::new().export_dynamic(
+            &PadFromOtherInput,
+            sample,
+            validation,
+            &specs,
+            PadFromOtherInput::forward,
+        ),
+        Err(ExportError::DynamicShapeLost { .. })
+    ));
+}
+
+#[test]
+fn dynamic_output_preserves_distinct_symbols_with_equal_capture_sizes() {
+    let device = Device::default();
+    let sample = Tensor::<4>::zeros([1, 1, 2, 2], &device);
+    let validation = Tensor::<4>::zeros([2, 1, 4, 4], &device);
+    let specs = [InputSpec::new([
+        AxisSpec::dynamic("batch_size"),
+        AxisSpec::Static,
+        AxisSpec::dynamic("height"),
+        AxisSpec::dynamic("width"),
+    ])];
+    let model = OnnxExporter::new()
+        .export_dynamic(&NegSpatial, sample, validation, &specs, NegSpatial::forward)
+        .unwrap();
+
+    let model = ModelProto::parse_from_bytes(model.as_bytes()).unwrap();
+    let output_shape = &model.graph.output[0]
+        .type_
+        .as_ref()
+        .unwrap()
+        .tensor_type()
+        .shape
+        .dim;
+    assert_eq!(output_shape[0].dim_param(), "batch_size");
+    assert_eq!(output_shape[2].dim_param(), "height");
+    assert_eq!(output_shape[3].dim_param(), "width");
 }
 
 #[test]

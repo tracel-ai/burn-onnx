@@ -12,12 +12,10 @@ mod shape;
 mod validate;
 
 pub use error::ExportError;
-pub use exporter::{ExportInput, ExportValues, OnnxExporter, Opset};
-pub use lower::{
-    MAX_EMBEDDED_PROTOBUF_BYTES, ONNX_IR_VERSION, ONNX_OPSET_VERSION, export_graph,
-    export_graph_with_bindings, export_graph_with_values,
-};
+#[doc(hidden)]
+pub use exporter::{ExportInput, ExportOutput};
+pub use exporter::{OnnxExporter, Opset};
 pub use model::OnnxModel;
-pub use resolved::{DynamicAxis, ResolvedExportGraph, ResolvedShape, ShapeExpr};
+pub(crate) use resolved::{DynamicAxis, ResolvedExportGraph, ResolvedShape, ShapeExpr};
 pub use shape::{AxisSpec, InputSpec};
-pub use validate::GraphStructureValidator;
+pub(crate) use validate::GraphStructureValidator;
