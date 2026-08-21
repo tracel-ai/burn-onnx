@@ -33,7 +33,7 @@ def ramp(shape, scale, offset):
 
 
 def main():
-    gru_node = helper.make_node(
+    rnn_node = helper.make_node(
         "RNN",
         inputs=["input", "W", "R", "B"],
         outputs=["Y", "Y_h"],
@@ -61,7 +61,7 @@ def main():
         "Y_h", TensorProto.FLOAT, [NUM_DIRECTIONS, BATCH_SIZE, HIDDEN_SIZE]
     )
 
-    graph = helper.make_graph([gru_node], "rnn_runtime_weights_graph", [inp, w, r, b], [out_Y, out_Y_h])
+    graph = helper.make_graph([rnn_node], "rnn_runtime_weights_graph", [inp, w, r, b], [out_Y, out_Y_h])
     model = helper.make_model(
         graph, opset_imports=[helper.make_operatorsetid("", OPSET_VERSION)]
     )

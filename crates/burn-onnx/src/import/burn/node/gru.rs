@@ -51,10 +51,13 @@ fn collect_gru_snapshots(
     let data_r = extract_node_data(inputs, 2);
     let data_b = extract_node_data(inputs, 3);
 
-    // Reaching here means `field()` emitted a module, so every weight was supposed to
-    // resolve. Returning an empty list instead would rebuild the bug this path exists to
-    // fix: a struct full of gate `Param`s that no snapshot fills, which `from_file`
-    // reports as missing tensors and `Model::new` silently fills with random values.
+    // `field()` emitted a module, so every weight was supposed to resolve.
+    // `validate_uniform_group` in onnx-ir rejects the model-shaped ways this can fail (a
+    // missing W/R, or a group split across initializers and graph inputs), so reaching
+    // here means the tensor store lost a value we were promised. Returning an empty list
+    // instead would rebuild the bug this path exists to fix: a struct full of gate
+    // `Param`s that no snapshot fills, which `from_file` reports as missing tensors and
+    // `Model::new` silently fills with random values.
     let (Some(data_w), Some(data_r)) = (data_w, data_r) else {
         panic!(
             "GRU '{field_name}': W/R are build-time weights but their data did not resolve. \

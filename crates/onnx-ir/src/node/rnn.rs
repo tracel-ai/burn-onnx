@@ -1,7 +1,7 @@
 use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
-    lift_all_or_none,
+    lift_all_or_none, validate_uniform_group,
 };
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
@@ -166,6 +166,10 @@ impl NodeProcessor for RnnProcessor {
                 input_tensor.rank
             )));
         }
+
+        // W, R and the optional B are consumed as one group, either all from the graph's
+        // initializers or all from its inputs.
+        validate_uniform_group(node, &[1, 2, 3], &[1, 2])?;
 
         // Validate weight tensor (W)
         let weight_tensor = match &node.inputs[1].ty {

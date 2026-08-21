@@ -346,6 +346,58 @@ pub fn validate_no_rank_zero_tensors(node: &RawNode) -> Result<(), ProcessError>
     Ok(())
 }
 
+/// Validate the group of inputs that [`lift_all_or_none`] treats as a unit.
+///
+/// `required` names the members that must be provided; the rest may be absent or left
+/// optional. Every provided member must agree on where its value comes from, because a
+/// consumer takes the group either entirely at build time or entirely at run time and
+/// has nowhere to put a mixture. A subgraph is the way one arises: a body that captures
+/// an already-lifted outer value alongside a body input.
+pub fn validate_uniform_group(
+    node: &RawNode,
+    indices: &[usize],
+    required: &[usize],
+) -> Result<(), ProcessError> {
+    for &index in required {
+        let provided = node.inputs.get(index).is_some_and(|arg| !arg.is_optional());
+        if !provided {
+            return Err(ProcessError::Custom(format!(
+                "Node '{}': input #{index} is required but was not provided",
+                node.name
+            )));
+        }
+    }
+
+    let mut first: Option<(usize, bool)> = None;
+    for &index in indices {
+        let Some(arg) = node.inputs.get(index) else {
+            continue;
+        };
+        if arg.is_optional() {
+            continue;
+        }
+        let runtime = arg.is_dynamic();
+        match first {
+            None => first = Some((index, runtime)),
+            Some((first_index, first_runtime)) if first_runtime != runtime => {
+                let (build, run) = if runtime {
+                    (first_index, index)
+                } else {
+                    (index, first_index)
+                };
+                return Err(ProcessError::Custom(format!(
+                    "Node '{}': input #{build} is a build-time value while input #{run} is \
+                     supplied at run time. They are consumed as a group, so they must both \
+                     be initializers or both be graph inputs.",
+                    node.name
+                )));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 /// Lift the inputs at `indices` to static values, but only if every one of them can be.
 ///
 /// Some operators split a group of inputs across the same piece of generated code, so

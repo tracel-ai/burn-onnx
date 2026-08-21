@@ -195,8 +195,8 @@ fn load_runtime_weights(
 ) -> TokenStream {
     // `to_static` clears an argument's name, so a lifted sibling here would reach
     // `Ident::new("")` and panic inside proc-macro2 with nothing to point at.
-    // `lift_all_or_none` keeps the group uniform; a subgraph that inherits an
-    // already-lifted value from its outer scope is the way it can still happen.
+    // `lift_all_or_none` keeps the group uniform and `validate_uniform_group` rejects a
+    // model that arrives mixed, so this is a backstop rather than a reachable path.
     for (index, arg) in inputs.iter().enumerate().skip(1).take(3) {
         assert!(
             !arg.is_static(),
@@ -311,8 +311,9 @@ fn load_runtime_weights(
 /// `Argument::new` defaults to `ValueSource::Dynamic`, which is the state of a weight
 /// supplied as a graph input, so tests covering the static path have to say so. The
 /// fabricated `DataId` resolves in no store: these tests read `field`/`forward`, never
-/// `value()`. A test that does call `collect_snapshots` gets an empty list and a
-/// `log::warn`, not an error.
+/// `value()`. A test that calls `collect_snapshots` on one of these nodes will panic on
+/// the unresolvable weight - back the argument with a real store instead of reaching for
+/// this helper there.
 #[cfg(test)]
 pub(crate) fn weights_as_initializers(inputs: &mut [Argument]) {
     for arg in inputs.iter_mut().skip(1).take(3) {

@@ -14,7 +14,7 @@
 use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
-    lift_all_or_none,
+    lift_all_or_none, validate_uniform_group,
 };
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
@@ -206,6 +206,10 @@ impl NodeProcessor for GruProcessor {
                 input_tensor.rank
             )));
         }
+
+        // W, R and the optional B are consumed as one group, either all from the graph's
+        // initializers or all from its inputs.
+        validate_uniform_group(node, &[1, 2, 3], &[1, 2])?;
 
         // Validate weight tensor (W)
         let weight_tensor = match &node.inputs[1].ty {
@@ -626,5 +630,39 @@ mod tests {
 
         assert!(node.inputs[1].value().is_some());
         assert!(node.inputs[2].value().is_some());
+    }
+
+    #[test]
+    fn mixed_build_time_and_runtime_weights_are_rejected() {
+        // A subgraph capturing an already-lifted outer W alongside a body-input R lands
+        // here. Codegen consumes the group as a unit, so it has nowhere to put a mixture.
+        let mut node = create_gru_node(8, None, None, 2);
+        node.inputs[2].value_source = crate::ir::ValueSource::Dynamic;
+        GruProcessor.lift_constants(&mut node, 14).unwrap();
+
+        let err = GruProcessor
+            .infer_types(&mut node, 14, &OutputPreferences::default())
+            .expect_err("a mixed weight group must be rejected");
+
+        let message = format!("{err}");
+        assert!(
+            message.contains("both be initializers or both be graph inputs"),
+            "unexpected error: {message}"
+        );
+    }
+
+    #[test]
+    fn an_omitted_required_weight_is_rejected() {
+        let mut node = create_gru_node(8, None, None, 2);
+        node.inputs[1].value_source = crate::ir::ValueSource::Optional;
+
+        let err = GruProcessor
+            .infer_types(&mut node, 14, &OutputPreferences::default())
+            .expect_err("W is required");
+
+        assert!(
+            format!("{err}").contains("required but was not provided"),
+            "unexpected error: {err}"
+        );
     }
 }
