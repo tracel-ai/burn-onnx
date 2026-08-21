@@ -213,22 +213,3 @@ fn format_statement(tokens: proc_macro2::TokenStream) -> String {
         Err(_) => tokens.to_string(),
     }
 }
-
-/// Mark a weight argument as a lifted initializer.
-///
-/// `Argument::new` defaults to `ValueSource::Dynamic`, which is the state of a
-/// weight supplied as a graph input. RNN-family codegen branches on that to decide
-/// between a struct field and a module built inside `forward`, so tests covering
-/// the static path have to say which one they mean.
-pub fn as_lifted_initializer(mut arg: onnx_ir::Argument) -> onnx_ir::Argument {
-    arg.value_source = onnx_ir::ir::ValueSource::Static(0);
-    arg
-}
-
-/// Re-mark an RNN-family node's `W`/`R`/`B` as graph inputs rather than initializers,
-/// which is how every RNN test in the upstream ONNX suite supplies them.
-pub fn weights_as_graph_inputs(inputs: &mut [onnx_ir::Argument]) {
-    for arg in inputs.iter_mut().take(4).skip(1) {
-        arg.value_source = onnx_ir::ir::ValueSource::Dynamic;
-    }
-}

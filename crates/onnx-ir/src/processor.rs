@@ -346,6 +346,33 @@ pub fn validate_no_rank_zero_tensors(node: &RawNode) -> Result<(), ProcessError>
     Ok(())
 }
 
+/// Lift the inputs at `indices` to static values, but only if every one of them can be.
+///
+/// Some operators split a group of inputs across the same piece of generated code, so
+/// codegen needs them to be uniformly static or uniformly named. Lifting only part of
+/// the group would leave the rest referring to an input whose name `to_static` cleared.
+/// Absent and optional inputs count as liftable, so a missing tail does not block the
+/// group.
+///
+/// Idempotent: `lift_constants` runs again after identity elimination
+/// (`phases/post_processing.rs`), and an already-lifted input is no longer `Constant`.
+pub fn lift_all_or_none(node: &mut RawNode, indices: &[usize]) -> Result<(), ProcessError> {
+    let liftable = |index: &usize| match node.inputs.get(*index) {
+        Some(arg) => arg.is_optional() || arg.is_constant(),
+        None => true,
+    };
+    if !indices.iter().all(liftable) {
+        return Ok(());
+    }
+
+    for &index in indices {
+        if node.inputs.get(index).is_some_and(|arg| arg.is_constant()) {
+            node.inputs[index].to_static()?;
+        }
+    }
+    Ok(())
+}
+
 // ============================================================================
 // NodeSpec Validation
 // ============================================================================

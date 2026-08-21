@@ -278,9 +278,8 @@ the runtime tensors:
 ```rust
 let mut gru1 = burn::nn::gru::GruConfig::new(2, 5, false)
     .with_reset_after(false)
-    .with_initializer(burn::module::Initializer::Zeros)
     .init(&self.device);
-let __w_dir = __w.clone().select_dim::<2>(0, 0);
+let __w_dir = __w.select_dim::<2>(0, 0);
 gru1.update_gate.input_transform.weight = burn::module::Param::from_tensor(
     __w_dir.clone().slice_dim(0, 0..5).transpose(),
 );
@@ -291,17 +290,20 @@ tokens instead. It is also not a new coupling to Burn's internals: burn-onnx alr
 `gru1.update_gate.input_transform.weight`, as a string, in the snapshot paths. Field access trades a
 load-time `Missing tensors` failure for a compile error if Burn ever renames one.
 
-`Initializer::Zeros` is there because every parameter is overwritten immediately; drawing Xavier
-values first would be pure waste on a path that runs per forward call.
+A first draft passed `Initializer::Zeros` here on the theory that the config's Xavier draw was
+wasted work. It is not: `Initializer::init_with` returns `Param::uninitialized`, whose closure runs
+only on the first `val()`, and every parameter is replaced before anything reads one. The config
+allocates nothing either way, so the initializer was three lines of emitted code buying nothing.
 
 The three ops differ in only three constants, so one table-driven emitter in
-`burn-onnx/src/import/burn/node/rnn_weights.rs` covers them:
+`burn-onnx/src/import/burn/node/rnn_common.rs` covers them, and the same `GateLayout` const now
+also drives each op's build-time `collect_*_snapshots` so the ONNX-to-Burn mapping has one home:
 
-| Op   | Burn gate order                             | ONNX gate index | `B` handling                       |
-| ---- | ------------------------------------------- | --------------- | ---------------------------------- |
-| GRU  | update, reset, new                          | `[0, 1, 2]`     | `Wb` and `Rb` on separate `Linear`s |
-| LSTM | input, forget, output, cell                 | `[0, 2, 1, 3]`  | `Wb + Rb` folded, other zeroed     |
-| RNN  | gate                                        | `[0]`           | `Wb + Rb` folded, other zeroed     |
+| Op   | Burn gate order             | ONNX gate index | `B` handling                        |
+| ---- | --------------------------- | --------------- | ----------------------------------- |
+| GRU  | update, reset, new          | `[0, 1, 2]`     | `Wb` and `Rb` on separate `Linear`s |
+| LSTM | input, forget, output, cell | `[0, 2, 1, 3]`  | `Wb + Rb` folded, other zeroed      |
+| RNN  | gate                        | `[0]`           | `Wb + Rb` folded, other zeroed      |
 
 Bidirectional falls out for free: `BiGru`, `BiLstm` and `BiRnn` are `{ forward, reverse }`, which is
 the same `forward.`/`reverse.` prefix pair the snapshot paths already use, so the emitter just
@@ -311,7 +313,9 @@ On the onnx-ir side, `lift_constants` for these three ops is now all-or-nothing 
 `B`. Lifting them independently could leave a model where one weight is a lifted `Static` (name
 cleared) and another is a graph input: the runtime path would then have an input it cannot name.
 Refusing to lift any of them when one is dynamic keeps the unlifted constants as named `Constant`
-node outputs, which the runtime path can reference like any other value.
+node outputs, which the runtime path can reference like any other value. The rule is
+`processor::lift_all_or_none(node, indices)`, general rather than RNN-specific, because
+`batch_norm.rs` already open-codes the same reasoning and the next weighted op will want it too.
 
 Two things surfaced that were not in the issue:
 
@@ -372,6 +376,18 @@ exposed to it.
   this shape (`.expect("Config extraction failed")`); Upsample is just the first to have checks
   that can realistically fire there. Reproduced with a `Constant -> Identity -> Upsample` graph
   carrying scales of 1.75.
+- **The static-vs-runtime weight decision is stated on both sides of the crate boundary (surfaced by
+  the item 6 review).** `lift_all_or_none`'s liftability test in onnx-ir and `weights_are_runtime` in
+  burn-onnx encode the same invariant with two non-complementary predicates over a four-variant
+  `ValueSource`, kept in sync by hand. `BatchNormalizationNode` already shows the deeper answer:
+  decide once in `extract_config` and carry it in the IR config (`BatchNormConfig::Static |
+  Runtime`), so codegen matches rather than re-derives. Doing the same for GRU/LSTM/RNN churns every
+  positional `Config::new(...)` in their tests, which is why it is not in item 6.
+- **Generated `use` lines are predicted per node.** `BurnImports` emits bare `use` with no
+  `#[allow(unused_imports)]`, so LSTM and RNN carry a `needs_module_type` flag purely to avoid
+  importing a type the runtime path never names. GRU needs none of it because it uses fully-qualified
+  `burn::nn::gru::Gru` paths. Either adopt GRU's style in the other two, or allow unused imports in
+  the generated block once.
 - **#280 shape propagation through Where/Mul/ConstantOfShape.** Blocks RF-DETR without an `onnxsim`
   pre-pass.
 - **#371 Kokoro residual 1.3x.** Established as f32 drift through HiFi-GAN resblocks, not fixable
@@ -401,4 +417,4 @@ better-understood one: Conv/ConvTranspose/LayerNorm all have a functional entry 
 
 Item 6 did not produce a helper item 3 can reuse — the two share a symptom, not a mechanism — so
 item 3 starts from the `runtime_scalar_to_native` extraction proposed in the #314 thread, not from
-`node/rnn_weights.rs`.
+`node/rnn_common.rs`.

@@ -14,6 +14,7 @@
 use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
+    lift_all_or_none,
 };
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
@@ -157,17 +158,6 @@ pub struct GruNode {
     pub config: GruConfig,
 }
 
-/// Whether every gate weight this node carries (`W`, `R`, and `B` when present) is a
-/// constant, which is what makes lifting them safe.
-fn weights_all_constant(node: &RawNode) -> bool {
-    [1usize, 2, 3]
-        .iter()
-        .all(|&index| match node.inputs.get(index) {
-            Some(arg) => arg.is_optional() || arg.is_constant(),
-            None => true,
-        })
-}
-
 pub(crate) struct GruProcessor;
 
 impl NodeProcessor for GruProcessor {
@@ -185,18 +175,10 @@ impl NodeProcessor for GruProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // W, R and the optional B are lifted together or not at all. The codegen that
+        // W, R and the optional B are lifted together or not at all: the codegen that
         // splits them across Burn's per-gate `Linear` modules runs either entirely at
-        // build time (all static) or entirely at run time (all referenced by name);
-        // lifting only some would leave the runtime path with an input it cannot name.
-        if !weights_all_constant(node) {
-            return Ok(());
-        }
-        for index in [1usize, 2, 3] {
-            if node.inputs.get(index).is_some_and(|arg| arg.is_constant()) {
-                node.inputs[index].to_static()?;
-            }
-        }
+        // build time (all static) or entirely at run time (all referenced by name).
+        lift_all_or_none(node, &[1, 2, 3])?;
         Ok(())
     }
 
