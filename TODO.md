@@ -7,8 +7,8 @@ the output against `burn 0.22.0-pre.1` with the `flex` backend.
 
 The `Size` codegen fix and the scoreboard re-triage that produced this baseline landed in #457, and
 the domain-aware unsupported-op error (#433) turned out to be already fixed on `main`. Counts below
-are the current state of `expectations.toml`, including the Upsample promotion (item 1) and the
-runtime-`axes` reduce fix (item 2).
+are the current state of `expectations.toml`, including the Upsample promotion (item 1), the
+runtime-`axes` reduce fix (item 2) and the RNN-family runtime weights fix (item 6).
 
 ## Scoreboard baseline
 
@@ -16,12 +16,12 @@ runtime-`axes` reduce fix (item 2).
 
 | Status         | Rows |
 | -------------- | ---: |
-| `pass`         |  921 |
-| `fail-compare` |  107 |
+| `pass`         |  932 |
+| `fail-compare` |   96 |
 | `skip-codegen` |  484 |
 | `skip-compile` |  103 |
 
-819 of the 921 `pass` rows execute as harness tests. The other 102 are codegen-only: build.rs skips
+830 of the 932 `pass` rows execute as harness tests. The other 102 are codegen-only: build.rs skips
 harness generation for dynamic shapes, rank-0 I/O, and dtypes the `.pb` loader cannot construct.
 
 ### Why skip counts rot
@@ -38,7 +38,7 @@ unblock a family.
 
 ### What "pass" does and does not mean
 
-921 rows are marked `pass`; 819 of them execute as harness tests. The other 102 are codegen-only:
+932 rows are marked `pass`; 830 of them execute as harness tests. The other 102 are codegen-only:
 `build.rs` skips harness generation for dynamic shapes, rank-0 I/O, and dtypes the `.pb` loader
 cannot construct, and `update-expectations` can only demote a row whose test failed. A codegen-only
 row is therefore unfalsifiable once promoted, and its output is never compared against the
@@ -48,7 +48,7 @@ them into the total.
 `test_size` and `test_size_example` are in that group (the Size fix is verified by the
 `crates/onnx-tests/tests/size/` integration tests, not by the official suite), as are 26
 `test_castlike_*` rows converting to FLOAT8/INT4 variants. Extending the harness to cover them is
-separate work; the honest reading of 921 is "921 compile, 819 match".
+separate work; the honest reading of 932 is "932 compile, 830 match".
 
 Item 2 turned four of those unfalsifiable rows into real tests and immediately found a bug in two
 of them, which is the concrete cost of the category: `test_reduce_log_sum_exp_do_not_keepdims_*`
@@ -215,6 +215,10 @@ a baked-in `Param` field. Five ops have now hit this pattern; extract the shared
 `runtime_scalar_to_native(arg, target_dtype, scope)` helper in `argument_helpers.rs` proposed in the
 #314 thread before doing these two.
 
+Unlike the RNN family (item 6), these three do have a functional route: `burn-tensor` exports
+`conv1d`/`conv2d`/`conv3d`, `conv_transpose*` and `layer_norm` as free functions taking the weights
+as arguments, so no module has to be built per forward call.
+
 ### 4. RMSNormalization (19 tests)
 
 Burn has `RmsNorm` natively and ONNX 23 made this a first-class op. High real-world relevance:
@@ -248,36 +252,97 @@ consuming crate that does not, and is worth fixing independently of these rows.
 
 ### 6. GRU/LSTM/RNN discard runtime weights (#458)
 
-Surfaced by the re-triage, previously hidden behind a `skip-compile` row. `test_gru_batchwise`
-compiles, then panics in `Model::from_file`:
+**Status: done.** All three ops accepted models whose `W`/`R` arrive as runtime graph inputs and
+then silently discarded them: `collect_*_snapshots` returned an empty snapshot list when the weights
+were not statically available (`gru.rs:52`, `:55`; same shape in `lstm.rs:87`/`:90` and
+`rnn.rs:82`/`:85`), while `field()` emitted the module regardless. The generated `forward` took the
+weight tensors as parameters and never read them. `Model::from_file` panicked on the missing
+tensors; `Model::new` did not, and ran inference on `GruConfig::init`'s random weights.
 
-```
-Validation error: Missing tensors: [
-  ("gru1.new_gate.hidden_transform.weight", "Struct:Model.Struct:Gru.Struct:GateController.Struct:Linear"),
-  ("gru1.new_gate.input_transform.weight",  ...),
-  ("gru1.reset_gate.hidden_transform.weight", ...),
-  ("gru1.reset_gate.input_transform.weight",  ...),
-  ("gru1.update_gate.hidden_transform.weight", ...),
-  ("gru1.update_gate.input_transform.weight",  ...),
-]
-```
+The issue offered two fixes: consume the runtime weights, or reject the model with a clear error.
+The second was the smaller change, but it would have made every RNN test in the upstream suite
+`skip-codegen` - the category that, per "Why skip counts rot" above, nothing ever re-checks. The
+weights are now consumed.
 
-Root-caused while filing #458, and it is worse than "unloadable". Every RNN-family test in the
-upstream suite supplies `W`/`R` as runtime graph inputs rather than initializers.
-`collect_gru_snapshots` returns an empty snapshot list when the weights are not statically available
-(`gru.rs:52`, `:55`; same shape in `lstm.rs:87`/`:90` and `rnn.rs:82`/`:85`), but `field()` still
-emits the module. So the generated `forward` accepts `w` and `r` as parameters and never reads them:
+**The functional route this item was expected to share with item 3 does not exist.**
+`burn-tensor/src/tensor/module.rs` exports functional `conv1d`/`conv2d`/`conv3d`,
+`conv_transpose*`, `layer_norm` and `linear`, which is exactly what #346 and #352 need. It exports
+no `gru`, `lstm` or `rnn`. So the earlier guess that doing 6 first would produce the helper 3 needs
+was wrong; these are two different fixes that happen to share a symptom.
+
+What works instead is that Burn's recurrent modules expose their parameters. When the weights are
+runtime, `field()` returns `None` - no struct field, so nothing for the snapshot pipeline to fail to
+fill - and `forward` builds the module locally, then overwrites each gate's `Param` from slices of
+the runtime tensors:
 
 ```rust
-pub fn forward(&self, x: Tensor<3>, w: Tensor<3>, r: Tensor<3>) -> Tensor<3> {
-    let gru_output = self.gru1.forward(x.swap_dims(0, 1), None);
-    //                    ^^^^ w and r are dropped on the floor
+let mut gru1 = burn::nn::gru::GruConfig::new(2, 5, false)
+    .with_reset_after(false)
+    .with_initializer(burn::module::Initializer::Zeros)
+    .init(&self.device);
+let __w_dir = __w.clone().select_dim::<2>(0, 0);
+gru1.update_gate.input_transform.weight = burn::module::Param::from_tensor(
+    __w_dir.clone().slice_dim(0, 0..5).transpose(),
+);
 ```
 
-`from_file` panics on the missing tensors, but `Model::new` does not: `GruConfig::init` gives the
-module fully random weights and inference proceeds. That silent path is the reason this is a bug
-rather than a gap. Same family as item 3's Conv/LayerNorm runtime weights (#346, #352), except
-those reject the model with a clear error instead of accepting it and computing nonsense.
+This is the same slice-and-transpose `collect_*_snapshots` already runs at build time, emitted as
+tokens instead. It is also not a new coupling to Burn's internals: burn-onnx already depended on
+`gru1.update_gate.input_transform.weight`, as a string, in the snapshot paths. Field access trades a
+load-time `Missing tensors` failure for a compile error if Burn ever renames one.
+
+`Initializer::Zeros` is there because every parameter is overwritten immediately; drawing Xavier
+values first would be pure waste on a path that runs per forward call.
+
+The three ops differ in only three constants, so one table-driven emitter in
+`burn-onnx/src/import/burn/node/rnn_weights.rs` covers them:
+
+| Op   | Burn gate order                             | ONNX gate index | `B` handling                       |
+| ---- | ------------------------------------------- | --------------- | ---------------------------------- |
+| GRU  | update, reset, new                          | `[0, 1, 2]`     | `Wb` and `Rb` on separate `Linear`s |
+| LSTM | input, forget, output, cell                 | `[0, 2, 1, 3]`  | `Wb + Rb` folded, other zeroed     |
+| RNN  | gate                                        | `[0]`           | `Wb + Rb` folded, other zeroed     |
+
+Bidirectional falls out for free: `BiGru`, `BiLstm` and `BiRnn` are `{ forward, reverse }`, which is
+the same `forward.`/`reverse.` prefix pair the snapshot paths already use, so the emitter just
+prefixes the field access.
+
+On the onnx-ir side, `lift_constants` for these three ops is now all-or-nothing across `W`, `R` and
+`B`. Lifting them independently could leave a model where one weight is a lifted `Static` (name
+cleared) and another is a graph input: the runtime path would then have an input it cannot name.
+Refusing to lift any of them when one is dynamic keeps the unlifted constants as named `Constant`
+node outputs, which the runtime path can reference like any other value.
+
+Two things surfaced that were not in the issue:
+
+- **`layout=1` put the direction axis on the wrong dimension.** ONNX's batch-first layout moves
+  `num_directions` in the *outputs* too: `Y` becomes `[batch, seq, dirs, hidden]` and `Y_h` becomes
+  `[batch, dirs, hidden]`. LSTM and RNN unsqueezed at a fixed dim 1 and 0 regardless of layout, and
+  GRU had `Y` right and `Y_h` wrong. Bidirectional plus `layout=1` needs a `swap_dims(0, 1)` on the
+  final state, which nothing did. This was unreachable before: the only upstream tests with
+  `layout=1` are the three `*_batchwise` rows, and every one of them was already failing for the
+  weights reason. Fixing the weights is what made the shape bug observable - the first pass promoted
+  8 of 11 rows, and the 3 that held out were exactly the batchwise ones.
+- **The snapshot tests were recording the bug.** `Argument::new` defaults to `ValueSource::Dynamic`,
+  so every GRU/LSTM/RNN codegen test built a node whose weights are, semantically, graph inputs. The
+  accepted snapshots showed `pub fn forward(&self, input: Tensor<3>, W: Tensor<3>, R: Tensor<3>, B:
+  Tensor<2>)` with a body that reads `self.gru1` and never touches `W`/`R`/`B` - the defect, frozen
+  as an expectation. The static-path tests now mark their weights as lifted initializers explicitly,
+  and there are new snapshot tests for the runtime path.
+
+Scoreboard: 11 rows promoted from `fail-compare` to `pass` (4 GRU, 3 LSTM, 4 RNN). Harness tests went
+from 819 to 830, all green. Three integration tests were added under `crates/onnx-tests/tests/`, one
+per op, because the official harness constructs with `Model::new` while `#458`'s headline symptom is
+`from_file` panicking; those go through `from_file` and compare against `ReferenceEvaluator`.
+
+Unchanged and still rejected with a clear message: LSTM peephole connections (input `P`) and
+`sequence_lens` on all three.
+
+One latent bug was left alone as out of scope: `collect_*_snapshots` slices a direction with
+`.squeeze::<2>()`, which drops *every* size-1 dimension, so a GRU with `input_size == 1` or
+`hidden_size == 1` would squeeze the wrong axis and fail the rank check. It predates this work and
+only affects the static path; the generated runtime path uses `select_dim`/`slice_dim` and is not
+exposed to it.
 
 ## Tier 3
 
@@ -326,13 +391,14 @@ those reject the model with a clear error instead of accepting it and computing 
 
 ## Order
 
-Items 1 and 2 are done, and #460 landed alongside item 2. Item 6 (#458) is next: it is the last
-known silent-wrong-answer bug on the board, and the argument that pulled item 2 ahead of the
-test-count work applies to it unchanged — a GRU/LSTM/RNN whose runtime `W`/`R` are dropped still
-runs, with fully random weights, under `Model::new`.
-
-Then 3 -> 4, each measurable against an honest baseline. Item 3 shares item 6's shape (runtime
-weights that codegen assumes are static), so doing 6 first may well produce the helper 3 needs.
+Items 1, 2 and 6 are done, and #460 landed alongside item 2. That clears the known
+silent-wrong-answer bugs from the board; what is left is test-count work against an honest baseline.
 
 Item 5's top three rows (34 + 22 + 22 = 78 of the 103 remaining `skip-compile` rows) are probably
-two fixes, which makes that bucket the largest remaining test-count win now that item 2 is spent.
+two fixes, which makes that bucket the largest remaining win. Item 3 is the next-largest and the
+better-understood one: Conv/ConvTranspose/LayerNorm all have a functional entry point in
+`burn-tensor` to route through, which is what item 6 turned out not to have. Then 4.
+
+Item 6 did not produce a helper item 3 can reuse — the two share a symptom, not a mechanism — so
+item 3 starts from the `runtime_scalar_to_native` extraction proposed in the #314 thread, not from
+`node/rnn_weights.rs`.

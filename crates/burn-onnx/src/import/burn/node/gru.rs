@@ -18,6 +18,9 @@
 //! - **Custom activations**: Burn's GRU uses fixed Sigmoid (gates) and Tanh (hidden) activations.
 
 use super::prelude::*;
+use super::rnn_weights::{
+    BiasLayout, GateLayout, Module, load_runtime_weights, weights_are_runtime,
+};
 use burn_store::TensorSnapshot;
 use onnx_ir::gru::{GruActivationFunction, GruDirection};
 
@@ -208,7 +211,7 @@ fn forward_unidirectional(
     node: &onnx_ir::gru::GruNode,
     scope: &mut ScopeAtPosition<'_>,
     input: TokenStream,
-    field: Ident,
+    module: Module,
     output_y: Option<Ident>,
     output_y_h: Option<Ident>,
 ) -> TokenStream {
@@ -245,8 +248,10 @@ fn forward_unidirectional(
         quote! { #input_transform }
     };
 
+    let Module { setup, expr } = module;
     let forward_call = quote! {
-        let gru_output = self.#field.forward(#input_with_direction, #initial_state_expr);
+        #setup
+        let gru_output = #expr.forward(#input_with_direction, #initial_state_expr);
     };
 
     // For reverse: flip output back
@@ -262,11 +267,14 @@ fn forward_unidirectional(
     } else {
         quote! { (seq_len - 1)..seq_len }
     };
+    // ONNX Y_h is [num_directions, batch, hidden] under layout=0 and
+    // [batch, num_directions, hidden] under layout=1, so the direction axis moves.
+    let y_h_axis = if batch_first { 1usize } else { 0 }.to_tokens();
     let y_h_expr = quote! {
         {
             let [_batch, seq_len, _hidden] = batch_first_output.dims();
             let step = batch_first_output.clone().slice([0.._batch, #y_h_step, 0.._hidden]);
-            step.squeeze_dim::<2>(1).unsqueeze_dims::<3>(&[0])
+            step.squeeze_dim::<2>(1).unsqueeze_dims::<3>(&[#y_h_axis])
         }
     };
 
@@ -326,7 +334,7 @@ fn forward_bidirectional(
     node: &onnx_ir::gru::GruNode,
     scope: &mut ScopeAtPosition<'_>,
     input: TokenStream,
-    field: Ident,
+    module: Module,
     output_y: Option<Ident>,
     output_y_h: Option<Ident>,
 ) -> TokenStream {
@@ -340,6 +348,13 @@ fn forward_bidirectional(
         quote! { Some(#h_input) }
     } else {
         quote! { None }
+    };
+
+    // BiGru's final state is [num_directions, batch, hidden], which is ONNX layout=0.
+    let y_h_expr = if node.config.batch_first {
+        quote! { final_state.swap_dims(0, 1) }
+    } else {
+        quote! { final_state }
     };
 
     // Y output transformation: split concatenated hidden states
@@ -363,20 +378,24 @@ fn forward_bidirectional(
         }
     };
 
+    let Module { setup, expr } = module;
+
     // Vary the destructuring to avoid unused-variable warnings in generated code
     match (output_y, output_y_h) {
         (Some(y), Some(y_h)) => {
             quote! {
                 let (#y, #y_h) = {
-                    let (output_seq, final_state) = self.#field.forward(#input, #initial_state_expr);
-                    (#y_output_expr, final_state)
+                    #setup
+                    let (output_seq, final_state) = #expr.forward(#input, #initial_state_expr);
+                    (#y_output_expr, #y_h_expr)
                 };
             }
         }
         (Some(y), None) => {
             quote! {
                 let #y = {
-                    let (output_seq, _final_state) = self.#field.forward(#input, #initial_state_expr);
+                    #setup
+                    let (output_seq, _final_state) = #expr.forward(#input, #initial_state_expr);
                     #y_output_expr
                 };
             }
@@ -384,18 +403,113 @@ fn forward_bidirectional(
         (None, Some(y_h)) => {
             quote! {
                 let #y_h = {
-                    let (_output_seq, final_state) = self.#field.forward(#input, #initial_state_expr);
-                    final_state
+                    #setup
+                    let (_output_seq, final_state) = #expr.forward(#input, #initial_state_expr);
+                    #y_h_expr
                 };
             }
         }
         (None, None) => {
             quote! {
                 {
-                    let _ = self.#field.forward(#input, #initial_state_expr);
+                    #setup
+                    let _ = #expr.forward(#input, #initial_state_expr);
                 }
             }
         }
+    }
+}
+
+/// ONNX GRU packs its gates as [z, r, h], which is Burn's own update/reset/new order.
+const GATE_LAYOUT: GateLayout = GateLayout {
+    gates: &["update_gate", "reset_gate", "new_gate"],
+    onnx_order: &[0, 1, 2],
+    bias: BiasLayout::Split,
+};
+
+/// The module's type and the expression that builds it on `device`.
+///
+/// `zeroed` swaps the config's random initializer for `Zeros`: the runtime-weight path
+/// overwrites every parameter right after building, so drawing random values first is
+/// wasted work.
+fn module_parts(
+    node: &onnx_ir::gru::GruNode,
+    device: &TokenStream,
+    zeroed: bool,
+) -> (TokenStream, TokenStream) {
+    if node.config.clip.is_some() {
+        panic!(
+            "GRU clip attribute is not supported. Burn's GRU module does not support cell state clipping."
+        );
+    }
+    if node.config.gate_activation != GruActivationFunction::Sigmoid
+        || node.config.hidden_activation != GruActivationFunction::Tanh
+    {
+        panic!(
+            "Custom GRU activations are not supported. Burn's GRU uses fixed Sigmoid (gates) and Tanh (hidden). Got gate: {:?}, hidden: {:?}",
+            node.config.gate_activation, node.config.hidden_activation
+        );
+    }
+
+    let d_input = node.config.input_size.to_tokens();
+    let d_hidden = node.config.hidden_size.to_tokens();
+    let bias = node.config.has_bias;
+    // ONNX linear_before_reset maps to Burn reset_after
+    let reset_after = node.config.linear_before_reset;
+    let initializer =
+        zeroed.then(|| quote! { .with_initializer(burn::module::Initializer::Zeros) });
+
+    match node.config.direction {
+        GruDirection::Forward | GruDirection::Reverse => (
+            quote! { burn::nn::gru::Gru },
+            quote! {
+                burn::nn::gru::GruConfig::new(#d_input, #d_hidden, #bias)
+                    .with_reset_after(#reset_after)
+                    #initializer
+                    .init(#device)
+            },
+        ),
+        GruDirection::Bidirectional => {
+            let batch_first = node.config.batch_first;
+            (
+                quote! { burn::nn::gru::BiGru },
+                quote! {
+                    burn::nn::gru::BiGruConfig::new(#d_input, #d_hidden, #bias)
+                        .with_reset_after(#reset_after)
+                        .with_batch_first(#batch_first)
+                        #initializer
+                        .init(#device)
+                },
+            )
+        }
+    }
+}
+
+/// The module the forward pass runs through, plus any statements that build it.
+fn module(node: &onnx_ir::gru::GruNode, scope: &mut ScopeAtPosition<'_>) -> Module {
+    let name = Ident::new(&node.name, Span::call_site());
+    if !weights_are_runtime(&node.inputs) {
+        return Module {
+            setup: quote! {},
+            expr: quote! { self.#name },
+        };
+    }
+
+    let (_, init) = module_parts(node, &quote! { &self.device }, true);
+    let load = load_runtime_weights(
+        &quote! { #name },
+        scope,
+        &node.inputs,
+        &GATE_LAYOUT,
+        node.config.hidden_size,
+        node.config.direction.num_directions(),
+    );
+    Module {
+        setup: quote! {
+            let mut #name = #init;
+            #load
+        },
+        expr: quote! { #name },
     }
 }
 
@@ -409,51 +523,19 @@ impl NodeCodegen for onnx_ir::gru::GruNode {
     }
 
     fn field(&self) -> Option<Field> {
-        if self.config.clip.is_some() {
-            panic!(
-                "GRU clip attribute is not supported. Burn's GRU module does not support cell state clipping."
-            );
-        }
-        if self.config.gate_activation != GruActivationFunction::Sigmoid
-            || self.config.hidden_activation != GruActivationFunction::Tanh
-        {
-            panic!(
-                "Custom GRU activations are not supported. Burn's GRU uses fixed Sigmoid (gates) and Tanh (hidden). Got gate: {:?}, hidden: {:?}",
-                self.config.gate_activation, self.config.hidden_activation
-            );
+        // Runtime weights are loaded into a module built inside forward(); declaring
+        // a field here would put `Param`s in the struct that no snapshot ever fills.
+        if weights_are_runtime(&self.inputs) {
+            return None;
         }
 
         let name = Ident::new(&self.name, Span::call_site());
-        let d_input = self.config.input_size.to_tokens();
-        let d_hidden = self.config.hidden_size.to_tokens();
-        let bias = self.config.has_bias;
-        // ONNX linear_before_reset maps to Burn reset_after
-        let reset_after = self.config.linear_before_reset;
-
-        match self.config.direction {
-            GruDirection::Forward | GruDirection::Reverse => Some(Field::new(
-                self.name.clone(),
-                quote! { burn::nn::gru::Gru },
-                quote! {
-                    let #name = burn::nn::gru::GruConfig::new(#d_input, #d_hidden, #bias)
-                        .with_reset_after(#reset_after)
-                        .init(device);
-                },
-            )),
-            GruDirection::Bidirectional => {
-                let batch_first = self.config.batch_first;
-                Some(Field::new(
-                    self.name.clone(),
-                    quote! { burn::nn::gru::BiGru },
-                    quote! {
-                        let #name = burn::nn::gru::BiGruConfig::new(#d_input, #d_hidden, #bias)
-                            .with_reset_after(#reset_after)
-                            .with_batch_first(#batch_first)
-                            .init(device);
-                    },
-                ))
-            }
-        }
+        let (ty, init) = module_parts(self, &quote! { device }, false);
+        Some(Field::new(
+            self.name.clone(),
+            ty,
+            quote! { let #name = #init; },
+        ))
     }
 
     fn collect_snapshots(&self, field_name: &str) -> Vec<TensorSnapshot> {
@@ -462,7 +544,7 @@ impl NodeCodegen for onnx_ir::gru::GruNode {
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
         let input = scope.arg(self.inputs.first().unwrap());
-        let field = Ident::new(&self.name, Span::call_site());
+        let module = module(self, scope);
 
         let output_y = self
             .outputs
@@ -476,9 +558,9 @@ impl NodeCodegen for onnx_ir::gru::GruNode {
             .map(arg_to_ident);
 
         if matches!(self.config.direction, GruDirection::Bidirectional) {
-            forward_bidirectional(self, scope, input, field, output_y, output_y_h)
+            forward_bidirectional(self, scope, input, module, output_y, output_y_h)
         } else {
-            forward_unidirectional(self, scope, input, field, output_y, output_y_h)
+            forward_unidirectional(self, scope, input, module, output_y, output_y_h)
         }
     }
 
@@ -490,6 +572,7 @@ impl NodeCodegen for onnx_ir::gru::GruNode {
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::*;
+    use crate::burn::node::NodeCodegen;
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::gru::{GruActivationFunction, GruConfig, GruDirection, GruNode};
@@ -521,9 +604,18 @@ mod tests {
             "input",
             ArgType::Tensor(TensorType::new(DType::F32, 3, None)),
         );
-        let w = Argument::new("W", ArgType::Tensor(TensorType::new(DType::F32, 3, None)));
-        let r = Argument::new("R", ArgType::Tensor(TensorType::new(DType::F32, 3, None)));
-        let b = Argument::new("B", ArgType::Tensor(TensorType::new(DType::F32, 2, None)));
+        let w = as_lifted_initializer(Argument::new(
+            "W",
+            ArgType::Tensor(TensorType::new(DType::F32, 3, None)),
+        ));
+        let r = as_lifted_initializer(Argument::new(
+            "R",
+            ArgType::Tensor(TensorType::new(DType::F32, 3, None)),
+        ));
+        let b = as_lifted_initializer(Argument::new(
+            "B",
+            ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+        ));
 
         let mut inputs = vec![input, w, r, b];
 
@@ -566,14 +658,8 @@ mod tests {
     fn test_gru_forward_basic() {
         let node = create_gru_node("gru1", GruDirection::Forward, false, false, 2);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r#"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> (Tensor<4>, Tensor<3>) {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let gru_output = self.gru1.forward(input.swap_dims(0, 1), None);
                 let batch_first_output = gru_output;
@@ -590,21 +676,15 @@ mod tests {
             };
             (Y, Y_h)
         }
-        "#);
+        ");
     }
 
     #[test]
     fn test_gru_forward_reverse() {
         let node = create_gru_node("gru1", GruDirection::Reverse, false, false, 2);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r#"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> (Tensor<4>, Tensor<3>) {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let gru_output = self
                     .gru1
@@ -629,21 +709,15 @@ mod tests {
             };
             (Y, Y_h)
         }
-        "#);
+        ");
     }
 
     #[test]
     fn test_gru_forward_y_only() {
         let node = create_gru_node("gru1", GruDirection::Forward, false, false, 1);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r#"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> Tensor<4> {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<4> {
             let Y = {
                 let gru_output = self.gru1.forward(input.swap_dims(0, 1), None);
                 let batch_first_output = gru_output;
@@ -651,7 +725,7 @@ mod tests {
             };
             Y
         }
-        "#);
+        ");
     }
 
     #[test]
@@ -684,14 +758,8 @@ mod tests {
     fn test_gru_forward_batch_first() {
         let node = create_gru_node("gru1", GruDirection::Forward, true, false, 2);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r#"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> (Tensor<4>, Tensor<3>) {
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let gru_output = self.gru1.forward(input, None);
                 let batch_first_output = gru_output;
@@ -702,26 +770,23 @@ mod tests {
                         let step = batch_first_output
                             .clone()
                             .slice([0.._batch, (seq_len - 1)..seq_len, 0.._hidden]);
-                        step.squeeze_dim::<2>(1).unsqueeze_dims::<3>(&[0])
+                        step.squeeze_dim::<2>(1).unsqueeze_dims::<3>(&[1])
                     },
                 )
             };
             (Y, Y_h)
         }
-        "#);
+        ");
     }
 
     #[test]
     fn test_gru_forward_with_initial_h() {
         let node = create_gru_node("gru1", GruDirection::Forward, false, true, 2);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r#"
+        assert_snapshot!(code, @r"
         pub fn forward(
             &self,
             input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
             sequence_lens: i64,
             initial_h: Tensor<3>,
         ) -> (Tensor<4>, Tensor<3>) {
@@ -743,7 +808,7 @@ mod tests {
             };
             (Y, Y_h)
         }
-        "#);
+        ");
     }
 
     #[test]
@@ -751,13 +816,7 @@ mod tests {
         let node = create_gru_node("gru1", GruDirection::Bidirectional, false, false, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> (Tensor<4>, Tensor<3>) {
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let (output_seq, final_state) = self.gru1.forward(input, None);
                 (
@@ -779,13 +838,7 @@ mod tests {
         let node = create_gru_node("gru1", GruDirection::Bidirectional, true, false, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> (Tensor<4>, Tensor<3>) {
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let (output_seq, final_state) = self.gru1.forward(input, None);
                 (
@@ -793,7 +846,7 @@ mod tests {
                         let [batch_size, seq_len, _] = output_seq.dims();
                         output_seq.reshape([batch_size, seq_len, 2, 8usize])
                     },
-                    final_state,
+                    final_state.swap_dims(0, 1),
                 )
             };
             (Y, Y_h)
@@ -806,13 +859,7 @@ mod tests {
         let node = create_gru_node("gru1", GruDirection::Bidirectional, false, false, 1);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> Tensor<4> {
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<4> {
             let Y = {
                 let (output_seq, _final_state) = self.gru1.forward(input, None);
                 {
@@ -834,9 +881,6 @@ mod tests {
         pub fn forward(
             &self,
             input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
             sequence_lens: i64,
             initial_h: Tensor<3>,
         ) -> (Tensor<4>, Tensor<3>) {
@@ -865,6 +909,348 @@ mod tests {
             .with_reset_after(false)
             .with_batch_first(false)
             .init(device);
+        ");
+    }
+
+    #[test]
+    fn test_gru_field_runtime_weights() {
+        let mut node = create_gru_node("gru1", GruDirection::Forward, false, false, 2);
+        weights_as_graph_inputs(&mut node.inputs);
+        assert!(
+            NodeCodegen::field(&node).is_none(),
+            "runtime weights must not declare a struct field, or `from_file` fails on \
+             tensors no snapshot can supply"
+        );
+    }
+
+    #[test]
+    fn test_gru_forward_runtime_weights() {
+        let mut node = create_gru_node("gru1", GruDirection::Forward, false, false, 2);
+        weights_as_graph_inputs(&mut node.inputs);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> (Tensor<4>, Tensor<3>) {
+            let (Y, Y_h) = {
+                let mut gru1 = burn::nn::gru::GruConfig::new(4, 8, true)
+                    .with_reset_after(false)
+                    .with_initializer(burn::module::Initializer::Zeros)
+                    .init(&self.device);
+                let __w = W;
+                let __r = R;
+                let __b = B;
+                {
+                    let __w_dir = __w.clone().select_dim::<2>(0, 0);
+                    let __r_dir = __r.clone().select_dim::<2>(0, 0);
+                    let __b_dir = __b.clone().select_dim::<1>(0, 0);
+                    gru1
+                        .update_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 0..8).transpose(),
+                    );
+                    gru1
+                        .update_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 0..8).transpose(),
+                    );
+                    gru1
+                        .update_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 0..8)),
+                    );
+                    gru1
+                        .update_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 24..32)),
+                    );
+                    gru1
+                        .reset_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 8..16).transpose(),
+                    );
+                    gru1
+                        .reset_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 8..16).transpose(),
+                    );
+                    gru1
+                        .reset_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 8..16)),
+                    );
+                    gru1
+                        .reset_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 32..40)),
+                    );
+                    gru1
+                        .new_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 16..24).transpose(),
+                    );
+                    gru1
+                        .new_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 16..24).transpose(),
+                    );
+                    gru1
+                        .new_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 16..24)),
+                    );
+                    gru1
+                        .new_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 40..48)),
+                    );
+                }
+                let gru_output = gru1.forward(input.swap_dims(0, 1), None);
+                let batch_first_output = gru_output;
+                (
+                    batch_first_output.clone().swap_dims(0, 1).unsqueeze_dims::<4>(&[1]),
+                    {
+                        let [_batch, seq_len, _hidden] = batch_first_output.dims();
+                        let step = batch_first_output
+                            .clone()
+                            .slice([0.._batch, (seq_len - 1)..seq_len, 0.._hidden]);
+                        step.squeeze_dim::<2>(1).unsqueeze_dims::<3>(&[0])
+                    },
+                )
+            };
+            (Y, Y_h)
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gru_forward_runtime_weights_bidirectional() {
+        let mut node = create_gru_node("gru1", GruDirection::Bidirectional, false, false, 2);
+        weights_as_graph_inputs(&mut node.inputs);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<3>,
+            W: Tensor<3>,
+            R: Tensor<3>,
+            B: Tensor<2>,
+        ) -> (Tensor<4>, Tensor<3>) {
+            let (Y, Y_h) = {
+                let mut gru1 = burn::nn::gru::BiGruConfig::new(4, 8, true)
+                    .with_reset_after(false)
+                    .with_batch_first(false)
+                    .with_initializer(burn::module::Initializer::Zeros)
+                    .init(&self.device);
+                let __w = W;
+                let __r = R;
+                let __b = B;
+                {
+                    let __w_dir = __w.clone().select_dim::<2>(0, 0);
+                    let __r_dir = __r.clone().select_dim::<2>(0, 0);
+                    let __b_dir = __b.clone().select_dim::<1>(0, 0);
+                    gru1
+                        .forward
+                        .update_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 0..8).transpose(),
+                    );
+                    gru1
+                        .forward
+                        .update_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 0..8).transpose(),
+                    );
+                    gru1
+                        .forward
+                        .update_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 0..8)),
+                    );
+                    gru1
+                        .forward
+                        .update_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 24..32)),
+                    );
+                    gru1
+                        .forward
+                        .reset_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 8..16).transpose(),
+                    );
+                    gru1
+                        .forward
+                        .reset_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 8..16).transpose(),
+                    );
+                    gru1
+                        .forward
+                        .reset_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 8..16)),
+                    );
+                    gru1
+                        .forward
+                        .reset_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 32..40)),
+                    );
+                    gru1
+                        .forward
+                        .new_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 16..24).transpose(),
+                    );
+                    gru1
+                        .forward
+                        .new_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 16..24).transpose(),
+                    );
+                    gru1
+                        .forward
+                        .new_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 16..24)),
+                    );
+                    gru1
+                        .forward
+                        .new_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 40..48)),
+                    );
+                }
+                {
+                    let __w_dir = __w.clone().select_dim::<2>(0, 1);
+                    let __r_dir = __r.clone().select_dim::<2>(0, 1);
+                    let __b_dir = __b.clone().select_dim::<1>(0, 1);
+                    gru1
+                        .reverse
+                        .update_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 0..8).transpose(),
+                    );
+                    gru1
+                        .reverse
+                        .update_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 0..8).transpose(),
+                    );
+                    gru1
+                        .reverse
+                        .update_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 0..8)),
+                    );
+                    gru1
+                        .reverse
+                        .update_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 24..32)),
+                    );
+                    gru1
+                        .reverse
+                        .reset_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 8..16).transpose(),
+                    );
+                    gru1
+                        .reverse
+                        .reset_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 8..16).transpose(),
+                    );
+                    gru1
+                        .reverse
+                        .reset_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 8..16)),
+                    );
+                    gru1
+                        .reverse
+                        .reset_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 32..40)),
+                    );
+                    gru1
+                        .reverse
+                        .new_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 16..24).transpose(),
+                    );
+                    gru1
+                        .reverse
+                        .new_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 16..24).transpose(),
+                    );
+                    gru1
+                        .reverse
+                        .new_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 16..24)),
+                    );
+                    gru1
+                        .reverse
+                        .new_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 40..48)),
+                    );
+                }
+                let (output_seq, final_state) = gru1.forward(input, None);
+                (
+                    {
+                        let [seq_len, batch_size, _] = output_seq.dims();
+                        let reshaped = output_seq.reshape([seq_len, batch_size, 2, 8usize]);
+                        reshaped.swap_dims(1, 2)
+                    },
+                    final_state,
+                )
+            };
+            (Y, Y_h)
+        }
         ");
     }
 }

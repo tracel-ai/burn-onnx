@@ -6,6 +6,7 @@ pub(crate) mod prelude;
 
 pub(crate) mod broadcast_helpers;
 pub(crate) mod indexing_helpers;
+pub(crate) mod rnn_weights;
 mod subgraph_helper;
 
 // Test helpers for node code generation tests

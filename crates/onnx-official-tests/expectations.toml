@@ -2367,20 +2367,16 @@ status = "pass"
 status = "pass"
 
 [test_gru_batchwise]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_gru_defaults]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_gru_seq_length]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_gru_with_initial_bias]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_hammingwindow]
 status = "pass"
@@ -2986,16 +2982,13 @@ status = "pass"
 status = "pass"
 
 [test_lstm_batchwise]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_lstm_defaults]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_lstm_with_initial_bias]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_lstm_with_peepholes]
 status = "skip-codegen"
@@ -4466,8 +4459,7 @@ reason = "Unsupported ONNX operation(s): RMSNormalization (node 'rmsnormalizatio
 status = "pass"
 
 [test_rnn_seq_length]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_roialign_aligned_false]
 status = "skip-codegen"
@@ -5001,16 +4993,13 @@ status = "pass"
 status = "pass"
 
 [test_simple_rnn_batchwise]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_simple_rnn_defaults]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_simple_rnn_with_initial_bias]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_sin]
 status = "pass"

@@ -15,6 +15,9 @@
 //!   the same length.
 
 use super::prelude::*;
+use super::rnn_weights::{
+    BiasLayout, GateLayout, Module, load_runtime_weights, weights_are_runtime,
+};
 use burn::nn::activation::ActivationConfig;
 use burn_store::TensorSnapshot;
 use onnx_ir::rnn::{RnnActivationFunction, RnnDirection};
@@ -262,6 +265,118 @@ fn activation_to_tokens(activation: &ActivationConfig) -> TokenStream {
     }
 }
 
+/// RNN has a single gate, so ONNX's packing is already Burn's.
+const GATE_LAYOUT: GateLayout = GateLayout {
+    gates: &["gate"],
+    onnx_order: &[0],
+    bias: BiasLayout::Merged,
+};
+
+/// The module's type and the expression that builds it on `device`.
+///
+/// `zeroed` swaps the config's random initializer for `Zeros`: the runtime-weight path
+/// overwrites every parameter right after building, so drawing random values first is
+/// wasted work.
+fn module_parts(
+    node: &onnx_ir::rnn::RnnNode,
+    device: &TokenStream,
+    zeroed: bool,
+) -> (TokenStream, TokenStream) {
+    let d_input = node.config.input_size.to_tokens();
+    let d_hidden = node.config.hidden_size.to_tokens();
+    let bias = node.config.has_bias;
+    let batch_first = node.config.batch_first;
+
+    // Convert activations to tokens
+    let hidden_act = to_burn_activation(node.config.hidden_activation);
+    let hidden_activation = activation_to_tokens(&hidden_act);
+
+    // Generate clip config if present
+    let clip_config = if let Some(clip) = node.config.clip {
+        let clip_val = clip as f64;
+        quote! { .with_clip(Some(#clip_val)) }
+    } else {
+        quote! {}
+    };
+
+    // Only add non-default activations to config
+    let activations_config = {
+        let mut tokens = quote! {};
+        if !matches!(hidden_act, ActivationConfig::Tanh) {
+            tokens = quote! { #tokens .with_hidden_activation(#hidden_activation) };
+        }
+        tokens
+    };
+
+    let initializer =
+        zeroed.then(|| quote! { .with_initializer(burn::module::Initializer::Zeros) });
+
+    match node.config.direction {
+        RnnDirection::Forward => (
+            quote! { Rnn },
+            quote! {
+                RnnConfig::new(#d_input, #d_hidden, #bias)
+                    .with_batch_first(#batch_first)
+                    #clip_config
+                    #activations_config
+                    #initializer
+                    .init(#device)
+            },
+        ),
+        RnnDirection::Reverse => (
+            quote! { Rnn },
+            quote! {
+                RnnConfig::new(#d_input, #d_hidden, #bias)
+                    .with_batch_first(#batch_first)
+                    .with_reverse(true)
+                    #clip_config
+                    #activations_config
+                    #initializer
+                    .init(#device)
+            },
+        ),
+        RnnDirection::Bidirectional => (
+            quote! { BiRnn },
+            quote! {
+                BiRnnConfig::new(#d_input, #d_hidden, #bias)
+                    .with_batch_first(#batch_first)
+                    #clip_config
+                    #activations_config
+                    #initializer
+                    .init(#device)
+            },
+        ),
+    }
+}
+
+/// The module the forward pass runs through, plus any statements that build it.
+fn module(node: &onnx_ir::rnn::RnnNode, scope: &mut ScopeAtPosition<'_>) -> Module {
+    let name = Ident::new(&node.name, Span::call_site());
+    if !weights_are_runtime(&node.inputs) {
+        return Module {
+            setup: quote! {},
+            expr: quote! { self.#name },
+        };
+    }
+
+    let (_, init) = module_parts(node, &quote! { &self.device }, true);
+    let load = load_runtime_weights(
+        &quote! { #name },
+        scope,
+        &node.inputs,
+        &GATE_LAYOUT,
+        node.config.hidden_size,
+        node.config.direction.num_directions(),
+    );
+    Module {
+        setup: quote! {
+            let mut #name = #init;
+            #load
+        },
+        expr: quote! { #name },
+    }
+}
+
 impl NodeCodegen for onnx_ir::rnn::RnnNode {
     fn inputs(&self) -> &[Argument] {
         &self.inputs
@@ -272,69 +387,19 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
     }
 
     fn field(&self) -> Option<Field> {
-        let name = Ident::new(&self.name, Span::call_site());
-        let d_input = self.config.input_size.to_tokens();
-        let d_hidden = self.config.hidden_size.to_tokens();
-        let bias = self.config.has_bias;
-        let batch_first = self.config.batch_first;
-
-        // Convert activations to tokens
-        let hidden_act = to_burn_activation(self.config.hidden_activation);
-        let hidden_activation = activation_to_tokens(&hidden_act);
-
-        // Generate clip config if present
-        let clip_config = if let Some(clip) = self.config.clip {
-            let clip_val = clip as f64;
-            quote! { .with_clip(Some(#clip_val)) }
-        } else {
-            quote! {}
-        };
-
-        // Only add non-default activations to config
-        let activations_config = {
-            let mut tokens = quote! {};
-            if !matches!(hidden_act, ActivationConfig::Tanh) {
-                tokens = quote! { #tokens .with_hidden_activation(#hidden_activation) };
-            }
-            tokens
-        };
-
-        match self.config.direction {
-            RnnDirection::Forward => Some(Field::new(
-                self.name.clone(),
-                quote! { Rnn },
-                quote! {
-                    let #name = RnnConfig::new(#d_input, #d_hidden, #bias)
-                        .with_batch_first(#batch_first)
-                        #clip_config
-                        #activations_config
-                        .init(device);
-                },
-            )),
-            RnnDirection::Reverse => Some(Field::new(
-                self.name.clone(),
-                quote! { Rnn },
-                quote! {
-                    let #name = RnnConfig::new(#d_input, #d_hidden, #bias)
-                        .with_batch_first(#batch_first)
-                        .with_reverse(true)
-                        #clip_config
-                        #activations_config
-                        .init(device);
-                },
-            )),
-            RnnDirection::Bidirectional => Some(Field::new(
-                self.name.clone(),
-                quote! { BiRnn },
-                quote! {
-                    let #name = BiRnnConfig::new(#d_input, #d_hidden, #bias)
-                        .with_batch_first(#batch_first)
-                        #clip_config
-                        #activations_config
-                        .init(device);
-                },
-            )),
+        // Runtime weights are loaded into a module built inside forward(); declaring
+        // a field here would put `Param`s in the struct that no snapshot ever fills.
+        if weights_are_runtime(&self.inputs) {
+            return None;
         }
+
+        let name = Ident::new(&self.name, Span::call_site());
+        let (ty, init) = module_parts(self, &quote! { device }, false);
+        Some(Field::new(
+            self.name.clone(),
+            ty,
+            quote! { let #name = #init; },
+        ))
     }
 
     fn collect_snapshots(&self, field_name: &str) -> Vec<TensorSnapshot> {
@@ -343,7 +408,7 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
         let input = scope.arg(self.inputs.first().unwrap());
-        let field = Ident::new(&self.name, Span::call_site());
+        let Module { setup, expr } = module(self, scope);
 
         // Get output variable names
         let output_y = self.outputs.first().map(arg_to_ident);
@@ -376,7 +441,8 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
         // The Rnn module now handles batch_first and reverse internally via config,
         // so no input/output transformation is needed here
         let forward_call = quote! {
-            let (output_seq, final_state) = self.#field.forward(#input, #initial_state_expr);
+            #setup
+            let (output_seq, final_state) = #expr.forward(#input, #initial_state_expr);
         };
 
         // Transform outputs to ONNX format
@@ -398,10 +464,17 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
         let is_bidirectional = matches!(self.config.direction, RnnDirection::Bidirectional);
         let hidden_size = self.config.hidden_size;
 
-        let hidden_expr = if is_bidirectional {
-            quote! { final_state.hidden }
-        } else {
-            quote! { final_state.hidden.unsqueeze_dims::<3>(&[0]) }
+        // ONNX Y_h is [num_directions, batch, hidden] under layout=0 and
+        // [batch, num_directions, hidden] under layout=1, so the direction axis moves.
+        let batch_first = self.config.batch_first;
+        let hidden_expr = match (is_bidirectional, batch_first) {
+            // Burn already produces [num_directions, batch, hidden] here.
+            (true, false) => quote! { final_state.hidden },
+            (true, true) => quote! { final_state.hidden.swap_dims(0, 1) },
+            (false, _) => {
+                let axis = if batch_first { 1usize } else { 0 }.to_tokens();
+                quote! { final_state.hidden.unsqueeze_dims::<3>(&[#axis]) }
+            }
         };
 
         // Y output transformation
@@ -410,7 +483,6 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
         //   ONNX layout=0 (batch_first=false): Y is [seq, num_dirs, batch, hidden]
         //   ONNX layout=1 (batch_first=true):  Y is [batch, seq, num_dirs, hidden]
         let y_output_expr = if is_bidirectional {
-            let batch_first = self.config.batch_first;
             if batch_first {
                 // Burn output: [batch, seq, 2*hidden]
                 // Reshape to: [batch, seq, 2, hidden] - already matches ONNX layout=1
@@ -433,7 +505,10 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
                 }
             }
         } else {
-            quote! { output_seq.unsqueeze_dims::<4>(&[1]) }
+            // layout=0 wants [seq, num_directions, batch, hidden], layout=1 wants
+            // [batch, seq, num_directions, hidden].
+            let axis = if batch_first { 2usize } else { 1 }.to_tokens();
+            quote! { output_seq.unsqueeze_dims::<4>(&[#axis]) }
         };
 
         // Build output assignments based on which outputs are used
@@ -487,16 +562,30 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
             imports.register("burn::nn::ActivationConfig");
         }
 
+        // The module type is only named by the struct field. On the runtime-weight
+        // path there is no field, and importing it would warn in generated code.
+        let needs_module_type = !weights_are_runtime(&self.inputs);
+        // RnnState is only named when an initial state is passed in.
+        let needs_state = self.config.has_initial_h;
+
         match self.config.direction {
             RnnDirection::Forward | RnnDirection::Reverse => {
-                imports.register("burn::nn::Rnn");
+                if needs_module_type {
+                    imports.register("burn::nn::Rnn");
+                }
                 imports.register("burn::nn::RnnConfig");
-                imports.register("burn::nn::RnnState");
+                if needs_state {
+                    imports.register("burn::nn::RnnState");
+                }
             }
             RnnDirection::Bidirectional => {
-                imports.register("burn::nn::BiRnn");
+                if needs_module_type {
+                    imports.register("burn::nn::BiRnn");
+                }
                 imports.register("burn::nn::BiRnnConfig");
-                imports.register("burn::nn::RnnState");
+                if needs_state {
+                    imports.register("burn::nn::RnnState");
+                }
             }
         }
     }
@@ -505,6 +594,7 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::*;
+    use crate::burn::node::NodeCodegen;
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::ir::{ArgType, Argument, TensorType};
@@ -531,9 +621,18 @@ mod tests {
             "input",
             ArgType::Tensor(TensorType::new(DType::F32, 3, None)),
         );
-        let w = Argument::new("W", ArgType::Tensor(TensorType::new(DType::F32, 3, None)));
-        let r = Argument::new("R", ArgType::Tensor(TensorType::new(DType::F32, 3, None)));
-        let b = Argument::new("B", ArgType::Tensor(TensorType::new(DType::F32, 2, None)));
+        let w = as_lifted_initializer(Argument::new(
+            "W",
+            ArgType::Tensor(TensorType::new(DType::F32, 3, None)),
+        ));
+        let r = as_lifted_initializer(Argument::new(
+            "R",
+            ArgType::Tensor(TensorType::new(DType::F32, 3, None)),
+        ));
+        let b = as_lifted_initializer(Argument::new(
+            "B",
+            ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+        ));
 
         let mut outputs = vec![];
         if num_outputs > 0 {
@@ -566,13 +665,7 @@ mod tests {
         let node = create_rnn_node("Rnn1", RnnDirection::Forward, false, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> (Tensor<4>, Tensor<3>) {
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let (output_seq, final_state) = self.Rnn1.forward(input, None);
                 (
@@ -590,13 +683,7 @@ mod tests {
         let node = create_rnn_node("Rnn1", RnnDirection::Bidirectional, false, 2);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> (Tensor<4>, Tensor<3>) {
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
                 let (output_seq, final_state) = self.Rnn1.forward(input, None);
                 (
@@ -619,6 +706,36 @@ mod tests {
         let code = codegen_forward_default(&node);
         // Note: reverse is now handled by the Rnn module's config, not by flip() in codegen
         assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>) {
+            let (Y, Y_h) = {
+                let (output_seq, final_state) = self.Rnn1.forward(input, None);
+                (
+                    output_seq.unsqueeze_dims::<4>(&[1]),
+                    final_state.hidden.unsqueeze_dims::<3>(&[0]),
+                )
+            };
+            (Y, Y_h)
+        }
+        ");
+    }
+
+    #[test]
+    fn test_rnn_field_runtime_weights() {
+        let mut node = create_rnn_node("rnn1", RnnDirection::Forward, false, 2);
+        weights_as_graph_inputs(&mut node.inputs);
+        assert!(
+            NodeCodegen::field(&node).is_none(),
+            "runtime weights must not declare a struct field, or `from_file` fails on \
+             tensors no snapshot can supply"
+        );
+    }
+
+    #[test]
+    fn test_rnn_forward_runtime_weights() {
+        let mut node = create_rnn_node("rnn1", RnnDirection::Forward, false, 2);
+        weights_as_graph_inputs(&mut node.inputs);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
         pub fn forward(
             &self,
             input: Tensor<3>,
@@ -627,7 +744,48 @@ mod tests {
             B: Tensor<2>,
         ) -> (Tensor<4>, Tensor<3>) {
             let (Y, Y_h) = {
-                let (output_seq, final_state) = self.Rnn1.forward(input, None);
+                let mut rnn1 = RnnConfig::new(4, 8, true)
+                    .with_batch_first(false)
+                    .with_initializer(burn::module::Initializer::Zeros)
+                    .init(&self.device);
+                let __w = W;
+                let __r = R;
+                let __b = B;
+                {
+                    let __w_dir = __w.clone().select_dim::<2>(0, 0);
+                    let __r_dir = __r.clone().select_dim::<2>(0, 0);
+                    let __b_dir = __b.clone().select_dim::<1>(0, 0);
+                    rnn1
+                        .gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 0..8).transpose(),
+                    );
+                    rnn1
+                        .gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 0..8).transpose(),
+                    );
+                    rnn1
+                        .gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(
+                            __b_dir.clone().slice_dim(0, 0..8)
+                                + __b_dir.clone().slice_dim(0, 8..16),
+                        ),
+                    );
+                    rnn1
+                        .gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(
+                            __b_dir.clone().slice_dim(0, 0..8).zeros_like(),
+                        ),
+                    );
+                }
+                let (output_seq, final_state) = rnn1.forward(input, None);
                 (
                     output_seq.unsqueeze_dims::<4>(&[1]),
                     final_state.hidden.unsqueeze_dims::<3>(&[0]),

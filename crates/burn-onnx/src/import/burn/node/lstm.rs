@@ -19,6 +19,9 @@
 //!   the same length.
 
 use super::prelude::*;
+use super::rnn_weights::{
+    BiasLayout, GateLayout, Module, load_runtime_weights, weights_are_runtime,
+};
 use burn::nn::activation::ActivationConfig;
 use burn_store::TensorSnapshot;
 use onnx_ir::lstm::{LstmActivationFunction, LstmDirection};
@@ -274,6 +277,133 @@ fn activation_to_tokens(activation: &ActivationConfig) -> TokenStream {
     }
 }
 
+/// ONNX LSTM packs its gates as [i, o, f, c]; Burn declares them [i, f, o, c].
+const GATE_LAYOUT: GateLayout = GateLayout {
+    gates: &["input_gate", "forget_gate", "output_gate", "cell_gate"],
+    onnx_order: &[0, 2, 1, 3],
+    bias: BiasLayout::Merged,
+};
+
+/// The module's type and the expression that builds it on `device`.
+///
+/// `zeroed` swaps the config's random initializer for `Zeros`: the runtime-weight path
+/// overwrites every parameter right after building, so drawing random values first is
+/// wasted work.
+fn module_parts(
+    node: &onnx_ir::lstm::LstmNode,
+    device: &TokenStream,
+    zeroed: bool,
+) -> (TokenStream, TokenStream) {
+    let d_input = node.config.input_size.to_tokens();
+    let d_hidden = node.config.hidden_size.to_tokens();
+    let bias = node.config.has_bias;
+    let batch_first = node.config.batch_first;
+    let input_forget = node.config.input_forget;
+
+    // Convert activations to tokens
+    let gate_act = to_burn_activation(node.config.gate_activation);
+    let cell_act = to_burn_activation(node.config.cell_activation);
+    let hidden_act = to_burn_activation(node.config.hidden_activation);
+
+    let gate_activation = activation_to_tokens(&gate_act);
+    let cell_activation = activation_to_tokens(&cell_act);
+    let hidden_activation = activation_to_tokens(&hidden_act);
+
+    // Generate clip config if present
+    let clip_config = if let Some(clip) = node.config.clip {
+        let clip_val = clip as f64;
+        quote! { .with_clip(Some(#clip_val)) }
+    } else {
+        quote! {}
+    };
+
+    // Only add non-default activations to config
+    let activations_config = {
+        let mut tokens = quote! {};
+        if !matches!(gate_act, ActivationConfig::Sigmoid) {
+            tokens = quote! { #tokens .with_gate_activation(#gate_activation) };
+        }
+        if !matches!(cell_act, ActivationConfig::Tanh) {
+            tokens = quote! { #tokens .with_cell_activation(#cell_activation) };
+        }
+        if !matches!(hidden_act, ActivationConfig::Tanh) {
+            tokens = quote! { #tokens .with_hidden_activation(#hidden_activation) };
+        }
+        tokens
+    };
+
+    let initializer =
+        zeroed.then(|| quote! { .with_initializer(burn::module::Initializer::Zeros) });
+
+    match node.config.direction {
+        LstmDirection::Forward => (
+            quote! { Lstm },
+            quote! {
+                LstmConfig::new(#d_input, #d_hidden, #bias)
+                    .with_batch_first(#batch_first)
+                    .with_input_forget(#input_forget)
+                    #clip_config
+                    #activations_config
+                    #initializer
+                    .init(#device)
+            },
+        ),
+        LstmDirection::Reverse => (
+            quote! { Lstm },
+            quote! {
+                LstmConfig::new(#d_input, #d_hidden, #bias)
+                    .with_batch_first(#batch_first)
+                    .with_reverse(true)
+                    .with_input_forget(#input_forget)
+                    #clip_config
+                    #activations_config
+                    #initializer
+                    .init(#device)
+            },
+        ),
+        LstmDirection::Bidirectional => (
+            quote! { BiLstm },
+            quote! {
+                BiLstmConfig::new(#d_input, #d_hidden, #bias)
+                    .with_batch_first(#batch_first)
+                    .with_input_forget(#input_forget)
+                    #clip_config
+                    #activations_config
+                    #initializer
+                    .init(#device)
+            },
+        ),
+    }
+}
+
+/// The module the forward pass runs through, plus any statements that build it.
+fn module(node: &onnx_ir::lstm::LstmNode, scope: &mut ScopeAtPosition<'_>) -> Module {
+    let name = Ident::new(&node.name, Span::call_site());
+    if !weights_are_runtime(&node.inputs) {
+        return Module {
+            setup: quote! {},
+            expr: quote! { self.#name },
+        };
+    }
+
+    let (_, init) = module_parts(node, &quote! { &self.device }, true);
+    let load = load_runtime_weights(
+        &quote! { #name },
+        scope,
+        &node.inputs,
+        &GATE_LAYOUT,
+        node.config.hidden_size,
+        node.config.direction.num_directions(),
+    );
+    Module {
+        setup: quote! {
+            let mut #name = #init;
+            #load
+        },
+        expr: quote! { #name },
+    }
+}
+
 impl NodeCodegen for onnx_ir::lstm::LstmNode {
     fn inputs(&self) -> &[Argument] {
         &self.inputs
@@ -284,84 +414,19 @@ impl NodeCodegen for onnx_ir::lstm::LstmNode {
     }
 
     fn field(&self) -> Option<Field> {
-        let name = Ident::new(&self.name, Span::call_site());
-        let d_input = self.config.input_size.to_tokens();
-        let d_hidden = self.config.hidden_size.to_tokens();
-        let bias = self.config.has_bias;
-        let batch_first = self.config.batch_first;
-        let input_forget = self.config.input_forget;
-
-        // Convert activations to tokens
-        let gate_act = to_burn_activation(self.config.gate_activation);
-        let cell_act = to_burn_activation(self.config.cell_activation);
-        let hidden_act = to_burn_activation(self.config.hidden_activation);
-
-        let gate_activation = activation_to_tokens(&gate_act);
-        let cell_activation = activation_to_tokens(&cell_act);
-        let hidden_activation = activation_to_tokens(&hidden_act);
-
-        // Generate clip config if present
-        let clip_config = if let Some(clip) = self.config.clip {
-            let clip_val = clip as f64;
-            quote! { .with_clip(Some(#clip_val)) }
-        } else {
-            quote! {}
-        };
-
-        // Only add non-default activations to config
-        let activations_config = {
-            let mut tokens = quote! {};
-            if !matches!(gate_act, ActivationConfig::Sigmoid) {
-                tokens = quote! { #tokens .with_gate_activation(#gate_activation) };
-            }
-            if !matches!(cell_act, ActivationConfig::Tanh) {
-                tokens = quote! { #tokens .with_cell_activation(#cell_activation) };
-            }
-            if !matches!(hidden_act, ActivationConfig::Tanh) {
-                tokens = quote! { #tokens .with_hidden_activation(#hidden_activation) };
-            }
-            tokens
-        };
-
-        match self.config.direction {
-            LstmDirection::Forward => Some(Field::new(
-                self.name.clone(),
-                quote! { Lstm },
-                quote! {
-                    let #name = LstmConfig::new(#d_input, #d_hidden, #bias)
-                        .with_batch_first(#batch_first)
-                        .with_input_forget(#input_forget)
-                        #clip_config
-                        #activations_config
-                        .init(device);
-                },
-            )),
-            LstmDirection::Reverse => Some(Field::new(
-                self.name.clone(),
-                quote! { Lstm },
-                quote! {
-                    let #name = LstmConfig::new(#d_input, #d_hidden, #bias)
-                        .with_batch_first(#batch_first)
-                        .with_reverse(true)
-                        .with_input_forget(#input_forget)
-                        #clip_config
-                        #activations_config
-                        .init(device);
-                },
-            )),
-            LstmDirection::Bidirectional => Some(Field::new(
-                self.name.clone(),
-                quote! { BiLstm },
-                quote! {
-                    let #name = BiLstmConfig::new(#d_input, #d_hidden, #bias)
-                        .with_batch_first(#batch_first)
-                        .with_input_forget(#input_forget)
-                        #clip_config
-                        #activations_config
-                        .init(device);
-                },
-            )),
+        // Runtime weights are loaded into a module built inside forward(); declaring
+        // a field here would put `Param`s in the struct that no snapshot ever fills.
+        if weights_are_runtime(&self.inputs) {
+            return None;
         }
+
+        let name = Ident::new(&self.name, Span::call_site());
+        let (ty, init) = module_parts(self, &quote! { device }, false);
+        Some(Field::new(
+            self.name.clone(),
+            ty,
+            quote! { let #name = #init; },
+        ))
     }
 
     fn collect_snapshots(&self, field_name: &str) -> Vec<TensorSnapshot> {
@@ -370,7 +435,7 @@ impl NodeCodegen for onnx_ir::lstm::LstmNode {
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
         let input = scope.arg(self.inputs.first().unwrap());
-        let field = Ident::new(&self.name, Span::call_site());
+        let Module { setup, expr } = module(self, scope);
 
         // Get output variable names
         let output_y = self.outputs.first().map(arg_to_ident);
@@ -411,7 +476,8 @@ impl NodeCodegen for onnx_ir::lstm::LstmNode {
         // The LSTM module now handles batch_first and reverse internally via config,
         // so no input/output transformation is needed here
         let forward_call = quote! {
-            let (output_seq, final_state) = self.#field.forward(#input, #initial_state_expr);
+            #setup
+            let (output_seq, final_state) = #expr.forward(#input, #initial_state_expr);
         };
 
         // Transform outputs to ONNX format
@@ -434,13 +500,23 @@ impl NodeCodegen for onnx_ir::lstm::LstmNode {
         let is_bidirectional = matches!(self.config.direction, LstmDirection::Bidirectional);
         let hidden_size = self.config.hidden_size;
 
-        let (hidden_expr, cell_expr) = if is_bidirectional {
-            (quote! { final_state.hidden }, quote! { final_state.cell })
-        } else {
-            (
-                quote! { final_state.hidden.unsqueeze_dims::<3>(&[0]) },
-                quote! { final_state.cell.unsqueeze_dims::<3>(&[0]) },
-            )
+        // ONNX Y_h/Y_c are [num_directions, batch, hidden] under layout=0 and
+        // [batch, num_directions, hidden] under layout=1, so the direction axis moves.
+        let batch_first = self.config.batch_first;
+        let (hidden_expr, cell_expr) = match (is_bidirectional, batch_first) {
+            // Burn already produces [num_directions, batch, hidden] here.
+            (true, false) => (quote! { final_state.hidden }, quote! { final_state.cell }),
+            (true, true) => (
+                quote! { final_state.hidden.swap_dims(0, 1) },
+                quote! { final_state.cell.swap_dims(0, 1) },
+            ),
+            (false, _) => {
+                let axis = if batch_first { 1usize } else { 0 }.to_tokens();
+                (
+                    quote! { final_state.hidden.unsqueeze_dims::<3>(&[#axis]) },
+                    quote! { final_state.cell.unsqueeze_dims::<3>(&[#axis]) },
+                )
+            }
         };
 
         // Y output transformation
@@ -449,7 +525,6 @@ impl NodeCodegen for onnx_ir::lstm::LstmNode {
         //   ONNX layout=0 (batch_first=false): Y is [seq, num_dirs, batch, hidden]
         //   ONNX layout=1 (batch_first=true):  Y is [batch, seq, num_dirs, hidden]
         let y_output_expr = if is_bidirectional {
-            let batch_first = self.config.batch_first;
             if batch_first {
                 // Burn output: [batch, seq, 2*hidden]
                 // Reshape to: [batch, seq, 2, hidden] - already matches ONNX layout=1
@@ -472,7 +547,10 @@ impl NodeCodegen for onnx_ir::lstm::LstmNode {
                 }
             }
         } else {
-            quote! { output_seq.unsqueeze_dims::<4>(&[1]) }
+            // layout=0 wants [seq, num_directions, batch, hidden], layout=1 wants
+            // [batch, seq, num_directions, hidden].
+            let axis = if batch_first { 2usize } else { 1 }.to_tokens();
+            quote! { output_seq.unsqueeze_dims::<4>(&[#axis]) }
         };
 
         // Build output assignments based on which outputs are used
@@ -545,16 +623,30 @@ impl NodeCodegen for onnx_ir::lstm::LstmNode {
             imports.register("burn::nn::ActivationConfig");
         }
 
+        // The module type is only named by the struct field. On the runtime-weight
+        // path there is no field, and importing it would warn in generated code.
+        let needs_module_type = !weights_are_runtime(&self.inputs);
+        // LstmState is only named when an initial state is passed in.
+        let needs_state = self.config.has_initial_h && self.config.has_initial_c;
+
         match self.config.direction {
             LstmDirection::Forward | LstmDirection::Reverse => {
-                imports.register("burn::nn::Lstm");
+                if needs_module_type {
+                    imports.register("burn::nn::Lstm");
+                }
                 imports.register("burn::nn::LstmConfig");
-                imports.register("burn::nn::LstmState");
+                if needs_state {
+                    imports.register("burn::nn::LstmState");
+                }
             }
             LstmDirection::Bidirectional => {
-                imports.register("burn::nn::BiLstm");
+                if needs_module_type {
+                    imports.register("burn::nn::BiLstm");
+                }
                 imports.register("burn::nn::BiLstmConfig");
-                imports.register("burn::nn::LstmState");
+                if needs_state {
+                    imports.register("burn::nn::LstmState");
+                }
             }
         }
     }
@@ -563,6 +655,7 @@ impl NodeCodegen for onnx_ir::lstm::LstmNode {
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::*;
+    use crate::burn::node::NodeCodegen;
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::ir::{ArgType, Argument, TensorType};
@@ -594,9 +687,18 @@ mod tests {
             "input",
             ArgType::Tensor(TensorType::new(DType::F32, 3, None)),
         );
-        let w = Argument::new("W", ArgType::Tensor(TensorType::new(DType::F32, 3, None)));
-        let r = Argument::new("R", ArgType::Tensor(TensorType::new(DType::F32, 3, None)));
-        let b = Argument::new("B", ArgType::Tensor(TensorType::new(DType::F32, 2, None)));
+        let w = as_lifted_initializer(Argument::new(
+            "W",
+            ArgType::Tensor(TensorType::new(DType::F32, 3, None)),
+        ));
+        let r = as_lifted_initializer(Argument::new(
+            "R",
+            ArgType::Tensor(TensorType::new(DType::F32, 3, None)),
+        ));
+        let b = as_lifted_initializer(Argument::new(
+            "B",
+            ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+        ));
 
         let mut outputs = vec![];
         if num_outputs > 0 {
@@ -631,13 +733,7 @@ mod tests {
         let node = create_lstm_node("lstm1", LstmDirection::Forward, false, 3);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> (Tensor<4>, Tensor<3>, Tensor<3>) {
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>, Tensor<3>) {
             let (Y, Y_h, Y_c) = {
                 let (output_seq, final_state) = self.lstm1.forward(input, None);
                 (
@@ -656,13 +752,7 @@ mod tests {
         let node = create_lstm_node("lstm1", LstmDirection::Bidirectional, false, 3);
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
-        pub fn forward(
-            &self,
-            input: Tensor<3>,
-            W: Tensor<3>,
-            R: Tensor<3>,
-            B: Tensor<2>,
-        ) -> (Tensor<4>, Tensor<3>, Tensor<3>) {
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>, Tensor<3>) {
             let (Y, Y_h, Y_c) = {
                 let (output_seq, final_state) = self.lstm1.forward(input, None);
                 (
@@ -686,6 +776,37 @@ mod tests {
         let code = codegen_forward_default(&node);
         // Note: reverse is now handled by the LSTM module's config, not by flip() in codegen
         assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>, Tensor<3>) {
+            let (Y, Y_h, Y_c) = {
+                let (output_seq, final_state) = self.lstm1.forward(input, None);
+                (
+                    output_seq.unsqueeze_dims::<4>(&[1]),
+                    final_state.hidden.unsqueeze_dims::<3>(&[0]),
+                    final_state.cell.unsqueeze_dims::<3>(&[0]),
+                )
+            };
+            (Y, Y_h, Y_c)
+        }
+        ");
+    }
+
+    #[test]
+    fn test_lstm_field_runtime_weights() {
+        let mut node = create_lstm_node("lstm1", LstmDirection::Forward, false, 3);
+        weights_as_graph_inputs(&mut node.inputs);
+        assert!(
+            NodeCodegen::field(&node).is_none(),
+            "runtime weights must not declare a struct field, or `from_file` fails on \
+             tensors no snapshot can supply"
+        );
+    }
+
+    #[test]
+    fn test_lstm_forward_runtime_weights() {
+        let mut node = create_lstm_node("lstm1", LstmDirection::Forward, false, 3);
+        weights_as_graph_inputs(&mut node.inputs);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
         pub fn forward(
             &self,
             input: Tensor<3>,
@@ -694,7 +815,136 @@ mod tests {
             B: Tensor<2>,
         ) -> (Tensor<4>, Tensor<3>, Tensor<3>) {
             let (Y, Y_h, Y_c) = {
-                let (output_seq, final_state) = self.lstm1.forward(input, None);
+                let mut lstm1 = LstmConfig::new(4, 8, true)
+                    .with_batch_first(false)
+                    .with_input_forget(false)
+                    .with_initializer(burn::module::Initializer::Zeros)
+                    .init(&self.device);
+                let __w = W;
+                let __r = R;
+                let __b = B;
+                {
+                    let __w_dir = __w.clone().select_dim::<2>(0, 0);
+                    let __r_dir = __r.clone().select_dim::<2>(0, 0);
+                    let __b_dir = __b.clone().select_dim::<1>(0, 0);
+                    lstm1
+                        .input_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 0..8).transpose(),
+                    );
+                    lstm1
+                        .input_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 0..8).transpose(),
+                    );
+                    lstm1
+                        .input_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(
+                            __b_dir.clone().slice_dim(0, 0..8)
+                                + __b_dir.clone().slice_dim(0, 32..40),
+                        ),
+                    );
+                    lstm1
+                        .input_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(
+                            __b_dir.clone().slice_dim(0, 0..8).zeros_like(),
+                        ),
+                    );
+                    lstm1
+                        .forget_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 16..24).transpose(),
+                    );
+                    lstm1
+                        .forget_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 16..24).transpose(),
+                    );
+                    lstm1
+                        .forget_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(
+                            __b_dir.clone().slice_dim(0, 16..24)
+                                + __b_dir.clone().slice_dim(0, 48..56),
+                        ),
+                    );
+                    lstm1
+                        .forget_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(
+                            __b_dir.clone().slice_dim(0, 16..24).zeros_like(),
+                        ),
+                    );
+                    lstm1
+                        .output_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 8..16).transpose(),
+                    );
+                    lstm1
+                        .output_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 8..16).transpose(),
+                    );
+                    lstm1
+                        .output_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(
+                            __b_dir.clone().slice_dim(0, 8..16)
+                                + __b_dir.clone().slice_dim(0, 40..48),
+                        ),
+                    );
+                    lstm1
+                        .output_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(
+                            __b_dir.clone().slice_dim(0, 8..16).zeros_like(),
+                        ),
+                    );
+                    lstm1
+                        .cell_gate
+                        .input_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __w_dir.clone().slice_dim(0, 24..32).transpose(),
+                    );
+                    lstm1
+                        .cell_gate
+                        .hidden_transform
+                        .weight = burn::module::Param::from_tensor(
+                        __r_dir.clone().slice_dim(0, 24..32).transpose(),
+                    );
+                    lstm1
+                        .cell_gate
+                        .input_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(
+                            __b_dir.clone().slice_dim(0, 24..32)
+                                + __b_dir.clone().slice_dim(0, 56..64),
+                        ),
+                    );
+                    lstm1
+                        .cell_gate
+                        .hidden_transform
+                        .bias = Some(
+                        burn::module::Param::from_tensor(
+                            __b_dir.clone().slice_dim(0, 24..32).zeros_like(),
+                        ),
+                    );
+                }
+                let (output_seq, final_state) = lstm1.forward(input, None);
                 (
                     output_seq.unsqueeze_dims::<4>(&[1]),
                     final_state.hidden.unsqueeze_dims::<3>(&[0]),

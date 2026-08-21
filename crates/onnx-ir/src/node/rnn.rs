@@ -114,6 +114,17 @@ pub struct RnnNode {
     pub config: RnnConfig,
 }
 
+/// Whether every gate weight this node carries (`W`, `R`, and `B` when present) is a
+/// constant, which is what makes lifting them safe.
+fn weights_all_constant(node: &RawNode) -> bool {
+    [1usize, 2, 3]
+        .iter()
+        .all(|&index| match node.inputs.get(index) {
+            Some(arg) => arg.is_optional() || arg.is_constant(),
+            None => true,
+        })
+}
+
 pub(crate) struct RnnProcessor;
 
 impl NodeProcessor for RnnProcessor {
@@ -133,16 +144,17 @@ impl NodeProcessor for RnnProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // W (weights) and R (recurrence weights) are typically constants
-        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
-            node.inputs[1].to_static()?;
+        // W, R and the optional B are lifted together or not at all. The codegen that
+        // splits them across Burn's per-gate `Linear` modules runs either entirely at
+        // build time (all static) or entirely at run time (all referenced by name);
+        // lifting only some would leave the runtime path with an input it cannot name.
+        if !weights_all_constant(node) {
+            return Ok(());
         }
-        if node.inputs.len() > 2 && node.inputs[2].is_constant() {
-            node.inputs[2].to_static()?;
-        }
-        // B (bias) is optional but typically constant
-        if node.inputs.len() > 3 && node.inputs[3].is_constant() {
-            node.inputs[3].to_static()?;
+        for index in [1usize, 2, 3] {
+            if node.inputs.get(index).is_some_and(|arg| arg.is_constant()) {
+                node.inputs[index].to_static()?;
+            }
         }
         Ok(())
     }

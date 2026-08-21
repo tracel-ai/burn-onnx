@@ -3,13 +3,14 @@ include_models!(
     lstm,
     lstm_bidirectional,
     lstm_reverse,
-    lstm_with_initial_state
+    lstm_with_initial_state,
+    lstm_runtime_weights
 );
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Device, Shape, Tensor};
+    use burn::tensor::{Device, Shape, Tensor, TensorData};
     use float_cmp::ApproxEq;
 
     #[test]
@@ -344,6 +345,57 @@ mod tests {
             "c_n sum mismatch: expected {}, got {}",
             expected_c_n_sum,
             c_n_sum
+        );
+    }
+
+    /// The deterministic values `*_runtime_weights.py` feeds the ONNX reference
+    /// evaluator: `arange(n) * scale + offset`, reshaped.
+    fn ramp<const D: usize>(shape: [usize; D], scale: f32, offset: f32) -> Tensor<D> {
+        let count: usize = shape.iter().product();
+        let values: alloc::vec::Vec<f32> = (0..count).map(|i| i as f32 * scale + offset).collect();
+        Tensor::from_data(TensorData::new(values, shape), &Default::default())
+    }
+
+    /// LSTM whose `W`/`R`/`B` are graph inputs rather than initializers. Constructed
+    /// through `from_file` so the burnpack path is exercised: before #458 the
+    /// generated struct declared gate `Param`s that no snapshot filled, and loading
+    /// panicked on the missing tensors.
+    #[test]
+    fn lstm_runtime_weights() {
+        let device = Default::default();
+        let model = lstm_runtime_weights::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/lstm_runtime_weights.bpk"),
+            &device,
+        );
+
+        let input = ramp([2, 1, 2], 0.25, -0.5);
+        let w = ramp([1, 12, 2], 0.02, -0.4);
+        let r = ramp([1, 12, 3], 0.015, -0.3);
+        let b = ramp([1, 24], 0.01, -0.1);
+
+        let (y, y_h) = model.forward(input, w, r, b);
+
+        assert_eq!(y.shape(), Shape::from([2, 1, 1, 3]));
+        assert_eq!(y_h.shape(), Shape::from([1, 1, 3]));
+
+        // Expected from ONNX ReferenceEvaluator
+        let expected_y_sum = 0.242_962_4;
+        let expected_y_h_sum = 0.140_150_2;
+
+        let y_sum = y.sum().into_scalar::<f32>();
+        let y_h_sum = y_h.sum().into_scalar::<f32>();
+
+        assert!(
+            expected_y_sum.approx_eq(y_sum, (1.0e-5, 2)),
+            "Y sum mismatch: expected {}, got {}",
+            expected_y_sum,
+            y_sum
+        );
+        assert!(
+            expected_y_h_sum.approx_eq(y_h_sum, (1.0e-5, 2)),
+            "Y_h sum mismatch: expected {}, got {}",
+            expected_y_h_sum,
+            y_h_sum
         );
     }
 }

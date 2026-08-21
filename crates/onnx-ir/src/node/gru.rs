@@ -157,6 +157,17 @@ pub struct GruNode {
     pub config: GruConfig,
 }
 
+/// Whether every gate weight this node carries (`W`, `R`, and `B` when present) is a
+/// constant, which is what makes lifting them safe.
+fn weights_all_constant(node: &RawNode) -> bool {
+    [1usize, 2, 3]
+        .iter()
+        .all(|&index| match node.inputs.get(index) {
+            Some(arg) => arg.is_optional() || arg.is_constant(),
+            None => true,
+        })
+}
+
 pub(crate) struct GruProcessor;
 
 impl NodeProcessor for GruProcessor {
@@ -174,16 +185,17 @@ impl NodeProcessor for GruProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // W (weights) and R (recurrence weights) are typically constants
-        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
-            node.inputs[1].to_static()?;
+        // W, R and the optional B are lifted together or not at all. The codegen that
+        // splits them across Burn's per-gate `Linear` modules runs either entirely at
+        // build time (all static) or entirely at run time (all referenced by name);
+        // lifting only some would leave the runtime path with an input it cannot name.
+        if !weights_all_constant(node) {
+            return Ok(());
         }
-        if node.inputs.len() > 2 && node.inputs[2].is_constant() {
-            node.inputs[2].to_static()?;
-        }
-        // B (bias) is optional but typically constant
-        if node.inputs.len() > 3 && node.inputs[3].is_constant() {
-            node.inputs[3].to_static()?;
+        for index in [1usize, 2, 3] {
+            if node.inputs.get(index).is_some_and(|arg| arg.is_constant()) {
+                node.inputs[index].to_static()?;
+            }
         }
         Ok(())
     }
@@ -600,5 +612,37 @@ mod tests {
 
         assert_eq!(spec.min_opset, 1);
         assert!(spec.max_opset.is_none());
+    }
+
+    #[test]
+    fn lift_constants_is_all_or_nothing() {
+        // A constant W alongside a runtime R must stay unlifted: burn-onnx's
+        // runtime-weight path references every weight by name, and `to_static`
+        // clears the name.
+        let mut node = TestNodeBuilder::new(NodeType::Gru, "test_gru")
+            .input_tensor_f32("X", 3, Some(vec![10, 2, 4]))
+            .input_tensor_f32_data("W", vec![0.0; 15 * 4], vec![1, 15, 4])
+            .input_tensor_f32("R", 3, Some(vec![1, 15, 5]))
+            .attr_int("hidden_size", 5)
+            .output_tensor_f32("Y", 4, None)
+            .build_with_graph_data(14);
+
+        GruProcessor.lift_constants(&mut node, 14).unwrap();
+
+        assert!(
+            node.inputs[1].is_constant(),
+            "W must stay named while R is a graph input"
+        );
+        assert!(node.inputs[2].is_dynamic());
+    }
+
+    #[test]
+    fn lift_constants_lifts_when_every_weight_is_constant() {
+        let mut node = create_gru_node(8, None, None, 2);
+
+        GruProcessor.lift_constants(&mut node, 14).unwrap();
+
+        assert!(node.inputs[1].value().is_some());
+        assert!(node.inputs[2].value().is_some());
     }
 }
