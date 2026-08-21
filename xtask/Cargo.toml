@@ -12,7 +12,7 @@ workspace = true
 [dependencies]
 log = { workspace = true }
 strum = { workspace = true }
-tracel-xtask = { workspace = true }
+tracel-xtask = { workspace = true, features = ["bump", "check", "compile", "coverage", "doc", "dependencies", "fix", "publish", "validate", "vulnerabilities", "build", "test", "utils-time"] }
 # The diff-expectations and update-expectations subcommands each parse
 # the onnx-official-tests `expectations.toml` schema. We deliberately
 # re-implement the schema locally in `xtask/src/expectations_schema.rs`
