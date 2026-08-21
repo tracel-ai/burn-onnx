@@ -182,7 +182,6 @@ fn create_snapshot_from_data(
 ) -> TensorSnapshot {
     use burn::module::ParamId;
     use burn_store::TensorSnapshotError;
-    use std::rc::Rc;
 
     let data = data.convert_dtype(dtype);
 
@@ -190,7 +189,7 @@ fn create_snapshot_from_data(
     let path_stack: Vec<String> = path.split('.').map(String::from).collect();
     let container_stack = vec![format!("Struct:{}", container_type)];
 
-    let data_fn = Rc::new(
+    let data_fn = TensorSnapshot::data_fn(
         move || -> Result<burn::tensor::TensorData, TensorSnapshotError> { Ok(data.clone()) },
     );
 

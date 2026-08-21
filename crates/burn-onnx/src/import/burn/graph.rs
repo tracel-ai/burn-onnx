@@ -1371,8 +1371,9 @@ mod tests {
         ) -> Result<Vec<TensorSnapshot>, onnx_ir::ProcessError> {
             use burn::module::ParamId;
             use burn::tensor::TensorData;
-            let data_fn =
-                std::rc::Rc::new(|| Ok(TensorData::new(vec![0.5f32, 1.0, 1.5, 2.0], [4usize])));
+            let data_fn = TensorSnapshot::data_fn(|| {
+                Ok(TensorData::new(vec![0.5f32, 1.0, 1.5, 2.0], [4usize]))
+            });
             Ok(vec![TensorSnapshot::from_closure(
                 data_fn,
                 burn::tensor::DType::F32,

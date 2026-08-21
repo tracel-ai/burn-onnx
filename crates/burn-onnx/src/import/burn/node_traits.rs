@@ -1,6 +1,5 @@
 extern crate alloc;
 
-use alloc::rc::Rc;
 use burn::tensor::Shape;
 use burn_store::{TensorSnapshot, TensorSnapshotError};
 use proc_macro2::{Ident, Span, TokenStream};
@@ -232,7 +231,7 @@ pub fn create_lazy_snapshot(
     let input_clone = input.clone();
 
     // Create a lazy closure that only loads data when called
-    let data_fn = Rc::new(move || -> Result<TensorData, TensorSnapshotError> {
+    let data_fn = TensorSnapshot::data_fn(move || -> Result<TensorData, TensorSnapshotError> {
         let mut data = input_clone.value().ok_or_else(|| {
             TensorSnapshotError::DataError(format!(
                 "Failed to extract tensor data for '{}'",
