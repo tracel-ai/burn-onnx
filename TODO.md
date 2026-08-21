@@ -253,9 +253,9 @@ consuming crate that does not, and is worth fixing independently of these rows.
 ### 6. GRU/LSTM/RNN discard runtime weights (#458)
 
 **Status: done.** All three ops accepted models whose `W`/`R` arrive as runtime graph inputs and
-then silently discarded them: `collect_*_snapshots` returned an empty snapshot list when the weights
-were not statically available (`gru.rs:52`, `:55`; same shape in `lstm.rs:87`/`:90` and
-`rnn.rs:82`/`:85`), while `field()` emitted the module regardless. The generated `forward` took the
+then silently discarded them: each `collect_*_snapshots` returned an empty snapshot list from its
+two `let Some(..) else { return vec![] }` weight guards when the weights were not statically
+available, while `field()` emitted the module regardless. The generated `forward` took the
 weight tensors as parameters and never read them. `Model::from_file` panicked on the missing
 tensors; `Model::new` did not, and ran inference on `GruConfig::init`'s random weights.
 
@@ -293,11 +293,13 @@ load-time `Missing tensors` failure for a compile error if Burn ever renames one
 A first draft passed `Initializer::Zeros` here on the theory that the config's Xavier draw was
 wasted work. It is not: `Initializer::init_with` returns `Param::uninitialized`, whose closure runs
 only on the first `val()`, and every parameter is replaced before anything reads one. The config
-allocates nothing either way, so the initializer was three lines of emitted code buying nothing.
+allocates no tensor data either way, so the initializer was three lines of emitted code buying
+nothing.
 
 The three ops differ in only three constants, so one table-driven emitter in
-`burn-onnx/src/import/burn/node/rnn_common.rs` covers them, and the same `GateLayout` const now
-also drives each op's build-time `collect_*_snapshots` so the ONNX-to-Burn mapping has one home:
+`burn-onnx/src/import/burn/node/rnn_common.rs` covers them. The `GateLayout` const drives each op's
+build-time `collect_*_snapshots` as well, so the gate mapping has one home; its `BiasLayout` drives
+the emitter only, and each collector still hardcodes the matching bias policy by hand:
 
 | Op   | Burn gate order             | ONNX gate index | `B` handling                        |
 | ---- | --------------------------- | --------------- | ----------------------------------- |
@@ -335,18 +337,29 @@ Two things surfaced that were not in the issue:
   and there are new snapshot tests for the runtime path.
 
 Scoreboard: 11 rows promoted from `fail-compare` to `pass` (4 GRU, 3 LSTM, 4 RNN). Harness tests went
-from 819 to 830, all green. Three integration tests were added under `crates/onnx-tests/tests/`, one
-per op, because the official harness constructs with `Model::new` while `#458`'s headline symptom is
-`from_file` panicking; those go through `from_file` and compare against `ReferenceEvaluator`.
+from 819 to 830, all green. Four integration tests were added under `crates/onnx-tests/tests/`: one
+per op going through `from_file`, because the official harness constructs with `Model::new` while
+`#458`'s headline symptom is `from_file` panicking, and those compare against `ReferenceEvaluator`.
+
+The fourth is a bidirectional GRU, which nothing upstream covers and which `ReferenceEvaluator`
+cannot serve either - its GRU raises `NotImplementedError` for `num_directions=2`. It uses the same
+weights as initializers as its own oracle and compares the two models element-wise, which pins the
+one piece of the layout still written twice: flipping GRU's `BiasLayout` to `Merged` fails it, while
+a wrong `GateLayout` does not, because that const drives both paths and moves them together.
 
 Unchanged and still rejected with a clear message: LSTM peephole connections (input `P`) and
 `sequence_lens` on all three.
 
-One latent bug was left alone as out of scope: `collect_*_snapshots` slices a direction with
-`.squeeze::<2>()`, which drops *every* size-1 dimension, so a GRU with `input_size == 1` or
-`hidden_size == 1` would squeeze the wrong axis and fail the rank check. It predates this work and
-only affects the static path; the generated runtime path uses `select_dim`/`slice_dim` and is not
-exposed to it.
+Two latent bugs were left alone as out of scope, both predating this work and both affecting the
+static path equally:
+
+- `collect_*_snapshots` slices a direction with `.squeeze::<2>()`, which drops *every* size-1
+  dimension, so a GRU with `input_size == 1` or `hidden_size == 1` would squeeze the wrong axis and
+  fail the rank check. The generated runtime path uses `select_dim`/`slice_dim` and is not exposed.
+- Nothing validates a declared `W`/`R` shape against the `hidden_size` and `direction` attributes.
+  An undersized weight panics in Burn's slice check, but an oversized one is silently truncated -
+  a `[2, ...]` W in a `direction="forward"` model quietly uses direction 0 only. This belongs in
+  `infer_types` as a `ProcessError` where the static shape is known.
 
 ## Tier 3
 

@@ -3,7 +3,7 @@
 //! This module defines the `NodeProcessor` trait with support for type preferences
 //! and proper error handling.
 
-use crate::ir::{Node, RawNode};
+use crate::ir::{Argument, Node, RawNode};
 use std::collections::HashMap;
 
 // Re-export registry types for backward compatibility
@@ -354,20 +354,38 @@ pub fn validate_no_rank_zero_tensors(node: &RawNode) -> Result<(), ProcessError>
 /// Absent and optional inputs count as liftable, so a missing tail does not block the
 /// group.
 ///
-/// Idempotent: `lift_constants` runs again after identity elimination
-/// (`phases/post_processing.rs`), and an already-lifted input is no longer `Constant`.
+/// Idempotent: `lift_constants` re-runs after no-op elimination
+/// (`phases/post_processing.rs`). An already-lifted input is `Static`, which is liftable
+/// in the sense that matters - it is already where this wants it - so a second pass over
+/// a fully lifted group is a no-op rather than an error.
+///
+/// Atomic: if any `to_static` fails, the group is restored, so a caller that logs the
+/// error rather than propagating it does not observe a half-lifted node.
 pub fn lift_all_or_none(node: &mut RawNode, indices: &[usize]) -> Result<(), ProcessError> {
     let liftable = |index: &usize| match node.inputs.get(*index) {
-        Some(arg) => arg.is_optional() || arg.is_constant(),
+        Some(arg) => arg.is_optional() || arg.is_constant() || arg.is_static(),
         None => true,
     };
     if !indices.iter().all(liftable) {
         return Ok(());
     }
 
-    for &index in indices {
-        if node.inputs.get(index).is_some_and(|arg| arg.is_constant()) {
-            node.inputs[index].to_static()?;
+    let to_lift: Vec<usize> = indices
+        .iter()
+        .copied()
+        .filter(|&index| node.inputs.get(index).is_some_and(|arg| arg.is_constant()))
+        .collect();
+    let restore: Vec<Argument> = to_lift
+        .iter()
+        .map(|&index| node.inputs[index].clone())
+        .collect();
+
+    for &index in &to_lift {
+        if let Err(e) = node.inputs[index].to_static() {
+            for (&index, arg) in to_lift.iter().zip(restore) {
+                node.inputs[index] = arg;
+            }
+            return Err(e);
         }
     }
     Ok(())
@@ -885,5 +903,47 @@ mod tests {
 
         let result = compute_broadcast_static_shape(&inputs);
         assert_eq!(result, Some(vec![Some(2), Some(3), Some(4)]));
+    }
+}
+
+#[cfg(test)]
+mod lift_all_or_none_tests {
+    use super::lift_all_or_none;
+    use crate::ir::NodeType;
+    use crate::node::test_utils::TestNodeBuilder;
+
+    /// A group whose tail is simply absent still lifts: "missing" is not "unliftable".
+    #[test]
+    fn absent_tail_does_not_block_the_group() {
+        let mut node = TestNodeBuilder::new(NodeType::Gru, "test_gru")
+            .input_tensor_f32("X", 3, Some(vec![10, 2, 4]))
+            .input_tensor_f32_data("W", vec![0.0; 12], vec![1, 3, 4])
+            .input_tensor_f32_data("R", vec![0.0; 9], vec![1, 3, 3])
+            .output_tensor_f32("Y", 4, None)
+            .build_with_graph_data(14);
+
+        lift_all_or_none(&mut node, &[1, 2, 3]).unwrap();
+
+        assert!(node.inputs[1].is_static());
+        assert!(node.inputs[2].is_static());
+    }
+
+    /// The second `lift_constants` pass sees `Static`, not `Constant`, and must leave the
+    /// group alone rather than erroring on it.
+    #[test]
+    fn lifting_twice_is_a_no_op() {
+        let mut node = TestNodeBuilder::new(NodeType::Gru, "test_gru")
+            .input_tensor_f32("X", 3, Some(vec![10, 2, 4]))
+            .input_tensor_f32_data("W", vec![0.0; 12], vec![1, 3, 4])
+            .input_tensor_f32_data("R", vec![0.0; 9], vec![1, 3, 3])
+            .output_tensor_f32("Y", 4, None)
+            .build_with_graph_data(14);
+
+        lift_all_or_none(&mut node, &[1, 2, 3]).unwrap();
+        let after_first = node.inputs[1].value_source;
+
+        lift_all_or_none(&mut node, &[1, 2, 3]).expect("a second pass must not error");
+
+        assert_eq!(node.inputs[1].value_source, after_first);
     }
 }

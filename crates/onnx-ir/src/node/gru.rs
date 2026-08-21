@@ -175,9 +175,9 @@ impl NodeProcessor for GruProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // W, R and the optional B are lifted together or not at all: the codegen that
-        // splits them across Burn's per-gate `Linear` modules runs either entirely at
-        // build time (all static) or entirely at run time (all referenced by name).
+        // W, R and the optional B are lifted together or not at all: a partly lifted
+        // group would leave one weight named and another with its name cleared by
+        // `to_static`, which downstream code cannot consume as a unit.
         lift_all_or_none(node, &[1, 2, 3])?;
         Ok(())
     }

@@ -357,8 +357,8 @@ mod tests {
     }
 
     /// LSTM whose `W`/`R`/`B` are graph inputs rather than initializers. Constructed
-    /// through `from_file` so the burnpack path is exercised: before #458 the
-    /// generated struct declared gate `Param`s that no snapshot filled, and loading
+    /// through `from_file` so the burnpack path is exercised: before this was fixed (#458)
+    /// the generated struct declared gate `Param`s that no snapshot filled, and loading
     /// panicked on the missing tensors.
     #[test]
     fn lstm_runtime_weights() {

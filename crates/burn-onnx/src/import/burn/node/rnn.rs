@@ -82,12 +82,23 @@ fn collect_rnn_snapshots(
     let data_r = extract_node_data(inputs, 2);
     let data_b = extract_node_data(inputs, 3);
 
-    let Some(data_w) = data_w else {
-        return vec![];
+    // Reaching here means `field()` emitted a module, so every weight was supposed to
+    // resolve. Returning an empty list instead would rebuild the bug this path exists to
+    // fix: a struct full of gate `Param`s that no snapshot fills, which `from_file`
+    // reports as missing tensors and `Model::new` silently fills with random values.
+    let (Some(data_w), Some(data_r)) = (data_w, data_r) else {
+        panic!(
+            "RNN '{field_name}': W/R are build-time weights but their data did not resolve. \
+             The generated model would load with uninitialized gate weights."
+        );
     };
-    let Some(data_r) = data_r else {
-        return vec![];
-    };
+    assert_eq!(
+        data_b.is_some(),
+        config.has_bias,
+        "RNN '{field_name}': config says has_bias={} but B data resolved to {}",
+        config.has_bias,
+        data_b.is_some()
+    );
 
     let dtype = data_w.dtype;
     let device = Default::default();
@@ -141,7 +152,7 @@ fn collect_rnn_snapshots(
                 .squeeze::<1>() // [2*gates*hidden_size]
         });
 
-        let (gate_name, onnx_gate_idx) = GATE_LAYOUT.gates[0];
+        let (gate_name, onnx_gate_idx) = GATE_LAYOUT.gates()[0];
         let start = onnx_gate_idx * hidden_size;
         let end = start + hidden_size;
 
@@ -275,10 +286,7 @@ fn activation_to_tokens(activation: &ActivationConfig) -> TokenStream {
 }
 
 /// RNN has a single gate, so ONNX's packing is already Burn's.
-const GATE_LAYOUT: GateLayout = GateLayout {
-    gates: &[("gate", 0)],
-    bias: BiasLayout::Merged,
-};
+const GATE_LAYOUT: GateLayout = GateLayout::new(&[("gate", 0)], BiasLayout::Merged);
 
 /// The module's type, and the expression that builds it on `device`.
 ///
@@ -387,17 +395,23 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
         // Input indices: 0=X, 1=W, 2=R, 3=B, 4=sequence_lens, 5=initial_h
         // ONNX initial states: [num_directions, batch_size, hidden_size]
         // Burn expects: [batch_size, hidden_size] for unidirectional
+        // initial_h carries the direction axis in the same place as Y_h, so layout=1 puts
+        // it at 1 rather than 0.
+        let state_axis = state_direction_axis(self.config.batch_first).to_tokens();
         let initial_state_expr = if has_initial_h {
             let h_input = scope.arg(&self.inputs[5]);
             match self.config.direction {
                 RnnDirection::Forward | RnnDirection::Reverse => {
-                    // Squeeze out the direction dimension (index 0) for unidirectional Rnn
-                    // ONNX: [1, batch_size, hidden_size] -> Burn: [batch_size, hidden_size]
-                    quote! { Some(RnnState::new(#h_input.squeeze_dim(0))) }
+                    // Drop the direction axis: Burn wants [batch_size, hidden_size]
+                    quote! { Some(RnnState::new(#h_input.squeeze_dim(#state_axis))) }
                 }
                 RnnDirection::Bidirectional => {
-                    // For bidirectional, keep all dimensions but reshape appropriately
-                    quote! { Some(RnnState::new(#h_input)) }
+                    // BiRnn wants [2, batch, hidden]; layout=1 hands it [batch, 2, hidden].
+                    if self.config.batch_first {
+                        quote! { Some(RnnState::new(#h_input.swap_dims(0, 1))) }
+                    } else {
+                        quote! { Some(RnnState::new(#h_input)) }
+                    }
                 }
             }
         } else {
@@ -415,13 +429,13 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
         // Burn output shape depends on batch_first config:
         //   batch_first=true:  [batch_size, seq_length, hidden_size] or [batch_size, seq_length, 2*hidden_size] for bidirectional
         //   batch_first=false: [seq_length, batch_size, hidden_size] or [seq_length, batch_size, 2*hidden_size] for bidirectional
-        // ONNX Y output: [seq_length, num_directions, batch_size, hidden_size]
-        // Y_h: [num_directions, batch_size, hidden_size]
+        // ONNX Y: [seq, dirs, batch, hidden] under layout=0, [batch, seq, dirs, hidden]
+        // under layout=1. Y_h: [dirs, batch, hidden] or [batch, dirs, hidden].
 
         // For unidirectional Rnn:
         //   - Burn final_state.hidden: [batch_size, hidden_size] (2D)
         //   - Need to unsqueeze to add num_directions dimension
-        //   - Burn output: [seq, batch, hidden] -> ONNX Y: [seq, 1, batch, hidden]
+        //   - Burn output: [seq, batch, hidden] -> ONNX Y, direction axis per layout
         // For bidirectional Rnn:
         //   - Burn final_state.hidden: [2, batch_size, hidden_size] (already 3D)
         //   - No unsqueeze needed
@@ -445,7 +459,7 @@ impl NodeCodegen for onnx_ir::rnn::RnnNode {
         };
 
         // Y output transformation
-        // For unidirectional: unsqueeze at dim 1 to add num_directions=1
+        // For unidirectional: unsqueeze at the layout's direction axis
         // For bidirectional: reshape to split the concatenated hidden states, then reorder dims
         //   ONNX layout=0 (batch_first=false): Y is [seq, num_dirs, batch, hidden]
         //   ONNX layout=1 (batch_first=true):  Y is [batch, seq, num_dirs, hidden]
@@ -810,9 +824,9 @@ mod tests {
                         .bias = Some(burn::module::Param::from_tensor(__b_zero.clone()));
                 }
                 {
-                    let __w_dir = __w.clone().select_dim::<2>(0, 1);
-                    let __r_dir = __r.clone().select_dim::<2>(0, 1);
-                    let __b_dir = __b.clone().select_dim::<1>(0, 1);
+                    let __w_dir = __w.select_dim::<2>(0, 1);
+                    let __r_dir = __r.select_dim::<2>(0, 1);
+                    let __b_dir = __b.select_dim::<1>(0, 1);
                     let __b_zero = __b_dir.clone().slice_dim(0, 0..8).zeros_like();
                     rnn1
                         .reverse
@@ -857,5 +871,67 @@ mod tests {
             (Y, Y_h)
         }
         ");
+    }
+
+    /// ONNX layout=1 moves the direction axis of `initial_h` too.
+    #[test]
+    fn test_rnn_forward_batch_first_initial_h() {
+        let node = with_initial_state(create_rnn_node("rnn1", RnnDirection::Forward, true, 2));
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<3>,
+            sequence_lens: i64,
+            initial_h: Tensor<3>,
+        ) -> (Tensor<4>, Tensor<3>) {
+            let (Y, Y_h) = {
+                let (output_seq, final_state) = self
+                    .rnn1
+                    .forward(input, Some(RnnState::new(initial_h.squeeze_dim(1))));
+                (
+                    output_seq.unsqueeze_dims::<4>(&[2]),
+                    final_state.hidden.unsqueeze_dims::<3>(&[1]),
+                )
+            };
+            (Y, Y_h)
+        }
+        ");
+    }
+
+    #[test]
+    fn test_rnn_forward_bidirectional_batch_first() {
+        let node = create_rnn_node("rnn1", RnnDirection::Bidirectional, true, 2);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> (Tensor<4>, Tensor<3>) {
+            let (Y, Y_h) = {
+                let (output_seq, final_state) = self.rnn1.forward(input, None);
+                (
+                    {
+                        let [batch_size, seq_len, _] = output_seq.dims();
+                        output_seq.reshape([batch_size, seq_len, 2, 8usize])
+                    },
+                    final_state.hidden.swap_dims(0, 1),
+                )
+            };
+            (Y, Y_h)
+        }
+        ");
+    }
+
+    /// Give a node the optional inputs an initial state needs, mirroring the ONNX input
+    /// order `X, W, R, B, sequence_lens, initial_h`.
+    fn with_initial_state(mut node: RnnNode) -> RnnNode {
+        node.config.has_initial_h = true;
+        node.inputs.push(Argument::new(
+            "sequence_lens",
+            ArgType::ScalarNative(DType::I64),
+        ));
+        node.inputs.push(Argument::new(
+            "initial_h",
+            ArgType::Tensor(TensorType::new(DType::F32, 3, None)),
+        ));
+        node
     }
 }

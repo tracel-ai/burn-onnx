@@ -4,7 +4,9 @@ include_models!(
     gru_reverse,
     gru_with_initial_state,
     gru_bidirectional,
-    gru_runtime_weights
+    gru_runtime_weights,
+    gru_bidirectional_runtime_weights,
+    gru_bidirectional_static_weights
 );
 
 #[cfg(test)]
@@ -281,8 +283,8 @@ mod tests {
     }
 
     /// GRU whose `W`/`R`/`B` are graph inputs rather than initializers. Constructed
-    /// through `from_file` so the burnpack path is exercised: before #458 the
-    /// generated struct declared gate `Param`s that no snapshot filled, and loading
+    /// through `from_file` so the burnpack path is exercised: before this was fixed (#458)
+    /// the generated struct declared gate `Param`s that no snapshot filled, and loading
     /// panicked on the missing tensors.
     #[test]
     fn gru_runtime_weights() {
@@ -320,6 +322,52 @@ mod tests {
             "Y_h sum mismatch: expected {}, got {}",
             expected_y_h_sum,
             y_h_sum
+        );
+    }
+
+    /// Bidirectional GRU with runtime weights, checked against the same weights supplied
+    /// as initializers. Nothing upstream covers a bidirectional RNN, so the build-time
+    /// snapshot path is the reference and the two must agree element-wise.
+    ///
+    /// What this pins is the half of the layout that is still written twice: `GateLayout`
+    /// drives both paths, so a wrong gate table moves both and stays invisible here, but
+    /// `BiasLayout` drives only the emitter while each `collect_*_snapshots` hardcodes its
+    /// own bias policy. Flipping GRU to `BiasLayout::Merged` fails this test.
+    /// `linear_before_reset=1` is what makes `Wb` and `Rb` separately observable.
+    #[test]
+    fn gru_bidirectional_runtime_weights_match_initializers() {
+        let device = Default::default();
+        let runtime = gru_bidirectional_runtime_weights::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model/gru_bidirectional_runtime_weights.bpk"
+            ),
+            &device,
+        );
+        let static_weights = gru_bidirectional_static_weights::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model/gru_bidirectional_static_weights.bpk"
+            ),
+            &device,
+        );
+
+        let input = ramp([2, 1, 2], 0.25, -0.5);
+        let w = ramp([2, 9, 2], 0.02, -0.4);
+        let r = ramp([2, 9, 3], 0.015, -0.3);
+        let b = ramp([2, 18], 0.01, -0.1);
+
+        let (y, y_h) = runtime.forward(input.clone(), w, r, b);
+        let (expected_y, expected_y_h) = static_weights.forward(input);
+
+        assert_eq!(y.shape(), Shape::from([2, 2, 1, 3]));
+        assert_eq!(y_h.shape(), Shape::from([2, 1, 3]));
+
+        y.into_data()
+            .assert_approx_eq::<f32>(&expected_y.into_data(), burn::tensor::Tolerance::default());
+        y_h.into_data().assert_approx_eq::<f32>(
+            &expected_y_h.into_data(),
+            burn::tensor::Tolerance::default(),
         );
     }
 }

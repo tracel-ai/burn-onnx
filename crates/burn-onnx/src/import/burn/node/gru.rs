@@ -51,12 +51,23 @@ fn collect_gru_snapshots(
     let data_r = extract_node_data(inputs, 2);
     let data_b = extract_node_data(inputs, 3);
 
-    let Some(data_w) = data_w else {
-        return vec![];
+    // Reaching here means `field()` emitted a module, so every weight was supposed to
+    // resolve. Returning an empty list instead would rebuild the bug this path exists to
+    // fix: a struct full of gate `Param`s that no snapshot fills, which `from_file`
+    // reports as missing tensors and `Model::new` silently fills with random values.
+    let (Some(data_w), Some(data_r)) = (data_w, data_r) else {
+        panic!(
+            "GRU '{field_name}': W/R are build-time weights but their data did not resolve. \
+             The generated model would load with uninitialized gate weights."
+        );
     };
-    let Some(data_r) = data_r else {
-        return vec![];
-    };
+    assert_eq!(
+        data_b.is_some(),
+        config.has_bias,
+        "GRU '{field_name}': config says has_bias={} but B data resolved to {}",
+        config.has_bias,
+        data_b.is_some()
+    );
 
     let dtype = data_w.dtype;
     let device = Default::default();
@@ -108,7 +119,7 @@ fn collect_gru_snapshots(
                 .squeeze::<1>() // [2*gates*hidden_size]
         });
 
-        for (gate_name, onnx_gate_idx) in GATE_LAYOUT.gates.iter().copied() {
+        for (gate_name, onnx_gate_idx) in GATE_LAYOUT.gates().iter().copied() {
             let start = onnx_gate_idx * hidden_size;
             let end = start + hidden_size;
 
@@ -223,12 +234,13 @@ fn forward_unidirectional(
     let is_reverse = matches!(node.config.direction, GruDirection::Reverse);
     let batch_first = node.config.batch_first;
 
-    // Build the initial state expression
-    // ONNX initial_h: [num_directions, batch_size, hidden_size]
-    // Burn expects: [batch_size, hidden_size] (2D)
+    // Build the initial state expression. ONNX initial_h carries the direction axis in
+    // the same place as Y_h, so layout=1 puts it at 1 rather than 0. Burn wants
+    // [batch_size, hidden_size].
     let initial_state_expr = if has_initial_h {
         let h_input = scope.arg(&node.inputs[5]);
-        quote! { Some(#h_input.squeeze_dim(0)) }
+        let axis = state_direction_axis(batch_first).to_tokens();
+        quote! { Some(#h_input.squeeze_dim(#axis)) }
     } else {
         quote! { None }
     };
@@ -346,11 +358,15 @@ fn forward_bidirectional(
     let has_initial_h = node.config.has_initial_h;
     let hidden_size = node.config.hidden_size;
 
-    // ONNX initial_h: [2, batch_size, hidden_size]
-    // BiGru expects: Option<Tensor<3>> with shape [2, batch, hidden] - no transform needed
+    // BiGru wants [2, batch, hidden], which is ONNX layout=0. layout=1 hands it
+    // [batch, 2, hidden].
     let initial_state_expr = if has_initial_h {
         let h_input = scope.arg(&node.inputs[5]);
-        quote! { Some(#h_input) }
+        if node.config.batch_first {
+            quote! { Some(#h_input.swap_dims(0, 1)) }
+        } else {
+            quote! { Some(#h_input) }
+        }
     } else {
         quote! { None }
     };
@@ -426,10 +442,10 @@ fn forward_bidirectional(
 }
 
 /// ONNX GRU packs its gates as [z, r, h], which is Burn's own update/reset/new order.
-const GATE_LAYOUT: GateLayout = GateLayout {
-    gates: &[("update_gate", 0), ("reset_gate", 1), ("new_gate", 2)],
-    bias: BiasLayout::Split,
-};
+const GATE_LAYOUT: GateLayout = GateLayout::new(
+    &[("update_gate", 0), ("reset_gate", 1), ("new_gate", 2)],
+    BiasLayout::Split,
+);
 
 /// The module's type, and the expression that builds it on `device`.
 ///
@@ -993,5 +1009,77 @@ mod tests {
             (Y, Y_h)
         }
         ");
+    }
+
+    /// ONNX layout=1 moves the direction axis of `initial_h` too, not just of the outputs.
+    #[test]
+    fn test_gru_forward_batch_first_initial_h() {
+        let node = create_gru_node("gru1", GruDirection::Forward, true, true, 2);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<3>,
+            sequence_lens: i64,
+            initial_h: Tensor<3>,
+        ) -> (Tensor<4>, Tensor<3>) {
+            let (Y, Y_h) = {
+                let gru_output = self.gru1.forward(input, Some(initial_h.squeeze_dim(1)));
+                let batch_first_output = gru_output;
+                (
+                    batch_first_output.clone().unsqueeze_dims::<4>(&[2]),
+                    {
+                        let [_batch, seq_len, _hidden] = batch_first_output.dims();
+                        let step = batch_first_output
+                            .clone()
+                            .slice([0.._batch, (seq_len - 1)..seq_len, 0.._hidden]);
+                        step.squeeze_dim::<2>(1).unsqueeze_dims::<3>(&[1])
+                    },
+                )
+            };
+            (Y, Y_h)
+        }
+        ");
+    }
+
+    #[test]
+    fn test_gru_forward_bidirectional_batch_first_initial_h() {
+        let node = create_gru_node("gru1", GruDirection::Bidirectional, true, true, 2);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<3>,
+            sequence_lens: i64,
+            initial_h: Tensor<3>,
+        ) -> (Tensor<4>, Tensor<3>) {
+            let (Y, Y_h) = {
+                let (output_seq, final_state) = self
+                    .gru1
+                    .forward(input, Some(initial_h.swap_dims(0, 1)));
+                (
+                    {
+                        let [batch_size, seq_len, _] = output_seq.dims();
+                        output_seq.reshape([batch_size, seq_len, 2, 8usize])
+                    },
+                    final_state.swap_dims(0, 1),
+                )
+            };
+            (Y, Y_h)
+        }
+        ");
+    }
+
+    /// A weight group that is only partly constant stays unlifted, so the whole group
+    /// takes the runtime path rather than half of it being dropped.
+    #[test]
+    fn test_gru_field_partial_runtime_weights() {
+        let mut node = create_gru_node("gru1", GruDirection::Forward, false, false, 2);
+        // W and R are constants that `lift_all_or_none` declined to lift; B is a graph input.
+        node.inputs[3].value_source = onnx_ir::ir::ValueSource::Dynamic;
+        assert!(
+            NodeCodegen::field(&node).is_none(),
+            "a runtime B must put the whole group on the runtime path, or its bias is dropped"
+        );
     }
 }

@@ -12,18 +12,21 @@
 //! as graph inputs there is nothing to snapshot, so the same split is emitted as
 //! generated code and applied to a module built inside `forward`.
 //!
-//! The [`GateLayout`] each op declares is the single description of its packing, and
-//! drives both paths.
+//! The [`GateLayout`] each op declares names its gate order for both paths. Its
+//! [`BiasLayout`] drives the runtime path only: each `collect_*_snapshots` still encodes
+//! the same bias policy by hand, so the two have to be changed together.
 
 use super::prelude::*;
 
 /// How ONNX's packed `B` input maps onto Burn's two per-gate `Linear` biases.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum BiasLayout {
     /// `Wb[g]` on `input_transform`, `Rb[g]` on `hidden_transform`.
     ///
-    /// GRU keeps the two apart because `linear_before_reset` applies the reset gate
-    /// between them, which makes the recurrent bias observable on its own.
+    /// GRU needs this for the `h` gate when `linear_before_reset != 0`, where the reset
+    /// gate is applied between the two: `Xt*Wh + rt * (Ht-1*Rh + Rbh) + Wbh`. Folding
+    /// would be wrong there. It stays exact for the other gates and for
+    /// `linear_before_reset = 0`, so GRU uses it unconditionally.
     Split,
     /// `Wb[g] + Rb[g]` on `input_transform`, zeros on `hidden_transform`.
     ///
@@ -32,16 +35,59 @@ pub(crate) enum BiasLayout {
 }
 
 /// Packed-weight layout of one RNN-family operator.
+#[derive(Debug)]
 pub(crate) struct GateLayout {
-    /// Each of Burn's per-gate field names paired with the ONNX gate index it holds,
-    /// in Burn's own declaration order.
-    pub gates: &'static [(&'static str, usize)],
-    /// How `B` splits across the two `Linear` modules of a gate.
-    pub bias: BiasLayout,
+    gates: &'static [(&'static str, usize)],
+    bias: BiasLayout,
 }
 
 impl GateLayout {
+    /// Declare an op's gate layout: each of Burn's per-gate field names paired with the
+    /// ONNX gate index it holds, in Burn's own declaration order.
+    ///
+    /// The indices must be a permutation of `0..gates.len()`, which is what lets
+    /// [`count`](Self::count) stand for both "Burn fields" and "ONNX gates" in the
+    /// stride arithmetic. A duplicate or missing index would otherwise produce silently
+    /// wrong weights, so it is checked here: these are consts, so a mistake is a
+    /// compile error in this crate rather than a wrong number at inference time.
+    pub const fn new(gates: &'static [(&'static str, usize)], bias: BiasLayout) -> Self {
+        assert!(
+            !gates.is_empty(),
+            "an RNN-family op packs at least one gate"
+        );
+        let mut i = 0;
+        while i < gates.len() {
+            assert!(
+                gates[i].1 < gates.len(),
+                "ONNX gate index is out of range for this op"
+            );
+            let mut j = 0;
+            while j < i {
+                assert!(
+                    gates[i].1 != gates[j].1,
+                    "two Burn gates claim the same ONNX gate index"
+                );
+                j += 1;
+            }
+            i += 1;
+        }
+        Self { gates, bias }
+    }
+
+    /// Burn's per-gate field names paired with the ONNX gate index each holds.
+    pub fn gates(&self) -> &'static [(&'static str, usize)] {
+        self.gates
+    }
+
+    /// How `B` splits across the two `Linear` modules of a gate.
+    pub fn bias(&self) -> BiasLayout {
+        self.bias
+    }
+
     /// How many gates the op packs into `W`, `R` and `B`.
+    ///
+    /// True of both the Burn side and the ONNX side, by the permutation invariant
+    /// [`new`](Self::new) enforces.
     pub fn count(&self) -> usize {
         self.gates.len()
     }
@@ -52,6 +98,12 @@ pub(crate) struct ModuleExpr {
     /// Statements binding the module. Empty when it is a struct field.
     pub setup: TokenStream,
     /// Expression naming the module: `self.gru1`, or the local `gru1`.
+    ///
+    /// Kept separate from `setup` so that it stays a bare path, cheap to splice more
+    /// than once. Folding the two together would make every splice carry the whole
+    /// weight-loading block, and a caller that spliced it into two branches would
+    /// emit the `let __w = ...;` bindings twice - which `scope.arg` has already
+    /// handed out as a move, and which no snapshot test would catch.
     pub expr: TokenStream,
 }
 
@@ -141,6 +193,19 @@ fn load_runtime_weights(
     hidden_size: usize,
     num_directions: usize,
 ) -> TokenStream {
+    // `to_static` clears an argument's name, so a lifted sibling here would reach
+    // `Ident::new("")` and panic inside proc-macro2 with nothing to point at.
+    // `lift_all_or_none` keeps the group uniform; a subgraph that inherits an
+    // already-lifted value from its outer scope is the way it can still happen.
+    for (index, arg) in inputs.iter().enumerate().skip(1).take(3) {
+        assert!(
+            !arg.is_static(),
+            "weight input #{index} was lifted to a static initializer while a sibling \
+             weight is a runtime graph input; the group must be lifted together or not \
+             at all"
+        );
+    }
+
     let w = scope.arg(&inputs[1]);
     let r = scope.arg(&inputs[2]);
     let b = inputs
@@ -151,9 +216,6 @@ fn load_runtime_weights(
     let gate_count = layout.count();
     let bind_bias = b.map(|b| quote! { let __b = #b; });
     let has_bias = bind_bias.is_some();
-    // The packed tensors are only read once per direction, so the last direction can
-    // take them by value.
-    let reuse = (num_directions > 1).then(|| quote! { .clone() });
 
     let mut directions = quote! {};
     for direction in 0..num_directions {
@@ -170,7 +232,9 @@ fn load_runtime_weights(
         };
 
         let index = direction.to_tokens();
-        let zero_bias = (has_bias && matches!(layout.bias, BiasLayout::Merged)).then(|| {
+        // Each packed tensor is read once per direction, so the last direction moves it.
+        let reuse = (direction + 1 < num_directions).then(|| quote! { .clone() });
+        let zero_bias = (has_bias && matches!(layout.bias(), BiasLayout::Merged)).then(|| {
             let hidden = hidden_size.to_tokens();
             // Every gate's zeroed hidden bias has the same shape, so build one.
             quote! { let __b_zero = __b_dir.clone().slice_dim(0, 0..#hidden).zeros_like(); }
@@ -180,7 +244,7 @@ fn load_runtime_weights(
         });
 
         let mut gates = quote! {};
-        for (gate, onnx_gate) in layout.gates.iter().copied() {
+        for (gate, onnx_gate) in layout.gates().iter().copied() {
             let gate = Ident::new(gate, Span::call_site());
             let start = (onnx_gate * hidden_size).to_tokens();
             let end = ((onnx_gate + 1) * hidden_size).to_tokens();
@@ -203,7 +267,7 @@ fn load_runtime_weights(
             let rb_start = ((gate_count + onnx_gate) * hidden_size).to_tokens();
             let rb_end = ((gate_count + onnx_gate + 1) * hidden_size).to_tokens();
 
-            gates.extend(match layout.bias {
+            gates.extend(match layout.bias() {
                 BiasLayout::Split => quote! {
                     #gate_owner.#gate.input_transform.bias = Some(burn::module::Param::from_tensor(
                         __b_dir.clone().slice_dim(0, #start..#end),
@@ -247,7 +311,8 @@ fn load_runtime_weights(
 /// `Argument::new` defaults to `ValueSource::Dynamic`, which is the state of a weight
 /// supplied as a graph input, so tests covering the static path have to say so. The
 /// fabricated `DataId` resolves in no store: these tests read `field`/`forward`, never
-/// `value()`.
+/// `value()`. A test that does call `collect_snapshots` gets an empty list and a
+/// `log::warn`, not an error.
 #[cfg(test)]
 pub(crate) fn weights_as_initializers(inputs: &mut [Argument]) {
     for arg in inputs.iter_mut().skip(1).take(3) {
