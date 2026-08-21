@@ -349,8 +349,10 @@ fn decode_f32(path: &Path, proto: &TensorProto) -> Result<Vec<f32>, LoadError> {
         check_raw_alignment(path, &proto.raw_data, 4, "FLOAT")?;
         Ok(proto
             .raw_data
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&c| f32::from_le_bytes(c))
             .collect())
     } else {
         Ok(proto.float_data.clone())
@@ -362,8 +364,10 @@ fn decode_f64(path: &Path, proto: &TensorProto) -> Result<Vec<f64>, LoadError> {
         check_raw_alignment(path, &proto.raw_data, 8, "DOUBLE")?;
         Ok(proto
             .raw_data
-            .chunks_exact(8)
-            .map(|c| f64::from_le_bytes([c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|&c| f64::from_le_bytes(c))
             .collect())
     } else {
         Ok(proto.double_data.clone())
@@ -378,8 +382,10 @@ fn decode_f16(path: &Path, proto: &TensorProto) -> Result<Vec<f16>, LoadError> {
         check_raw_alignment(path, &proto.raw_data, 2, "FLOAT16")?;
         Ok(proto
             .raw_data
-            .chunks_exact(2)
-            .map(|c| f16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&c| f16::from_le_bytes(c))
             .collect())
     } else {
         Ok(proto
@@ -395,8 +401,10 @@ fn decode_bf16(path: &Path, proto: &TensorProto) -> Result<Vec<bf16>, LoadError>
         check_raw_alignment(path, &proto.raw_data, 2, "BFLOAT16")?;
         Ok(proto
             .raw_data
-            .chunks_exact(2)
-            .map(|c| bf16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&c| bf16::from_le_bytes(c))
             .collect())
     } else {
         Ok(proto
@@ -412,8 +420,10 @@ fn decode_i32(path: &Path, proto: &TensorProto) -> Result<Vec<i32>, LoadError> {
         check_raw_alignment(path, &proto.raw_data, 4, "INT32")?;
         Ok(proto
             .raw_data
-            .chunks_exact(4)
-            .map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&c| i32::from_le_bytes(c))
             .collect())
     } else {
         Ok(proto.int32_data.clone())
@@ -425,8 +435,10 @@ fn decode_i64(path: &Path, proto: &TensorProto) -> Result<Vec<i64>, LoadError> {
         check_raw_alignment(path, &proto.raw_data, 8, "INT64")?;
         Ok(proto
             .raw_data
-            .chunks_exact(8)
-            .map(|c| i64::from_le_bytes([c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|&c| i64::from_le_bytes(c))
             .collect())
     } else {
         Ok(proto.int64_data.clone())
@@ -438,8 +450,10 @@ fn decode_u32(path: &Path, proto: &TensorProto) -> Result<Vec<u32>, LoadError> {
         check_raw_alignment(path, &proto.raw_data, 4, "UINT32")?;
         Ok(proto
             .raw_data
-            .chunks_exact(4)
-            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&c| u32::from_le_bytes(c))
             .collect())
     } else {
         // UINT32 and UINT64 share the `uint64_data` storage slot; UINT32
@@ -463,8 +477,10 @@ fn decode_u64(path: &Path, proto: &TensorProto) -> Result<Vec<u64>, LoadError> {
         check_raw_alignment(path, &proto.raw_data, 8, "UINT64")?;
         Ok(proto
             .raw_data
-            .chunks_exact(8)
-            .map(|c| u64::from_le_bytes([c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|&c| u64::from_le_bytes(c))
             .collect())
     } else {
         Ok(proto.uint64_data.clone())
@@ -500,8 +516,10 @@ fn decode_i16(path: &Path, proto: &TensorProto, _expected: usize) -> Result<Vec<
         check_raw_alignment(path, &proto.raw_data, 2, "INT16")?;
         Ok(proto
             .raw_data
-            .chunks_exact(2)
-            .map(|c| i16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&c| i16::from_le_bytes(c))
             .collect())
     } else {
         checked_narrow_i32(path, &proto.int32_data, "INT16", |v| i16::try_from(v).ok())
@@ -513,8 +531,10 @@ fn decode_u16(path: &Path, proto: &TensorProto, _expected: usize) -> Result<Vec<
         check_raw_alignment(path, &proto.raw_data, 2, "UINT16")?;
         Ok(proto
             .raw_data
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&c| u16::from_le_bytes(c))
             .collect())
     } else {
         checked_narrow_i32(path, &proto.int32_data, "UINT16", |v| u16::try_from(v).ok())
