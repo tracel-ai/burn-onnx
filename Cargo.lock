@@ -862,7 +862,7 @@ dependencies = [
  "bytes",
  "clap",
  "derive-new",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.0",
  "insta",
  "log",
  "onnx-ir",
