@@ -34,7 +34,9 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
                         let name = arg_to_ident(shape_arg);
                         quote! { #name }
                     }
-                    _ => panic!("Invalid shape source {:?}", shape_arg.ty),
+                    other => {
+                        unreachable!("Expand shape input type validated in onnx-ir, got {other:?}")
+                    }
                 }
             }
         };

@@ -35,6 +35,11 @@ pub enum ExpandConfig {
     Runtime(RuntimeInputRef),
 }
 
+/// ONNX requires `shape` to be a 1-D tensor. onnx-ir models an ONNX scalar as
+/// `ScalarTensor` / `ScalarNative` rather than a rank-0 `Tensor`, so a rank-0 shape input
+/// never meets the `rank != 1` check and needs rejecting explicitly.
+const SHAPE_NOT_1D: &str = "Expand: shape input must be a 1D tensor, got a rank-0 scalar";
+
 pub(crate) struct ExpandProcessor;
 
 impl NodeProcessor for ExpandProcessor {
@@ -85,7 +90,10 @@ impl NodeProcessor for ExpandProcessor {
                 // Shapes are always 1-D int64 data, so nothing to validate here
             }
             ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => {
-                // Scalar shape means expanding to rank 0 (scalar output)
+                // A rank-0 shape input is out of spec: `shape` must be 1-D. Expanding to a
+                // rank-0 output is spelled as an empty 1-D shape tensor, which reaches the
+                // `ExpandConfig::Static(vec![])` path instead.
+                return Err(ProcessError::Custom(SHAPE_NOT_1D.to_string()));
             }
         }
 
@@ -121,8 +129,10 @@ impl NodeProcessor for ExpandProcessor {
             ExpandConfig::Runtime(_) => {
                 // When the shape cannot be determined statically, infer the rank from the shape input
                 let output_rank = match &node.inputs[1].ty {
-                    // Scalar shape input means expanding to a scalar (rank 0)
-                    ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => 0,
+                    // Rejected above; repeated here to keep the match exhaustive.
+                    ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => {
+                        return Err(ProcessError::Custom(SHAPE_NOT_1D.to_string()));
+                    }
                     ArgType::Shape(rank) => *rank,
                     ArgType::Tensor(tensor) => {
                         if let Some(static_shape) = &tensor.static_shape
@@ -388,16 +398,36 @@ mod tests {
     }
 
     #[test]
-    fn test_expand_scalar_native_shape_outputs_scalar() {
-        // ScalarNative shape input means expanding to rank 0
+    fn test_expand_rejects_scalar_native_shape() {
+        // A rank-0 `shape` input is out of spec; onnxruntime reports
+        // "shape input must be 1D tensor" for the same graph.
         let shape_type = ArgType::ScalarNative(DType::I64);
         let node = create_test_node(2, None, Some(shape_type)).build();
         let mut node = node;
         let processor = ExpandProcessor;
         let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        let result = processor.infer_types(&mut node, 16, &prefs);
 
-        assert_eq!(node.outputs[0].ty, ArgType::ScalarTensor(DType::F32));
+        match result {
+            Err(ProcessError::Custom(msg)) => assert_eq!(msg, SHAPE_NOT_1D),
+            other => panic!("Expected ProcessError::Custom, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_expand_rejects_scalar_tensor_shape() {
+        // Same rejection when the scalar is still on device rather than lowered to a native.
+        let shape_type = ArgType::ScalarTensor(DType::I64);
+        let node = create_test_node(2, None, Some(shape_type)).build();
+        let mut node = node;
+        let processor = ExpandProcessor;
+        let prefs = OutputPreferences::new();
+        let result = processor.infer_types(&mut node, 16, &prefs);
+
+        match result {
+            Err(ProcessError::Custom(msg)) => assert_eq!(msg, SHAPE_NOT_1D),
+            other => panic!("Expected ProcessError::Custom, got {other:?}"),
+        }
     }
 
     #[test]

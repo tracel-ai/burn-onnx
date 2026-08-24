@@ -86,7 +86,7 @@ serde = { version = "1.0.228", default-features = false, features = [
 ] } # alloc is for no_std, derive is needed
 strum = { version = "0.28.0", features = ["derive"] }
 bytes = { version = "1.11.1", default-features = false }
-hashbrown = "0.16"
+hashbrown = "0.17"
 memmap2 = { version = "0.9" }
 ort = "=2.0.0-rc.13"
 tempfile = "3.24.0"
