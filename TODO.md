@@ -3,7 +3,7 @@
 Prioritized work queue derived from a measured sweep of the open issues and the
 `onnx-official-tests` scoreboard on 2026-08-18. Test counts come from re-running every non-passing
 entry in `crates/onnx-official-tests/expectations.toml` through `onnx2burn`, then compile-checking
-the output against `burn 0.22.0-pre.1` with the `flex` backend.
+the output against `burn 0.22.0-pre.3` with the `flex` backend.
 
 Three items have shipped since that sweep (#461, #464, #466); "Landed" at the bottom says what each
 one did, and `git log -- TODO.md` has the write-ups they replaced. Findings from those items that
