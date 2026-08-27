@@ -6,15 +6,13 @@
 //! dispatches each Burn operation to an operation-family lowerer.
 //!
 //! [`context::LoweringContext`] owns protobuf construction and deterministic
-//! naming. The family modules only translate operations; [`patterns`] contains
-//! temporary recognition of decomposed Burn operation sequences.
+//! naming. The family modules only translate operations.
 
 mod base;
 mod context;
 mod direct;
 mod module;
 mod numeric;
-pub(crate) mod patterns;
 
 use std::collections::BTreeMap;
 

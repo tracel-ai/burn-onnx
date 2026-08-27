@@ -7,35 +7,13 @@ use burn::backend::ir::{BaseOperationIr, OperationIr};
 
 use crate::export::ExportError;
 
-use super::{context::LoweringContext, patterns};
+use super::context::LoweringContext;
 
 pub(super) fn lower(
     context: &mut LoweringContext<'_>,
     index: usize,
     operation: &OperationIr,
 ) -> Result<bool, ExportError> {
-    if let Some(pad) = patterns::constant_pad(&context.graph.graph.operations, index) {
-        let pads_name = format!("node_{index}_pads");
-        context.i64_initializer(pads_name.clone(), &pad.pads);
-        let value_name = format!("node_{index}_value");
-        context.scalar_initializer(
-            value_name.clone(),
-            pad.full.out.dtype,
-            pad.full.value,
-            pad.full.out.id,
-        )?;
-        let input = context.tensor_name(pad.slice_assign.value.id);
-        let output = context.tensor_name(pad.slice_assign.out.id);
-        context.node(
-            format!("node_{index}"),
-            "Pad",
-            vec![input, pads_name, value_name],
-            vec![output],
-        );
-        context.string_attribute("mode", "constant");
-        return Ok(true);
-    }
-
     let base = match operation {
         OperationIr::BaseFloat(operation)
         | OperationIr::BaseInt(operation)

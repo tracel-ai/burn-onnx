@@ -10,7 +10,6 @@ use crate::export::{
     ShapeExpr,
 };
 
-use super::lower::patterns;
 use dynamic_axes::PotentiallyDynamicAxes;
 
 /// Annotation for one runtime input axis.
@@ -421,49 +420,25 @@ fn validate_shape_sensitive_operations(
         .zip(&validation.operations)
         .enumerate()
     {
-        let constant_pad = match (
-            patterns::constant_pad(&sample.operations, index),
-            patterns::constant_pad(&validation.operations, index),
-        ) {
-            (Some(sample_pad), Some(validation_pad)) if sample_pad.pads == validation_pad.pads => {
-                true
-            }
-            (Some(sample_pad), Some(validation_pad)) => {
-                let rank = sample_pad.slice_assign.out.shape.num_dims();
-                let axis = sample_pad
-                    .pads
+        match (sample_operation, validation_operation) {
+            (
+                OperationIr::NumericFloat(_, NumericOperationIr::Pad(sample))
+                | OperationIr::NumericInt(_, NumericOperationIr::Pad(sample)),
+                OperationIr::NumericFloat(_, NumericOperationIr::Pad(validation))
+                | OperationIr::NumericInt(_, NumericOperationIr::Pad(validation)),
+            ) if sample.padding != validation.padding => {
+                let axis = sample
+                    .padding
                     .iter()
-                    .zip(&validation_pad.pads)
+                    .zip(&validation.padding)
                     .position(|(sample, validation)| sample != validation)
-                    .map(|position| position % rank)
                     .unwrap_or(0);
                 return Err(ExportError::DynamicShapeLost {
-                    tensor: sample_pad.slice_assign.out.id,
+                    tensor: sample.out.id,
                     axis,
-                    reason: format!("operation {index} has varying constant-padding widths"),
+                    reason: format!("operation {index} has varying padding widths"),
                 });
             }
-            (Some(sample_pad), None) => {
-                return Err(ExportError::DynamicShapeLost {
-                    tensor: sample_pad.slice_assign.out.id,
-                    axis: 0,
-                    reason: format!(
-                        "operation {index} is recognized as constant padding in only one trace"
-                    ),
-                });
-            }
-            (None, Some(validation_pad)) => {
-                return Err(ExportError::DynamicShapeLost {
-                    tensor: validation_pad.slice_assign.out.id,
-                    axis: 0,
-                    reason: format!(
-                        "operation {index} is recognized as constant padding in only one trace"
-                    ),
-                });
-            }
-            (None, None) => false,
-        };
-        match (sample_operation, validation_operation) {
             (
                 OperationIr::Module(ModuleOperationIr::Interpolate(sample)),
                 OperationIr::Module(ModuleOperationIr::Interpolate(validation)),
@@ -507,9 +482,6 @@ fn validate_shape_sensitive_operations(
                 OperationIr::BaseFloat(BaseOperationIr::SliceAssign(validation_slice))
                 | OperationIr::BaseInt(BaseOperationIr::SliceAssign(validation_slice)),
             ) if sample_slice.ranges != validation_slice.ranges => {
-                if constant_pad {
-                    continue;
-                }
                 let axis = sample_slice
                     .ranges
                     .iter()
@@ -663,15 +635,11 @@ fn shape_operations(graph: &GraphIr) -> impl Iterator<Item = ShapeOperation<'_>>
                 output: &op.out,
             }),
             OperationIr::NumericFloat(_, NumericOperationIr::Full(op))
-            | OperationIr::NumericInt(_, NumericOperationIr::Full(op)) => {
-                (!patterns::is_constant_pad_full(&graph.operations, index)).then_some(
-                    ShapeOperation {
-                        index,
-                        source: None,
-                        output: &op.out,
-                    },
-                )
-            }
+            | OperationIr::NumericInt(_, NumericOperationIr::Full(op)) => Some(ShapeOperation {
+                index,
+                source: None,
+                output: &op.out,
+            }),
             _ => None,
         })
 }

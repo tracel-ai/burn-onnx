@@ -186,6 +186,24 @@ impl ConstantPad {
 }
 
 #[derive(Module, Debug)]
+struct ReflectPad;
+
+impl ReflectPad {
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        input.pad([(0, 0), (0, 0), (1, 1), (2, 1)], PadMode::Reflect)
+    }
+}
+
+#[derive(Module, Debug)]
+struct EdgePad;
+
+impl EdgePad {
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        input.pad([(0, 0), (0, 0), (1, 2), (3, 1)], PadMode::Edge)
+    }
+}
+
+#[derive(Module, Debug)]
 struct PadFromOtherInput;
 
 impl PadFromOtherInput {
@@ -559,6 +577,36 @@ fn constant_pad_matches_burn() {
     let expected = ConstantPad.forward(input.clone()).into_data();
     let model = OnnxExporter::new()
         .export(&ConstantPad, input, ConstantPad::forward)
+        .unwrap();
+
+    let actual = run_ort(model.as_bytes(), [1, 1, 2, 3], input_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+}
+
+#[test]
+fn reflect_pad_matches_burn() {
+    let device = Device::default();
+    let input_values = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
+    let input =
+        Tensor::<4>::from_data(TensorData::new(input_values.clone(), [1, 1, 2, 3]), &device);
+    let expected = ReflectPad.forward(input.clone()).into_data();
+    let model = OnnxExporter::new()
+        .export(&ReflectPad, input, ReflectPad::forward)
+        .unwrap();
+
+    let actual = run_ort(model.as_bytes(), [1, 1, 2, 3], input_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+}
+
+#[test]
+fn edge_pad_matches_burn() {
+    let device = Device::default();
+    let input_values = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
+    let input =
+        Tensor::<4>::from_data(TensorData::new(input_values.clone(), [1, 1, 2, 3]), &device);
+    let expected = EdgePad.forward(input.clone()).into_data();
+    let model = OnnxExporter::new()
+        .export(&EdgePad, input, EdgePad::forward)
         .unwrap();
 
     let actual = run_ort(model.as_bytes(), [1, 1, 2, 3], input_values);

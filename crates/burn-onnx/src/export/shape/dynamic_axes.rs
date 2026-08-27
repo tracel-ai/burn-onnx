@@ -196,6 +196,15 @@ impl AxisTracker {
             NumericOperationIr::Abs(operation) | NumericOperationIr::Neg(operation) => {
                 self.same_axes(&operation.input, &operation.out)
             }
+            NumericOperationIr::Pad(operation) => {
+                for (axis, &(before, after)) in operation.padding.iter().enumerate() {
+                    if before == 0 && after == 0 {
+                        self.axis(&operation.input, axis, &operation.out, axis);
+                    } else {
+                        self.derived_axis(&operation.input, axis, &operation.out, axis);
+                    }
+                }
+            }
             NumericOperationIr::MeanDim(operation)
             | NumericOperationIr::SumDim(operation)
             | NumericOperationIr::ProdDim(operation) => {

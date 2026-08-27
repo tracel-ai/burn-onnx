@@ -1,6 +1,7 @@
 use burn::backend::Shape;
 use burn::backend::ir::{
-    BaseOperationIr, GraphIr, IrVisitorMut, ModuleOperationIr, OperationIr, TensorId, TensorIr,
+    BaseOperationIr, GraphIr, IrVisitorMut, ModuleOperationIr, NumericOperationIr, OperationIr,
+    TensorId, TensorIr,
 };
 use hashbrown::{HashMap, HashSet};
 
@@ -163,6 +164,10 @@ fn erase_shape_sensitive_attributes(operation: &mut OperationIr) {
         },
         OperationIr::Module(ModuleOperationIr::Interpolate(operation)) => {
             operation.output_size = [0; 2];
+        }
+        OperationIr::NumericFloat(_, NumericOperationIr::Pad(operation))
+        | OperationIr::NumericInt(_, NumericOperationIr::Pad(operation)) => {
+            operation.padding.fill((0, 0));
         }
         _ => {}
     }
