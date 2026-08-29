@@ -219,8 +219,7 @@ functionality.
 | [Xor][192]                       | ✅             | ✅           |
 | [Unsqueeze][193]                 | ✅             | ✅           |
 
-¹ NonMaxSuppression delegates to Burn's vision NMS implementation, requires
-the `burn/vision` feature, and supports the backends provided by Burn Vision.
+¹ Requires `burn/vision`; backend support follows Burn Vision.
 
 [1]: https://onnx.ai/onnx/operators/onnx__Abs.html "ONNX Abs"
 [2]: https://onnx.ai/onnx/operators/onnx__Acos.html "ONNX Acos"

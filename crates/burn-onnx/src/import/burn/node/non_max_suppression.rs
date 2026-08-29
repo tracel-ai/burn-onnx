@@ -2,8 +2,7 @@ use onnx_ir::node::non_max_suppression::{BoxFormat, NonMaxSuppressionNode};
 
 use super::prelude::*;
 
-fn compile_error(message: impl Into<String>) -> TokenStream {
-    let message = message.into();
+fn compile_error(message: String) -> TokenStream {
     quote! {
         compile_error!(#message);
     }
@@ -35,10 +34,10 @@ fn corner_boxes(format: &BoxFormat) -> TokenStream {
         BoxFormat::Corner => quote! {{
             let __first_corner: Tensor<2> = __boxes_batch
                 .clone()
-                .slice([0..__num_boxes, 0..2])
+                .slice_dim(1, 0..2)
                 .flip([1]);
             let __second_corner: Tensor<2> = __boxes_batch
-                .slice([0..__num_boxes, 2..4])
+                .slice_dim(1, 2..4)
                 .flip([1]);
             Tensor::cat(
                 alloc::vec![
@@ -51,9 +50,9 @@ fn corner_boxes(format: &BoxFormat) -> TokenStream {
         BoxFormat::Center => quote! {{
             let __center: Tensor<2> = __boxes_batch
                 .clone()
-                .slice([0..__num_boxes, 0..2]);
+                .slice_dim(1, 0..2);
             let __half_size: Tensor<2> = __boxes_batch
-                .slice([0..__num_boxes, 2..4])
+                .slice_dim(1, 2..4)
                 / 2.0f32;
             Tensor::cat(
                 alloc::vec![
@@ -137,8 +136,8 @@ impl NodeCodegen for NonMaxSuppressionNode {
                     None => f32::NEG_INFINITY,
                 };
                 let __device = #boxes.device();
-                let [__num_batches, __num_boxes, _] = #boxes.shape().dims();
-                let [_, __num_classes, _] = #scores.shape().dims();
+                let [__num_batches, _, _] = #boxes.dims();
+                let [_, __num_classes, _] = #scores.dims();
                 let mut __selected: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::new();
 
                 // ONNX defines zero as no output, whereas Burn uses zero as
@@ -152,23 +151,15 @@ impl NodeCodegen for NonMaxSuppressionNode {
                     for __batch in 0..__num_batches {
                         let __boxes_batch: Tensor<2> = #boxes
                             .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_boxes, 0..4])
-                            .reshape([__num_boxes, 4]);
+                            .select_dim(0, __batch);
                         let __corner_boxes: Tensor<2> = #corner_boxes;
                         let __scores_batch: Tensor<2> = #scores
                             .clone()
-                            .slice([
-                                __batch..(__batch + 1),
-                                0..__num_classes,
-                                0..__num_boxes,
-                            ])
-                            .reshape([__num_classes, __num_boxes]);
-
+                            .select_dim(0, __batch);
                         for __class in 0..__num_classes {
                             let __class_scores: Tensor<1> = __scores_batch
                                 .clone()
-                                .slice([__class..(__class + 1), 0..__num_boxes])
-                                .reshape([__num_boxes]);
+                                .select_dim(0, __class);
                             let __kept: Tensor<1, Int> = __corner_boxes.clone().nms(
                                 __class_scores,
                                 NmsOptions {
@@ -177,7 +168,7 @@ impl NodeCodegen for NonMaxSuppressionNode {
                                     max_output_boxes: __max_output_boxes,
                                 },
                             );
-                            let [__num_kept] = __kept.shape().dims();
+                            let [__num_kept] = __kept.dims();
 
                             if __num_kept > 0 {
                                 let __batch_indices = Tensor::<1, Int>::full(
@@ -190,13 +181,11 @@ impl NodeCodegen for NonMaxSuppressionNode {
                                     __class as i64,
                                     (&__device, burn::tensor::DType::I64),
                                 );
-                                __selected.push(Tensor::cat(
+                                __selected.push(Tensor::stack(
                                     alloc::vec![
-                                        __batch_indices.unsqueeze_dim(1),
-                                        __class_indices.unsqueeze_dim(1),
-                                        __kept
-                                            .cast(burn::tensor::DType::I64)
-                                            .unsqueeze_dim(1),
+                                        __batch_indices,
+                                        __class_indices,
+                                        __kept.cast(burn::tensor::DType::I64),
                                     ],
                                     1,
                                 ));
@@ -234,34 +223,28 @@ mod tests {
             .config(NonMaxSuppressionConfig::new(format))
     }
 
-    fn scalar_setup(node: &NonMaxSuppressionNode) -> String {
-        const START: &str = "let __max_output_boxes_per_class";
-        const END: &str = "let __burn_score_threshold";
-
+    fn generated_section(node: &NonMaxSuppressionNode, start: &str, end: &str) -> String {
         let code = codegen_forward_default(node);
-        let (_, setup) = code.split_once(START).expect("missing scalar setup");
-        let (setup, _) = setup.split_once(END).expect("missing NMS setup");
+        let (_, section) = code.split_once(start).expect("missing section start");
+        let (section, _) = section.split_once(end).expect("missing section end");
 
-        format!("{START}{setup}")
+        format!("{start}{section}")
             .lines()
             .map(str::trim)
             .collect::<Vec<_>>()
             .join("\n")
     }
 
+    fn scalar_setup(node: &NonMaxSuppressionNode) -> String {
+        generated_section(
+            node,
+            "let __max_output_boxes_per_class",
+            "let __burn_score_threshold",
+        )
+    }
+
     fn box_conversion(node: &NonMaxSuppressionNode) -> String {
-        const START: &str = "let __corner_boxes";
-        const END: &str = "let __scores_batch";
-
-        let code = codegen_forward_default(node);
-        let (_, conversion) = code.split_once(START).expect("missing box conversion");
-        let (conversion, _) = conversion.split_once(END).expect("missing score setup");
-
-        format!("{START}{conversion}")
-            .lines()
-            .map(str::trim)
-            .collect::<Vec<_>>()
-            .join("\n")
+        generated_section(node, "let __corner_boxes", "let __scores_batch")
     }
 
     #[test]
@@ -292,24 +275,21 @@ mod tests {
                     None => f32::NEG_INFINITY,
                 };
                 let __device = boxes.device();
-                let [__num_batches, __num_boxes, _] = boxes.shape().dims();
-                let [_, __num_classes, _] = scores.shape().dims();
+                let [__num_batches, _, _] = boxes.dims();
+                let [_, __num_classes, _] = scores.dims();
                 let mut __selected: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::new();
                 if __max_output_boxes_per_class > 0 {
                     let __max_output_boxes = usize::try_from(__max_output_boxes_per_class)
                         .unwrap_or(usize::MAX);
                     for __batch in 0..__num_batches {
-                        let __boxes_batch: Tensor<2> = boxes
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_boxes, 0..4])
-                            .reshape([__num_boxes, 4]);
+                        let __boxes_batch: Tensor<2> = boxes.clone().select_dim(0, __batch);
                         let __corner_boxes: Tensor<2> = {
                             let __first_corner: Tensor<2> = __boxes_batch
                                 .clone()
-                                .slice([0..__num_boxes, 0..2])
+                                .slice_dim(1, 0..2)
                                 .flip([1]);
                             let __second_corner: Tensor<2> = __boxes_batch
-                                .slice([0..__num_boxes, 2..4])
+                                .slice_dim(1, 2..4)
                                 .flip([1]);
                             Tensor::cat(
                                 alloc::vec![
@@ -319,15 +299,11 @@ mod tests {
                                 1,
                             )
                         };
-                        let __scores_batch: Tensor<2> = scores
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_classes, 0..__num_boxes])
-                            .reshape([__num_classes, __num_boxes]);
+                        let __scores_batch: Tensor<2> = scores.clone().select_dim(0, __batch);
                         for __class in 0..__num_classes {
                             let __class_scores: Tensor<1> = __scores_batch
                                 .clone()
-                                .slice([__class..(__class + 1), 0..__num_boxes])
-                                .reshape([__num_boxes]);
+                                .select_dim(0, __class);
                             let __kept: Tensor<1, Int> = __corner_boxes
                                 .clone()
                                 .nms(
@@ -338,7 +314,7 @@ mod tests {
                                         max_output_boxes: __max_output_boxes,
                                     },
                                 );
-                            let [__num_kept] = __kept.shape().dims();
+                            let [__num_kept] = __kept.dims();
                             if __num_kept > 0 {
                                 let __batch_indices = Tensor::<
                                     1,
@@ -358,11 +334,10 @@ mod tests {
                                 );
                                 __selected
                                     .push(
-                                        Tensor::cat(
+                                        Tensor::stack(
                                             alloc::vec![
-                                                __batch_indices.unsqueeze_dim(1), __class_indices
-                                                .unsqueeze_dim(1), __kept.cast(burn::tensor::DType::I64)
-                                                .unsqueeze_dim(1),
+                                                __batch_indices, __class_indices, __kept
+                                                .cast(burn::tensor::DType::I64),
                                             ],
                                             1,
                                         ),
@@ -399,11 +374,9 @@ mod tests {
 
         assert_snapshot!(box_conversion(&scalar_tensor_node), @"
         let __corner_boxes: Tensor<2> = {
-        let __center: Tensor<2> = __boxes_batch
-        .clone()
-        .slice([0..__num_boxes, 0..2]);
-        let __half_size: Tensor<2> = __boxes_batch
-        .slice([0..__num_boxes, 2..4]) / 2.0f32;
+        let __center: Tensor<2> = __boxes_batch.clone().slice_dim(1, 0..2);
+        let __half_size: Tensor<2> = __boxes_batch.slice_dim(1, 2..4)
+        / 2.0f32;
         Tensor::cat(
         alloc::vec![
         __center.clone() - __half_size.clone(), __center +

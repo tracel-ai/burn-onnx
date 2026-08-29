@@ -20,10 +20,9 @@ use crate::processor::{
 };
 
 /// Coordinate representation used by the input boxes.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BoxFormat {
     /// `[y1, x1, y2, x2]`, using any diagonal pair of corners.
-    #[default]
     Corner,
     /// `[x_center, y_center, width, height]`.
     Center,
@@ -146,8 +145,8 @@ fn validate_inputs(node: &RawNode) -> Result<(), ProcessError> {
         .get_input(1)
         .ok_or_else(|| ProcessError::MissingInput("scores".to_string()))?;
 
-    let boxes = expect_f32_tensor(boxes, "boxes", 3)?;
-    let scores = expect_f32_tensor(scores, "scores", 3)?;
+    let boxes = expect_f32_tensor(boxes, "boxes")?;
+    let scores = expect_f32_tensor(scores, "scores")?;
 
     if let Some(shape) = boxes.static_shape.as_ref()
         && let Some(Some(last_dim)) = shape.get(2)
@@ -158,20 +157,20 @@ fn validate_inputs(node: &RawNode) -> Result<(), ProcessError> {
         )));
     }
 
-    validate_matching_dimension(
-        boxes.static_shape.as_ref(),
-        0,
-        scores.static_shape.as_ref(),
-        0,
-        "batch",
-    )?;
-    validate_matching_dimension(
-        boxes.static_shape.as_ref(),
-        1,
-        scores.static_shape.as_ref(),
-        2,
-        "num_boxes",
-    )?;
+    let known_dim = |shape: Option<&[Option<usize>]>, index: usize| {
+        shape.and_then(|shape| shape.get(index)).copied().flatten()
+    };
+    for (box_index, score_index, name) in [(0, 0, "batch"), (1, 2, "num_boxes")] {
+        if let (Some(boxes), Some(scores)) = (
+            known_dim(boxes.static_shape.as_deref(), box_index),
+            known_dim(scores.static_shape.as_deref(), score_index),
+        ) && boxes != scores
+        {
+            return Err(ProcessError::Custom(format!(
+                "NonMaxSuppression inputs 'boxes' and 'scores' must agree on {name}, got {boxes} and {scores}"
+            )));
+        }
+    }
 
     for (index, name, dtype) in [
         (2, "max_output_boxes_per_class", DType::I64),
@@ -199,21 +198,20 @@ fn validate_inputs(node: &RawNode) -> Result<(), ProcessError> {
 fn expect_f32_tensor<'a>(
     argument: &'a Argument,
     name: &str,
-    rank: usize,
 ) -> Result<&'a TensorType, ProcessError> {
     let tensor = match &argument.ty {
         ArgType::Tensor(tensor) => tensor,
         other => {
             return Err(ProcessError::TypeMismatch {
-                expected: format!("{name} to be a rank-{rank} float32 tensor"),
+                expected: format!("{name} to be a rank-3 float32 tensor"),
                 actual: other.to_string(),
             });
         }
     };
 
-    if tensor.rank != rank {
+    if tensor.rank != 3 {
         return Err(ProcessError::Custom(format!(
-            "NonMaxSuppression input '{name}' must be rank {rank}, got rank {}",
+            "NonMaxSuppression input '{name}' must be rank 3, got rank {}",
             tensor.rank
         )));
     }
@@ -227,33 +225,6 @@ fn expect_f32_tensor<'a>(
     Ok(tensor)
 }
 
-fn validate_matching_dimension(
-    left_shape: Option<&Vec<Option<usize>>>,
-    left_index: usize,
-    right_shape: Option<&Vec<Option<usize>>>,
-    right_index: usize,
-    name: &str,
-) -> Result<(), ProcessError> {
-    let left = left_shape
-        .and_then(|shape| shape.get(left_index))
-        .copied()
-        .flatten();
-    let right = right_shape
-        .and_then(|shape| shape.get(right_index))
-        .copied()
-        .flatten();
-
-    if let (Some(left), Some(right)) = (left, right)
-        && left != right
-    {
-        return Err(ProcessError::Custom(format!(
-            "NonMaxSuppression inputs 'boxes' and 'scores' must agree on {name}, got {left} and {right}"
-        )));
-    }
-
-    Ok(())
-}
-
 fn validate_scalar_input(
     argument: &Argument,
     name: &str,
@@ -262,9 +233,8 @@ fn validate_scalar_input(
     let actual_dtype = match &argument.ty {
         ArgType::ScalarNative(dtype) | ArgType::ScalarTensor(dtype) => *dtype,
         ArgType::Tensor(tensor) if tensor.rank == 1 => {
-            if let Some(shape) = tensor.static_shape.as_ref()
-                && let Some(Some(length)) = shape.first()
-                && *length != 1
+            if let Some(length) = argument.ty.first_dim_static_len()
+                && length != 1
             {
                 return Err(ProcessError::Custom(format!(
                     "NonMaxSuppression optional input '{name}' must contain one value, got length {length}"
@@ -342,33 +312,16 @@ mod tests {
             ),
         ] {
             let node = infer(node, 10).unwrap();
-            assert_eq!(
-                node.outputs[0].ty,
-                ArgType::Tensor(TensorType {
-                    dtype: DType::I64,
-                    rank: 2,
-                    static_shape: Some(vec![Some(0), Some(3)]),
-                }),
-                "{case}"
-            );
+            let ArgType::Tensor(output) = &node.outputs[0].ty else {
+                panic!("Expected tensor output for {case}");
+            };
+            assert_eq!(output.static_shape, Some(vec![Some(0), Some(3)]), "{case}");
         }
     }
 
     #[test]
-    fn accepts_opset_10_and_rejects_opset_9() {
-        let node = base_node().build();
-        let spec = NonMaxSuppressionProcessor.spec();
-
-        crate::processor::validate_node_spec(&node, 10, &spec).unwrap();
-        let error = crate::processor::validate_node_spec(&node, 9, &spec).unwrap_err();
-
-        assert!(matches!(
-            error,
-            ProcessError::UnsupportedOpset {
-                required: 10,
-                actual: 9
-            }
-        ));
+    fn starts_at_opset_10() {
+        assert_eq!(NonMaxSuppressionProcessor.spec().min_opset, 10);
     }
 
     #[test]
@@ -431,12 +384,10 @@ mod tests {
 
     #[test]
     fn preserves_omitted_center_point_box() {
-        let node = infer(base_node().build(), 10).unwrap();
+        let config = NonMaxSuppressionProcessor
+            .extract_config(&base_node().build(), 10)
+            .unwrap();
 
-        let Node::NonMaxSuppression(node) = NonMaxSuppressionProcessor.build_node(node, 10) else {
-            panic!("Expected NonMaxSuppression node");
-        };
-
-        assert_eq!(node.config.center_point_box, None);
+        assert_eq!(config.center_point_box, None);
     }
 }

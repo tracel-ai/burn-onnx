@@ -5627,3 +5627,4 @@ status = "pass"
 
 [test_xor_bcast4v4d]
 status = "pass"
+
