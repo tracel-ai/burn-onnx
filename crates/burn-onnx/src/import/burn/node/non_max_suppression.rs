@@ -33,65 +33,32 @@ fn optional_scalar(
 fn corner_boxes(format: &BoxFormat) -> TokenStream {
     match format {
         BoxFormat::Corner => quote! {{
-            let __y1_raw: Tensor<1> = __boxes_batch
+            let __first_corner: Tensor<2> = __boxes_batch
                 .clone()
-                .slice([0..__num_boxes, 0..1])
-                .reshape([__num_boxes]);
-            let __x1_raw: Tensor<1> = __boxes_batch
-                .clone()
-                .slice([0..__num_boxes, 1..2])
-                .reshape([__num_boxes]);
-            let __y2_raw: Tensor<1> = __boxes_batch
-                .clone()
-                .slice([0..__num_boxes, 2..3])
-                .reshape([__num_boxes]);
-            let __x2_raw: Tensor<1> = __boxes_batch
-                .clone()
-                .slice([0..__num_boxes, 3..4])
-                .reshape([__num_boxes]);
-            let __x1 = __x1_raw.clone().min_pair(__x2_raw.clone());
-            let __y1 = __y1_raw.clone().min_pair(__y2_raw.clone());
-            let __x2 = __x1_raw.max_pair(__x2_raw);
-            let __y2 = __y1_raw.max_pair(__y2_raw);
+                .slice([0..__num_boxes, 0..2])
+                .flip([1]);
+            let __second_corner: Tensor<2> = __boxes_batch
+                .slice([0..__num_boxes, 2..4])
+                .flip([1]);
             Tensor::cat(
                 alloc::vec![
-                    __x1.unsqueeze_dim(1),
-                    __y1.unsqueeze_dim(1),
-                    __x2.unsqueeze_dim(1),
-                    __y2.unsqueeze_dim(1),
+                    __first_corner.clone().min_pair(__second_corner.clone()),
+                    __first_corner.max_pair(__second_corner),
                 ],
                 1,
             )
         }},
         BoxFormat::Center => quote! {{
-            let __center_x: Tensor<1> = __boxes_batch
+            let __center: Tensor<2> = __boxes_batch
                 .clone()
-                .slice([0..__num_boxes, 0..1])
-                .reshape([__num_boxes]);
-            let __center_y: Tensor<1> = __boxes_batch
-                .clone()
-                .slice([0..__num_boxes, 1..2])
-                .reshape([__num_boxes]);
-            let __width: Tensor<1> = __boxes_batch
-                .clone()
-                .slice([0..__num_boxes, 2..3])
-                .reshape([__num_boxes]);
-            let __height: Tensor<1> = __boxes_batch
-                .clone()
-                .slice([0..__num_boxes, 3..4])
-                .reshape([__num_boxes]);
-            let __half_width = __width / 2.0f32;
-            let __half_height = __height / 2.0f32;
-            let __x1 = __center_x.clone() - __half_width.clone();
-            let __y1 = __center_y.clone() - __half_height.clone();
-            let __x2 = __center_x + __half_width;
-            let __y2 = __center_y + __half_height;
+                .slice([0..__num_boxes, 0..2]);
+            let __half_size: Tensor<2> = __boxes_batch
+                .slice([0..__num_boxes, 2..4])
+                / 2.0f32;
             Tensor::cat(
                 alloc::vec![
-                    __x1.unsqueeze_dim(1),
-                    __y1.unsqueeze_dim(1),
-                    __x2.unsqueeze_dim(1),
-                    __y2.unsqueeze_dim(1),
+                    __center.clone() - __half_size.clone(),
+                    __center + __half_size,
                 ],
                 1,
             )
@@ -213,18 +180,14 @@ impl NodeCodegen for NonMaxSuppressionNode {
                             let [__num_kept] = __kept.shape().dims();
 
                             if __num_kept > 0 {
-                                let __batch_indices = Tensor::<1, Int>::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__batch as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
+                                let __batch_indices = Tensor::<1, Int>::full(
+                                    [__num_kept],
+                                    __batch as i64,
                                     (&__device, burn::tensor::DType::I64),
                                 );
-                                let __class_indices = Tensor::<1, Int>::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__class as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
+                                let __class_indices = Tensor::<1, Int>::full(
+                                    [__num_kept],
+                                    __class as i64,
                                     (&__device, burn::tensor::DType::I64),
                                 );
                                 __selected.push(Tensor::cat(
@@ -243,11 +206,8 @@ impl NodeCodegen for NonMaxSuppressionNode {
                 }
 
                 if __selected.is_empty() {
-                    Tensor::<2, Int>::from_data(
-                        burn::tensor::TensorData::new(
-                            alloc::vec::Vec::<i64>::new(),
-                            [0, 3],
-                        ),
+                    Tensor::<2, Int>::empty(
+                        [0, 3],
                         (&__device, burn::tensor::DType::I64),
                     )
                 } else {
@@ -272,6 +232,31 @@ mod tests {
             .input_tensor("boxes", 3, DType::F32)
             .input_tensor("scores", 3, DType::F32)
             .config(NonMaxSuppressionConfig::new(format))
+    }
+
+    fn generated_section(
+        node: &NonMaxSuppressionNode,
+        start: impl Fn(&str) -> bool,
+        end: impl Fn(&str) -> bool,
+    ) -> String {
+        codegen_forward_default(node)
+            .lines()
+            .skip_while(|line| !start(line))
+            .take_while(|line| !end(line))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn nms_setup(node: &NonMaxSuppressionNode) -> String {
+        generated_section(node, |_| true, |line| line.contains("let __device"))
+    }
+
+    fn box_conversion(node: &NonMaxSuppressionNode) -> String {
+        generated_section(
+            node,
+            |line| line.contains("let __corner_boxes"),
+            |line| line.contains("let __scores_batch"),
+        )
     }
 
     #[test]
@@ -314,30 +299,17 @@ mod tests {
                             .slice([__batch..(__batch + 1), 0..__num_boxes, 0..4])
                             .reshape([__num_boxes, 4]);
                         let __corner_boxes: Tensor<2> = {
-                            let __y1_raw: Tensor<1> = __boxes_batch
+                            let __first_corner: Tensor<2> = __boxes_batch
                                 .clone()
-                                .slice([0..__num_boxes, 0..1])
-                                .reshape([__num_boxes]);
-                            let __x1_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 1..2])
-                                .reshape([__num_boxes]);
-                            let __y2_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 2..3])
-                                .reshape([__num_boxes]);
-                            let __x2_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 3..4])
-                                .reshape([__num_boxes]);
-                            let __x1 = __x1_raw.clone().min_pair(__x2_raw.clone());
-                            let __y1 = __y1_raw.clone().min_pair(__y2_raw.clone());
-                            let __x2 = __x1_raw.max_pair(__x2_raw);
-                            let __y2 = __y1_raw.max_pair(__y2_raw);
+                                .slice([0..__num_boxes, 0..2])
+                                .flip([1]);
+                            let __second_corner: Tensor<2> = __boxes_batch
+                                .slice([0..__num_boxes, 2..4])
+                                .flip([1]);
                             Tensor::cat(
                                 alloc::vec![
-                                    __x1.unsqueeze_dim(1), __y1.unsqueeze_dim(1), __x2
-                                    .unsqueeze_dim(1), __y2.unsqueeze_dim(1),
+                                    __first_corner.clone().min_pair(__second_corner.clone()),
+                                    __first_corner.max_pair(__second_corner),
                                 ],
                                 1,
                             )
@@ -366,21 +338,17 @@ mod tests {
                                 let __batch_indices = Tensor::<
                                     1,
                                     Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__batch as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
+                                >::full(
+                                    [__num_kept],
+                                    __batch as i64,
                                     (&__device, burn::tensor::DType::I64),
                                 );
                                 let __class_indices = Tensor::<
                                     1,
                                     Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__class as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
+                                >::full(
+                                    [__num_kept],
+                                    __class as i64,
                                     (&__device, burn::tensor::DType::I64),
                                 );
                                 __selected
@@ -399,13 +367,7 @@ mod tests {
                     }
                 }
                 if __selected.is_empty() {
-                    Tensor::<
-                        2,
-                        Int,
-                    >::from_data(
-                        burn::tensor::TensorData::new(alloc::vec::Vec::<i64>::new(), [0, 3]),
-                        (&__device, burn::tensor::DType::I64),
-                    )
+                    Tensor::<2, Int>::empty([0, 3], (&__device, burn::tensor::DType::I64))
                 } else {
                     Tensor::cat(__selected, 0)
                 }
@@ -424,7 +386,23 @@ mod tests {
             .output_tensor("selected_indices", 2, DType::I64)
             .build();
 
-        assert_snapshot!(codegen_forward_default(&node), @"
+        assert_snapshot!(box_conversion(&node), @"
+        let __corner_boxes: Tensor<2> = {
+            let __center: Tensor<2> = __boxes_batch
+                .clone()
+                .slice([0..__num_boxes, 0..2]);
+            let __half_size: Tensor<2> = __boxes_batch
+                .slice([0..__num_boxes, 2..4]) / 2.0f32;
+            Tensor::cat(
+                alloc::vec![
+                    __center.clone() - __half_size.clone(), __center +
+                    __half_size,
+                ],
+                1,
+            )
+        };
+        ");
+        assert_snapshot!(nms_setup(&node), @"
         pub fn forward(
             &self,
             boxes: Tensor<3>,
@@ -444,119 +422,6 @@ mod tests {
                     Some(threshold) => threshold.next_up(),
                     None => f32::NEG_INFINITY,
                 };
-                let __device = boxes.device();
-                let [__num_batches, __num_boxes, _] = boxes.shape().dims();
-                let [_, __num_classes, _] = scores.shape().dims();
-                let mut __selected: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::new();
-                if __max_output_boxes_per_class > 0 {
-                    let __max_output_boxes = usize::try_from(__max_output_boxes_per_class)
-                        .unwrap_or(usize::MAX);
-                    for __batch in 0..__num_batches {
-                        let __boxes_batch: Tensor<2> = boxes
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_boxes, 0..4])
-                            .reshape([__num_boxes, 4]);
-                        let __corner_boxes: Tensor<2> = {
-                            let __center_x: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 0..1])
-                                .reshape([__num_boxes]);
-                            let __center_y: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 1..2])
-                                .reshape([__num_boxes]);
-                            let __width: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 2..3])
-                                .reshape([__num_boxes]);
-                            let __height: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 3..4])
-                                .reshape([__num_boxes]);
-                            let __half_width = __width / 2.0f32;
-                            let __half_height = __height / 2.0f32;
-                            let __x1 = __center_x.clone() - __half_width.clone();
-                            let __y1 = __center_y.clone() - __half_height.clone();
-                            let __x2 = __center_x + __half_width;
-                            let __y2 = __center_y + __half_height;
-                            Tensor::cat(
-                                alloc::vec![
-                                    __x1.unsqueeze_dim(1), __y1.unsqueeze_dim(1), __x2
-                                    .unsqueeze_dim(1), __y2.unsqueeze_dim(1),
-                                ],
-                                1,
-                            )
-                        };
-                        let __scores_batch: Tensor<2> = scores
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_classes, 0..__num_boxes])
-                            .reshape([__num_classes, __num_boxes]);
-                        for __class in 0..__num_classes {
-                            let __class_scores: Tensor<1> = __scores_batch
-                                .clone()
-                                .slice([__class..(__class + 1), 0..__num_boxes])
-                                .reshape([__num_boxes]);
-                            let __kept: Tensor<1, Int> = __corner_boxes
-                                .clone()
-                                .nms(
-                                    __class_scores,
-                                    NmsOptions {
-                                        iou_threshold: __iou_threshold,
-                                        score_threshold: __burn_score_threshold,
-                                        max_output_boxes: __max_output_boxes,
-                                    },
-                                );
-                            let [__num_kept] = __kept.shape().dims();
-                            if __num_kept > 0 {
-                                let __batch_indices = Tensor::<
-                                    1,
-                                    Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__batch as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
-                                    (&__device, burn::tensor::DType::I64),
-                                );
-                                let __class_indices = Tensor::<
-                                    1,
-                                    Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__class as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
-                                    (&__device, burn::tensor::DType::I64),
-                                );
-                                __selected
-                                    .push(
-                                        Tensor::cat(
-                                            alloc::vec![
-                                                __batch_indices.unsqueeze_dim(1), __class_indices
-                                                .unsqueeze_dim(1), __kept.cast(burn::tensor::DType::I64)
-                                                .unsqueeze_dim(1),
-                                            ],
-                                            1,
-                                        ),
-                                    );
-                            }
-                        }
-                    }
-                }
-                if __selected.is_empty() {
-                    Tensor::<
-                        2,
-                        Int,
-                    >::from_data(
-                        burn::tensor::TensorData::new(alloc::vec::Vec::<i64>::new(), [0, 3]),
-                        (&__device, burn::tensor::DType::I64),
-                    )
-                } else {
-                    Tensor::cat(__selected, 0)
-                }
-            };
-            selected_indices
-        }
         ");
     }
 
@@ -569,7 +434,7 @@ mod tests {
             .output_tensor("selected_indices", 2, DType::I64)
             .build();
 
-        assert_snapshot!(codegen_forward_default(&node), @"
+        assert_snapshot!(nms_setup(&node), @"
         pub fn forward(
             &self,
             boxes: Tensor<3>,
@@ -589,117 +454,6 @@ mod tests {
                     Some(threshold) => threshold.next_up(),
                     None => f32::NEG_INFINITY,
                 };
-                let __device = boxes.device();
-                let [__num_batches, __num_boxes, _] = boxes.shape().dims();
-                let [_, __num_classes, _] = scores.shape().dims();
-                let mut __selected: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::new();
-                if __max_output_boxes_per_class > 0 {
-                    let __max_output_boxes = usize::try_from(__max_output_boxes_per_class)
-                        .unwrap_or(usize::MAX);
-                    for __batch in 0..__num_batches {
-                        let __boxes_batch: Tensor<2> = boxes
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_boxes, 0..4])
-                            .reshape([__num_boxes, 4]);
-                        let __corner_boxes: Tensor<2> = {
-                            let __y1_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 0..1])
-                                .reshape([__num_boxes]);
-                            let __x1_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 1..2])
-                                .reshape([__num_boxes]);
-                            let __y2_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 2..3])
-                                .reshape([__num_boxes]);
-                            let __x2_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 3..4])
-                                .reshape([__num_boxes]);
-                            let __x1 = __x1_raw.clone().min_pair(__x2_raw.clone());
-                            let __y1 = __y1_raw.clone().min_pair(__y2_raw.clone());
-                            let __x2 = __x1_raw.max_pair(__x2_raw);
-                            let __y2 = __y1_raw.max_pair(__y2_raw);
-                            Tensor::cat(
-                                alloc::vec![
-                                    __x1.unsqueeze_dim(1), __y1.unsqueeze_dim(1), __x2
-                                    .unsqueeze_dim(1), __y2.unsqueeze_dim(1),
-                                ],
-                                1,
-                            )
-                        };
-                        let __scores_batch: Tensor<2> = scores
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_classes, 0..__num_boxes])
-                            .reshape([__num_classes, __num_boxes]);
-                        for __class in 0..__num_classes {
-                            let __class_scores: Tensor<1> = __scores_batch
-                                .clone()
-                                .slice([__class..(__class + 1), 0..__num_boxes])
-                                .reshape([__num_boxes]);
-                            let __kept: Tensor<1, Int> = __corner_boxes
-                                .clone()
-                                .nms(
-                                    __class_scores,
-                                    NmsOptions {
-                                        iou_threshold: __iou_threshold,
-                                        score_threshold: __burn_score_threshold,
-                                        max_output_boxes: __max_output_boxes,
-                                    },
-                                );
-                            let [__num_kept] = __kept.shape().dims();
-                            if __num_kept > 0 {
-                                let __batch_indices = Tensor::<
-                                    1,
-                                    Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__batch as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
-                                    (&__device, burn::tensor::DType::I64),
-                                );
-                                let __class_indices = Tensor::<
-                                    1,
-                                    Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__class as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
-                                    (&__device, burn::tensor::DType::I64),
-                                );
-                                __selected
-                                    .push(
-                                        Tensor::cat(
-                                            alloc::vec![
-                                                __batch_indices.unsqueeze_dim(1), __class_indices
-                                                .unsqueeze_dim(1), __kept.cast(burn::tensor::DType::I64)
-                                                .unsqueeze_dim(1),
-                                            ],
-                                            1,
-                                        ),
-                                    );
-                            }
-                        }
-                    }
-                }
-                if __selected.is_empty() {
-                    Tensor::<
-                        2,
-                        Int,
-                    >::from_data(
-                        burn::tensor::TensorData::new(alloc::vec::Vec::<i64>::new(), [0, 3]),
-                        (&__device, burn::tensor::DType::I64),
-                    )
-                } else {
-                    Tensor::cat(__selected, 0)
-                }
-            };
-            selected_indices
-        }
         ");
     }
 
@@ -709,7 +463,7 @@ mod tests {
             .output_tensor("selected_indices", 2, DType::I64)
             .build();
 
-        assert_snapshot!(codegen_forward_default(&node), @"
+        assert_snapshot!(nms_setup(&node), @"
         pub fn forward(&self, boxes: Tensor<3>, scores: Tensor<3>) -> Tensor<2, Int> {
             let selected_indices = {
                 let __max_output_boxes_per_class: i64 = 0i64;
@@ -720,117 +474,6 @@ mod tests {
                     Some(threshold) => threshold.next_up(),
                     None => f32::NEG_INFINITY,
                 };
-                let __device = boxes.device();
-                let [__num_batches, __num_boxes, _] = boxes.shape().dims();
-                let [_, __num_classes, _] = scores.shape().dims();
-                let mut __selected: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::new();
-                if __max_output_boxes_per_class > 0 {
-                    let __max_output_boxes = usize::try_from(__max_output_boxes_per_class)
-                        .unwrap_or(usize::MAX);
-                    for __batch in 0..__num_batches {
-                        let __boxes_batch: Tensor<2> = boxes
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_boxes, 0..4])
-                            .reshape([__num_boxes, 4]);
-                        let __corner_boxes: Tensor<2> = {
-                            let __y1_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 0..1])
-                                .reshape([__num_boxes]);
-                            let __x1_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 1..2])
-                                .reshape([__num_boxes]);
-                            let __y2_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 2..3])
-                                .reshape([__num_boxes]);
-                            let __x2_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 3..4])
-                                .reshape([__num_boxes]);
-                            let __x1 = __x1_raw.clone().min_pair(__x2_raw.clone());
-                            let __y1 = __y1_raw.clone().min_pair(__y2_raw.clone());
-                            let __x2 = __x1_raw.max_pair(__x2_raw);
-                            let __y2 = __y1_raw.max_pair(__y2_raw);
-                            Tensor::cat(
-                                alloc::vec![
-                                    __x1.unsqueeze_dim(1), __y1.unsqueeze_dim(1), __x2
-                                    .unsqueeze_dim(1), __y2.unsqueeze_dim(1),
-                                ],
-                                1,
-                            )
-                        };
-                        let __scores_batch: Tensor<2> = scores
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_classes, 0..__num_boxes])
-                            .reshape([__num_classes, __num_boxes]);
-                        for __class in 0..__num_classes {
-                            let __class_scores: Tensor<1> = __scores_batch
-                                .clone()
-                                .slice([__class..(__class + 1), 0..__num_boxes])
-                                .reshape([__num_boxes]);
-                            let __kept: Tensor<1, Int> = __corner_boxes
-                                .clone()
-                                .nms(
-                                    __class_scores,
-                                    NmsOptions {
-                                        iou_threshold: __iou_threshold,
-                                        score_threshold: __burn_score_threshold,
-                                        max_output_boxes: __max_output_boxes,
-                                    },
-                                );
-                            let [__num_kept] = __kept.shape().dims();
-                            if __num_kept > 0 {
-                                let __batch_indices = Tensor::<
-                                    1,
-                                    Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__batch as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
-                                    (&__device, burn::tensor::DType::I64),
-                                );
-                                let __class_indices = Tensor::<
-                                    1,
-                                    Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__class as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
-                                    (&__device, burn::tensor::DType::I64),
-                                );
-                                __selected
-                                    .push(
-                                        Tensor::cat(
-                                            alloc::vec![
-                                                __batch_indices.unsqueeze_dim(1), __class_indices
-                                                .unsqueeze_dim(1), __kept.cast(burn::tensor::DType::I64)
-                                                .unsqueeze_dim(1),
-                                            ],
-                                            1,
-                                        ),
-                                    );
-                            }
-                        }
-                    }
-                }
-                if __selected.is_empty() {
-                    Tensor::<
-                        2,
-                        Int,
-                    >::from_data(
-                        burn::tensor::TensorData::new(alloc::vec::Vec::<i64>::new(), [0, 3]),
-                        (&__device, burn::tensor::DType::I64),
-                    )
-                } else {
-                    Tensor::cat(__selected, 0)
-                }
-            };
-            selected_indices
-        }
         ");
     }
 
@@ -843,7 +486,7 @@ mod tests {
             .output_tensor("selected_indices", 2, DType::I64)
             .build();
 
-        assert_snapshot!(codegen_forward_default(&node), @"
+        assert_snapshot!(nms_setup(&node), @"
         pub fn forward(
             &self,
             boxes: Tensor<3>,
@@ -860,117 +503,6 @@ mod tests {
                     Some(threshold) => threshold.next_up(),
                     None => f32::NEG_INFINITY,
                 };
-                let __device = boxes.device();
-                let [__num_batches, __num_boxes, _] = boxes.shape().dims();
-                let [_, __num_classes, _] = scores.shape().dims();
-                let mut __selected: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::new();
-                if __max_output_boxes_per_class > 0 {
-                    let __max_output_boxes = usize::try_from(__max_output_boxes_per_class)
-                        .unwrap_or(usize::MAX);
-                    for __batch in 0..__num_batches {
-                        let __boxes_batch: Tensor<2> = boxes
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_boxes, 0..4])
-                            .reshape([__num_boxes, 4]);
-                        let __corner_boxes: Tensor<2> = {
-                            let __y1_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 0..1])
-                                .reshape([__num_boxes]);
-                            let __x1_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 1..2])
-                                .reshape([__num_boxes]);
-                            let __y2_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 2..3])
-                                .reshape([__num_boxes]);
-                            let __x2_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 3..4])
-                                .reshape([__num_boxes]);
-                            let __x1 = __x1_raw.clone().min_pair(__x2_raw.clone());
-                            let __y1 = __y1_raw.clone().min_pair(__y2_raw.clone());
-                            let __x2 = __x1_raw.max_pair(__x2_raw);
-                            let __y2 = __y1_raw.max_pair(__y2_raw);
-                            Tensor::cat(
-                                alloc::vec![
-                                    __x1.unsqueeze_dim(1), __y1.unsqueeze_dim(1), __x2
-                                    .unsqueeze_dim(1), __y2.unsqueeze_dim(1),
-                                ],
-                                1,
-                            )
-                        };
-                        let __scores_batch: Tensor<2> = scores
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_classes, 0..__num_boxes])
-                            .reshape([__num_classes, __num_boxes]);
-                        for __class in 0..__num_classes {
-                            let __class_scores: Tensor<1> = __scores_batch
-                                .clone()
-                                .slice([__class..(__class + 1), 0..__num_boxes])
-                                .reshape([__num_boxes]);
-                            let __kept: Tensor<1, Int> = __corner_boxes
-                                .clone()
-                                .nms(
-                                    __class_scores,
-                                    NmsOptions {
-                                        iou_threshold: __iou_threshold,
-                                        score_threshold: __burn_score_threshold,
-                                        max_output_boxes: __max_output_boxes,
-                                    },
-                                );
-                            let [__num_kept] = __kept.shape().dims();
-                            if __num_kept > 0 {
-                                let __batch_indices = Tensor::<
-                                    1,
-                                    Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__batch as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
-                                    (&__device, burn::tensor::DType::I64),
-                                );
-                                let __class_indices = Tensor::<
-                                    1,
-                                    Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__class as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
-                                    (&__device, burn::tensor::DType::I64),
-                                );
-                                __selected
-                                    .push(
-                                        Tensor::cat(
-                                            alloc::vec![
-                                                __batch_indices.unsqueeze_dim(1), __class_indices
-                                                .unsqueeze_dim(1), __kept.cast(burn::tensor::DType::I64)
-                                                .unsqueeze_dim(1),
-                                            ],
-                                            1,
-                                        ),
-                                    );
-                            }
-                        }
-                    }
-                }
-                if __selected.is_empty() {
-                    Tensor::<
-                        2,
-                        Int,
-                    >::from_data(
-                        burn::tensor::TensorData::new(alloc::vec::Vec::<i64>::new(), [0, 3]),
-                        (&__device, burn::tensor::DType::I64),
-                    )
-                } else {
-                    Tensor::cat(__selected, 0)
-                }
-            };
-            selected_indices
-        }
         ");
     }
 
@@ -982,7 +514,7 @@ mod tests {
             .output_tensor("selected_indices", 2, DType::I64)
             .build();
 
-        assert_snapshot!(codegen_forward_default(&node), @"
+        assert_snapshot!(nms_setup(&node), @"
         pub fn forward(
             &self,
             boxes: Tensor<3>,
@@ -999,117 +531,6 @@ mod tests {
                     Some(threshold) => threshold.next_up(),
                     None => f32::NEG_INFINITY,
                 };
-                let __device = boxes.device();
-                let [__num_batches, __num_boxes, _] = boxes.shape().dims();
-                let [_, __num_classes, _] = scores.shape().dims();
-                let mut __selected: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::new();
-                if __max_output_boxes_per_class > 0 {
-                    let __max_output_boxes = usize::try_from(__max_output_boxes_per_class)
-                        .unwrap_or(usize::MAX);
-                    for __batch in 0..__num_batches {
-                        let __boxes_batch: Tensor<2> = boxes
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_boxes, 0..4])
-                            .reshape([__num_boxes, 4]);
-                        let __corner_boxes: Tensor<2> = {
-                            let __y1_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 0..1])
-                                .reshape([__num_boxes]);
-                            let __x1_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 1..2])
-                                .reshape([__num_boxes]);
-                            let __y2_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 2..3])
-                                .reshape([__num_boxes]);
-                            let __x2_raw: Tensor<1> = __boxes_batch
-                                .clone()
-                                .slice([0..__num_boxes, 3..4])
-                                .reshape([__num_boxes]);
-                            let __x1 = __x1_raw.clone().min_pair(__x2_raw.clone());
-                            let __y1 = __y1_raw.clone().min_pair(__y2_raw.clone());
-                            let __x2 = __x1_raw.max_pair(__x2_raw);
-                            let __y2 = __y1_raw.max_pair(__y2_raw);
-                            Tensor::cat(
-                                alloc::vec![
-                                    __x1.unsqueeze_dim(1), __y1.unsqueeze_dim(1), __x2
-                                    .unsqueeze_dim(1), __y2.unsqueeze_dim(1),
-                                ],
-                                1,
-                            )
-                        };
-                        let __scores_batch: Tensor<2> = scores
-                            .clone()
-                            .slice([__batch..(__batch + 1), 0..__num_classes, 0..__num_boxes])
-                            .reshape([__num_classes, __num_boxes]);
-                        for __class in 0..__num_classes {
-                            let __class_scores: Tensor<1> = __scores_batch
-                                .clone()
-                                .slice([__class..(__class + 1), 0..__num_boxes])
-                                .reshape([__num_boxes]);
-                            let __kept: Tensor<1, Int> = __corner_boxes
-                                .clone()
-                                .nms(
-                                    __class_scores,
-                                    NmsOptions {
-                                        iou_threshold: __iou_threshold,
-                                        score_threshold: __burn_score_threshold,
-                                        max_output_boxes: __max_output_boxes,
-                                    },
-                                );
-                            let [__num_kept] = __kept.shape().dims();
-                            if __num_kept > 0 {
-                                let __batch_indices = Tensor::<
-                                    1,
-                                    Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__batch as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
-                                    (&__device, burn::tensor::DType::I64),
-                                );
-                                let __class_indices = Tensor::<
-                                    1,
-                                    Int,
-                                >::from_data(
-                                    burn::tensor::TensorData::new(
-                                        alloc::vec![__class as i64; __num_kept],
-                                        [__num_kept],
-                                    ),
-                                    (&__device, burn::tensor::DType::I64),
-                                );
-                                __selected
-                                    .push(
-                                        Tensor::cat(
-                                            alloc::vec![
-                                                __batch_indices.unsqueeze_dim(1), __class_indices
-                                                .unsqueeze_dim(1), __kept.cast(burn::tensor::DType::I64)
-                                                .unsqueeze_dim(1),
-                                            ],
-                                            1,
-                                        ),
-                                    );
-                            }
-                        }
-                    }
-                }
-                if __selected.is_empty() {
-                    Tensor::<
-                        2,
-                        Int,
-                    >::from_data(
-                        burn::tensor::TensorData::new(alloc::vec::Vec::<i64>::new(), [0, 3]),
-                        (&__device, burn::tensor::DType::I64),
-                    )
-                } else {
-                    Tensor::cat(__selected, 0)
-                }
-            };
-            selected_indices
-        }
         ");
     }
 

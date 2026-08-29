@@ -95,7 +95,6 @@ def evaluate_and_print(name: str, model, feeds):
 
     output = ReferenceEvaluator(model).run(None, feeds)[0]
     print(f"{name} selected_indices: {output.tolist()}")
-    return output
 
 
 def save_and_check(name: str, model, feeds):
@@ -304,16 +303,9 @@ def main():
         [[[0.9, 0.8, 0.7, 0.6], [0.5, 0.6, 0.9, 0.8]]],
         dtype=np.float32,
     )
-    multi_inputs = standard_inputs(4)
-    multi_inputs[1] = value_info("scores", TensorProto.FLOAT, (1, 2, 4))
-    save_and_check(
+    evaluate_and_print(
         "non_max_suppression_multi_class",
-        build_model(
-            "non_max_suppression_multi_class",
-            0,
-            full_names,
-            multi_inputs,
-        ),
+        standard,
         {
             "boxes": multi_boxes,
             "scores": multi_scores,

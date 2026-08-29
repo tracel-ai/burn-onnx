@@ -4,8 +4,7 @@ include_models!(
     non_max_suppression_center,
     non_max_suppression_minimal,
     non_max_suppression_missing_middle,
-    non_max_suppression_missing_score_threshold,
-    non_max_suppression_multi_class
+    non_max_suppression_missing_score_threshold
 );
 
 #[cfg(test)]
@@ -189,7 +188,7 @@ mod tests {
     #[test]
     fn multiple_classes() {
         let device = Device::default();
-        let model = load_model!(non_max_suppression_multi_class, &device);
+        let model = load_model!(non_max_suppression, &device);
         let boxes = corner_boxes(&device).select(1, int_scalar_indices(&[0, 1, 3, 4], &device));
         let scores = Tensor::from_floats([[[0.9, 0.8, 0.7, 0.6], [0.5, 0.6, 0.9, 0.8]]], &device);
         let output = model.forward(
