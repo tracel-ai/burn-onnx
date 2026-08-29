@@ -22,7 +22,7 @@ thiserror = { workspace = true }
 toml = { workspace = true }
 
 [dev-dependencies]
-burn = { workspace = true }
+burn = { workspace = true, features = ["vision"] }
 burn-store = { workspace = true, features = ["std"] }
 float-cmp = { workspace = true }
 

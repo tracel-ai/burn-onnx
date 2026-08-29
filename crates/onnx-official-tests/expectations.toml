@@ -3431,40 +3431,31 @@ reason = "Unsupported ONNX operation(s): NegativeLogLikelihoodLoss (node 'negati
 status = "pass"
 
 [test_nonmaxsuppression_center_point_box_format]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): NonMaxSuppression (node 'nonmaxsuppression1')"
+status = "pass"
 
 [test_nonmaxsuppression_flipped_coordinates]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): NonMaxSuppression (node 'nonmaxsuppression1')"
+status = "pass"
 
 [test_nonmaxsuppression_identical_boxes]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): NonMaxSuppression (node 'nonmaxsuppression1')"
+status = "pass"
 
 [test_nonmaxsuppression_limit_output_size]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): NonMaxSuppression (node 'nonmaxsuppression1')"
+status = "pass"
 
 [test_nonmaxsuppression_single_box]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): NonMaxSuppression (node 'nonmaxsuppression1')"
+status = "pass"
 
 [test_nonmaxsuppression_suppress_by_IOU]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): NonMaxSuppression (node 'nonmaxsuppression1')"
+status = "pass"
 
 [test_nonmaxsuppression_suppress_by_IOU_and_scores]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): NonMaxSuppression (node 'nonmaxsuppression1')"
+status = "pass"
 
 [test_nonmaxsuppression_two_batches]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): NonMaxSuppression (node 'nonmaxsuppression1')"
+status = "pass"
 
 [test_nonmaxsuppression_two_classes]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): NonMaxSuppression (node 'nonmaxsuppression1')"
+status = "pass"
 
 [test_nonzero_example]
 status = "pass"
@@ -5636,4 +5627,3 @@ status = "pass"
 
 [test_xor_bcast4v4d]
 status = "pass"
-

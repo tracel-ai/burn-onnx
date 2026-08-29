@@ -445,7 +445,7 @@ define_node_enum! {
     MelWeightMatrix => mel_weight_matrix::MelWeightMatrixNode,
     Multinomial => unsupported::MultinomialNode,
     NegativeLogLikelihoodLoss => unsupported::NegativeLogLikelihoodLossNode,
-    NonMaxSuppression => unsupported::NonMaxSuppressionNode,
+    NonMaxSuppression => non_max_suppression::NonMaxSuppressionNode,
     Optional => unsupported::OptionalNode,
     OptionalGetElement => unsupported::OptionalGetElementNode,
     OptionalHasElement => unsupported::OptionalHasElementNode,

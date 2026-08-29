@@ -722,6 +722,10 @@ impl ProcessorRegistry {
             NodeType::ThresholdedRelu,
             Box::new(crate::node::thresholded_relu::ThresholdedReluProcessor),
         );
+        registry.register(
+            NodeType::NonMaxSuppression,
+            Box::new(crate::node::non_max_suppression::NonMaxSuppressionProcessor),
+        );
 
         // Control flow operations
         registry.register(NodeType::If, Box::new(crate::node::if_node::IfProcessor));

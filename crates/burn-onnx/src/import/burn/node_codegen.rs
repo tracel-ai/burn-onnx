@@ -376,6 +376,7 @@ impl_node_codegen_dispatch! {
 
     // Special ops
     Attention,
+    NonMaxSuppression,
 
     // Control flow ops
     If,

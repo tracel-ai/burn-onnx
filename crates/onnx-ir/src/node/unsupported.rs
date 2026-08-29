@@ -62,7 +62,6 @@ define_placeholder_node! {
     MaxUnpoolNode,
     MultinomialNode,
     NegativeLogLikelihoodLossNode,
-    NonMaxSuppressionNode,
     OptionalNode,
     OptionalGetElementNode,
     OptionalHasElementNode,
