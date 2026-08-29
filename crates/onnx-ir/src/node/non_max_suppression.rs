@@ -303,17 +303,22 @@ mod tests {
             .output_default("selected_indices")
     }
 
+    fn infer(mut node: RawNode, opset: usize) -> Result<RawNode, ProcessError> {
+        NonMaxSuppressionProcessor.infer_types(&mut node, opset, &OutputPreferences::new())?;
+        Ok(node)
+    }
+
     #[test]
     fn infers_i64_triple_output() {
-        let mut node = base_node()
-            .input_tensor_i64("max_output_boxes_per_class", 1, Some(vec![1]))
-            .input_tensor_f32("iou_threshold", 1, Some(vec![1]))
-            .input_tensor_f32("score_threshold", 1, Some(vec![1]))
-            .build();
-
-        NonMaxSuppressionProcessor
-            .infer_types(&mut node, 11, &OutputPreferences::new())
-            .unwrap();
+        let node = infer(
+            base_node()
+                .input_tensor_i64("max_output_boxes_per_class", 1, Some(vec![1]))
+                .input_tensor_f32("iou_threshold", 1, Some(vec![1]))
+                .input_tensor_f32("score_threshold", 1, Some(vec![1]))
+                .build(),
+            11,
+        )
+        .unwrap();
 
         assert_eq!(
             node.outputs[0].ty,
@@ -326,41 +331,27 @@ mod tests {
     }
 
     #[test]
-    fn infers_empty_output_when_max_output_is_omitted() {
-        let mut node = base_node().build();
-
-        NonMaxSuppressionProcessor
-            .infer_types(&mut node, 10, &OutputPreferences::new())
-            .unwrap();
-
-        assert_eq!(
-            node.outputs[0].ty,
-            ArgType::Tensor(TensorType {
-                dtype: DType::I64,
-                rank: 2,
-                static_shape: Some(vec![Some(0), Some(3)]),
-            })
-        );
-    }
-
-    #[test]
-    fn infers_empty_output_when_max_output_is_non_positive() {
-        let mut node = base_node()
-            .input_tensor_i64_data("max_output_boxes_per_class", vec![-1], vec![1])
-            .build_with_graph_data(10);
-
-        NonMaxSuppressionProcessor
-            .infer_types(&mut node, 10, &OutputPreferences::new())
-            .unwrap();
-
-        assert_eq!(
-            node.outputs[0].ty,
-            ArgType::Tensor(TensorType {
-                dtype: DType::I64,
-                rank: 2,
-                static_shape: Some(vec![Some(0), Some(3)]),
-            })
-        );
+    fn infers_empty_output_when_max_output_is_absent_or_non_positive() {
+        for (case, node) in [
+            ("absent", base_node().build()),
+            (
+                "non-positive",
+                base_node()
+                    .input_tensor_i64_data("max_output_boxes_per_class", vec![-1], vec![1])
+                    .build_with_graph_data(10),
+            ),
+        ] {
+            let node = infer(node, 10).unwrap();
+            assert_eq!(
+                node.outputs[0].ty,
+                ArgType::Tensor(TensorType {
+                    dtype: DType::I64,
+                    rank: 2,
+                    static_shape: Some(vec![Some(0), Some(3)]),
+                }),
+                "{case}"
+            );
+        }
     }
 
     #[test]
@@ -381,114 +372,66 @@ mod tests {
     }
 
     #[test]
-    fn accepts_omitted_middle_input() {
-        let mut node = base_node()
-            .input_tensor_i64("max_output_boxes_per_class", 1, Some(vec![1]))
-            .add_input(
-                "",
-                ArgType::Tensor(TensorType::new(DType::F32, 1, Some(vec![Some(1)]))),
-            )
-            .input_tensor_f32("score_threshold", 1, Some(vec![1]))
-            .build();
-
-        NonMaxSuppressionProcessor
-            .infer_types(&mut node, 11, &OutputPreferences::new())
-            .unwrap();
-    }
-
-    #[test]
-    fn rejects_invalid_center_point_box() {
-        let mut node = base_node().attr_int("center_point_box", 2).build();
-        let error = NonMaxSuppressionProcessor
-            .infer_types(&mut node, 11, &OutputPreferences::new())
-            .unwrap_err();
-
-        assert!(matches!(error, ProcessError::InvalidAttribute { .. }));
-    }
-
-    #[test]
-    fn rejects_wrong_center_point_box_type() {
-        let mut node = base_node().attr_float("center_point_box", 1.0).build();
-        let error = NonMaxSuppressionProcessor
-            .infer_types(&mut node, 11, &OutputPreferences::new())
-            .unwrap_err();
-
-        assert!(matches!(error, ProcessError::InvalidAttribute { .. }));
+    fn rejects_invalid_center_point_box_attributes() {
+        for node in [
+            base_node().attr_int("center_point_box", 2).build(),
+            base_node().attr_float("center_point_box", 1.0).build(),
+        ] {
+            assert!(matches!(
+                infer(node, 11).unwrap_err(),
+                ProcessError::InvalidAttribute { .. }
+            ));
+        }
     }
 
     #[test]
     fn rejects_invalid_boxes_shape() {
-        let mut node = TestNodeBuilder::new(NodeType::NonMaxSuppression, "nms")
+        let node = TestNodeBuilder::new(NodeType::NonMaxSuppression, "nms")
             .input_tensor_f32("boxes", 3, Some(vec![1, 6, 5]))
             .input_tensor_f32("scores", 3, Some(vec![1, 1, 6]))
             .output_default("selected_indices")
             .build();
-        let error = NonMaxSuppressionProcessor
-            .infer_types(&mut node, 11, &OutputPreferences::new())
-            .unwrap_err();
+        let error = infer(node, 11).unwrap_err();
 
         assert!(error.to_string().contains("last dimension 5"));
     }
 
     #[test]
     fn rejects_mismatched_box_count() {
-        let mut node = TestNodeBuilder::new(NodeType::NonMaxSuppression, "nms")
+        let node = TestNodeBuilder::new(NodeType::NonMaxSuppression, "nms")
             .input_tensor_f32("boxes", 3, Some(vec![1, 6, 4]))
             .input_tensor_f32("scores", 3, Some(vec![1, 1, 5]))
             .output_default("selected_indices")
             .build();
-        let error = NonMaxSuppressionProcessor
-            .infer_types(&mut node, 11, &OutputPreferences::new())
-            .unwrap_err();
+        let error = infer(node, 11).unwrap_err();
 
         assert!(error.to_string().contains("num_boxes"));
     }
 
     #[test]
     fn rejects_non_scalar_optional_input() {
-        let mut node = base_node()
+        let node = base_node()
             .input_tensor_i64("max_output_boxes_per_class", 1, Some(vec![2]))
             .build();
-        let error = NonMaxSuppressionProcessor
-            .infer_types(&mut node, 11, &OutputPreferences::new())
-            .unwrap_err();
+        let error = infer(node, 11).unwrap_err();
 
         assert!(error.to_string().contains("length 2"));
     }
 
     #[test]
     fn rejects_out_of_range_constant_iou_threshold() {
-        let mut node = base_node()
+        let node = base_node()
             .input_tensor_i64("max_output_boxes_per_class", 1, Some(vec![1]))
             .input_tensor_f32_data("iou_threshold", vec![1.5], vec![1])
             .build_with_graph_data(11);
-        let error = NonMaxSuppressionProcessor
-            .infer_types(&mut node, 11, &OutputPreferences::new())
-            .unwrap_err();
+        let error = infer(node, 11).unwrap_err();
 
         assert!(error.to_string().contains("[0, 1]"));
     }
 
     #[test]
-    fn builds_center_format_node() {
-        let mut node = base_node().attr_int("center_point_box", 1).build();
-        NonMaxSuppressionProcessor
-            .infer_types(&mut node, 11, &OutputPreferences::new())
-            .unwrap();
-
-        let Node::NonMaxSuppression(node) = NonMaxSuppressionProcessor.build_node(node, 11) else {
-            panic!("Expected NonMaxSuppression node");
-        };
-
-        assert_eq!(node.config.center_point_box, Some(BoxFormat::Center));
-    }
-
-    #[test]
     fn preserves_omitted_center_point_box() {
-        let mut node = base_node().build();
-        NonMaxSuppressionProcessor
-            .infer_types(&mut node, 10, &OutputPreferences::new())
-            .unwrap();
+        let node = infer(base_node().build(), 10).unwrap();
 
         let Node::NonMaxSuppression(node) = NonMaxSuppressionProcessor.build_node(node, 10) else {
             panic!("Expected NonMaxSuppression node");

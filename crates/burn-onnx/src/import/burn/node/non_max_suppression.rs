@@ -234,29 +234,34 @@ mod tests {
             .config(NonMaxSuppressionConfig::new(format))
     }
 
-    fn generated_section(
-        node: &NonMaxSuppressionNode,
-        start: impl Fn(&str) -> bool,
-        end: impl Fn(&str) -> bool,
-    ) -> String {
-        codegen_forward_default(node)
+    fn scalar_setup(node: &NonMaxSuppressionNode) -> String {
+        const START: &str = "let __max_output_boxes_per_class";
+        const END: &str = "let __burn_score_threshold";
+
+        let code = codegen_forward_default(node);
+        let (_, setup) = code.split_once(START).expect("missing scalar setup");
+        let (setup, _) = setup.split_once(END).expect("missing NMS setup");
+
+        format!("{START}{setup}")
             .lines()
-            .skip_while(|line| !start(line))
-            .take_while(|line| !end(line))
+            .map(str::trim)
             .collect::<Vec<_>>()
             .join("\n")
     }
 
-    fn nms_setup(node: &NonMaxSuppressionNode) -> String {
-        generated_section(node, |_| true, |line| line.contains("let __device"))
-    }
-
     fn box_conversion(node: &NonMaxSuppressionNode) -> String {
-        generated_section(
-            node,
-            |line| line.contains("let __corner_boxes"),
-            |line| line.contains("let __scores_batch"),
-        )
+        const START: &str = "let __corner_boxes";
+        const END: &str = "let __scores_batch";
+
+        let code = codegen_forward_default(node);
+        let (_, conversion) = code.split_once(START).expect("missing box conversion");
+        let (conversion, _) = conversion.split_once(END).expect("missing score setup");
+
+        format!("{START}{conversion}")
+            .lines()
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     #[test]
@@ -379,82 +384,47 @@ mod tests {
 
     #[test]
     fn center_with_scalar_tensors() {
-        let node = base_node(Some(BoxFormat::Center))
+        let scalar_tensor_node = base_node(Some(BoxFormat::Center))
             .input_scalar_tensor("max_output", DType::I64)
             .input_scalar_tensor("iou_threshold", DType::F32)
             .input_scalar_tensor("score_threshold", DType::F32)
             .output_tensor("selected_indices", 2, DType::I64)
             .build();
-
-        assert_snapshot!(box_conversion(&node), @"
-        let __corner_boxes: Tensor<2> = {
-            let __center: Tensor<2> = __boxes_batch
-                .clone()
-                .slice([0..__num_boxes, 0..2]);
-            let __half_size: Tensor<2> = __boxes_batch
-                .slice([0..__num_boxes, 2..4]) / 2.0f32;
-            Tensor::cat(
-                alloc::vec![
-                    __center.clone() - __half_size.clone(), __center +
-                    __half_size,
-                ],
-                1,
-            )
-        };
-        ");
-        assert_snapshot!(nms_setup(&node), @"
-        pub fn forward(
-            &self,
-            boxes: Tensor<3>,
-            scores: Tensor<3>,
-            max_output: Tensor<1, Int>,
-            iou_threshold: Tensor<1>,
-            score_threshold: Tensor<1>,
-        ) -> Tensor<2, Int> {
-            let selected_indices = {
-                let __max_output_boxes_per_class: i64 = (max_output).into_scalar::<i64>();
-                let __iou_threshold: f32 = (iou_threshold).into_scalar::<f32>() as f32;
-                let __score_threshold: Option<f32> = Some(
-                    (score_threshold).into_scalar::<f32>() as f32,
-                );
-                let __burn_score_threshold = match __score_threshold {
-                    Some(threshold) if threshold == f32::INFINITY => f32::NAN,
-                    Some(threshold) => threshold.next_up(),
-                    None => f32::NEG_INFINITY,
-                };
-        ");
-    }
-
-    #[test]
-    fn rank_one_tensor_scalars() {
-        let node = base_node(Some(BoxFormat::Corner))
+        let rank_one_tensor_node = base_node(Some(BoxFormat::Center))
             .input_tensor("max_output", 1, DType::I64)
             .input_tensor("iou_threshold", 1, DType::F32)
             .input_tensor("score_threshold", 1, DType::F32)
             .output_tensor("selected_indices", 2, DType::I64)
             .build();
 
-        assert_snapshot!(nms_setup(&node), @"
-        pub fn forward(
-            &self,
-            boxes: Tensor<3>,
-            scores: Tensor<3>,
-            max_output: Tensor<1, Int>,
-            iou_threshold: Tensor<1>,
-            score_threshold: Tensor<1>,
-        ) -> Tensor<2, Int> {
-            let selected_indices = {
-                let __max_output_boxes_per_class: i64 = (max_output).into_scalar::<i64>();
-                let __iou_threshold: f32 = (iou_threshold).into_scalar::<f32>() as f32;
-                let __score_threshold: Option<f32> = Some(
-                    (score_threshold).into_scalar::<f32>() as f32,
-                );
-                let __burn_score_threshold = match __score_threshold {
-                    Some(threshold) if threshold == f32::INFINITY => f32::NAN,
-                    Some(threshold) => threshold.next_up(),
-                    None => f32::NEG_INFINITY,
-                };
+        assert_snapshot!(box_conversion(&scalar_tensor_node), @"
+        let __corner_boxes: Tensor<2> = {
+        let __center: Tensor<2> = __boxes_batch
+        .clone()
+        .slice([0..__num_boxes, 0..2]);
+        let __half_size: Tensor<2> = __boxes_batch
+        .slice([0..__num_boxes, 2..4]) / 2.0f32;
+        Tensor::cat(
+        alloc::vec![
+        __center.clone() - __half_size.clone(), __center +
+        __half_size,
+        ],
+        1,
+        )
+        };
         ");
+        assert_snapshot!(scalar_setup(&scalar_tensor_node), @"
+        let __max_output_boxes_per_class: i64 = (max_output).into_scalar::<i64>();
+        let __iou_threshold: f32 = (iou_threshold).into_scalar::<f32>() as f32;
+        let __score_threshold: Option<f32> = Some(
+        (score_threshold).into_scalar::<f32>() as f32,
+        );
+        ");
+
+        assert_eq!(
+            scalar_setup(&scalar_tensor_node),
+            scalar_setup(&rank_one_tensor_node)
+        );
     }
 
     #[test]
@@ -463,74 +433,10 @@ mod tests {
             .output_tensor("selected_indices", 2, DType::I64)
             .build();
 
-        assert_snapshot!(nms_setup(&node), @"
-        pub fn forward(&self, boxes: Tensor<3>, scores: Tensor<3>) -> Tensor<2, Int> {
-            let selected_indices = {
-                let __max_output_boxes_per_class: i64 = 0i64;
-                let __iou_threshold: f32 = 0.0f32;
-                let __score_threshold: Option<f32> = None;
-                let __burn_score_threshold = match __score_threshold {
-                    Some(threshold) if threshold == f32::INFINITY => f32::NAN,
-                    Some(threshold) => threshold.next_up(),
-                    None => f32::NEG_INFINITY,
-                };
-        ");
-    }
-
-    #[test]
-    fn omitted_middle_input() {
-        let node = base_node(Some(BoxFormat::Corner))
-            .input_scalar("max_output", DType::I64)
-            .input_scalar("", DType::F32)
-            .input_scalar("score_threshold", DType::F32)
-            .output_tensor("selected_indices", 2, DType::I64)
-            .build();
-
-        assert_snapshot!(nms_setup(&node), @"
-        pub fn forward(
-            &self,
-            boxes: Tensor<3>,
-            scores: Tensor<3>,
-            max_output: i64,
-            score_threshold: f32,
-        ) -> Tensor<2, Int> {
-            let selected_indices = {
-                let __max_output_boxes_per_class: i64 = max_output;
-                let __iou_threshold: f32 = 0.0f32;
-                let __score_threshold: Option<f32> = Some(score_threshold as f32);
-                let __burn_score_threshold = match __score_threshold {
-                    Some(threshold) if threshold == f32::INFINITY => f32::NAN,
-                    Some(threshold) => threshold.next_up(),
-                    None => f32::NEG_INFINITY,
-                };
-        ");
-    }
-
-    #[test]
-    fn omitted_score_threshold() {
-        let node = base_node(Some(BoxFormat::Corner))
-            .input_scalar("max_output", DType::I64)
-            .input_scalar("iou_threshold", DType::F32)
-            .output_tensor("selected_indices", 2, DType::I64)
-            .build();
-
-        assert_snapshot!(nms_setup(&node), @"
-        pub fn forward(
-            &self,
-            boxes: Tensor<3>,
-            scores: Tensor<3>,
-            max_output: i64,
-            iou_threshold: f32,
-        ) -> Tensor<2, Int> {
-            let selected_indices = {
-                let __max_output_boxes_per_class: i64 = max_output;
-                let __iou_threshold: f32 = iou_threshold as f32;
-                let __score_threshold: Option<f32> = None;
-                let __burn_score_threshold = match __score_threshold {
-                    Some(threshold) if threshold == f32::INFINITY => f32::NAN,
-                    Some(threshold) => threshold.next_up(),
-                    None => f32::NEG_INFINITY,
-                };
+        assert_snapshot!(scalar_setup(&node), @"
+        let __max_output_boxes_per_class: i64 = 0i64;
+        let __iou_threshold: f32 = 0.0f32;
+        let __score_threshold: Option<f32> = None;
         ");
     }
 

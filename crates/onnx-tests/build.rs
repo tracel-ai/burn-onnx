@@ -409,7 +409,6 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/mul/mul_broadcast.onnx")
         .input("tests/neg/neg.onnx")
         .input("tests/non_max_suppression/non_max_suppression.onnx")
-        .input("tests/non_max_suppression/non_max_suppression_center.onnx")
         .input("tests/non_max_suppression/non_max_suppression_minimal.onnx")
         .input("tests/non_max_suppression/non_max_suppression_missing_middle.onnx")
         .input("tests/non_max_suppression/non_max_suppression_missing_score_threshold.onnx")

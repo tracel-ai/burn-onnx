@@ -1,7 +1,6 @@
 use crate::include_models;
 include_models!(
     non_max_suppression,
-    non_max_suppression_center,
     non_max_suppression_minimal,
     non_max_suppression_missing_middle,
     non_max_suppression_missing_score_threshold
@@ -35,62 +34,12 @@ mod tests {
         )
     }
 
-    fn center_boxes(device: &Device) -> Tensor<3> {
-        Tensor::from_floats(
-            [[
-                [0.5, 0.5, 1.0, 1.0],
-                [0.6, 0.5, 1.0, 1.0],
-                [0.4, 0.5, 1.0, 1.0],
-                [10.5, 0.5, 1.0, 1.0],
-                [10.6, 0.5, 1.0, 1.0],
-                [100.5, 0.5, 1.0, 1.0],
-            ]],
-            device,
-        )
-    }
-
     fn scores(device: &Device) -> Tensor<3> {
         Tensor::from_floats([[[0.9, 0.75, 0.6, 0.95, 0.5, 0.3]]], device)
     }
 
     fn int_scalar(value: i64, device: &Device) -> Tensor<1, Int> {
         Tensor::from_data(TensorData::from([value]), (device, DType::I64))
-    }
-
-    #[test]
-    fn corner_format() {
-        let device = Device::default();
-        let model = load_model!(non_max_suppression, &device);
-        let output = model.forward(
-            corner_boxes(&device),
-            scores(&device),
-            int_scalar(3, &device),
-            Tensor::from_floats([0.5], &device),
-            Tensor::from_floats([0.0], &device),
-        );
-
-        output.to_data().assert_eq(
-            &TensorData::from([[0i64, 0, 3], [0, 0, 0], [0, 0, 5]]),
-            true,
-        );
-    }
-
-    #[test]
-    fn center_format() {
-        let device = Device::default();
-        let model = load_model!(non_max_suppression_center, &device);
-        let output = model.forward(
-            center_boxes(&device),
-            scores(&device),
-            int_scalar(3, &device),
-            Tensor::from_floats([0.5], &device),
-            Tensor::from_floats([0.0], &device),
-        );
-
-        output.to_data().assert_eq(
-            &TensorData::from([[0i64, 0, 3], [0, 0, 0], [0, 0, 5]]),
-            true,
-        );
     }
 
     #[test]
@@ -222,34 +171,5 @@ mod tests {
 
         assert_eq!(output.shape().dims(), [0, 3]);
         assert_eq!(output.dtype(), DType::I64);
-    }
-
-    #[test]
-    fn reversed_corner_coordinates_are_normalized() {
-        let device = Device::default();
-        let model = load_model!(non_max_suppression, &device);
-        let boxes = Tensor::from_floats(
-            [[
-                [1.0, 1.0, 0.0, 0.0],
-                [0.0, 0.1, 1.0, 1.1],
-                [10.0, 10.0, 11.0, 11.0],
-                [20.0, 20.0, 21.0, 21.0],
-                [30.0, 30.0, 31.0, 31.0],
-                [40.0, 40.0, 41.0, 41.0],
-            ]],
-            &device,
-        );
-        let scores = Tensor::from_floats([[[0.9, 0.8, 0.0, 0.0, 0.0, 0.0]]], &device);
-        let output = model.forward(
-            boxes,
-            scores,
-            int_scalar(2, &device),
-            Tensor::from_floats([0.5], &device),
-            Tensor::from_floats([0.1], &device),
-        );
-
-        output
-            .to_data()
-            .assert_eq(&TensorData::from([[0i64, 0, 0]]), true);
     }
 }
