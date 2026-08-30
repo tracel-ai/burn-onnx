@@ -280,6 +280,8 @@ mod tests {
 
     #[test]
     fn infers_i64_triple_output() {
+        assert_eq!(NonMaxSuppressionProcessor.spec().min_opset, 10);
+
         let node = infer(
             base_node()
                 .input_tensor_i64("max_output_boxes_per_class", 1, Some(vec![1]))
@@ -317,11 +319,6 @@ mod tests {
             };
             assert_eq!(output.static_shape, Some(vec![Some(0), Some(3)]), "{case}");
         }
-    }
-
-    #[test]
-    fn starts_at_opset_10() {
-        assert_eq!(NonMaxSuppressionProcessor.spec().min_opset, 10);
     }
 
     #[test]
