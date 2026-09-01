@@ -19,6 +19,25 @@ pub(super) fn lower(
         return Ok(false);
     };
     match operation {
+        ModuleOperationIr::Conv1d(conv) => {
+            let mut inputs = vec![
+                context.tensor_name(conv.x.id),
+                context.tensor_name(conv.weight.id),
+            ];
+            if let Some(bias) = &conv.bias {
+                inputs.push(context.tensor_name(bias.id));
+            }
+            let output = context.tensor_name(conv.out.id);
+            context.node(format!("node_{index}"), "Conv", inputs, vec![output]);
+            context.ints_attribute("strides", conv.options.stride);
+            context.ints_attribute("dilations", conv.options.dilation);
+            context.ints_attribute(
+                "pads",
+                [conv.options.padding[0], conv.options.padding[0]],
+            );
+            context.int_attribute("group", conv.options.groups as i64);
+            Ok(true)
+        }
         ModuleOperationIr::Conv2d(conv) => {
             let mut inputs = vec![
                 context.tensor_name(conv.x.id),
