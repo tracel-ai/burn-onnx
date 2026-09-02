@@ -232,6 +232,7 @@ fn onnx_dtype_parts(tensor: TensorId, dtype: DType) -> Result<i32, ExportError> 
         DType::F32 => Ok(1),
         DType::U8 => Ok(2),
         DType::I8 => Ok(3),
+        DType::U16 => Ok(4),
         DType::I16 => Ok(5),
         DType::I32 => Ok(6),
         DType::I64 => Ok(7),

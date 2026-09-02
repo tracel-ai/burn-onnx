@@ -43,6 +43,25 @@ pub(super) fn lower(
         return Ok(true);
     }
     if let NumericOperationIr::SumDim(reduce) = numeric {
+        if !matches!(
+            reduce.input.dtype,
+            DType::F16
+                | DType::BF16
+                | DType::F32
+                | DType::F64
+                | DType::I32
+                | DType::I64
+                | DType::U32
+                | DType::U64
+        ) {
+            return Err(ExportError::UnsupportedOperation {
+                operation: index,
+                kind: format!(
+                    "ReduceSum with {:?} input in ONNX opset 18",
+                    reduce.input.dtype
+                ),
+            });
+        }
         let axes_name = format!("node_{index}_axes");
         context.i64_initializer(axes_name.clone(), &[reduce.axis as i64]);
         let input = context.tensor_name(reduce.input.id);
@@ -93,8 +112,8 @@ pub(super) fn lower(
 /// Lower a max or min reduction that also yields the winning indices.
 ///
 /// ONNX has no single operator for this pair. `ArgMax`/`ArgMin` produces the
-/// indices, and `GatherElements` reads the values back out through them, which
-/// matches the reduction exactly instead of recomputing it.
+/// indices, and `GatherElements` reads the values back out through them. Float
+/// inputs need an additional NaN path because Burn propagates the first NaN.
 fn lower_reduce_with_indices(
     context: &mut LoweringContext<'_>,
     index: usize,
@@ -118,14 +137,72 @@ fn lower_reduce_with_indices(
         _ => format!("node_{index}_indices64"),
     };
     let input = context.tensor_name(reduce.tensor.id);
+    let normal_indices64 = if reduce.tensor.dtype.is_float() {
+        format!("node_{index}_normal_indices64")
+    } else {
+        indices64.clone()
+    };
     context.node(
         format!("node_{index}_arg"),
         arg_op,
         vec![input.clone()],
-        vec![indices64.clone()],
+        vec![normal_indices64.clone()],
     );
     context.int_attribute("axis", reduce.dim as i64);
     context.int_attribute("keepdims", 1);
+
+    if reduce.tensor.dtype.is_float() {
+        let nan_mask = format!("node_{index}_nan_mask");
+        context.node(
+            nan_mask.clone(),
+            "IsNaN",
+            vec![input.clone()],
+            vec![nan_mask.clone()],
+        );
+        let nan_mask64 = format!("node_{index}_nan_mask64");
+        context.node(
+            nan_mask64.clone(),
+            "Cast",
+            vec![nan_mask],
+            vec![nan_mask64.clone()],
+        );
+        context.int_attribute("to", 7);
+
+        let nan_indices64 = format!("node_{index}_nan_indices64");
+        context.node(
+            nan_indices64.clone(),
+            "ArgMax",
+            vec![nan_mask64.clone()],
+            vec![nan_indices64.clone()],
+        );
+        context.int_attribute("axis", reduce.dim as i64);
+        context.int_attribute("keepdims", 1);
+
+        let has_nan64 = format!("node_{index}_has_nan64");
+        context.node(
+            has_nan64.clone(),
+            "GatherElements",
+            vec![nan_mask64, nan_indices64.clone()],
+            vec![has_nan64.clone()],
+        );
+        context.int_attribute("axis", reduce.dim as i64);
+        let has_nan = format!("node_{index}_has_nan");
+        context.node(
+            has_nan.clone(),
+            "Cast",
+            vec![has_nan64],
+            vec![has_nan.clone()],
+        );
+        context.int_attribute("to", 9);
+
+        context.node(
+            format!("node_{index}_select_indices"),
+            "Where",
+            vec![has_nan, nan_indices64, normal_indices64],
+            vec![indices64.clone()],
+        );
+    }
+
     if indices64 != indices {
         context.node(
             format!("node_{index}_cast"),

@@ -2,7 +2,7 @@
 
 use burn::backend::ir::{
     ActivationOperationIr, BaseOperationIr, FloatOperationIr, GraphIr, IntOperationIr,
-    ModuleOperationIr, NumericOperationIr, OperationIr, TensorId, TensorIr,
+    ModuleOperationIr, NumericOperationIr, OperationIr, SliceOpIr, TensorId, TensorIr,
 };
 use hashbrown::HashMap;
 
@@ -21,6 +21,7 @@ impl PotentiallyDynamicAxes {
             sample.operations.iter().zip(&validation.operations)
         {
             tracker.transfer(sample_operation);
+            tracker.transfer_slice(sample_operation, validation_operation);
             tracker.transfer_reshape(sample_operation, validation_operation);
             tracker.observe_changes(sample_operation, validation_operation);
         }
@@ -169,6 +170,18 @@ impl AxisTracker {
                     }
                 }
             }
+            BaseOperationIr::Select(operation) => {
+                for axis in 0..operation.out.shape.num_dims() {
+                    if axis == operation.dim {
+                        self.axis(&operation.indices, 0, &operation.out, axis);
+                    } else {
+                        self.axis(&operation.tensor, axis, &operation.out, axis);
+                    }
+                }
+            }
+            BaseOperationIr::Scatter(operation) => {
+                self.same_axes(&operation.tensor, &operation.out)
+            }
             BaseOperationIr::Cast(operation) => self.same_axes(&operation.input, &operation.out),
             BaseOperationIr::AllDim(operation) | BaseOperationIr::AnyDim(operation) => {
                 self.reduced_axes(&operation.input, &operation.out, operation.axis)
@@ -210,6 +223,11 @@ impl AxisTracker {
             | NumericOperationIr::ProdDim(operation) => {
                 self.reduced_axes(&operation.input, &operation.out, operation.axis)
             }
+            NumericOperationIr::MaxDimWithIndices(operation)
+            | NumericOperationIr::MinDimWithIndices(operation) => {
+                self.reduced_axes(&operation.tensor, &operation.out, operation.dim);
+                self.reduced_axes(&operation.tensor, &operation.out_indices, operation.dim);
+            }
             _ => {}
         }
     }
@@ -229,6 +247,10 @@ impl AxisTracker {
 
     fn transfer_module(&mut self, operation: &ModuleOperationIr) {
         match operation {
+            ModuleOperationIr::Conv1d(operation) => {
+                self.axis(&operation.x, 0, &operation.out, 0);
+                self.derived_axis(&operation.x, 2, &operation.out, 2);
+            }
             ModuleOperationIr::Conv2d(operation) => {
                 self.axis(&operation.x, 0, &operation.out, 0);
                 self.derived_axis(&operation.x, 2, &operation.out, 2);
@@ -257,6 +279,42 @@ impl AxisTracker {
                 operation.out.shape.num_dims().saturating_sub(1),
             ),
             _ => {}
+        }
+    }
+
+    fn transfer_slice(&mut self, sample: &OperationIr, validation: &OperationIr) {
+        let (Some(sample), Some(validation)) =
+            (slice_operation(sample), slice_operation(validation))
+        else {
+            return;
+        };
+        for axis in 0..sample.out.shape.num_dims() {
+            let dimensions = sample
+                .tensor
+                .shape
+                .get(axis)
+                .zip(validation.tensor.shape.get(axis));
+            let exact = sample
+                .ranges
+                .get(axis)
+                .zip(validation.ranges.get(axis))
+                .zip(dimensions)
+                .is_some_and(
+                    |(
+                        (sample_range, validation_range),
+                        (&sample_dimension, &validation_dimension),
+                    )| {
+                        sample_range.step == validation_range.step
+                            && sample_range.step.unsigned_abs() == 1
+                            && slice_covers_axis(sample_range, sample_dimension)
+                            && slice_covers_axis(validation_range, validation_dimension)
+                    },
+                );
+            if exact {
+                self.axis(&sample.tensor, axis, &sample.out, axis);
+            } else {
+                self.derived_axis(&sample.tensor, axis, &sample.out, axis);
+            }
         }
     }
 
@@ -407,6 +465,20 @@ fn reshape_tensors(operation: &OperationIr) -> Option<(&TensorIr, &TensorIr)> {
         }
         _ => None,
     }
+}
+
+fn slice_operation(operation: &OperationIr) -> Option<&SliceOpIr> {
+    match operation {
+        OperationIr::BaseFloat(BaseOperationIr::Slice(operation))
+        | OperationIr::BaseInt(BaseOperationIr::Slice(operation))
+        | OperationIr::BaseBool(BaseOperationIr::Slice(operation)) => Some(operation),
+        _ => None,
+    }
+}
+
+fn slice_covers_axis(range: &burn::backend::Slice, dimension: usize) -> bool {
+    range.start == 0
+        && isize::try_from(dimension).is_ok_and(|dimension| range.end == Some(dimension))
 }
 
 #[cfg(test)]

@@ -640,9 +640,7 @@ fn shape_operations(graph: &GraphIr) -> impl Iterator<Item = ShapeOperation<'_>>
                 source: None,
                 output: &op.out,
             }),
-            OperationIr::BaseFloat(
-                BaseOperationIr::Zeros(op) | BaseOperationIr::Ones(op),
-            )
+            OperationIr::BaseFloat(BaseOperationIr::Zeros(op) | BaseOperationIr::Ones(op))
             | OperationIr::BaseInt(BaseOperationIr::Zeros(op) | BaseOperationIr::Ones(op))
             | OperationIr::BaseBool(BaseOperationIr::Zeros(op) | BaseOperationIr::Ones(op)) => {
                 Some(ShapeOperation {
@@ -667,8 +665,8 @@ fn tensor(graph: &GraphIr, id: TensorId) -> Option<&TensorIr> {
 mod tests {
     use super::*;
     use burn::backend::ir::{
-        FullOpIr, InterpolateModeIr, InterpolateOpIr, InterpolateOptionsIr, ScalarIr, ShapeOpIr,
-        SwapDimsOpIr, TensorIr,
+        CreationOpIr, FullOpIr, InterpolateModeIr, InterpolateOpIr, InterpolateOptionsIr, ScalarIr,
+        ShapeOpIr, SwapDimsOpIr, TensorIr,
     };
     use burn::backend::{DType, Shape};
 
@@ -696,6 +694,29 @@ mod tests {
         assert_eq!(
             resolved.shapes[0].dimensions,
             vec![ShapeExpr::Static(2), ShapeExpr::Static(12)]
+        );
+    }
+
+    #[test]
+    fn static_resolver_handles_zeros_and_ones() {
+        let graph = GraphIr::new(vec![
+            OperationIr::BaseFloat(BaseOperationIr::Zeros(CreationOpIr {
+                out: tensor(1, &[2, 3]),
+            })),
+            OperationIr::BaseFloat(BaseOperationIr::Ones(CreationOpIr {
+                out: tensor(2, &[4, 5]),
+            })),
+        ]);
+
+        let resolved = StaticShapeResolver { graph: &graph }.resolve().unwrap();
+
+        assert_eq!(
+            resolved.shapes[0].dimensions,
+            vec![ShapeExpr::Static(2), ShapeExpr::Static(3)]
+        );
+        assert_eq!(
+            resolved.shapes[1].dimensions,
+            vec![ShapeExpr::Static(4), ShapeExpr::Static(5)]
         );
     }
 

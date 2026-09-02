@@ -4,7 +4,8 @@
 //! owns opset-specific attributes for convolution, normalization, resize, and
 //! pooling operations.
 
-use burn::backend::ir::{InterpolateModeIr, ModuleOperationIr, OperationIr};
+use burn::backend::DType;
+use burn::backend::ir::{InterpolateModeIr, ModuleOperationIr, OperationIr, TensorIr};
 
 use crate::export::ExportError;
 
@@ -20,6 +21,14 @@ pub(super) fn lower(
     };
     match operation {
         ModuleOperationIr::Conv1d(conv) => {
+            validate_conv_dtypes(
+                index,
+                "Conv1d",
+                &conv.x,
+                &conv.weight,
+                conv.bias.as_ref(),
+                &conv.out,
+            )?;
             let mut inputs = vec![
                 context.tensor_name(conv.x.id),
                 context.tensor_name(conv.weight.id),
@@ -31,14 +40,19 @@ pub(super) fn lower(
             context.node(format!("node_{index}"), "Conv", inputs, vec![output]);
             context.ints_attribute("strides", conv.options.stride);
             context.ints_attribute("dilations", conv.options.dilation);
-            context.ints_attribute(
-                "pads",
-                [conv.options.padding[0], conv.options.padding[0]],
-            );
+            context.ints_attribute("pads", [conv.options.padding[0], conv.options.padding[0]]);
             context.int_attribute("group", conv.options.groups as i64);
             Ok(true)
         }
         ModuleOperationIr::Conv2d(conv) => {
+            validate_conv_dtypes(
+                index,
+                "Conv2d",
+                &conv.x,
+                &conv.weight,
+                conv.bias.as_ref(),
+                &conv.out,
+            )?;
             let mut inputs = vec![
                 context.tensor_name(conv.x.id),
                 context.tensor_name(conv.weight.id),
@@ -222,4 +236,31 @@ pub(super) fn lower(
         }
         _ => Ok(false),
     }
+}
+
+fn validate_conv_dtypes(
+    index: usize,
+    kind: &'static str,
+    input: &TensorIr,
+    weight: &TensorIr,
+    bias: Option<&TensorIr>,
+    output: &TensorIr,
+) -> Result<(), ExportError> {
+    let dtype = input.dtype;
+    if weight.dtype != dtype
+        || bias.is_some_and(|bias| bias.dtype != dtype)
+        || output.dtype != dtype
+    {
+        return Err(ExportError::UnsupportedOperation {
+            operation: index,
+            kind: format!("{kind} with mixed tensor dtypes"),
+        });
+    }
+    if !matches!(dtype, DType::F16 | DType::F32 | DType::F64) {
+        return Err(ExportError::UnsupportedOperation {
+            operation: index,
+            kind: format!("{kind} with {dtype:?} tensors in ONNX opset 18"),
+        });
+    }
+    Ok(())
 }

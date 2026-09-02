@@ -2,16 +2,17 @@
 
 use std::cell::RefCell;
 
+use burn::backend::DType;
 use burn::module::{Module, Param};
 use burn::nn::{
-    Linear, LinearConfig, Relu,
-    conv::{Conv2d, Conv2dConfig},
+    Linear, LinearConfig, PaddingConfig1d, Relu,
+    conv::{Conv1d, Conv1dConfig, Conv2d, Conv2dConfig},
     pool::{MaxPool2d, MaxPool2dConfig},
 };
-use burn::tensor::{Device, Int, Tensor, TensorData, Tolerance};
+use burn::tensor::{Bool, Device, Int, Tensor, TensorData, Tolerance, s};
 use burn::tensor::{
-    module::interpolate,
-    ops::{InterpolateMode, InterpolateOptions, PadMode},
+    module::{conv1d, interpolate},
+    ops::{ConvOptions, IndexingUpdateOp, InterpolateMode, InterpolateOptions, PadMode},
 };
 use burn_onnx::export::{AxisSpec, ExportError, InputSpec, OnnxExporter};
 use onnx_ir::ModelProto;
@@ -88,6 +89,126 @@ struct SmallCnn {
     conv: Conv2d,
     activation: Relu,
     pool: MaxPool2d,
+}
+
+#[derive(Module, Debug)]
+struct SmallConv1d {
+    conv: Conv1d,
+}
+
+impl SmallConv1d {
+    fn forward(&self, input: Tensor<3>) -> Tensor<3> {
+        self.conv.forward(input)
+    }
+}
+
+#[derive(Module, Debug)]
+struct SteppedSlice;
+
+impl SteppedSlice {
+    fn forward(&self, input: Tensor<1>) -> (Tensor<1>, Tensor<1>) {
+        (input.clone().slice(s![1..9;2]), input.slice(s![2..8;-2]))
+    }
+}
+
+#[derive(Module, Debug)]
+struct FixedUpperSlice;
+
+impl FixedUpperSlice {
+    fn forward(&self, input: Tensor<1>) -> Tensor<1> {
+        input.slice(s![..5])
+    }
+}
+
+#[derive(Module, Debug)]
+struct SelectColumns {
+    indices: Tensor<1, Int>,
+}
+
+impl SelectColumns {
+    fn forward(&self, input: Tensor<2>) -> Tensor<2> {
+        input.select(1, self.indices.clone())
+    }
+}
+
+#[derive(Module, Debug)]
+struct ScatterColumns {
+    indices: Tensor<2, Int>,
+    values: Tensor<2>,
+}
+
+impl ScatterColumns {
+    fn forward(&self, input: Tensor<2>) -> Vec<Tensor<2>> {
+        [
+            IndexingUpdateOp::Assign,
+            IndexingUpdateOp::Add,
+            IndexingUpdateOp::Mul,
+            IndexingUpdateOp::Min,
+            IndexingUpdateOp::Max,
+        ]
+        .map(|update| {
+            input
+                .clone()
+                .scatter(1, self.indices.clone(), self.values.clone(), update)
+        })
+        .into()
+    }
+}
+
+#[derive(Module, Debug)]
+struct BoolCreation;
+
+impl BoolCreation {
+    fn forward(&self, input: Tensor<2>) -> (Tensor<2, Bool>, Tensor<2, Bool>) {
+        let shape = input.shape();
+        (
+            Tensor::zeros(shape.clone(), &input.device()),
+            Tensor::ones(shape, &input.device()),
+        )
+    }
+}
+
+#[derive(Module, Debug)]
+struct DimReductions;
+
+#[derive(Module, Debug)]
+struct IntSum;
+
+impl IntSum {
+    fn forward(&self, input: Tensor<2, Int>) -> Tensor<2, Int> {
+        input.sum_dim(1)
+    }
+}
+
+#[derive(Module, Debug)]
+struct RawConv1d {
+    weight: Tensor<3>,
+}
+
+impl RawConv1d {
+    fn forward(&self, input: Tensor<3>) -> Tensor<3> {
+        conv1d(
+            input,
+            self.weight.clone(),
+            None,
+            ConvOptions::new([1], [0], [1], 1),
+        )
+    }
+}
+
+type DimReductionOutputs = (
+    Tensor<2>,
+    (Tensor<2>, Tensor<2, Int>),
+    (Tensor<2>, Tensor<2, Int>),
+);
+
+impl DimReductions {
+    fn forward(&self, input: Tensor<2>) -> DimReductionOutputs {
+        let sum = input.clone().sum_dim(1);
+        let (max, max_indices) = input.clone().max_dim_with_indices(1);
+        let (min, min_indices) = input.min_dim_with_indices(1);
+        (sum, (max, max_indices), (min, min_indices))
+    }
 }
 
 #[derive(Module, Debug)]
@@ -469,6 +590,329 @@ fn small_cnn_matches_burn() {
 
     let actual = run_ort(model.as_bytes(), [1, 1, 5, 5], input_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
+}
+
+#[test]
+fn conv1d_matches_burn() {
+    let device = Device::default();
+    let module = SmallConv1d {
+        conv: Conv1dConfig::new(2, 2, 3)
+            .with_stride(2)
+            .with_dilation(2)
+            .with_groups(2)
+            .with_padding(PaddingConfig1d::Explicit(2, 2))
+            .init(&device),
+    };
+    let input = (Tensor::<1, Int>::arange(0..18, &device).float() / 10.0).reshape([1, 2, 9]);
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
+    let expected = module.forward(input.clone()).into_data();
+    let model = OnnxExporter::new()
+        .export(&module, input, SmallConv1d::forward)
+        .unwrap();
+
+    let actual = run_ort(model.as_bytes(), [1, 2, 9], input_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
+}
+
+#[test]
+fn dynamic_conv1d_handles_colliding_capture_shapes() {
+    let device = Device::default();
+    let module = SmallConv1d {
+        conv: Conv1dConfig::new(1, 2, 2).with_stride(2).init(&device),
+    };
+    // Lengths 4 and 5 both convolve to 2, but runtime length 6 convolves to 3.
+    let sample = Tensor::<3>::zeros([1, 1, 4], &device);
+    let validation = Tensor::<3>::zeros([1, 1, 5], &device);
+    let specs = [InputSpec::new([
+        AxisSpec::Static,
+        AxisSpec::Static,
+        AxisSpec::dynamic("length"),
+    ])];
+    let model = OnnxExporter::new()
+        .export_dynamic(&module, sample, validation, &specs, SmallConv1d::forward)
+        .unwrap();
+
+    let runtime_input = Tensor::<1, Int>::arange(0..6, &device)
+        .float()
+        .reshape([1, 1, 6]);
+    let runtime_values = runtime_input
+        .clone()
+        .into_data()
+        .try_to_vec::<f32>()
+        .unwrap();
+    let expected = module.forward(runtime_input).into_data();
+    let actual = run_ort(model.as_bytes(), [1, 1, 6], runtime_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
+
+    let model = ModelProto::parse_from_bytes(model.as_bytes()).unwrap();
+    assert!(
+        model.graph.output[0]
+            .type_
+            .as_ref()
+            .unwrap()
+            .tensor_type()
+            .shape
+            .dim[2]
+            .has_dim_param()
+    );
+}
+
+#[test]
+fn stepped_slice_matches_burn() {
+    let device = Device::default();
+    let input = Tensor::<1, Int>::arange(0..10, &device).float();
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
+    let (expected_positive, expected_negative) = SteppedSlice.forward(input.clone());
+    let model = OnnxExporter::new()
+        .export(&SteppedSlice, input, SteppedSlice::forward)
+        .unwrap();
+
+    let mut session = Session::builder()
+        .unwrap()
+        .commit_from_memory(model.as_bytes())
+        .unwrap();
+    let outputs = session
+        .run(ort::inputs![
+            OrtTensor::from_array(([10], input_values)).unwrap()
+        ])
+        .unwrap();
+    let (shape, values) = outputs[0].try_extract_tensor::<f32>().unwrap();
+    TensorData::new(
+        values.to_vec(),
+        shape.iter().map(|&dim| dim as usize).collect::<Vec<_>>(),
+    )
+    .assert_approx_eq::<f32>(&expected_positive.into_data(), Tolerance::default());
+    let (shape, values) = outputs[1].try_extract_tensor::<f32>().unwrap();
+    TensorData::new(
+        values.to_vec(),
+        shape.iter().map(|&dim| dim as usize).collect::<Vec<_>>(),
+    )
+    .assert_approx_eq::<f32>(&expected_negative.into_data(), Tolerance::default());
+}
+
+#[test]
+fn dynamic_slice_rejects_ambiguous_clamped_bounds() {
+    let device = Device::default();
+    // Burn clamps `..5` to each captured input. The resulting `0..3` and
+    // `0..4` ranges cannot be distinguished from a genuinely open range.
+    let sample = Tensor::<1>::zeros([3], &device);
+    let validation = Tensor::<1>::zeros([4], &device);
+    let specs = [InputSpec::new([AxisSpec::dynamic("length")])];
+    let result = OnnxExporter::new().export_dynamic(
+        &FixedUpperSlice,
+        sample,
+        validation,
+        &specs,
+        FixedUpperSlice::forward,
+    );
+
+    assert!(matches!(
+        result,
+        Err(ExportError::DynamicShapeLost { reason, .. })
+            if reason.contains("varying slice bounds")
+    ));
+}
+
+#[test]
+fn select_matches_burn() {
+    let device = Device::default();
+    let module = SelectColumns {
+        indices: Tensor::from_ints([3, 1], &device).cast(DType::I8),
+    };
+    let input = Tensor::<1, Int>::arange(0..8, &device)
+        .float()
+        .reshape([2, 4]);
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
+    let expected = module.forward(input.clone()).into_data();
+    let model = OnnxExporter::new()
+        .export(&module, input, SelectColumns::forward)
+        .unwrap();
+
+    let actual = run_ort(model.as_bytes(), [2, 4], input_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+}
+
+#[test]
+fn scatter_reductions_match_burn() {
+    let device = Device::default();
+    let module = ScatterColumns {
+        indices: Tensor::from_ints([[0, 2], [1, 0]], &device).cast(DType::I8),
+        values: Tensor::from_floats([[10.0, -2.0], [3.0, 20.0]], &device),
+    };
+    let input = Tensor::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
+    let expected = [
+        [[10.0f32, 2.0, -2.0], [20.0, 3.0, 6.0]],
+        [[11.0, 2.0, 1.0], [24.0, 8.0, 6.0]],
+        [[10.0, 2.0, -6.0], [80.0, 15.0, 6.0]],
+        [[1.0, 2.0, -2.0], [4.0, 3.0, 6.0]],
+        [[10.0, 2.0, 3.0], [20.0, 5.0, 6.0]],
+    ]
+    .map(TensorData::from);
+    let model = OnnxExporter::new()
+        .export(&module, input, ScatterColumns::forward)
+        .unwrap();
+
+    let mut session = Session::builder()
+        .unwrap()
+        .commit_from_memory(model.as_bytes())
+        .unwrap();
+    let outputs = session
+        .run(ort::inputs![
+            OrtTensor::from_array(([2, 3], input_values)).unwrap()
+        ])
+        .unwrap();
+    for (output, expected) in outputs.values().zip(expected) {
+        let (shape, values) = output.try_extract_tensor::<f32>().unwrap();
+        TensorData::new(
+            values.to_vec(),
+            shape.iter().map(|&dim| dim as usize).collect::<Vec<_>>(),
+        )
+        .assert_approx_eq::<f32>(&expected, Tolerance::default());
+    }
+}
+
+#[test]
+fn dynamic_bool_zeros_and_ones_match_burn() {
+    let device = Device::default();
+    let sample = Tensor::<2>::zeros([2, 3], &device);
+    let validation = Tensor::<2>::zeros([5, 3], &device);
+    let specs = [InputSpec::new([
+        AxisSpec::dynamic("batch"),
+        AxisSpec::Static,
+    ])];
+    let model = OnnxExporter::new()
+        .export_dynamic(
+            &BoolCreation,
+            sample,
+            validation,
+            &specs,
+            BoolCreation::forward,
+        )
+        .unwrap();
+
+    let runtime_values = vec![0.0f32; 21];
+    let mut session = Session::builder()
+        .unwrap()
+        .commit_from_memory(model.as_bytes())
+        .unwrap();
+    let outputs = session
+        .run(ort::inputs![
+            OrtTensor::from_array(([7, 3], runtime_values)).unwrap()
+        ])
+        .unwrap();
+    let (shape, zeros) = outputs[0].try_extract_tensor::<bool>().unwrap();
+    assert_eq!(shape.iter().copied().collect::<Vec<_>>(), vec![7, 3]);
+    assert!(zeros.iter().all(|value| !value));
+    let (shape, ones) = outputs[1].try_extract_tensor::<bool>().unwrap();
+    assert_eq!(shape.iter().copied().collect::<Vec<_>>(), vec![7, 3]);
+    assert!(ones.iter().all(|value| *value));
+}
+
+#[test]
+fn dim_reductions_match_burn() {
+    let device = Device::default();
+    let input = Tensor::from_floats([[3.0, -2.0, 7.0, 7.0], [5.0, 9.0, -1.0, 4.0]], &device);
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
+    let (expected_sum, (expected_max, expected_max_indices), (expected_min, expected_min_indices)) =
+        DimReductions.forward(input.clone());
+    let model = OnnxExporter::new()
+        .export(&DimReductions, input, DimReductions::forward)
+        .unwrap();
+
+    let mut session = Session::builder()
+        .unwrap()
+        .commit_from_memory(model.as_bytes())
+        .unwrap();
+    let outputs = session
+        .run(ort::inputs![
+            OrtTensor::from_array(([2, 4], input_values)).unwrap()
+        ])
+        .unwrap();
+    for (position, expected) in [expected_sum, expected_max, expected_min]
+        .into_iter()
+        .enumerate()
+    {
+        let output = if position < 2 {
+            &outputs[position]
+        } else {
+            &outputs[3]
+        };
+        let (shape, values) = output.try_extract_tensor::<f32>().unwrap();
+        TensorData::new(
+            values.to_vec(),
+            shape.iter().map(|&dim| dim as usize).collect::<Vec<_>>(),
+        )
+        .assert_approx_eq::<f32>(&expected.into_data(), Tolerance::default());
+    }
+    for (output, expected) in [
+        (&outputs[2], expected_max_indices),
+        (&outputs[4], expected_min_indices),
+    ] {
+        let (shape, values) = output.try_extract_tensor::<i64>().unwrap();
+        TensorData::new(
+            values.to_vec(),
+            shape.iter().map(|&dim| dim as usize).collect::<Vec<_>>(),
+        )
+        .assert_eq(&expected.into_data(), false);
+    }
+}
+
+#[test]
+fn dim_reductions_propagate_the_first_nan() {
+    let device = Device::default();
+    let input = Tensor::from_floats([[1.0, f32::NAN, -3.0]], &device);
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
+    let model = OnnxExporter::new()
+        .export(&DimReductions, input, DimReductions::forward)
+        .unwrap();
+
+    let mut session = Session::builder()
+        .unwrap()
+        .commit_from_memory(model.as_bytes())
+        .unwrap();
+    let outputs = session
+        .run(ort::inputs![
+            OrtTensor::from_array(([1, 3], input_values)).unwrap()
+        ])
+        .unwrap();
+    for output in [&outputs[1], &outputs[3]] {
+        let (_, values) = output.try_extract_tensor::<f32>().unwrap();
+        assert!(values[0].is_nan());
+    }
+    for output in [&outputs[2], &outputs[4]] {
+        let (_, values) = output.try_extract_tensor::<i64>().unwrap();
+        assert_eq!(values, [1]);
+    }
+}
+
+#[test]
+fn reduce_sum_rejects_unsupported_opset_18_dtype() {
+    let device = Device::default();
+    let input = Tensor::<2, Int>::from_ints([[1, 2], [3, 4]], &device).cast(DType::I8);
+    let result = OnnxExporter::new().export(&IntSum, input, IntSum::forward);
+
+    assert!(matches!(
+        result,
+        Err(ExportError::UnsupportedOperation { kind, .. })
+            if kind.contains("ReduceSum") && kind.contains("I8")
+    ));
+}
+
+#[test]
+fn conv1d_rejects_bfloat16_for_opset_18() {
+    let device = Device::default();
+    let module = RawConv1d {
+        weight: Tensor::<3>::ones([1, 1, 2], &device).cast(DType::BF16),
+    };
+    let input = Tensor::<3>::ones([1, 1, 4], &device).cast(DType::BF16);
+    let result = OnnxExporter::new().export(&module, input, RawConv1d::forward);
+
+    assert!(matches!(
+        result,
+        Err(ExportError::UnsupportedOperation { kind, .. })
+            if kind.contains("Conv1d") && kind.contains("BF16")
+    ));
 }
 
 #[test]
