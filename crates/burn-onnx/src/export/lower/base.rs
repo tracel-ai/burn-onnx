@@ -155,6 +155,11 @@ fn onnx_slice_bounds(start: isize, end: Option<isize>, step: isize) -> (i64, i64
     if step > 0 {
         return (start as i64, end.map_or(i64::MAX, |end| end as i64));
     }
+    if end.is_some_and(|end| start >= end) {
+        // Burn permits empty intervals and returns no elements regardless of
+        // the step. Equal in-range ONNX bounds preserve that cardinality.
+        return (0, 0);
+    }
 
     // Burn selects an ascending [start, end) interval and traverses it in
     // reverse. ONNX uses Python-style descending bounds, so swap the interval
@@ -204,4 +209,15 @@ fn lower_creation(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::onnx_slice_bounds;
+
+    #[test]
+    fn negative_step_keeps_empty_intervals_empty() {
+        assert_eq!(onnx_slice_bounds(0, Some(0), -1), (0, 0));
+        assert_eq!(onnx_slice_bounds(3, Some(1), -2), (0, 0));
+    }
 }
