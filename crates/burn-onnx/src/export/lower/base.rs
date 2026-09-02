@@ -119,7 +119,7 @@ fn lower_indices(
 
     let output = format!("node_{index}_{kind}_indices64");
     context.node(output.clone(), "Cast", vec![input], vec![output.clone()]);
-    context.int_attribute("to", 7);
+    context.int_attribute("to", onnx_dtype_parts(indices.id, DType::I64)? as i64);
     Ok(output)
 }
 

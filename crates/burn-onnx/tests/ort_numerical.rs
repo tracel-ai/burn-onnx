@@ -172,6 +172,9 @@ impl BoolCreation {
 struct DimReductions;
 
 #[derive(Module, Debug)]
+struct ArgReductions;
+
+#[derive(Module, Debug)]
 struct IntSum;
 
 impl IntSum {
@@ -208,6 +211,12 @@ impl DimReductions {
         let (max, max_indices) = input.clone().max_dim_with_indices(1);
         let (min, min_indices) = input.min_dim_with_indices(1);
         (sum, (max, max_indices), (min, min_indices))
+    }
+}
+
+impl ArgReductions {
+    fn forward(&self, input: Tensor<2>) -> (Tensor<2, Int>, Tensor<2, Int>) {
+        (input.clone().argmax(1), input.argmin(1))
     }
 }
 
@@ -819,6 +828,22 @@ fn dim_reductions_match_burn() {
     let model = OnnxExporter::new()
         .export(&DimReductions, input, DimReductions::forward)
         .unwrap();
+    let model_proto = ModelProto::parse_from_bytes(model.as_bytes()).unwrap();
+    assert_eq!(
+        model_proto
+            .graph
+            .node
+            .iter()
+            .map(|node| node.op_type.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "ReduceSum",
+            "ArgMax",
+            "GatherElements",
+            "ArgMin",
+            "GatherElements"
+        ]
+    );
 
     let mut session = Session::builder()
         .unwrap()
@@ -859,13 +884,24 @@ fn dim_reductions_match_burn() {
 }
 
 #[test]
-fn dim_reductions_propagate_the_first_nan() {
+fn arg_reductions_lower_directly_and_match_burn() {
     let device = Device::default();
-    let input = Tensor::from_floats([[1.0, f32::NAN, -3.0]], &device);
+    let input = Tensor::from_floats([[3.0, -2.0, 7.0, 7.0], [5.0, 9.0, -1.0, 4.0]], &device);
     let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
+    let (expected_max, expected_min) = ArgReductions.forward(input.clone());
     let model = OnnxExporter::new()
-        .export(&DimReductions, input, DimReductions::forward)
+        .export(&ArgReductions, input, ArgReductions::forward)
         .unwrap();
+    let model_proto = ModelProto::parse_from_bytes(model.as_bytes()).unwrap();
+    assert_eq!(
+        model_proto
+            .graph
+            .node
+            .iter()
+            .map(|node| node.op_type.as_str())
+            .collect::<Vec<_>>(),
+        ["ArgMax", "ArgMin"]
+    );
 
     let mut session = Session::builder()
         .unwrap()
@@ -873,16 +909,12 @@ fn dim_reductions_propagate_the_first_nan() {
         .unwrap();
     let outputs = session
         .run(ort::inputs![
-            OrtTensor::from_array(([1, 3], input_values)).unwrap()
+            OrtTensor::from_array(([2, 4], input_values)).unwrap()
         ])
         .unwrap();
-    for output in [&outputs[1], &outputs[3]] {
-        let (_, values) = output.try_extract_tensor::<f32>().unwrap();
-        assert!(values[0].is_nan());
-    }
-    for output in [&outputs[2], &outputs[4]] {
+    for (output, expected) in [(&outputs[0], expected_max), (&outputs[1], expected_min)] {
         let (_, values) = output.try_extract_tensor::<i64>().unwrap();
-        assert_eq!(values, [1]);
+        TensorData::new(values.to_vec(), vec![2, 1]).assert_eq(&expected.into_data(), false);
     }
 }
 

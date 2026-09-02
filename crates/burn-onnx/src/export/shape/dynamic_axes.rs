@@ -220,7 +220,9 @@ impl AxisTracker {
             }
             NumericOperationIr::MeanDim(operation)
             | NumericOperationIr::SumDim(operation)
-            | NumericOperationIr::ProdDim(operation) => {
+            | NumericOperationIr::ProdDim(operation)
+            | NumericOperationIr::ArgMax(operation)
+            | NumericOperationIr::ArgMin(operation) => {
                 self.reduced_axes(&operation.input, &operation.out, operation.axis)
             }
             NumericOperationIr::MaxDimWithIndices(operation)
@@ -484,14 +486,18 @@ fn slice_covers_axis(range: &burn::backend::Slice, dimension: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::backend::ir::{AdaptiveAvgPool2dOpIr, MatmulOpIr, SwapDimsOpIr};
+    use burn::backend::ir::{AdaptiveAvgPool2dOpIr, MatmulOpIr, ReduceDimOpIr, SwapDimsOpIr};
     use burn::backend::{DType, Shape};
 
     fn tensor(id: u64, shape: &[usize]) -> TensorIr {
+        tensor_with_dtype(id, shape, DType::F32)
+    }
+
+    fn tensor_with_dtype(id: u64, shape: &[usize], dtype: DType) -> TensorIr {
         TensorIr::uninit(
             TensorId::new(id),
             shape.iter().copied().collect::<Shape>(),
-            DType::F32,
+            dtype,
         )
     }
 
@@ -570,6 +576,45 @@ mod tests {
 
         assert!(!dynamic.contains(TensorId::new(3), 0));
         assert!(!dynamic.contains(TensorId::new(3), 1));
+    }
+
+    #[test]
+    fn arg_reduction_preserves_only_non_reduced_dynamic_axes() {
+        let sample = graph(
+            OperationIr::NumericFloat(
+                DType::F32,
+                NumericOperationIr::ArgMax(ReduceDimOpIr {
+                    input: tensor(1, &[2, 4]),
+                    out: tensor_with_dtype(2, &[2, 1], DType::I64),
+                    axis: 1,
+                    accumulator_len: 4,
+                }),
+            ),
+            &[1],
+            &[2],
+        );
+        let validation = graph(
+            OperationIr::NumericFloat(
+                DType::F32,
+                NumericOperationIr::ArgMax(ReduceDimOpIr {
+                    input: tensor(11, &[5, 6]),
+                    out: tensor_with_dtype(12, &[5, 1], DType::I64),
+                    axis: 1,
+                    accumulator_len: 6,
+                }),
+            ),
+            &[11],
+            &[12],
+        );
+        let specs = [InputSpec::new([
+            AxisSpec::dynamic("rows"),
+            AxisSpec::dynamic("columns"),
+        ])];
+
+        let dynamic = PotentiallyDynamicAxes::analyze(&sample, &validation, &specs);
+
+        assert_eq!(dynamic.symbol(TensorId::new(2), 0), Some("rows"));
+        assert!(!dynamic.contains(TensorId::new(2), 1));
     }
 
     #[test]

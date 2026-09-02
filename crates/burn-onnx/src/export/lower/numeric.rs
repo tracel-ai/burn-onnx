@@ -5,7 +5,8 @@
 
 use burn::backend::DType;
 use burn::backend::ir::{
-    NumericOperationIr, OperationIr, PadModeIr, PadOpIr, ReduceDimWithIndicesOpIr, ScalarOpIr,
+    NumericOperationIr, OperationIr, PadModeIr, PadOpIr, ReduceDimOpIr, ReduceDimWithIndicesOpIr,
+    ScalarOpIr, TensorIr,
 };
 
 use crate::export::ExportError;
@@ -76,6 +77,14 @@ pub(super) fn lower(
         context.int_attribute("keepdims", kept as i64);
         return Ok(true);
     }
+    if let NumericOperationIr::ArgMax(reduce) = numeric {
+        lower_arg(context, index, reduce, "ArgMax")?;
+        return Ok(true);
+    }
+    if let NumericOperationIr::ArgMin(reduce) = numeric {
+        lower_arg(context, index, reduce, "ArgMin")?;
+        return Ok(true);
+    }
     if let NumericOperationIr::MaxDimWithIndices(reduce) = numeric {
         lower_reduce_with_indices(context, index, reduce, "ArgMax")?;
         return Ok(true);
@@ -109,11 +118,28 @@ pub(super) fn lower(
     Ok(true)
 }
 
+/// Lower a reduction that returns only its winning indices.
+fn lower_arg(
+    context: &mut LoweringContext<'_>,
+    index: usize,
+    reduce: &ReduceDimOpIr,
+    arg_op: &'static str,
+) -> Result<(), ExportError> {
+    lower_arg_indices(
+        context,
+        index,
+        &reduce.input,
+        &reduce.out,
+        reduce.axis,
+        arg_op,
+    )?;
+    Ok(())
+}
+
 /// Lower a max or min reduction that also yields the winning indices.
 ///
 /// ONNX has no single operator for this pair. `ArgMax`/`ArgMin` produces the
-/// indices, and `GatherElements` reads the values back out through them. Float
-/// inputs need an additional NaN path because Burn propagates the first NaN.
+/// indices, and `GatherElements` reads the values back out through them.
 fn lower_reduce_with_indices(
     context: &mut LoweringContext<'_>,
     index: usize,
@@ -129,92 +155,15 @@ fn lower_reduce_with_indices(
         });
     }
 
-    let indices = context.tensor_name(reduce.out_indices.id);
-    // `ArgMax`/`ArgMin` always produce `int64`; a cast reconciles the traced
-    // index dtype where it differs.
-    let indices64 = match reduce.out_indices.dtype {
-        DType::I64 => indices.clone(),
-        _ => format!("node_{index}_indices64"),
-    };
     let input = context.tensor_name(reduce.tensor.id);
-    let normal_indices64 = if reduce.tensor.dtype.is_float() {
-        format!("node_{index}_normal_indices64")
-    } else {
-        indices64.clone()
-    };
-    context.node(
-        format!("node_{index}_arg"),
+    let indices64 = lower_arg_indices(
+        context,
+        index,
+        &reduce.tensor,
+        &reduce.out_indices,
+        reduce.dim,
         arg_op,
-        vec![input.clone()],
-        vec![normal_indices64.clone()],
-    );
-    context.int_attribute("axis", reduce.dim as i64);
-    context.int_attribute("keepdims", 1);
-
-    if reduce.tensor.dtype.is_float() {
-        let nan_mask = format!("node_{index}_nan_mask");
-        context.node(
-            nan_mask.clone(),
-            "IsNaN",
-            vec![input.clone()],
-            vec![nan_mask.clone()],
-        );
-        let nan_mask64 = format!("node_{index}_nan_mask64");
-        context.node(
-            nan_mask64.clone(),
-            "Cast",
-            vec![nan_mask],
-            vec![nan_mask64.clone()],
-        );
-        context.int_attribute("to", 7);
-
-        let nan_indices64 = format!("node_{index}_nan_indices64");
-        context.node(
-            nan_indices64.clone(),
-            "ArgMax",
-            vec![nan_mask64.clone()],
-            vec![nan_indices64.clone()],
-        );
-        context.int_attribute("axis", reduce.dim as i64);
-        context.int_attribute("keepdims", 1);
-
-        let has_nan64 = format!("node_{index}_has_nan64");
-        context.node(
-            has_nan64.clone(),
-            "GatherElements",
-            vec![nan_mask64, nan_indices64.clone()],
-            vec![has_nan64.clone()],
-        );
-        context.int_attribute("axis", reduce.dim as i64);
-        let has_nan = format!("node_{index}_has_nan");
-        context.node(
-            has_nan.clone(),
-            "Cast",
-            vec![has_nan64],
-            vec![has_nan.clone()],
-        );
-        context.int_attribute("to", 9);
-
-        context.node(
-            format!("node_{index}_select_indices"),
-            "Where",
-            vec![has_nan, nan_indices64, normal_indices64],
-            vec![indices64.clone()],
-        );
-    }
-
-    if indices64 != indices {
-        context.node(
-            format!("node_{index}_cast"),
-            "Cast",
-            vec![indices64.clone()],
-            vec![indices],
-        );
-        context.int_attribute(
-            "to",
-            onnx_dtype_parts(reduce.out_indices.id, reduce.out_indices.dtype)? as i64,
-        );
-    }
+    )?;
     let output = context.tensor_name(reduce.out.id);
     context.node(
         format!("node_{index}"),
@@ -224,6 +173,55 @@ fn lower_reduce_with_indices(
     );
     context.int_attribute("axis", reduce.dim as i64);
     Ok(())
+}
+
+/// Emit canonical ONNX `ArgMax`/`ArgMin` lowering and reconcile its fixed
+/// `int64` output with the dtype captured by Burn.
+///
+/// ONNX does not specify NaN precedence for these operators. Consequently,
+/// runtime behavior for NaN inputs may differ from Burn's first-NaN contract.
+fn lower_arg_indices(
+    context: &mut LoweringContext<'_>,
+    index: usize,
+    input: &TensorIr,
+    output: &TensorIr,
+    axis: usize,
+    arg_op: &'static str,
+) -> Result<String, ExportError> {
+    if !output.dtype.is_int() && !output.dtype.is_uint() {
+        return Err(ExportError::UnsupportedOperation {
+            operation: index,
+            kind: format!("{arg_op} with non-integer {:?} output", output.dtype),
+        });
+    }
+
+    let output_name = context.tensor_name(output.id);
+    let indices64 = if output.dtype == DType::I64 {
+        output_name.clone()
+    } else {
+        format!("node_{index}_indices64")
+    };
+    context.node(
+        format!("node_{index}_arg"),
+        arg_op,
+        vec![context.tensor_name(input.id)],
+        vec![indices64.clone()],
+    );
+    context.int_attribute("axis", axis as i64);
+    context.int_attribute("keepdims", 1);
+    context.int_attribute("select_last_index", 0);
+
+    if indices64 != output_name {
+        context.node(
+            format!("node_{index}_indices_cast"),
+            "Cast",
+            vec![indices64.clone()],
+            vec![output_name],
+        );
+        context.int_attribute("to", onnx_dtype_parts(output.id, output.dtype)? as i64);
+    }
+
+    Ok(indices64)
 }
 
 fn lower_pad(
