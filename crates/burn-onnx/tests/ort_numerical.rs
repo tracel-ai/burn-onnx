@@ -1061,13 +1061,7 @@ fn dim_reductions_match_burn() {
             .iter()
             .map(|node| node.op_type.as_str())
             .collect::<Vec<_>>(),
-        [
-            "ReduceSum",
-            "ArgMax",
-            "GatherElements",
-            "ArgMin",
-            "GatherElements"
-        ]
+        ["ReduceSum", "TopK", "TopK"]
     );
 
     let mut session = Session::builder()
@@ -1157,6 +1151,19 @@ fn reduce_sum_rejects_unsupported_opset_18_dtype() {
         result,
         Err(ExportError::UnsupportedOperation { kind, .. })
             if kind.contains("ReduceSum") && kind.contains("I8")
+    ));
+}
+
+#[test]
+fn topk_reduction_rejects_bfloat16_for_opset_18() {
+    let device = Device::default();
+    let input = Tensor::<2>::ones([2, 3], &device).cast(DType::BF16);
+    let result = OnnxExporter::new().export(&DimReductions, input, DimReductions::forward);
+
+    assert!(matches!(
+        result,
+        Err(ExportError::UnsupportedOperation { kind, .. })
+            if kind.contains("MaxDimWithIndices") && kind.contains("BF16")
     ));
 }
 
