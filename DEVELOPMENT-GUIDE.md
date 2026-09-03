@@ -609,7 +609,11 @@ import onnx
 # ... rest of script
 ```
 
-This makes scripts executable without manual environment setup.
+This makes scripts executable without manual environment setup:
+
+```bash
+uv run script.py
+```
 
 #### Creating a Test for a New Operator
 

@@ -1489,44 +1489,38 @@ status = "skip-codegen"
 reason = "Unsupported ONNX operation(s): CenterCropPad (node 'centercroppad1')"
 
 [test_center_crop_pad_crop_and_pad_expanded]
-status = "skip-codegen"
-reason = "max: unsupported input types"
+status = "pass"
 
 [test_center_crop_pad_crop_axes_chw]
 status = "skip-codegen"
 reason = "Unsupported ONNX operation(s): CenterCropPad (node 'centercroppad1')"
 
 [test_center_crop_pad_crop_axes_chw_expanded]
-status = "skip-codegen"
-reason = "max: unsupported input types"
+status = "pass"
 
 [test_center_crop_pad_crop_axes_hwc]
 status = "skip-codegen"
 reason = "Unsupported ONNX operation(s): CenterCropPad (node 'centercroppad1')"
 
 [test_center_crop_pad_crop_axes_hwc_expanded]
-status = "skip-codegen"
-reason = "max: unsupported input types"
+status = "pass"
 
 [test_center_crop_pad_crop_expanded]
-status = "skip-codegen"
-reason = "max: unsupported input types"
+status = "pass"
 
 [test_center_crop_pad_crop_negative_axes_hwc]
 status = "skip-codegen"
 reason = "Unsupported ONNX operation(s): CenterCropPad (node 'centercroppad1')"
 
 [test_center_crop_pad_crop_negative_axes_hwc_expanded]
-status = "skip-codegen"
-reason = "max: unsupported input types"
+status = "pass"
 
 [test_center_crop_pad_pad]
 status = "skip-codegen"
 reason = "Unsupported ONNX operation(s): CenterCropPad (node 'centercroppad1')"
 
 [test_center_crop_pad_pad_expanded]
-status = "skip-codegen"
-reason = "max: unsupported input types"
+status = "pass"
 
 [test_clip]
 status = "pass"
@@ -3110,11 +3104,11 @@ reason = "burn-onnx does not currently support 3D max pooling: Burn lacks a nati
 
 [test_maxpool_with_argmax_2d_precomputed_pads]
 status = "skip-compile"
-reason = "cannot find value `maxpool2d1_out2` in this scope"
+reason = "cannot find value `maxpool2d1_out2` in this scope: not found in this scope"
 
 [test_maxpool_with_argmax_2d_precomputed_strides]
 status = "skip-compile"
-reason = "cannot find value `maxpool2d1_out2` in this scope"
+reason = "cannot find value `maxpool2d1_out2` in this scope: not found in this scope"
 
 [test_maxunpool_export_with_output_shape]
 status = "skip-codegen"
@@ -4306,7 +4300,7 @@ tracking = "#311"
 
 [test_resize_upsample_sizes_nearest_not_larger]
 status = "skip-codegen"
-reason = "Node 'resize1' (Resize): Invalid attribute 'keep_aspect_ratio_policy': keep_aspect_ratio_policy other than 'stretch' is not supported"
+reason = "Node 'resize1' (Resize): Invalid attribute 'axes': custom axes attribute is not supported"
 
 [test_resize_upsample_sizes_nearest_not_smaller]
 status = "skip-codegen"
@@ -4495,7 +4489,7 @@ reason = "Unsupported ONNX operation(s): RotaryEmbedding (node 'rotaryembedding1
 
 [test_rotary_embedding_interleaved_expanded]
 status = "skip-codegen"
-reason = "Config extraction failed: TypeMismatch { expected: \"Tensor for split sizes input\", actual: \"Shape(2)\" }"
+reason = "Node 'slice3' (Slice): Slice with runtime bounds only supports step=1; node slice3 has steps=[2]"
 
 [test_rotary_embedding_no_position_ids]
 status = "skip-codegen"
@@ -4511,7 +4505,7 @@ reason = "Unsupported ONNX operation(s): RotaryEmbedding (node 'rotaryembedding1
 
 [test_rotary_embedding_no_position_ids_interleaved_expanded]
 status = "skip-codegen"
-reason = "Config extraction failed: TypeMismatch { expected: \"Tensor for split sizes input\", actual: \"Shape(2)\" }"
+reason = "Node 'slice3' (Slice): Slice with runtime bounds only supports step=1; node slice3 has steps=[2]"
 
 [test_rotary_embedding_no_position_ids_rotary_dim]
 status = "skip-codegen"
@@ -4527,7 +4521,7 @@ reason = "Unsupported ONNX operation(s): RotaryEmbedding (node 'rotaryembedding1
 
 [test_rotary_embedding_with_interleaved_rotary_dim_expanded]
 status = "skip-codegen"
-reason = "Config extraction failed: TypeMismatch { expected: \"Tensor for split sizes input\", actual: \"Shape(2)\" }"
+reason = "Node 'slice4' (Slice): Slice with runtime bounds only supports step=1; node slice4 has steps=[2]"
 
 [test_rotary_embedding_with_rotary_dim]
 status = "skip-codegen"

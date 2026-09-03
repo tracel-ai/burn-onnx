@@ -1,11 +1,11 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(max, max_broadcast);
+include_models!(max, max_broadcast, max_scalar, max_shape, max_shape_tensor);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Device, Tensor, TensorData};
+    use burn::tensor::{DType, Int, Tensor, TensorData};
 
     #[test]
     fn max() {
@@ -71,5 +71,53 @@ mod tests {
         // Both directions should produce the same result (max is commutative)
         result1.to_data().assert_eq(&expected, true);
         result2.to_data().assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn max_scalar() {
+        let device = Default::default();
+        let model: max_scalar::Model = max_scalar::Model::default();
+
+        let tensor = Tensor::<2>::from_floats([[0., 1.5, -3., 2.5], [4., 1., -1., 3.5]], &device);
+        let (scalar_tensor, tensor_scalar, scalar_scalar) = model.forward(1., tensor, 2.);
+
+        scalar_tensor.to_data().assert_eq(
+            &TensorData::from([[1.0f32, 1.5, 1., 2.5], [4., 1., 1., 3.5]]),
+            true,
+        );
+        tensor_scalar.to_data().assert_eq(
+            &TensorData::from([[2.0f32, 2., 2., 2.5], [4., 2., 2., 3.5]]),
+            true,
+        );
+        assert_eq!(scalar_scalar, 2.);
+    }
+
+    #[test]
+    fn max_shape() {
+        let device = Default::default();
+        let model: max_shape::Model = max_shape::Model::default();
+
+        let input1 = Tensor::<3>::ones([10, 8, 6], &device);
+        let input2 = Tensor::<3>::ones([2, 30, 4], &device);
+        let (shape_scalar, scalar_shape, shape_shape) = model.forward(input1, input2);
+
+        // there is a constant node with 7
+        assert_eq!(shape_scalar, [10, 8, 7]);
+        assert_eq!(scalar_shape, [10, 8, 7]);
+        assert_eq!(shape_shape, [10, 30, 6]);
+    }
+
+    #[test]
+    fn max_shape_tensor() {
+        let device = Default::default();
+        let model: max_shape_tensor::Model = max_shape_tensor::Model::default();
+
+        let input_tensor = Tensor::<3>::ones([5, 7, 9], &device);
+        let input_1d = Tensor::<1, Int>::from_data([2i64, 30, 4], (&device, DType::I64));
+        let (shape_tensor, tensor_shape) = model.forward(input_tensor, input_1d);
+
+        let expected = TensorData::from([5i64, 30, 9]);
+        shape_tensor.to_data().assert_eq(&expected, true);
+        tensor_shape.to_data().assert_eq(&expected, true);
     }
 }
