@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use burn::backend::DType;
 use burn::module::{Module, Param};
 use burn::nn::{
-    Linear, LinearConfig, PaddingConfig1d, Relu,
+    Linear, LinearConfig, PaddingConfig1d, PaddingConfig2d, Relu,
     conv::{Conv1d, Conv1dConfig, Conv2d, Conv2dConfig},
     pool::{MaxPool2d, MaxPool2dConfig},
 };
@@ -103,11 +103,37 @@ impl SmallConv1d {
 }
 
 #[derive(Module, Debug)]
+struct SmallConv2d {
+    conv: Conv2d,
+}
+
+impl SmallConv2d {
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        self.conv.forward(input)
+    }
+}
+
+#[derive(Module, Debug)]
+struct SliceAfterConv1d {
+    conv: Conv1d,
+}
+
+impl SliceAfterConv1d {
+    fn forward(&self, input: Tensor<3>) -> Tensor<3> {
+        self.conv.forward(input).slice(s![.., 0..1, ..])
+    }
+}
+
+#[derive(Module, Debug)]
 struct SteppedSlice;
 
 impl SteppedSlice {
-    fn forward(&self, input: Tensor<1>) -> (Tensor<1>, Tensor<1>) {
-        (input.clone().slice(s![1..9;2]), input.slice(s![2..8;-2]))
+    fn forward(&self, input: Tensor<1>) -> (Tensor<1>, Tensor<1>, Tensor<1>) {
+        (
+            input.clone().slice(s![1..9;2]),
+            input.clone().slice(s![2..8;-2]),
+            input.slice(s![..;-1]),
+        )
     }
 }
 
@@ -153,6 +179,28 @@ impl ScatterColumns {
         })
         .into()
     }
+
+    fn reference(&self, input: Tensor<2>) -> Vec<Tensor<2>> {
+        // The default test backend only implements element-wise scatter for
+        // `Add`. Its ScatterND implementation supports every reduction and is
+        // equivalent here because all update coordinates are unique.
+        let coordinates =
+            Tensor::<2, Int>::from_ints([[0, 0], [0, 2], [1, 1], [1, 0]], &input.device());
+        let values = self.values.clone().reshape([4]);
+        [
+            IndexingUpdateOp::Assign,
+            IndexingUpdateOp::Add,
+            IndexingUpdateOp::Mul,
+            IndexingUpdateOp::Min,
+            IndexingUpdateOp::Max,
+        ]
+        .map(|update| {
+            input
+                .clone()
+                .scatter_nd(coordinates.clone(), values.clone(), update)
+        })
+        .into()
+    }
 }
 
 #[derive(Module, Debug)]
@@ -160,6 +208,19 @@ struct BoolCreation;
 
 impl BoolCreation {
     fn forward(&self, input: Tensor<2>) -> (Tensor<2, Bool>, Tensor<2, Bool>) {
+        let shape = input.shape();
+        (
+            Tensor::zeros(shape.clone(), &input.device()),
+            Tensor::ones(shape, &input.device()),
+        )
+    }
+}
+
+#[derive(Module, Debug)]
+struct FloatCreation;
+
+impl FloatCreation {
+    fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2>) {
         let shape = input.shape();
         (
             Tensor::zeros(shape.clone(), &input.device()),
@@ -609,7 +670,7 @@ fn conv1d_matches_burn() {
             .with_stride(2)
             .with_dilation(2)
             .with_groups(2)
-            .with_padding(PaddingConfig1d::Explicit(2, 2))
+            .with_padding(PaddingConfig1d::Explicit(1, 2))
             .init(&device),
     };
     let input = (Tensor::<1, Int>::arange(0..18, &device).float() / 10.0).reshape([1, 2, 9]);
@@ -620,6 +681,26 @@ fn conv1d_matches_burn() {
         .unwrap();
 
     let actual = run_ort(model.as_bytes(), [1, 2, 9], input_values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
+}
+
+#[test]
+fn asymmetric_conv2d_matches_burn() {
+    let device = Device::default();
+    let module = SmallConv2d {
+        conv: Conv2dConfig::new([1, 2], [3, 2])
+            .with_stride([2, 1])
+            .with_padding(PaddingConfig2d::Explicit(1, 0, 2, 1))
+            .init(&device),
+    };
+    let input = (Tensor::<1, Int>::arange(0..25, &device).float() / 10.0).reshape([1, 1, 5, 5]);
+    let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
+    let expected = module.forward(input.clone()).into_data();
+    let model = OnnxExporter::new()
+        .export(&module, input, SmallConv2d::forward)
+        .unwrap();
+
+    let actual = run_ort(model.as_bytes(), [1, 1, 5, 5], input_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
 }
 
@@ -654,7 +735,7 @@ fn dynamic_conv1d_handles_colliding_capture_shapes() {
     actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
 
     let model = ModelProto::parse_from_bytes(model.as_bytes()).unwrap();
-    assert!(
+    assert_eq!(
         model.graph.output[0]
             .type_
             .as_ref()
@@ -662,8 +743,103 @@ fn dynamic_conv1d_handles_colliding_capture_shapes() {
             .tensor_type()
             .shape
             .dim[2]
-            .has_dim_param()
+            .dim_param(),
+        "output_0_dim_2"
     );
+}
+
+#[test]
+fn dynamic_slice_after_shape_collapse_is_rejected() {
+    let device = Device::default();
+    let module = SliceAfterConv1d {
+        conv: Conv1dConfig::new(1, 2, 2).with_stride(2).init(&device),
+    };
+    let sample = Tensor::<3>::zeros([1, 1, 4], &device);
+    let validation = Tensor::<3>::zeros([1, 1, 5], &device);
+    let specs = [InputSpec::new([
+        AxisSpec::Static,
+        AxisSpec::Static,
+        AxisSpec::dynamic("length"),
+    ])];
+
+    let result = OnnxExporter::new().export_dynamic(
+        &module,
+        sample,
+        validation,
+        &specs,
+        SliceAfterConv1d::forward,
+    );
+
+    assert!(matches!(
+        result,
+        Err(ExportError::DynamicShapeLost { reason, .. })
+            if reason.contains("normalized slice bounds")
+    ));
+}
+
+#[test]
+fn dynamic_padded_strided_conv1d_is_rejected() {
+    let device = Device::default();
+    let module = SmallConv1d {
+        conv: Conv1dConfig::new(1, 2, 3)
+            .with_stride(2)
+            .with_padding(PaddingConfig1d::Same)
+            .init(&device),
+    };
+    let sample = Tensor::<3>::zeros([1, 1, 4], &device);
+    let validation = Tensor::<3>::zeros([1, 1, 6], &device);
+    let specs = [InputSpec::new([
+        AxisSpec::Static,
+        AxisSpec::Static,
+        AxisSpec::dynamic("length"),
+    ])];
+
+    let result = OnnxExporter::new().export_dynamic(
+        &module,
+        sample,
+        validation,
+        &specs,
+        SmallConv1d::forward,
+    );
+
+    assert!(matches!(
+        result,
+        Err(ExportError::DynamicShapeLost { reason, .. })
+            if reason.contains("strided convolution padding")
+    ));
+}
+
+#[test]
+fn dynamic_padded_strided_conv2d_is_rejected() {
+    let device = Device::default();
+    let module = SmallConv2d {
+        conv: Conv2dConfig::new([1, 2], [3, 3])
+            .with_stride([2, 2])
+            .with_padding(PaddingConfig2d::Same)
+            .init(&device),
+    };
+    let sample = Tensor::<4>::zeros([1, 1, 4, 4], &device);
+    let validation = Tensor::<4>::zeros([1, 1, 6, 6], &device);
+    let specs = [InputSpec::new([
+        AxisSpec::Static,
+        AxisSpec::Static,
+        AxisSpec::dynamic("height"),
+        AxisSpec::dynamic("width"),
+    ])];
+
+    let result = OnnxExporter::new().export_dynamic(
+        &module,
+        sample,
+        validation,
+        &specs,
+        SmallConv2d::forward,
+    );
+
+    assert!(matches!(
+        result,
+        Err(ExportError::DynamicShapeLost { reason, .. })
+            if reason.contains("strided convolution padding")
+    ));
 }
 
 #[test]
@@ -671,7 +847,8 @@ fn stepped_slice_matches_burn() {
     let device = Device::default();
     let input = Tensor::<1, Int>::arange(0..10, &device).float();
     let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
-    let (expected_positive, expected_negative) = SteppedSlice.forward(input.clone());
+    let (expected_positive, expected_negative, expected_reverse) =
+        SteppedSlice.forward(input.clone());
     let model = OnnxExporter::new()
         .export(&SteppedSlice, input, SteppedSlice::forward)
         .unwrap();
@@ -697,13 +874,21 @@ fn stepped_slice_matches_burn() {
         shape.iter().map(|&dim| dim as usize).collect::<Vec<_>>(),
     )
     .assert_approx_eq::<f32>(&expected_negative.into_data(), Tolerance::default());
+    let (shape, values) = outputs[2].try_extract_tensor::<f32>().unwrap();
+    TensorData::new(
+        values.to_vec(),
+        shape.iter().map(|&dim| dim as usize).collect::<Vec<_>>(),
+    )
+    .assert_approx_eq::<f32>(&expected_reverse.into_data(), Tolerance::default());
 }
 
 #[test]
 fn dynamic_slice_rejects_ambiguous_clamped_bounds() {
     let device = Device::default();
-    // Burn clamps `..5` to each captured input. The resulting `0..3` and
-    // `0..4` ranges cannot be distinguished from a genuinely open range.
+    // Burn normalizes every range before capture. For example, it clamps `..5`
+    // to `0..3` and `0..4` here, but the exporter cannot distinguish those
+    // bounds from a genuinely open range. It therefore rejects every slice on
+    // a potentially dynamic axis, even if two normalized captures agree.
     let sample = Tensor::<1>::zeros([3], &device);
     let validation = Tensor::<1>::zeros([4], &device);
     let specs = [InputSpec::new([AxisSpec::dynamic("length")])];
@@ -750,7 +935,12 @@ fn scatter_reductions_match_burn() {
     };
     let input = Tensor::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], &device);
     let input_values = input.clone().into_data().try_to_vec::<f32>().unwrap();
-    let expected = [
+    let expected = module
+        .reference(input.clone())
+        .into_iter()
+        .map(Tensor::into_data)
+        .collect::<Vec<_>>();
+    let sanity = [
         [[10.0f32, 2.0, -2.0], [20.0, 3.0, 6.0]],
         [[11.0, 2.0, 1.0], [24.0, 8.0, 6.0]],
         [[10.0, 2.0, -6.0], [80.0, 15.0, 6.0]],
@@ -758,6 +948,9 @@ fn scatter_reductions_match_burn() {
         [[10.0, 2.0, 3.0], [20.0, 5.0, 6.0]],
     ]
     .map(TensorData::from);
+    for (actual, expected) in expected.iter().zip(sanity) {
+        actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+    }
     let model = OnnxExporter::new()
         .export(&module, input, ScatterColumns::forward)
         .unwrap();
@@ -800,6 +993,18 @@ fn dynamic_bool_zeros_and_ones_match_burn() {
         )
         .unwrap();
 
+    let proto = ModelProto::parse_from_bytes(model.as_bytes()).unwrap();
+    assert_eq!(
+        proto
+            .graph
+            .node
+            .iter()
+            .filter(|node| node.op_type == "ConstantOfShape")
+            .count(),
+        2
+    );
+    assert!(proto.graph.node.iter().all(|node| node.op_type != "Cast"));
+
     let runtime_values = vec![0.0f32; 21];
     let mut session = Session::builder()
         .unwrap()
@@ -816,6 +1021,26 @@ fn dynamic_bool_zeros_and_ones_match_burn() {
     let (shape, ones) = outputs[1].try_extract_tensor::<bool>().unwrap();
     assert_eq!(shape.iter().copied().collect::<Vec<_>>(), vec![7, 3]);
     assert!(ones.iter().all(|value| *value));
+}
+
+#[test]
+fn native_constant_of_shape_dtypes_do_not_add_casts() {
+    let device = Device::default();
+    let input = Tensor::<2>::zeros([2, 3], &device);
+    let model = OnnxExporter::new()
+        .export(&FloatCreation, input, FloatCreation::forward)
+        .unwrap();
+    let model = ModelProto::parse_from_bytes(model.as_bytes()).unwrap();
+
+    assert_eq!(
+        model
+            .graph
+            .node
+            .iter()
+            .map(|node| node.op_type.as_str())
+            .collect::<Vec<_>>(),
+        ["ConstantOfShape", "ConstantOfShape"]
+    );
 }
 
 #[test]
@@ -913,8 +1138,12 @@ fn arg_reductions_lower_directly_and_match_burn() {
         ])
         .unwrap();
     for (output, expected) in [(&outputs[0], expected_max), (&outputs[1], expected_min)] {
-        let (_, values) = output.try_extract_tensor::<i64>().unwrap();
-        TensorData::new(values.to_vec(), vec![2, 1]).assert_eq(&expected.into_data(), false);
+        let (shape, values) = output.try_extract_tensor::<i64>().unwrap();
+        TensorData::new(
+            values.to_vec(),
+            shape.iter().map(|&dim| dim as usize).collect::<Vec<_>>(),
+        )
+        .assert_eq(&expected.into_data(), false);
     }
 }
 

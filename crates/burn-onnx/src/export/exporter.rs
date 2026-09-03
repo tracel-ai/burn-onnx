@@ -280,6 +280,11 @@ impl OnnxExporter {
     /// `input_specs` are positional and must contain one entry per tensor in
     /// `sample_inputs`. Static axes must agree between both input sets; dynamic
     /// axes must differ. Repeated symbols must refer to identical dimensions.
+    ///
+    /// Export fails when capture has normalized away shape-dependent intent,
+    /// including slices over potentially dynamic axes and input-dependent
+    /// padding before a strided convolution. Rejecting these cases prevents a
+    /// model that is valid only for the two captured shapes from being emitted.
     pub fn export_dynamic<M, I, O, F>(
         &self,
         module: &M,

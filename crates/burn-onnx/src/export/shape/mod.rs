@@ -160,11 +160,87 @@ impl<'a> PairedTraceAnalysis<'a> {
             .collect::<Result<_, _>>()?;
         let potentially_dynamic =
             PotentiallyDynamicAxes::analyze(resolver.sample, resolver.validation, resolver.inputs);
-        Ok(Self {
+        let analysis = Self {
             resolver,
             inputs,
             potentially_dynamic,
-        })
+        };
+        analysis.validate_dynamic_operation_contracts()?;
+        Ok(analysis)
+    }
+
+    /// Reject operations whose runtime behavior depends on information that
+    /// Burn's captured IR has already normalized away.
+    fn validate_dynamic_operation_contracts(&self) -> Result<(), ExportError> {
+        for (index, operation) in self.resolver.sample.operations.iter().enumerate() {
+            match operation {
+                OperationIr::BaseFloat(BaseOperationIr::Slice(slice))
+                | OperationIr::BaseInt(BaseOperationIr::Slice(slice))
+                | OperationIr::BaseBool(BaseOperationIr::Slice(slice)) => {
+                    if let Some(axis) = (0..slice.ranges.len())
+                        .find(|&axis| self.potentially_dynamic.contains(slice.tensor.id, axis))
+                    {
+                        return Err(ExportError::DynamicShapeLost {
+                            tensor: slice.out.id,
+                            axis,
+                            reason: format!(
+                                "operation {index} has normalized slice bounds on a potentially dynamic axis"
+                            ),
+                        });
+                    }
+                }
+                OperationIr::Module(ModuleOperationIr::Conv1d(conv)) => {
+                    self.validate_strided_convolution_padding(
+                        index,
+                        &conv.x,
+                        &conv.options.stride,
+                        &conv.options.padding,
+                    )?;
+                }
+                OperationIr::Module(ModuleOperationIr::Conv2d(conv)) => {
+                    self.validate_strided_convolution_padding(
+                        index,
+                        &conv.x,
+                        &conv.options.stride,
+                        &conv.options.padding,
+                    )?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_strided_convolution_padding<const D: usize>(
+        &self,
+        index: usize,
+        input: &TensorIr,
+        stride: &[usize; D],
+        padding: &[(usize, usize); D],
+    ) -> Result<(), ExportError> {
+        // Burn resolves `Same` to concrete start/end widths using the captured
+        // input shape. Asymmetric widths can change with the runtime input but
+        // the original `Same` intent is not retained in Conv*OpIr. Symmetric
+        // `Same` remains indistinguishable from explicit padding; Burn IR must
+        // retain the original padding intent to close that gap without
+        // rejecting valid explicit-padding convolutions.
+        let spatial_offset = input.shape.num_dims().saturating_sub(D);
+        for (spatial_axis, &stride) in stride.iter().enumerate() {
+            let axis = spatial_offset + spatial_axis;
+            if stride > 1
+                && self.potentially_dynamic.contains(input.id, axis)
+                && padding[spatial_axis].0 != padding[spatial_axis].1
+            {
+                return Err(ExportError::DynamicShapeLost {
+                    tensor: input.id,
+                    axis,
+                    reason: format!(
+                        "operation {index} has strided convolution padding on a potentially dynamic axis; captured IR does not preserve input-dependent padding intent"
+                    ),
+                });
+            }
+        }
+        Ok(())
     }
 
     fn dynamic_axes(&self) -> Result<Vec<DynamicAxis>, ExportError> {
@@ -294,7 +370,8 @@ impl<'a> PairedTraceAnalysis<'a> {
             [] if sample.source.is_none() => Err(ExportError::DynamicShapeLost {
                 tensor: sample.output.id,
                 axis,
-                reason: "Full dimension does not match an annotated dynamic input axis".into(),
+                reason: "created tensor dimension does not match an annotated dynamic input axis"
+                    .into(),
             }),
             [] => Ok(DimensionResolution::Infer),
             candidates => Err(ExportError::DynamicShapeLost {
@@ -399,7 +476,8 @@ impl<'a> PairedTraceAnalysis<'a> {
             Err(ExportError::DynamicShapeLost {
                 tensor: operation.output.id,
                 axis,
-                reason: "equal Full dimensions cannot be proven static from two captures".into(),
+                reason: "equal created tensor dimensions cannot be proven static from two captures"
+                    .into(),
             })
         }
     }

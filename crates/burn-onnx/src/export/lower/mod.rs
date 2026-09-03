@@ -17,7 +17,7 @@ mod numeric;
 use std::collections::BTreeMap;
 
 use burn::backend::ir::{OperationIr, ScalarIr, TensorId, TensorIr};
-use burn::backend::{DType, TensorData};
+use burn::backend::{DType, TensorData, f16};
 use context::LoweringContext;
 use hashbrown::{HashMap, HashSet};
 use onnx_ir::{GraphProto, TensorProto, TypeProto, ValueInfoProto};
@@ -285,8 +285,16 @@ fn scalar_tensor(
     let bytes = match dtype {
         DType::F32 => value.elem::<f32>().to_le_bytes().to_vec(),
         DType::F64 => value.elem::<f64>().to_le_bytes().to_vec(),
+        DType::F16 => value.elem::<f16>().to_le_bytes().to_vec(),
+        DType::I8 => value.elem::<i8>().to_le_bytes().to_vec(),
+        DType::I16 => value.elem::<i16>().to_le_bytes().to_vec(),
         DType::I32 => value.elem::<i32>().to_le_bytes().to_vec(),
         DType::I64 => value.elem::<i64>().to_le_bytes().to_vec(),
+        DType::U8 => value.elem::<u8>().to_le_bytes().to_vec(),
+        DType::U16 => value.elem::<u16>().to_le_bytes().to_vec(),
+        DType::U32 => value.elem::<u32>().to_le_bytes().to_vec(),
+        DType::U64 => value.elem::<u64>().to_le_bytes().to_vec(),
+        DType::Bool(_) => vec![value.elem::<bool>() as u8],
         dtype => {
             return Err(ExportError::UnsupportedDType {
                 tensor,
@@ -308,6 +316,32 @@ mod tests {
 
     fn tensor(id: u64) -> TensorIr {
         TensorIr::uninit(TensorId::new(id), Shape::new([2, 3]), DType::F32)
+    }
+
+    #[test]
+    fn serializes_all_constant_of_shape_opset_18_scalar_dtypes() {
+        let cases = [
+            (DType::F16, vec![0, 60]),
+            (DType::F32, vec![0, 0, 128, 63]),
+            (DType::F64, vec![0, 0, 0, 0, 0, 0, 240, 63]),
+            (DType::I8, vec![1]),
+            (DType::I16, vec![1, 0]),
+            (DType::I32, vec![1, 0, 0, 0]),
+            (DType::I64, vec![1, 0, 0, 0, 0, 0, 0, 0]),
+            (DType::U8, vec![1]),
+            (DType::U16, vec![1, 0]),
+            (DType::U32, vec![1, 0, 0, 0]),
+            (DType::U64, vec![1, 0, 0, 0, 0, 0, 0, 0]),
+            (DType::Bool(burn::backend::BoolStore::Native), vec![1]),
+        ];
+
+        for (dtype, expected) in cases {
+            let tensor = TensorId::new(1);
+            let scalar = scalar_tensor(dtype, ScalarIr::new(1, &dtype), tensor).unwrap();
+
+            assert_eq!(scalar.data_type, onnx_dtype_parts(tensor, dtype).unwrap());
+            assert_eq!(scalar.raw_data.as_ref(), expected);
+        }
     }
 
     #[test]

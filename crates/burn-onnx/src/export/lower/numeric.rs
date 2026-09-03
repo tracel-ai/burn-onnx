@@ -125,6 +125,7 @@ fn lower_arg(
     reduce: &ReduceDimOpIr,
     arg_op: &'static str,
 ) -> Result<(), ExportError> {
+    let keepdims = reduce.out.shape.num_dims() == reduce.input.shape.num_dims();
     lower_arg_indices(
         context,
         index,
@@ -132,14 +133,15 @@ fn lower_arg(
         &reduce.out,
         reduce.axis,
         arg_op,
+        keepdims,
     )?;
     Ok(())
 }
 
 /// Lower a max or min reduction that also yields the winning indices.
 ///
-/// ONNX has no single operator for this pair. `ArgMax`/`ArgMin` produces the
-/// indices, and `GatherElements` reads the values back out through them.
+/// `ArgMax`/`ArgMin` matches Burn's index-selection contract directly, and
+/// `GatherElements` reads the corresponding values back out.
 fn lower_reduce_with_indices(
     context: &mut LoweringContext<'_>,
     index: usize,
@@ -148,10 +150,14 @@ fn lower_reduce_with_indices(
 ) -> Result<(), ExportError> {
     // `GatherElements` needs indices of the input's rank, which only the
     // dimension-keeping form provides.
-    if reduce.out.shape.num_dims() != reduce.tensor.shape.num_dims() {
+    if reduce.out.shape.num_dims() != reduce.tensor.shape.num_dims()
+        || reduce.out_indices.shape.num_dims() != reduce.tensor.shape.num_dims()
+    {
         return Err(ExportError::UnsupportedOperation {
             operation: index,
-            kind: format!("{arg_op} reduction that drops the reduced dimension"),
+            kind: format!(
+                "invalid Burn IR: {arg_op} with-indices outputs must preserve the input rank"
+            ),
         });
     }
 
@@ -163,6 +169,7 @@ fn lower_reduce_with_indices(
         &reduce.out_indices,
         reduce.dim,
         arg_op,
+        true,
     )?;
     let output = context.tensor_name(reduce.out.id);
     context.node(
@@ -187,6 +194,7 @@ fn lower_arg_indices(
     output: &TensorIr,
     axis: usize,
     arg_op: &'static str,
+    keepdims: bool,
 ) -> Result<String, ExportError> {
     if !output.dtype.is_int() && !output.dtype.is_uint() {
         return Err(ExportError::UnsupportedOperation {
@@ -208,7 +216,7 @@ fn lower_arg_indices(
         vec![indices64.clone()],
     );
     context.int_attribute("axis", axis as i64);
-    context.int_attribute("keepdims", 1);
+    context.int_attribute("keepdims", keepdims as i64);
     context.int_attribute("select_last_index", 0);
 
     if indices64 != output_name {

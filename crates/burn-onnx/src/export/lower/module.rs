@@ -40,7 +40,8 @@ pub(super) fn lower(
             context.node(format!("node_{index}"), "Conv", inputs, vec![output]);
             context.ints_attribute("strides", conv.options.stride);
             context.ints_attribute("dilations", conv.options.dilation);
-            context.ints_attribute("pads", [conv.options.padding[0], conv.options.padding[0]]);
+            let [(left, right)] = conv.options.padding;
+            context.ints_attribute("pads", [left, right]);
             context.int_attribute("group", conv.options.groups as i64);
             Ok(true)
         }
@@ -67,10 +68,10 @@ pub(super) fn lower(
             context.ints_attribute(
                 "pads",
                 [
-                    conv.options.padding[0],
-                    conv.options.padding[1],
-                    conv.options.padding[0],
-                    conv.options.padding[1],
+                    conv.options.padding[0].0,
+                    conv.options.padding[1].0,
+                    conv.options.padding[0].1,
+                    conv.options.padding[1].1,
                 ],
             );
             context.int_attribute("group", conv.options.groups as i64);

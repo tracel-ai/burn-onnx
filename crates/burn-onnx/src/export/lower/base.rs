@@ -151,16 +151,21 @@ fn lower_slice(context: &mut LoweringContext<'_>, index: usize, slice: &SliceOpI
     );
 }
 
+/// Convert a range normalized by Burn's slice API into ONNX bounds.
+///
+/// At capture time Burn has already clamped the ascending interval to the
+/// input shape. A negative step reverses that normalized interval; it is not a
+/// raw Python-style descending slice. The empty-interval conversion is kept so
+/// capture remains correct once Burn moves its empty-output bypass from the
+/// Tensor API to execution backends and preserves Slice in the captured IR.
 fn onnx_slice_bounds(start: isize, end: Option<isize>, step: isize) -> (i64, i64) {
     if step > 0 {
         return (start as i64, end.map_or(i64::MAX, |end| end as i64));
     }
     if end.is_some_and(|end| start >= end) {
-        // Burn permits empty intervals and returns no elements regardless of
-        // the step. Equal in-range ONNX bounds preserve that cardinality.
+        // Equal in-range ONNX bounds preserve Burn's empty interval.
         return (0, 0);
     }
-
     // Burn selects an ascending [start, end) interval and traverses it in
     // reverse. ONNX uses Python-style descending bounds, so swap the interval
     // endpoints and make each one inclusive/exclusive in the other direction.
@@ -181,7 +186,8 @@ fn lower_creation(
 ) -> Result<(), ExportError> {
     let shape_name = context.shape_input(index, creation.out.id)?;
     let output = context.tensor_name(creation.out.id);
-    let constant_output = if creation.out.dtype == DType::I64 {
+    let constant_dtype = constant_of_shape_dtype(creation.out.dtype);
+    let constant_output = if constant_dtype == creation.out.dtype {
         output.clone()
     } else {
         format!("node_{index}_constant")
@@ -194,7 +200,11 @@ fn lower_creation(
     );
     context.tensor_attribute(
         "value",
-        scalar_tensor(DType::I64, ScalarIr::Int(value), creation.out.id)?,
+        scalar_tensor(
+            constant_dtype,
+            ScalarIr::new(value, &constant_dtype),
+            creation.out.id,
+        )?,
     );
     if constant_output != output {
         context.node(
@@ -211,13 +221,65 @@ fn lower_creation(
     Ok(())
 }
 
+/// Return the dtype used for the `ConstantOfShape` value attribute.
+///
+/// Opset 18 uses the version 9 `ConstantOfShape` schema. Unsupported output
+/// types are created as `I64` and converted by the following `Cast` node.
+fn constant_of_shape_dtype(dtype: DType) -> DType {
+    match dtype {
+        DType::F16
+        | DType::F32
+        | DType::F64
+        | DType::I8
+        | DType::I16
+        | DType::I32
+        | DType::I64
+        | DType::U8
+        | DType::U16
+        | DType::U32
+        | DType::U64
+        | DType::Bool(_) => dtype,
+        _ => DType::I64,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::onnx_slice_bounds;
+    use burn::backend::{BoolStore, DType};
+
+    use super::{constant_of_shape_dtype, onnx_slice_bounds};
+
+    #[test]
+    fn constant_of_shape_uses_all_opset_18_native_dtypes() {
+        let native_dtypes = [
+            DType::F16,
+            DType::F32,
+            DType::F64,
+            DType::I8,
+            DType::I16,
+            DType::I32,
+            DType::I64,
+            DType::U8,
+            DType::U16,
+            DType::U32,
+            DType::U64,
+            DType::Bool(BoolStore::Native),
+        ];
+
+        for dtype in native_dtypes {
+            assert_eq!(constant_of_shape_dtype(dtype), dtype);
+        }
+        assert_eq!(constant_of_shape_dtype(DType::BF16), DType::I64);
+    }
 
     #[test]
     fn negative_step_keeps_empty_intervals_empty() {
         assert_eq!(onnx_slice_bounds(0, Some(0), -1), (0, 0));
         assert_eq!(onnx_slice_bounds(3, Some(1), -2), (0, 0));
+    }
+
+    #[test]
+    fn negative_step_reverses_a_normalized_full_range() {
+        assert_eq!(onnx_slice_bounds(0, Some(5), -1), (4, i64::MIN));
     }
 }
