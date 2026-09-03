@@ -6,8 +6,8 @@ edition = "2024"
 [workspace]
 
 [dependencies]
-burn = { git = "https://github.com/tracel-ai/burn", default-features = false, features = ["std", "flex"], rev = "ef7c981590de7c8df0bf3478f4de7db949bf5df9" }
-burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, features = ["std"], rev = "ef7c981590de7c8df0bf3478f4de7db949bf5df9" }
+burn = { git = "https://github.com/tracel-ai/burn", default-features = false, features = ["std", "flex"], rev = "046a21c436db4d86e90be54c162a57164d4f2862" }
+burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, features = ["std"], rev = "046a21c436db4d86e90be54c162a57164d4f2862" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
