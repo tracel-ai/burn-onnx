@@ -134,8 +134,7 @@ fn lower_arg(
         reduce.axis,
         arg_op,
         keepdims,
-    )?;
-    Ok(())
+    )
 }
 
 /// Lower a max or min reduction that also yields the winning indices.
@@ -151,11 +150,27 @@ fn lower_reduce_with_indices(
     largest: bool,
     operation: &'static str,
 ) -> Result<(), ExportError> {
-    // Opset 18 selects TopK-11, which does not support BF16.
-    if reduce.tensor.dtype == DType::BF16 {
+    // Opset 18 selects TopK-11.
+    if !matches!(
+        reduce.tensor.dtype,
+        DType::F16
+            | DType::F32
+            | DType::F64
+            | DType::I8
+            | DType::I16
+            | DType::I32
+            | DType::I64
+            | DType::U8
+            | DType::U16
+            | DType::U32
+            | DType::U64
+    ) {
         return Err(ExportError::UnsupportedOperation {
             operation: index,
-            kind: format!("{operation} with BF16 input in ONNX opset 18"),
+            kind: format!(
+                "{operation} with {:?} input in ONNX opset 18",
+                reduce.tensor.dtype
+            ),
         });
     }
     if reduce.out.shape.num_dims() != reduce.tensor.shape.num_dims()
@@ -224,7 +239,7 @@ fn lower_arg_indices(
     axis: usize,
     arg_op: &'static str,
     keepdims: bool,
-) -> Result<String, ExportError> {
+) -> Result<(), ExportError> {
     if !output.dtype.is_int() && !output.dtype.is_uint() {
         return Err(ExportError::UnsupportedOperation {
             operation: index,
@@ -238,10 +253,11 @@ fn lower_arg_indices(
     } else {
         format!("node_{index}_indices64")
     };
+    let arg_input = context.tensor_name(input.id);
     context.node(
         format!("node_{index}_arg"),
         arg_op,
-        vec![context.tensor_name(input.id)],
+        vec![arg_input],
         vec![indices64.clone()],
     );
     context.int_attribute("axis", axis as i64);
@@ -252,13 +268,13 @@ fn lower_arg_indices(
         context.node(
             format!("node_{index}_indices_cast"),
             "Cast",
-            vec![indices64.clone()],
+            vec![indices64],
             vec![output_name],
         );
         context.int_attribute("to", onnx_dtype_parts(output.id, output.dtype)? as i64);
     }
 
-    Ok(indices64)
+    Ok(())
 }
 
 fn lower_pad(

@@ -165,6 +165,12 @@ fn erase_shape_sensitive_attributes(operation: &mut OperationIr) {
         OperationIr::Module(ModuleOperationIr::Interpolate(operation)) => {
             operation.output_size = [0; 2];
         }
+        OperationIr::Module(ModuleOperationIr::Conv1d(operation)) => {
+            operation.options.padding.fill((0, 0));
+        }
+        OperationIr::Module(ModuleOperationIr::Conv2d(operation)) => {
+            operation.options.padding.fill((0, 0));
+        }
         OperationIr::NumericFloat(_, NumericOperationIr::Pad(operation))
         | OperationIr::NumericInt(_, NumericOperationIr::Pad(operation)) => {
             operation.padding.fill((0, 0));

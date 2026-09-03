@@ -155,9 +155,10 @@ fn lower_slice(context: &mut LoweringContext<'_>, index: usize, slice: &SliceOpI
 ///
 /// At capture time Burn has already clamped the ascending interval to the
 /// input shape. A negative step reverses that normalized interval; it is not a
-/// raw Python-style descending slice. The empty-interval conversion is kept so
-/// capture remains correct once Burn moves its empty-output bypass from the
-/// Tensor API to execution backends and preserves Slice in the captured IR.
+/// raw Python-style descending slice. `Tensor::slice` currently returns an
+/// empty tensor before the backend operation is recorded, so an empty interval
+/// never reaches the captured IR. The branch keeps the conversion total in case
+/// that changes.
 fn onnx_slice_bounds(start: isize, end: Option<isize>, step: isize) -> (i64, i64) {
     if step > 0 {
         return (start as i64, end.map_or(i64::MAX, |end| end as i64));
@@ -186,7 +187,12 @@ fn lower_creation(
 ) -> Result<(), ExportError> {
     let shape_name = context.shape_input(index, creation.out.id)?;
     let output = context.tensor_name(creation.out.id);
-    let constant_dtype = constant_of_shape_dtype(creation.out.dtype);
+    let constant_dtype = constant_of_shape_dtype(creation.out.dtype).ok_or_else(|| {
+        ExportError::UnsupportedDType {
+            tensor: creation.out.id,
+            dtype: format!("{:?}", creation.out.dtype),
+        }
+    })?;
     let constant_output = if constant_dtype == creation.out.dtype {
         output.clone()
     } else {
@@ -223,9 +229,10 @@ fn lower_creation(
 
 /// Return the dtype used for the `ConstantOfShape` value attribute.
 ///
-/// Opset 18 uses the version 9 `ConstantOfShape` schema. Unsupported output
-/// types are created as `I64` and converted by the following `Cast` node.
-fn constant_of_shape_dtype(dtype: DType) -> DType {
+/// Opset 18 uses the version 9 `ConstantOfShape` schema. `BF16` outputs are
+/// created as `F32` and converted by the following `Cast` node. Burn-specific
+/// dtypes without an ONNX representation are rejected.
+fn constant_of_shape_dtype(dtype: DType) -> Option<DType> {
     match dtype {
         DType::F16
         | DType::F32
@@ -238,8 +245,9 @@ fn constant_of_shape_dtype(dtype: DType) -> DType {
         | DType::U16
         | DType::U32
         | DType::U64
-        | DType::Bool(_) => dtype,
-        _ => DType::I64,
+        | DType::Bool(_) => Some(dtype),
+        DType::BF16 => Some(DType::F32),
+        DType::Flex32 | DType::QFloat(_) => None,
     }
 }
 
@@ -267,9 +275,10 @@ mod tests {
         ];
 
         for dtype in native_dtypes {
-            assert_eq!(constant_of_shape_dtype(dtype), dtype);
+            assert_eq!(constant_of_shape_dtype(dtype), Some(dtype));
         }
-        assert_eq!(constant_of_shape_dtype(DType::BF16), DType::I64);
+        assert_eq!(constant_of_shape_dtype(DType::BF16), Some(DType::F32));
+        assert_eq!(constant_of_shape_dtype(DType::Flex32), None);
     }
 
     #[test]
