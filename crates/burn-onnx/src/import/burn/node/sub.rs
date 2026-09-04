@@ -45,11 +45,7 @@ impl NodeCodegen for onnx_ir::node::arithmetic::SubNode {
                 }
             },
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_scalar() => {
-                let scalar_expr = if rhs_ty.is_scalar_tensor() {
-                    on_device_to_native(rhs.clone(), &rhs_ty.elem_type())
-                } else {
-                    quote! { #rhs as i64 }
-                };
+                let scalar_expr = scalar_as_i64(rhs_arg, rhs.clone());
                 quote! {
                     {
                         let mut result = #lhs;
@@ -62,11 +58,7 @@ impl NodeCodegen for onnx_ir::node::arithmetic::SubNode {
                 }
             }
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_scalar() => {
-                let scalar_expr = if lhs_ty.is_scalar_tensor() {
-                    on_device_to_native(lhs.clone(), &lhs_ty.elem_type())
-                } else {
-                    quote! { #lhs as i64 }
-                };
+                let scalar_expr = scalar_as_i64(lhs_arg, lhs.clone());
                 quote! {
                     {
                         let mut result = #rhs;
@@ -314,7 +306,7 @@ mod tests {
         pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<1, Int>) -> [i64; 4] {
             let output = {
                 let mut result = lhs;
-                let __scalar = (rhs).into_scalar::<i64>();
+                let __scalar = (rhs).into_scalar::<i64>() as i64;
                 for result_item in result.iter_mut() {
                     *result_item = result_item.saturating_sub(__scalar);
                 }
@@ -358,7 +350,7 @@ mod tests {
         pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 4]) -> [i64; 4] {
             let output = {
                 let mut result = rhs;
-                let __scalar = (lhs).into_scalar::<i64>();
+                let __scalar = (lhs).into_scalar::<i64>() as i64;
                 for result_item in result.iter_mut() {
                     *result_item = __scalar.saturating_sub(*result_item);
                 }

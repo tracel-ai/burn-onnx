@@ -1,20 +1,5 @@
 use super::prelude::*;
 
-/// Native `i64` expression for a scalar input, for the shape-arithmetic paths
-/// where every value is converted to i64. A `ScalarTensor` lives on device, so
-/// it is read back rather than named directly.
-fn scalar_as_i64(arg: &Argument, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
-    let value = scope.arg(arg);
-
-    match &arg.ty {
-        ArgType::ScalarTensor(dtype) => {
-            let native = on_device_to_native(value, dtype);
-            quote! { #native as i64 }
-        }
-        _ => quote! { #value as i64 },
-    }
-}
-
 impl NodeCodegen for onnx_ir::concat::ConcatNode {
     fn inputs(&self) -> &[Argument] {
         &self.inputs
@@ -90,7 +75,9 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
                             // arrays. onnx-ir has already rejected non-integer
                             // inputs in that case.
                             let (dtype, value) = match has_shape {
-                                true => (DType::I64, scalar_as_i64(input_arg, scope)),
+                                true => {
+                                    (DType::I64, scalar_as_i64(input_arg, scope.arg(input_arg)))
+                                }
                                 false => (input_arg.ty.elem_type(), scope.arg(input_arg)),
                             };
                             let dtype_tokens = dtype.to_tokens();
@@ -172,7 +159,7 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
                                 __shape_parts.extend(#data_name.iter::<i64>());
                             });
                         } else if input.ty.is_scalar() {
-                            let value = scalar_as_i64(input, scope);
+                            let value = scalar_as_i64(input, scope.arg(input));
                             pushes.push(quote! { __shape_parts.push(#value); });
                         } else {
                             let input_name = arg_to_ident(input);
@@ -207,7 +194,7 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
                         if input.ty.is_scalar() {
                             // Scalar: widen to i64 and wrap in an array, so it
                             // can be sliced alongside the i64 shape arrays
-                            let value = scalar_as_i64(input, scope);
+                            let value = scalar_as_i64(input, scope.arg(input));
                             shape_parts.push(quote! { &[#value][..] });
                         } else {
                             // Shape: already an array, just slice

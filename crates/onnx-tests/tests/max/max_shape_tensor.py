@@ -26,30 +26,36 @@ def main():
     input_tensor = helper.make_tensor_value_info(
         "input_tensor", TensorProto.FLOAT, [5, 7, 9]
     )
-    input_tensor_1d = helper.make_tensor_value_info("input_1d", TensorProto.INT64, [3])
+    input_tensor_3d = helper.make_tensor_value_info(
+        "input_3d", TensorProto.INT64, [2, 4, 3]
+    )
 
     # Shape node - extract shape of input
     shape_node = helper.make_node("Shape", inputs=["input_tensor"], outputs=["shape"])
 
     # Max tensor from shape Max(Shape, Tensor)
     max_shape_tensor = helper.make_node(
-        "Max", inputs=["shape", "input_1d"], outputs=["max_shape_tensor"]
+        "Max", inputs=["shape", "input_3d"], outputs=["max_shape_tensor"]
     )
 
     # Max shape from tensor Max(Tensor, Shape)
     max_tensor_shape = helper.make_node(
-        "Max", inputs=["input_1d", "shape"], outputs=["max_tensor_shape"]
+        "Max", inputs=["input_3d", "shape"], outputs=["max_tensor_shape"]
     )
 
     # Outputs
-    output1 = helper.make_tensor_value_info("max_shape_tensor", TensorProto.INT64, [3])
-    output2 = helper.make_tensor_value_info("max_tensor_shape", TensorProto.INT64, [3])
+    output1 = helper.make_tensor_value_info(
+        "max_shape_tensor", TensorProto.INT64, [2, 4, 3]
+    )
+    output2 = helper.make_tensor_value_info(
+        "max_tensor_shape", TensorProto.INT64, [2, 4, 3]
+    )
 
     # Create the graph
     graph_def = helper.make_graph(
         [shape_node, max_shape_tensor, max_tensor_shape],
         "max_shape_tensor_test",
-        [input_tensor, input_tensor_1d],
+        [input_tensor, input_tensor_3d],
         [output1, output2],
     )
 
@@ -67,23 +73,35 @@ def main():
 
     # Test the model with sample data
     test_input = np.random.randn(5, 7, 9).astype(np.float32)
-    test_1d = np.array([2, 30, 4], dtype=np.int64)
+    test_3d = np.array(
+        [
+            [[1, 9, 2], [6, 3, 12], [5, 7, 9], [0, 0, 0]],
+            [[10, 2, 3], [4, 20, 8], [7, 7, 11], [2, 8, 15]],
+        ],
+        dtype=np.int64,
+    )
 
     print(f"\nTest input shape: {test_input.shape}")
-    print(f"Test 1d tensor: {test_1d}")
+    print(f"Test 3d tensor: {test_3d}")
 
     # Run the model using ReferenceEvaluator
     session = ReferenceEvaluator(onnx_name, verbose=0)
-    outputs = session.run(None, {"input_tensor": test_input, "input_1d": test_1d})
+    outputs = session.run(None, {"input_tensor": test_input, "input_3d": test_3d})
 
     max_shape_tensor, max_tensor_shape = outputs
 
     print(f"\nTest output max_shape_tensor: {repr(max_shape_tensor)}")
     print(f"Test output max_tensor_shape: {repr(max_tensor_shape)}")
 
-    # Verify results are the same
     assert np.array_equal(max_shape_tensor, max_tensor_shape), (
         "Max results should be the same"
+    )
+    np.testing.assert_array_equal(
+        max_shape_tensor,
+        [
+            [[5, 9, 9], [6, 7, 12], [5, 7, 9], [5, 7, 9]],
+            [[10, 7, 9], [5, 20, 9], [7, 7, 11], [5, 8, 15]],
+        ],
     )
 
 

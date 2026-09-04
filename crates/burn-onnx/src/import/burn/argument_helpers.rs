@@ -80,6 +80,19 @@ pub fn on_device_to_native(input: TokenStream, dtype: &DType) -> TokenStream {
     quote! { (#input)#cast }
 }
 
+/// Native `i64` expression for a scalar input, for the shape-arithmetic paths
+/// where every value is converted to i64. A `ScalarTensor` lives on device, so
+/// it is read back rather than named directly.
+pub fn scalar_as_i64(arg: &Argument, value: TokenStream) -> TokenStream {
+    match &arg.ty {
+        ArgType::ScalarTensor(dtype) => {
+            let native = on_device_to_native(value, dtype);
+            quote! { #native as i64 }
+        }
+        _ => quote! { #value as i64 },
+    }
+}
+
 /// Generate code to convert a ScalarTensor (Tensor<1>) to a Shape([i64; 1]).
 ///
 /// Produces: `{ let __v: T = <input>.into_scalar::<T>(); [__v as i64] }`

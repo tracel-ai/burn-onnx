@@ -16,11 +16,11 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
         let lhs_arg = &self.inputs[0];
         let rhs_arg = &self.inputs[1];
 
+        let lhs = scope.arg(lhs_arg);
+        let rhs = scope.arg(rhs_arg);
+
         match (&lhs_arg.ty, &rhs_arg.ty) {
             (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
-                let lhs = scope.arg(lhs_arg);
-                let rhs = scope.arg(rhs_arg);
-
                 let lhs_rank = lhs_ty.rank();
                 let rhs_rank = rhs_ty.rank();
 
@@ -46,9 +46,6 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
-                let lhs = scope.arg(lhs_arg);
-                let rhs = scope.arg(rhs_arg);
-
                 let mod_op = if self.config.fmod {
                     quote! { fmod_scalar }
                 } else {
@@ -81,8 +78,6 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 }
             }
             (ArgType::ScalarNative(dtype), rhs_ty) if rhs_ty.is_on_device() => {
-                let lhs = scope.arg(lhs_arg);
-                let rhs = scope.arg(rhs_arg);
                 let dtype_tokens = dtype.to_tokens();
                 let rhs_rank = rhs_ty.rank();
 
@@ -132,8 +127,6 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
             // Shape values reach this arm, the `fmod=0` path would need to switch
             // to `rem_euclid` to match ONNX semantics.
             (ArgType::Shape(_), ArgType::Shape(_)) => {
-                let lhs = scope.arg(lhs_arg);
-                let rhs = scope.arg(rhs_arg);
                 quote! {
                     let #output = {
                         let mut result = #lhs;
@@ -145,13 +138,7 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 }
             }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_scalar() => {
-                let lhs = scope.arg(lhs_arg);
-                let rhs = scope.arg(rhs_arg);
-                let scalar_expr = if rhs_ty.is_scalar_tensor() {
-                    on_device_to_native(rhs.clone(), &rhs_ty.elem_type())
-                } else {
-                    quote! { #rhs as i64 }
-                };
+                let scalar_expr = scalar_as_i64(rhs_arg, rhs.clone());
                 quote! {
                     let #output = {
                         let mut result = #lhs;
@@ -164,13 +151,7 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 }
             }
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_scalar() => {
-                let lhs = scope.arg(lhs_arg);
-                let rhs = scope.arg(rhs_arg);
-                let scalar_expr = if lhs_ty.is_scalar_tensor() {
-                    on_device_to_native(lhs.clone(), &lhs_ty.elem_type())
-                } else {
-                    quote! { #lhs as i64 }
-                };
+                let scalar_expr = scalar_as_i64(lhs_arg, lhs.clone());
                 quote! {
                     let #output = {
                         let mut result = #rhs;
@@ -183,8 +164,6 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 }
             }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
-                let lhs = scope.arg(lhs_arg);
-                let rhs = scope.arg(rhs_arg);
                 let dtype_tokens = rhs_ty.elem_type().to_tokens();
                 let lhs_tensor = quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
@@ -202,8 +181,6 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 }
             }
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
-                let lhs = scope.arg(lhs_arg);
-                let rhs = scope.arg(rhs_arg);
                 let dtype_tokens = lhs_ty.elem_type().to_tokens();
                 let rhs_tensor = quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
@@ -906,7 +883,7 @@ mod tests {
         pub fn forward(&self, lhs: [i64; 3], rhs: Tensor<1, Int>) -> [i64; 3] {
             let output = {
                 let mut result = lhs;
-                let __scalar = (rhs).into_scalar::<i64>();
+                let __scalar = (rhs).into_scalar::<i64>() as i64;
                 for result_item in result.iter_mut() {
                     *result_item %= __scalar;
                 }
@@ -930,7 +907,7 @@ mod tests {
         pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 3]) -> [i64; 3] {
             let output = {
                 let mut result = rhs;
-                let __scalar = (lhs).into_scalar::<i64>();
+                let __scalar = (lhs).into_scalar::<i64>() as i64;
                 for result_item in result.iter_mut() {
                     *result_item = __scalar % *result_item;
                 }

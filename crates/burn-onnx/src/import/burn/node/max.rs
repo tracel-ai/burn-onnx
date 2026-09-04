@@ -49,11 +49,7 @@ impl NodeCodegen for onnx_ir::node::max::MaxNode {
             },
 
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_scalar() => {
-                let scalar_expr = if lhs_ty.is_scalar_tensor() {
-                    on_device_to_native(lhs.clone(), &lhs_ty.elem_type())
-                } else {
-                    quote! { #lhs as i64 }
-                };
+                let scalar_expr = scalar_as_i64(lhs_arg, lhs.clone());
                 quote! {
                     {
                         let mut result = #rhs;
@@ -66,11 +62,7 @@ impl NodeCodegen for onnx_ir::node::max::MaxNode {
                 }
             }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_scalar() => {
-                let scalar_expr = if rhs_ty.is_scalar_tensor() {
-                    on_device_to_native(rhs.clone(), &rhs_ty.elem_type())
-                } else {
-                    quote! { #rhs as i64 }
-                };
+                let scalar_expr = scalar_as_i64(rhs_arg, rhs.clone());
                 quote! {
                     {
                         let mut result = #lhs;
@@ -83,26 +75,46 @@ impl NodeCodegen for onnx_ir::node::max::MaxNode {
                 }
             }
 
-            (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
-                let dtype_tokens = lhs_ty.elem_type().to_tokens();
+            (lhs_ty, ArgType::Shape(_))
+                if lhs_ty.is_on_device()
+                    && (lhs_ty.elem_type().is_int() || lhs_ty.elem_type().is_uint()) =>
+            {
+                let dtype = lhs_ty.elem_type();
+                let cast = if dtype == DType::I64 {
+                    quote! {}
+                } else {
+                    let dtype_tokens = lhs_ty.elem_type().to_tokens();
+                    quote! { .cast(#dtype_tokens) }
+                };
+
                 let rhs_tensor = quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#rhs as &[i64]),
                         (&self.device, burn::tensor::DType::I64),
                     )
-                    .cast(#dtype_tokens)
+                    #cast
                 };
                 let rhs_bc = broadcast_helpers::leading_broadcast(rhs_tensor, 1, lhs_ty.rank());
                 quote! { #rhs_bc.max_pair(#lhs) }
             }
-            (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
-                let dtype_tokens = rhs_ty.elem_type().to_tokens();
+            (ArgType::Shape(_), rhs_ty)
+                if rhs_ty.is_on_device()
+                    && (rhs_ty.elem_type().is_int() || rhs_ty.elem_type().is_uint()) =>
+            {
+                let dtype = rhs_ty.elem_type();
+                let cast = if dtype == DType::I64 {
+                    quote! {}
+                } else {
+                    let dtype_tokens = rhs_ty.elem_type().to_tokens();
+                    quote! { .cast(#dtype_tokens) }
+                };
+
                 let lhs_tensor = quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#lhs as &[i64]),
                         (&self.device, burn::tensor::DType::I64),
                     )
-                    .cast(#dtype_tokens)
+                    #cast
                 };
                 let lhs_bc = broadcast_helpers::leading_broadcast(lhs_tensor, 1, rhs_ty.rank());
                 quote! { #lhs_bc.max_pair(#rhs) }
@@ -324,7 +336,7 @@ mod tests {
         pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<1, Int>) -> [i64; 4] {
             let output = {
                 let mut result = lhs;
-                let __scalar = (rhs).into_scalar::<i64>();
+                let __scalar = (rhs).into_scalar::<i64>() as i64;
                 for result_item in result.iter_mut() {
                     *result_item = (*result_item).max(__scalar);
                 }
@@ -368,7 +380,7 @@ mod tests {
         pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 4]) -> [i64; 4] {
             let output = {
                 let mut result = rhs;
-                let __scalar = (lhs).into_scalar::<i64>();
+                let __scalar = (lhs).into_scalar::<i64>() as i64;
                 for result_item in result.iter_mut() {
                     *result_item = (*result_item).max(__scalar);
                 }
@@ -406,6 +418,29 @@ mod tests {
     }
 
     #[test]
+    fn test_shape_tensor_no_cast() {
+        let node = MaxNodeBuilder::new("max1")
+            .input_shape("lhs", 4)
+            .input_tensor("rhs", 3, DType::I64)
+            .output_tensor("output", 3, DType::I64)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<3, Int>) -> Tensor<3, Int> {
+            let output = (Tensor::<
+                1,
+                burn::tensor::Int,
+            >::from_data(
+                burn::tensor::TensorData::from(&lhs as &[i64]),
+                (&self.device, burn::tensor::DType::I64),
+            ))
+                .unsqueeze_dims(&[0isize, 1isize])
+                .max_pair(rhs);
+            output
+        }
+        ");
+    }
+
+    #[test]
     fn test_tensor_shape() {
         let node = MaxNodeBuilder::new("max1")
             .input_tensor("lhs", 3, DType::I32)
@@ -422,6 +457,29 @@ mod tests {
                     (&self.device, burn::tensor::DType::I64),
                 )
                 .cast(burn::tensor::DType::I32))
+                .unsqueeze_dims(&[0isize, 1isize])
+                .max_pair(lhs);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_tensor_shape_no_cast() {
+        let node = MaxNodeBuilder::new("max1")
+            .input_tensor("lhs", 3, DType::I64)
+            .input_shape("rhs", 4)
+            .output_tensor("output", 3, DType::I64)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: Tensor<3, Int>, rhs: [i64; 4]) -> Tensor<3, Int> {
+            let output = (Tensor::<
+                1,
+                burn::tensor::Int,
+            >::from_data(
+                burn::tensor::TensorData::from(&rhs as &[i64]),
+                (&self.device, burn::tensor::DType::I64),
+            ))
                 .unsqueeze_dims(&[0isize, 1isize])
                 .max_pair(lhs);
             output

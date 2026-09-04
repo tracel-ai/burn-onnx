@@ -113,10 +113,19 @@ mod tests {
         let model: max_shape_tensor::Model = max_shape_tensor::Model::default();
 
         let input_tensor = Tensor::<3>::ones([5, 7, 9], &device);
-        let input_1d = Tensor::<1, Int>::from_data([2i64, 30, 4], (&device, DType::I64));
-        let (shape_tensor, tensor_shape) = model.forward(input_tensor, input_1d);
+        let input_3d = Tensor::<3, Int>::from_data(
+            TensorData::from([
+                [[1i64, 9, 2], [6, 3, 12], [5, 7, 9], [0, 0, 0]],
+                [[10, 2, 3], [4, 20, 8], [7, 7, 11], [2, 8, 15]],
+            ]),
+            (&device, DType::I64),
+        );
+        let (shape_tensor, tensor_shape) = model.forward(input_tensor, input_3d);
 
-        let expected = TensorData::from([5i64, 30, 9]);
+        let expected = TensorData::from([
+            [[5i64, 9, 9], [6, 7, 12], [5, 7, 9], [5, 7, 9]],
+            [[10, 7, 9], [5, 20, 9], [7, 7, 11], [5, 8, 15]],
+        ]);
         shape_tensor.to_data().assert_eq(&expected, true);
         tensor_shape.to_data().assert_eq(&expected, true);
     }

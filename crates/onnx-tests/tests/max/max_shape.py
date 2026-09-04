@@ -109,10 +109,11 @@ def main():
     print(f"Test output max_scalar_shape: {repr(max_scalar_shape)}")
     print(f"Test output max_shape_shape: {repr(max_shape_shape)}")
 
-    # Verify results are the same
     assert np.array_equal(max_shape_scalar, max_scalar_shape), (
         "Max results should be the same"
     )
+    np.testing.assert_array_equal(max_scalar_shape, [10, 8, 7])
+    np.testing.assert_array_equal(max_shape_shape, [10, 30, 6])
 
 
 if __name__ == "__main__":
