@@ -853,7 +853,7 @@ dependencies = [
  "bytes",
  "clap",
  "derive-new",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "insta",
  "log",
  "onnx-ir",
@@ -1961,7 +1961,7 @@ dependencies = [
  "float4",
  "float8",
  "half",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "log",
  "num-traits",
  "portable-atomic",
@@ -1989,7 +1989,7 @@ dependencies = [
  "derive_more",
  "float-ord",
  "half",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "itertools 0.15.0",
  "log",
  "num-complex",
@@ -2083,7 +2083,7 @@ dependencies = [
  "etcetera",
  "foldhash 0.2.0",
  "futures-lite",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "log",
  "oneshot",
  "parking_lot",
@@ -2146,7 +2146,7 @@ dependencies = [
  "float-ord",
  "foldhash 0.2.0",
  "half",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "internment",
  "itertools 0.15.0",
  "num-complex",
@@ -2224,7 +2224,7 @@ dependencies = [
  "derive_more",
  "downcast-rs",
  "foldhash 0.2.0",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "itertools 0.15.0",
  "log",
  "pliron",
@@ -2249,7 +2249,7 @@ dependencies = [
  "derive_more",
  "foldhash 0.2.0",
  "futures-util",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "itertools 0.15.0",
  "log",
  "pliron",
@@ -2297,7 +2297,7 @@ dependencies = [
  "derive-new",
  "derive_more",
  "half",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "itertools 0.15.0",
  "log",
  "objc2",
@@ -3966,9 +3966,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.17.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
+checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
  "allocator-api2",
  "equivalent",
@@ -3983,7 +3983,7 @@ version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32069d97bb81e38fa67eab65e3393bf804bb85969f2bc06bf13f64aef5aba248"
 dependencies = [
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
 ]
 
 [[package]]
@@ -4363,7 +4363,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
 dependencies = [
  "equivalent",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "serde",
  "serde_core",
 ]
@@ -4992,7 +4992,7 @@ dependencies = [
  "cfg_aliases",
  "codespan-reporting 0.13.1",
  "half",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "indexmap",
  "libm",
  "log",
@@ -5011,7 +5011,7 @@ version = "30.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "658200ddc25c6c7b860747516d132d1b284c0fafb7a380233acee9a72fb30e11"
 dependencies = [
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "indexmap",
  "rustc-hash 1.1.0",
  "thiserror 2.0.20",
@@ -5733,7 +5733,7 @@ dependencies = [
  "combine",
  "downcast-rs",
  "dyn-clone",
- "hashbrown 0.17.0",
+ "hashbrown 0.13.2",
  "hi_sparse_bitset",
  "indexmap",
  "inventory",
@@ -8337,7 +8337,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "document-features",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "js-sys",
  "log",
  "naga",
@@ -8368,7 +8368,7 @@ dependencies = [
  "bytemuck",
  "cfg_aliases",
  "document-features",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "indexmap",
  "log",
  "naga",
@@ -8434,7 +8434,7 @@ dependencies = [
  "glow",
  "glutin_wgl_sys",
  "gpu-allocator",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "js-sys",
  "khronos-egl",
  "libc",
