@@ -17,7 +17,7 @@ default = []
 
 [dependencies]
 burn = { workspace = true, default-features = false, features = [
-    "flex", "webgpu",
+    "flex", "webgpu", "fusion",
 ] }
 burn-store = { workspace = true, default-features = false }
 

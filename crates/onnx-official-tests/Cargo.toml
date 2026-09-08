@@ -9,9 +9,9 @@ description = "Native regression gate against the upstream ONNX backend test sui
 [features]
 default = ["test-flex"]
 test-flex = ["burn/flex"]
-test-wgpu = ["burn/wgpu"]
+test-wgpu = ["burn/wgpu", "burn/fusion"]
 test-tch = ["burn/tch"]
-test-metal = ["burn/metal"]
+test-metal = ["burn/metal", "burn/fusion"]
 
 [dependencies]
 half = { workspace = true }

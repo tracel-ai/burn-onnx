@@ -6,10 +6,10 @@ license.workspace = true
 
 [features]
 default = ["test-flex"]
-test-wgpu = ["burn/wgpu"]
+test-wgpu = ["burn/wgpu", "burn/fusion"]
 test-flex = ["burn/flex"]
 test-tch = ["burn/tch"]
-test-metal = ["burn/metal"]
+test-metal = ["burn/metal", "burn/fusion"]
 
 [dev-dependencies]
 burn = { workspace = true, features = ["vision"] }
