@@ -12,7 +12,7 @@ test-tch = ["burn/tch"]
 test-metal = ["burn/metal", "burn/fusion"]
 
 [dev-dependencies]
-burn = { workspace = true, features = ["vision"] }
+burn = { workspace = true, features = ["vision", "linalg"] }
 burn-store = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 float-cmp = { workspace = true }
