@@ -775,14 +775,10 @@ status = "pass"
 status = "pass"
 
 [test_averagepool_2d_same_lower]
-status = "fail-compare"
-reason = "averagepool op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_averagepool_2d_same_upper]
-status = "fail-compare"
-reason = "averagepool op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_averagepool_2d_strides]
 status = "pass"
