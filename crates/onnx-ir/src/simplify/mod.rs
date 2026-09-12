@@ -15,7 +15,9 @@
 //! 7. **Common subexpression elimination** - merge duplicate nodes
 //! 8. **Dead node elimination** - remove unreferenced nodes (cascading)
 //!
-//! All passes run in a fixed-point loop until the graph stabilizes.
+//! All passes run in a fixed-point loop until the graph stabilizes. Constant lifting
+//! then re-runs once, so inputs that only became constant during simplification are
+//! lifted into their consumers' configs like any other constant.
 //!
 //! ## Design note: constant_shape never folds a bare `Shape(x)`
 //!
@@ -48,6 +50,8 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     graph_state::GraphState,
     ir::{Argument, RawNode},
+    processor::get_processor_registry,
+    proto_conversion::DEFAULT_OPSET_VERSION,
 };
 
 use coalesce_attention::coalesce_attention;
@@ -118,7 +122,35 @@ pub(crate) fn simplify_graph(
         );
     }
 
+    relift_constants(&mut nodes);
+
     (nodes, inputs, outputs)
+}
+
+/// Re-run constant lifting for inputs that became constant during simplification.
+///
+/// Lifting first runs in post-processing, before these passes. Folding can later turn a
+/// Dynamic input into a Constant (e.g. `Reshape(x, Concat(Slice(Shape(x)), [-1]))`), and
+/// the consumer reads the value into its config without lifting it. The consumer then
+/// still references the Constant, so finalization keeps it and codegen emits an unused
+/// binding for it.
+fn relift_constants(nodes: &mut [RawNode]) {
+    let registry = get_processor_registry();
+    for node in nodes.iter_mut() {
+        // Best effort, as in post-processing: inputs that are already Static or still
+        // Dynamic cannot be lifted, so failures are logged rather than propagated.
+        if let Err(e) = registry
+            .get(&node.node_type)
+            .lift_constants(node, DEFAULT_OPSET_VERSION)
+        {
+            log::debug!(
+                "Could not lift constants for node '{}' (type: {:?}): {}",
+                node.name,
+                node.node_type,
+                e
+            );
+        }
+    }
 }
 
 /// Update downstream inputs that reference newly-created constant outputs.
