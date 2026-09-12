@@ -10,61 +10,60 @@ impl NodeCodegen for onnx_ir::comparison::GreaterNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
-        let lhs = self.inputs.first().unwrap();
-        let rhs = self.inputs.get(1).unwrap();
+        let lhs_arg = self.inputs.first().unwrap();
+        let rhs_arg = self.inputs.get(1).unwrap();
         let output = arg_to_ident(self.outputs.first().unwrap());
 
-        let lhs_value = scope.arg(lhs);
+        let lhs = scope.arg(lhs_arg);
+        let rhs = scope.arg(rhs_arg);
 
-        let rhs_value = scope.arg(rhs);
-
-        let function = match (&lhs.ty, &rhs.ty) {
+        let function = match (&lhs_arg.ty, &rhs_arg.ty) {
             (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
                 let lhs_rank = lhs_ty.rank();
                 let rhs_rank = rhs_ty.rank();
                 let lhs_bc =
-                    broadcast_helpers::leading_broadcast(quote! { #lhs_value }, lhs_rank, rhs_rank);
+                    broadcast_helpers::leading_broadcast(quote! { #lhs }, lhs_rank, rhs_rank);
                 let rhs_bc =
-                    broadcast_helpers::leading_broadcast(quote! { #rhs_value }, rhs_rank, lhs_rank);
+                    broadcast_helpers::leading_broadcast(quote! { #rhs }, rhs_rank, lhs_rank);
                 quote! { #lhs_bc.greater(#rhs_bc) }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
-                quote! { #lhs_value.greater_elem(#rhs_value) }
+                quote! { #lhs.greater_elem(#rhs) }
             }
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 // L > R == R < L
-                quote! { #rhs_value.lower_elem(#lhs_value) }
+                quote! { #rhs.lower_elem(#lhs) }
             }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
                 let dtype_tokens = rhs_ty.elem_type().to_tokens();
                 quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
-                        burn::tensor::TensorData::from(&#lhs_value as &[i64]),
+                        burn::tensor::TensorData::from(&#lhs as &[i64]),
                         (&self.device, #dtype_tokens)
-                    ).greater(#rhs_value)
+                    ).greater(#rhs)
                 }
             }
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
                 let dtype_tokens = lhs_ty.elem_type().to_tokens();
                 quote! {
-                    #lhs_value.greater(Tensor::<1, burn::tensor::Int>::from_data(
-                        burn::tensor::TensorData::from(&#rhs_value as &[i64]),
+                    #lhs.greater(Tensor::<1, burn::tensor::Int>::from_data(
+                        burn::tensor::TensorData::from(&#rhs as &[i64]),
                         (&self.device, #dtype_tokens)
                     ))
                 }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
-                quote! { #lhs_value > #rhs_value }
+                quote! { #lhs > #rhs }
             }
-            (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
-                {
-                    let mut result = #lhs_value;
-                    for (result_item, rhs_item) in result.iter_mut().zip(#rhs_value.iter()) {
-                        *result_item = if result_item > rhs_item { 1i64 } else { 0i64 };
-                    }
-                    result
-                }
-            },
+            (ArgType::Shape(lhs_len), ArgType::Shape(rhs_len)) => {
+                broadcast_helpers::shape_binary_elementwise(
+                    quote! { #lhs },
+                    *lhs_len,
+                    quote! { #rhs },
+                    *rhs_len,
+                    |a, b| quote! { if #a > #b { 1i64 } else { 0i64 } },
+                )
+            }
             (lhs, rhs) => panic!("greater is not supported for {lhs:?} > {rhs:?}"),
         };
 
@@ -267,11 +266,62 @@ mod tests {
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
             let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item = if result_item > rhs_item { 1i64 } else { 0i64 };
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = if __lhs[__i] > __rhs[__i] { 1i64 } else { 0i64 };
                 }
-                result
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_lhs() {
+        let node = GreaterNodeBuilder::new("greater1")
+            .input_shape("lhs", 1)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = if __lhs[0] > __rhs[__i] { 1i64 } else { 0i64 };
+                }
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_rhs() {
+        let node = GreaterNodeBuilder::new("greater1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 1)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 1]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = if __lhs[__i] > __rhs[0] { 1i64 } else { 0i64 };
+                }
+                __result
             };
             output
         }

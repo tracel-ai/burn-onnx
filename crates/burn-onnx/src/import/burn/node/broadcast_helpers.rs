@@ -1,4 +1,4 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Literal, TokenStream};
 use quote::quote;
 
 /// Build the shape literal `[1, channels, 1, ..., 1]` of length `rank` used to
@@ -32,6 +32,50 @@ pub(crate) fn leading_broadcast(
     quote! { (#expr).unsqueeze_dims(&[#(#dims),*]) }
 }
 
+/// Performs an element wise binary `op` over two `Shape` operands with numpy-style broadcasting of
+/// a length 1 operand.
+///
+/// Output length is `max(lhs_len, rhs_len)` matching what `broadcast_output_type` infers.
+///
+/// An operand that is neither length 1 nor the output length cannot broadcast, we index it at 0
+/// nonetheless so that the generated code still compiles, c.f. `broadcast_output_type` incompatible
+/// handling.
+pub(crate) fn shape_binary_elementwise(
+    lhs: TokenStream,
+    lhs_len: usize,
+    rhs: TokenStream,
+    rhs_len: usize,
+    op: impl Fn(TokenStream, TokenStream) -> TokenStream,
+) -> TokenStream {
+    let out_len = lhs_len.max(rhs_len);
+    let len_lit = Literal::usize_suffixed(out_len);
+
+    let lhs_idx = if lhs_len == out_len {
+        quote! { __i }
+    } else {
+        quote! { 0 }
+    };
+    let rhs_idx = if rhs_len == out_len {
+        quote! { __i }
+    } else {
+        quote! { 0 }
+    };
+    let elem = op(quote! { __lhs[#lhs_idx] }, quote! { __rhs[#rhs_idx] });
+
+    quote! {
+        {
+            let __lhs = #lhs;
+            let __rhs = #rhs;
+            let mut __result = [0i64; #len_lit];
+            #[allow(clippy::needless_range_loop)]
+            for __i in 0..#len_lit {
+                __result[__i] = #elem;
+            }
+            __result
+        }
+    }
+}
+
 /// Generates numpy-style broadcasting for a binary operation.
 ///
 /// Expands both operands to a common shape (per-dimension max) before applying `op`.
@@ -47,7 +91,7 @@ pub(crate) fn broadcast_binary_op(
     output_rank: usize,
     op: TokenStream,
 ) -> TokenStream {
-    let rank_lit = proc_macro2::Literal::usize_suffixed(output_rank);
+    let rank_lit = Literal::usize_suffixed(output_rank);
     quote! {
         {
             let __lhs = #lhs;

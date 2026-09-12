@@ -1,6 +1,11 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(less_or_equal, less_or_equal_scalar, less_or_equal_broadcast);
+include_models!(
+    less_or_equal,
+    less_or_equal_broadcast,
+    less_or_equal_scalar,
+    less_or_equal_shape_broadcast
+);
 
 #[cfg(test)]
 mod tests {
@@ -61,5 +66,20 @@ mod tests {
         ]);
 
         output.to_data().assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn less_or_equal_shape_broadcast() {
+        let device = Default::default();
+        let model: less_or_equal_shape_broadcast::Model =
+            less_or_equal_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([3], &device);
+        let input_4d = Tensor::<4>::zeros([2, 30, 3, 5], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [0i64, 1, 1, 1]);
+        assert_eq!(rhs_bc, [1i64, 0, 1, 0]);
     }
 }

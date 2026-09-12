@@ -10,48 +10,47 @@ impl NodeCodegen for onnx_ir::node::and::AndNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
-        let lhs = self.inputs.first().unwrap();
-        let rhs = self.inputs.get(1).unwrap();
+        let lhs_arg = self.inputs.first().unwrap();
+        let rhs_arg = self.inputs.get(1).unwrap();
         let output = arg_to_ident(self.outputs.first().unwrap());
 
-        let lhs_value = scope.arg(lhs);
+        let lhs = scope.arg(lhs_arg);
+        let rhs = scope.arg(rhs_arg);
 
-        let rhs_value = scope.arg(rhs);
-
-        let function = match (&lhs.ty, &rhs.ty) {
+        let function = match (&lhs_arg.ty, &rhs_arg.ty) {
             (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
                 let lhs_rank = lhs_ty.rank();
                 let rhs_rank = rhs_ty.rank();
                 let lhs_bc =
-                    broadcast_helpers::leading_broadcast(quote! { #lhs_value }, lhs_rank, rhs_rank);
+                    broadcast_helpers::leading_broadcast(quote! { #lhs }, lhs_rank, rhs_rank);
                 let rhs_bc =
-                    broadcast_helpers::leading_broadcast(quote! { #rhs_value }, rhs_rank, lhs_rank);
+                    broadcast_helpers::leading_broadcast(quote! { #rhs }, rhs_rank, lhs_rank);
                 quote! { #lhs_bc.bool_and(#rhs_bc) }
             }
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 let rank = rhs_ty.rank();
                 quote! {
-                    if #lhs_value { #rhs_value } else { Tensor::<#rank, Int>::zeros(#rhs_value.shape(), &self.device).bool() }
+                    if #lhs { #rhs } else { Tensor::<#rank, Int>::zeros(#rhs.shape(), &self.device).bool() }
                 }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                 let rank = lhs_ty.rank();
                 quote! {
-                    if #rhs_value { #lhs_value } else { Tensor::<#rank, Int>::zeros(#lhs_value.shape(), &self.device).bool() }
+                    if #rhs { #lhs } else { Tensor::<#rank, Int>::zeros(#lhs.shape(), &self.device).bool() }
                 }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
-                quote! { #lhs_value && #rhs_value }
+                quote! { #lhs && #rhs }
             }
-            (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
-                {
-                    let mut result = #lhs_value;
-                    for (result_item, rhs_item) in result.iter_mut().zip(#rhs_value.iter()) {
-                        *result_item = if *result_item != 0 && *rhs_item != 0 { 1i64 } else { 0i64 };
-                    }
-                    result
-                }
-            },
+            (ArgType::Shape(lhs_len), ArgType::Shape(rhs_len)) => {
+                broadcast_helpers::shape_binary_elementwise(
+                    quote! { #lhs },
+                    *lhs_len,
+                    quote! { #rhs },
+                    *rhs_len,
+                    |a, b| quote! { if #a != 0 && #b != 0 { 1i64 } else { 0i64 } },
+                )
+            }
             // `And` on a Shape happens when a prior Shape-returning op
             // (e.g. elementwise comparison of two Shapes in comparison.rs,
             // which emits a Shape of 0/1 i64s) feeds into And. Convert the
@@ -61,18 +60,18 @@ impl NodeCodegen for onnx_ir::node::and::AndNode {
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
                 quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
-                        burn::tensor::TensorData::from(&#lhs_value as &[i64]),
+                        burn::tensor::TensorData::from(&#lhs as &[i64]),
                         (&self.device, burn::tensor::DType::I64),
                     )
                     .not_equal_elem(0i64)
-                    .bool_and(#rhs_value)
+                    .bool_and(#rhs)
                 }
             }
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
                 quote! {
-                    #lhs_value.bool_and(
+                    #lhs.bool_and(
                         Tensor::<1, burn::tensor::Int>::from_data(
-                            burn::tensor::TensorData::from(&#rhs_value as &[i64]),
+                            burn::tensor::TensorData::from(&#rhs as &[i64]),
                             (&self.device, burn::tensor::DType::I64),
                         )
                         .not_equal_elem(0i64)
@@ -81,7 +80,7 @@ impl NodeCodegen for onnx_ir::node::and::AndNode {
             }
             _ => panic!(
                 "And operation: unsupported input types: lhs={:?}, rhs={:?}",
-                lhs.ty, rhs.ty
+                lhs_arg.ty, rhs_arg.ty
             ),
         };
 
@@ -132,28 +131,6 @@ mod tests {
                 lhs
             } else {
                 Tensor::<4usize, Int>::zeros(lhs.shape(), &self.device).bool()
-            };
-            output
-        }
-        ");
-    }
-
-    #[test]
-    fn test_and_shape_forward() {
-        let node = AndNodeBuilder::new("and1")
-            .input_shape("lhs", 3)
-            .input_shape("rhs", 3)
-            .output_shape("output", 3)
-            .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
-        pub fn forward(&self, lhs: [i64; 3], rhs: [i64; 3]) -> [i64; 3] {
-            let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item = if *result_item != 0 && *rhs_item != 0 { 1i64 } else { 0i64 };
-                }
-                result
             };
             output
         }
@@ -221,6 +198,80 @@ mod tests {
                         )
                         .not_equal_elem(0i64),
                 );
+            output
+        }
+        ");
+    }
+
+    // --- Shape + Shape ---
+
+    #[test]
+    fn test_shape_shape() {
+        let node = AndNodeBuilder::new("and1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = if __lhs[__i] != 0 && __rhs[__i] != 0 { 1i64 } else { 0i64 };
+                }
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_lhs() {
+        let node = AndNodeBuilder::new("and1")
+            .input_shape("lhs", 1)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = if __lhs[0] != 0 && __rhs[__i] != 0 { 1i64 } else { 0i64 };
+                }
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_rhs() {
+        let node = AndNodeBuilder::new("and1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 1)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 1]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = if __lhs[__i] != 0 && __rhs[0] != 0 { 1i64 } else { 0i64 };
+                }
+                __result
+            };
             output
         }
         ");

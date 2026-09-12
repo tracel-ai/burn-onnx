@@ -38,15 +38,15 @@ impl NodeCodegen for onnx_ir::node::max::MaxNode {
                 quote! { #rhs.clamp_min(#lhs) }
             }
 
-            (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
-                {
-                    let mut result = #lhs;
-                    for (result_item, rhs_item) in result.iter_mut().zip(#rhs.iter()) {
-                        *result_item = (*result_item).max(*rhs_item);
-                    }
-                    result
-                }
-            },
+            (ArgType::Shape(lhs_len), ArgType::Shape(rhs_len)) => {
+                broadcast_helpers::shape_binary_elementwise(
+                    quote! { #lhs },
+                    *lhs_len,
+                    quote! { #rhs },
+                    *rhs_len,
+                    |a, b| quote! { (#a).max(#b) },
+                )
+            }
 
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_scalar() => {
                 let scalar_expr = scalar_as_i64(lhs_arg, lhs.clone());
@@ -290,11 +290,62 @@ mod tests {
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
             let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item = (*result_item).max(*rhs_item);
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = (__lhs[__i]).max(__rhs[__i]);
                 }
-                result
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_lhs() {
+        let node = MaxNodeBuilder::new("max1")
+            .input_shape("lhs", 1)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = (__lhs[0]).max(__rhs[__i]);
+                }
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_rhs() {
+        let node = MaxNodeBuilder::new("max1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 1)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 1]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = (__lhs[__i]).max(__rhs[0]);
+                }
+                __result
             };
             output
         }

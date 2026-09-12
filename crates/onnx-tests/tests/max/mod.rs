@@ -1,6 +1,13 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(max, max_broadcast, max_scalar, max_shape, max_shape_tensor);
+include_models!(
+    max,
+    max_broadcast,
+    max_scalar,
+    max_shape,
+    max_shape_broadcast,
+    max_shape_tensor
+);
 
 #[cfg(test)]
 mod tests {
@@ -128,5 +135,19 @@ mod tests {
         ]);
         shape_tensor.to_data().assert_eq(&expected, true);
         tensor_shape.to_data().assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn max_shape_broadcast() {
+        let device = Default::default();
+        let model: max_shape_broadcast::Model = max_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([3], &device);
+        let input_4d = Tensor::<4>::zeros([2, 30, 4, 5], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [3i64, 30, 4, 5]);
+        assert_eq!(rhs_bc, [3i64, 30, 4, 5]);
     }
 }

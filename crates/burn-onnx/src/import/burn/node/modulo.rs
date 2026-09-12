@@ -126,15 +126,16 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
             // config.fmod variants here. If a future producer ever lets negative
             // Shape values reach this arm, the `fmod=0` path would need to switch
             // to `rem_euclid` to match ONNX semantics.
-            (ArgType::Shape(_), ArgType::Shape(_)) => {
+            (ArgType::Shape(lhs_len), ArgType::Shape(rhs_len)) => {
+                let expr = broadcast_helpers::shape_binary_elementwise(
+                    quote! { #lhs },
+                    *lhs_len,
+                    quote! { #rhs },
+                    *rhs_len,
+                    |a, b| quote! { #a % #b },
+                );
                 quote! {
-                    let #output = {
-                        let mut result = #lhs;
-                        for (result_item, rhs_item) in result.iter_mut().zip(#rhs.iter()) {
-                            *result_item %= *rhs_item;
-                        }
-                        result
-                    };
+                    let #output = #expr;
                 }
             }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_scalar() => {
@@ -611,23 +612,110 @@ mod tests {
 
     // --- Shape + Shape ---
 
+    // `fmod` coverage for the Shape/Shape, Shape/ScalarNative, and
+    // ScalarNative/Shape arms: these arms deliberately ignore config.fmod
+    // because Shape values are non-negative in practice and Rust's `%`
+    // coincides with both fmod and remainder on non-negative integers.
+    // These tests pin that behavior so any accidental split of an arm into
+    // fmod/remainder branches shows up as a snapshot diff.
     #[test]
-    fn test_mod_shape_shape() {
-        let config = ModConfig::new(false);
+    fn test_fmod_shape_shape() {
+        let config = ModConfig::new(true);
         let node = ModNodeBuilder::new("mod1")
-            .input_shape("lhs", 3)
-            .input_shape("rhs", 3)
-            .output_shape("output", 3)
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
             .config(config)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: [i64; 3], rhs: [i64; 3]) -> [i64; 3] {
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
             let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item %= *rhs_item;
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = __lhs[__i] % __rhs[__i];
                 }
-                result
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape() {
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = __lhs[__i] % __rhs[__i];
+                }
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_lhs() {
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_shape("lhs", 1)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = __lhs[0] % __rhs[__i];
+                }
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_rhs() {
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 1)
+            .output_shape("output", 4)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 1]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = __lhs[__i] % __rhs[0];
+                }
+                __result
             };
             output
         }
@@ -783,36 +871,6 @@ mod tests {
                         (&self.device, burn::tensor::DType::I64),
                     ),
                 );
-            output
-        }
-        ");
-    }
-
-    // `fmod` coverage for the Shape/Shape, Shape/ScalarNative, and
-    // ScalarNative/Shape arms: these arms deliberately ignore config.fmod
-    // because Shape values are non-negative in practice and Rust's `%`
-    // coincides with both fmod and remainder on non-negative integers.
-    // These tests pin that behavior so any accidental split of an arm into
-    // fmod/remainder branches shows up as a snapshot diff.
-
-    #[test]
-    fn test_fmod_shape_shape() {
-        let config = ModConfig::new(true);
-        let node = ModNodeBuilder::new("mod1")
-            .input_shape("lhs", 3)
-            .input_shape("rhs", 3)
-            .output_shape("output", 3)
-            .config(config)
-            .build();
-        assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: [i64; 3], rhs: [i64; 3]) -> [i64; 3] {
-            let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item %= *rhs_item;
-                }
-                result
-            };
             output
         }
         ");

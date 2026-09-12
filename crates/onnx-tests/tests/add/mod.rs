@@ -2,11 +2,12 @@
 use crate::include_models;
 include_models!(
     add,
+    add_argmax_with_shape,
     add_int,
     add_shape,
     add_broadcast,
-    add_shape_tensor,
-    add_argmax_with_shape
+    add_shape_broadcast,
+    add_shape_tensor
 );
 
 #[cfg(test)]
@@ -152,5 +153,19 @@ mod tests {
 
         result1.to_data().assert_eq(&expected1, true);
         result2.to_data().assert_eq(&expected2, true);
+    }
+
+    #[test]
+    fn add_shape_broadcast() {
+        let device = Default::default();
+        let model: add_shape_broadcast::Model = add_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([3], &device);
+        let input_4d = Tensor::<4>::zeros([2, 30, 4, 5], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [5i64, 33, 7, 8]);
+        assert_eq!(rhs_bc, [5i64, 33, 7, 8]);
     }
 }

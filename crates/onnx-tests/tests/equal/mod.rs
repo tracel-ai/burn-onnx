@@ -1,6 +1,12 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(equal, equal_shape, equal_two_shapes, equal_scalar);
+include_models!(
+    equal,
+    equal_scalar,
+    equal_shape,
+    equal_shape_broadcast,
+    equal_two_shapes
+);
 
 #[cfg(test)]
 mod tests {
@@ -68,5 +74,19 @@ mod tests {
         let expected: [i64; 3] = [1, 1, 1];
 
         assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn equal_shape_broadcast() {
+        let device = Default::default();
+        let model: equal_shape_broadcast::Model = equal_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([3], &device);
+        let input_4d = Tensor::<4>::zeros([2, 30, 3, 5], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [0i64, 0, 1, 0]);
+        assert_eq!(rhs_bc, [0i64, 0, 1, 0]);
     }
 }

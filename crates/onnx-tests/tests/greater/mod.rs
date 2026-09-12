@@ -1,6 +1,11 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(greater, greater_scalar, greater_broadcast);
+include_models!(
+    greater,
+    greater_scalar,
+    greater_broadcast,
+    greater_shape_broadcast
+);
 
 #[cfg(test)]
 mod tests {
@@ -61,5 +66,19 @@ mod tests {
         ]);
 
         output.to_data().assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn greater_shape_broadcast() {
+        let device = Default::default();
+        let model: greater_shape_broadcast::Model = greater_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([3], &device);
+        let input_4d = Tensor::<4>::zeros([2, 30, 4, 5], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [1i64, 0, 0, 0]);
+        assert_eq!(rhs_bc, [0i64, 1, 1, 1]);
     }
 }

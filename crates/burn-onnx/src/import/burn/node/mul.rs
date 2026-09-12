@@ -35,15 +35,15 @@ impl NodeCodegen for onnx_ir::node::arithmetic::MulNode {
                 quote! { #lhs * #rhs }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => quote! { #lhs * #rhs },
-            (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
-                {
-                    let mut result = #lhs;
-                    for (result_item, rhs_item) in result.iter_mut().zip(#rhs.iter()) {
-                        *result_item = result_item.saturating_mul(*rhs_item);
-                    }
-                    result
-                }
-            },
+            (ArgType::Shape(lhs_len), ArgType::Shape(rhs_len)) => {
+                broadcast_helpers::shape_binary_elementwise(
+                    quote! { #lhs },
+                    *lhs_len,
+                    quote! { #rhs },
+                    *rhs_len,
+                    |a, b| quote! { (#a).saturating_mul(#b) },
+                )
+            }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_scalar() => {
                 let scalar_expr = scalar_as_i64(rhs_arg, rhs.clone());
                 quote! {
@@ -260,11 +260,62 @@ mod tests {
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
             let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item = result_item.saturating_mul(*rhs_item);
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = (__lhs[__i]).saturating_mul(__rhs[__i]);
                 }
-                result
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_lhs() {
+        let node = MulNodeBuilder::new("mul1")
+            .input_shape("lhs", 1)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = (__lhs[0]).saturating_mul(__rhs[__i]);
+                }
+                __result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_rhs() {
+        let node = MulNodeBuilder::new("mul1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 1)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 1]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                let mut __result = [0i64; 4usize];
+                #[allow(clippy::needless_range_loop)]
+                for __i in 0..4usize {
+                    __result[__i] = (__lhs[__i]).saturating_mul(__rhs[0]);
+                }
+                __result
             };
             output
         }

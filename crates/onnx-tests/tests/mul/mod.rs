@@ -1,6 +1,12 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(mul, mul_shape, mul_broadcast, mul_shape_tensor);
+include_models!(
+    mul,
+    mul_broadcast,
+    mul_shape,
+    mul_shape_broadcast,
+    mul_shape_tensor
+);
 
 #[cfg(test)]
 mod tests {
@@ -127,5 +133,19 @@ mod tests {
 
         result1.to_data().assert_eq(&expected1, true);
         result2.to_data().assert_eq(&expected2, true);
+    }
+
+    #[test]
+    fn mul_shape_broadcast() {
+        let device = Default::default();
+        let model: mul_shape_broadcast::Model = mul_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([3], &device);
+        let input_4d = Tensor::<4>::zeros([2, 30, 4, 5], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [6i64, 90, 12, 15]);
+        assert_eq!(rhs_bc, [6i64, 90, 12, 15]);
     }
 }
