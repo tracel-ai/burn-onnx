@@ -288,16 +288,11 @@ mod tests {
             let output = {
                 let __lhs = lhs;
                 let __rhs = rhs;
-                let mut __result = [0i64; 4usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..4usize {
-                    __result[__i] = if __rhs[__i] != 0 {
-                        __lhs[__i] / __rhs[__i]
-                    } else {
-                        __lhs[__i]
-                    };
-                }
-                __result
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __rhs[__i] != 0 { __lhs[__i] / __rhs[__i] } else { __lhs[__i] })
             };
             output
         }
@@ -316,16 +311,11 @@ mod tests {
             let output = {
                 let __lhs = lhs;
                 let __rhs = rhs;
-                let mut __result = [0i64; 4usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..4usize {
-                    __result[__i] = if __rhs[__i] != 0 {
-                        __lhs[0] / __rhs[__i]
-                    } else {
-                        __lhs[0]
-                    };
-                }
-                __result
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __rhs[__i] != 0 { __lhs[0] / __rhs[__i] } else { __lhs[0] })
             };
             output
         }
@@ -344,16 +334,11 @@ mod tests {
             let output = {
                 let __lhs = lhs;
                 let __rhs = rhs;
-                let mut __result = [0i64; 4usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..4usize {
-                    __result[__i] = if __rhs[0] != 0 {
-                        __lhs[__i] / __rhs[0]
-                    } else {
-                        __lhs[__i]
-                    };
-                }
-                __result
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __rhs[0] != 0 { __lhs[__i] / __rhs[0] } else { __lhs[__i] })
             };
             output
         }

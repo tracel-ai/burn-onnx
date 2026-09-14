@@ -262,12 +262,11 @@ mod tests {
             let output = {
                 let __lhs = lhs;
                 let __rhs = rhs;
-                let mut __result = [0i64; 4usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..4usize {
-                    __result[__i] = (__lhs[__i]).saturating_mul(__rhs[__i]);
-                }
-                __result
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| (__lhs[__i]).saturating_mul(__rhs[__i]))
             };
             output
         }
@@ -286,12 +285,11 @@ mod tests {
             let output = {
                 let __lhs = lhs;
                 let __rhs = rhs;
-                let mut __result = [0i64; 4usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..4usize {
-                    __result[__i] = (__lhs[0]).saturating_mul(__rhs[__i]);
-                }
-                __result
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| (__lhs[0]).saturating_mul(__rhs[__i]))
             };
             output
         }
@@ -310,12 +308,11 @@ mod tests {
             let output = {
                 let __lhs = lhs;
                 let __rhs = rhs;
-                let mut __result = [0i64; 4usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..4usize {
-                    __result[__i] = (__lhs[__i]).saturating_mul(__rhs[0]);
-                }
-                __result
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| (__lhs[__i]).saturating_mul(__rhs[0]))
             };
             output
         }

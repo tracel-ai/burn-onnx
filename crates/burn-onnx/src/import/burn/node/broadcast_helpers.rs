@@ -66,12 +66,7 @@ pub(crate) fn shape_binary_elementwise(
         {
             let __lhs = #lhs;
             let __rhs = #rhs;
-            let mut __result = [0i64; #len_lit];
-            #[allow(clippy::needless_range_loop)]
-            for __i in 0..#len_lit {
-                __result[__i] = #elem;
-            }
-            __result
+            core::array::from_fn::<i64, #len_lit, _>(|__i| #elem)
         }
     }
 }

@@ -268,12 +268,11 @@ mod tests {
             let output = {
                 let __lhs = lhs;
                 let __rhs = rhs;
-                let mut __result = [0i64; 4usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..4usize {
-                    __result[__i] = if __lhs[__i] <= __rhs[__i] { 1i64 } else { 0i64 };
-                }
-                __result
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __lhs[__i] <= __rhs[__i] { 1i64 } else { 0i64 })
             };
             output
         }
@@ -292,12 +291,11 @@ mod tests {
             let output = {
                 let __lhs = lhs;
                 let __rhs = rhs;
-                let mut __result = [0i64; 4usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..4usize {
-                    __result[__i] = if __lhs[0] <= __rhs[__i] { 1i64 } else { 0i64 };
-                }
-                __result
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __lhs[0] <= __rhs[__i] { 1i64 } else { 0i64 })
             };
             output
         }
@@ -316,12 +314,11 @@ mod tests {
             let output = {
                 let __lhs = lhs;
                 let __rhs = rhs;
-                let mut __result = [0i64; 4usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..4usize {
-                    __result[__i] = if __lhs[__i] <= __rhs[0] { 1i64 } else { 0i64 };
-                }
-                __result
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __lhs[__i] <= __rhs[0] { 1i64 } else { 0i64 })
             };
             output
         }
