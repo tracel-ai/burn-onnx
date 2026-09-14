@@ -1,6 +1,12 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(div, div_shape, div_broadcast, div_shape_tensor);
+include_models!(
+    div,
+    div_broadcast,
+    div_shape,
+    div_shape_broadcast,
+    div_shape_tensor
+);
 
 #[cfg(test)]
 mod tests {
@@ -128,5 +134,19 @@ mod tests {
 
         result1.to_data().assert_eq(&expected1, true);
         result2.to_data().assert_eq(&expected2, true);
+    }
+
+    #[test]
+    fn div_shape_broadcast() {
+        let device = Default::default();
+        let model: div_shape_broadcast::Model = div_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([10], &device);
+        let input_4d = Tensor::<4>::zeros([3, 7, 24, 45], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [3i64, 1, 0, 0]);
+        assert_eq!(rhs_bc, [0i64, 0, 2, 4]);
     }
 }

@@ -24,9 +24,8 @@ impl NodeCodegen for onnx_ir::node::hamming_window::HammingWindowNode {
                 let arg = &self.inputs[runtime_ref.input_index];
                 let name = arg_to_ident(arg);
                 quote! { {
-                    let __size = #name;
-                    assert!(__size >= 0, "HammingWindow: size must be non-negative, got {}", __size);
-                    __size as usize
+                    assert!(#name >= 0, "HammingWindow: size must be non-negative, got {}", #name);
+                    #name as usize
                 } }
             }
         };
@@ -114,12 +113,10 @@ mod tests {
         pub fn forward(&self, size: i64) -> Tensor<1> {
             let output = hamming_window(
                     {
-                        let __size = size;
                         assert!(
-                            __size >= 0, "HammingWindow: size must be non-negative, got {}",
-                            __size
+                            size >= 0, "HammingWindow: size must be non-negative, got {}", size
                         );
-                        __size as usize
+                        size as usize
                     },
                     true,
                     &self.device,

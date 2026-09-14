@@ -1,13 +1,14 @@
 // Import the shared macro
 use crate::include_models;
 include_models!(
-    modulo,
-    mod_scalar,
-    mod_remainder,
-    mod_fmod,
     mod_broadcast_fixed,
     mod_broadcast_remainder_fixed,
-    mod_shape
+    mod_fmod,
+    mod_remainder,
+    mod_scalar,
+    mod_shape,
+    mod_shape_broadcast,
+    modulo
 );
 
 #[cfg(test)]
@@ -182,5 +183,19 @@ mod tests {
         assert!((values[2] - (-1.5)).abs() < 0.001);
         assert!((values[3] - (-0.5)).abs() < 0.001);
         assert!((values[4] - 2.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn mod_shape_broadcast() {
+        let device = Default::default();
+        let model: mod_shape_broadcast::Model = mod_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([2], &device);
+        let input_4d = Tensor::<4>::zeros([2, 30, 4, 5], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [0i64, 2, 2, 2]);
+        assert_eq!(rhs_bc, [0i64, 0, 0, 1]);
     }
 }

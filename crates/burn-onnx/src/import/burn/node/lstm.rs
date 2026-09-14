@@ -779,114 +779,110 @@ mod tests {
                     .with_batch_first(false)
                     .with_input_forget(false)
                     .init(&self.device);
-                let __w = W;
-                let __r = R;
-                let __b = B;
                 {
-                    let __w_dir = __w.select_dim::<2>(0, 0);
-                    let __r_dir = __r.select_dim::<2>(0, 0);
-                    let __b_dir = __b.select_dim::<1>(0, 0);
-                    let __b_zero = __b_dir.clone().slice_dim(0, 0..8).zeros_like();
+                    let w_dir = W.select_dim::<2>(0, 0);
+                    let r_dir = R.select_dim::<2>(0, 0);
+                    let b_dir = B.select_dim::<1>(0, 0);
+                    let b_zero = b_dir.clone().slice_dim(0, 0..8).zeros_like();
                     lstm1
                         .input_gate
                         .input_transform
                         .weight = burn::module::Param::from_tensor(
-                        __w_dir.clone().slice_dim(0, 0..8).transpose(),
+                        w_dir.clone().slice_dim(0, 0..8).transpose(),
                     );
                     lstm1
                         .input_gate
                         .hidden_transform
                         .weight = burn::module::Param::from_tensor(
-                        __r_dir.clone().slice_dim(0, 0..8).transpose(),
+                        r_dir.clone().slice_dim(0, 0..8).transpose(),
                     );
                     lstm1
                         .input_gate
                         .input_transform
                         .bias = Some(
                         burn::module::Param::from_tensor(
-                            __b_dir.clone().slice_dim(0, 0..8)
-                                + __b_dir.clone().slice_dim(0, 32..40),
+                            b_dir.clone().slice_dim(0, 0..8) + b_dir.clone().slice_dim(0, 32..40),
                         ),
                     );
                     lstm1
                         .input_gate
                         .hidden_transform
-                        .bias = Some(burn::module::Param::from_tensor(__b_zero.clone()));
+                        .bias = Some(burn::module::Param::from_tensor(b_zero.clone()));
                     lstm1
                         .forget_gate
                         .input_transform
                         .weight = burn::module::Param::from_tensor(
-                        __w_dir.clone().slice_dim(0, 16..24).transpose(),
+                        w_dir.clone().slice_dim(0, 16..24).transpose(),
                     );
                     lstm1
                         .forget_gate
                         .hidden_transform
                         .weight = burn::module::Param::from_tensor(
-                        __r_dir.clone().slice_dim(0, 16..24).transpose(),
+                        r_dir.clone().slice_dim(0, 16..24).transpose(),
                     );
                     lstm1
                         .forget_gate
                         .input_transform
                         .bias = Some(
                         burn::module::Param::from_tensor(
-                            __b_dir.clone().slice_dim(0, 16..24)
-                                + __b_dir.clone().slice_dim(0, 48..56),
+                            b_dir.clone().slice_dim(0, 16..24)
+                                + b_dir.clone().slice_dim(0, 48..56),
                         ),
                     );
                     lstm1
                         .forget_gate
                         .hidden_transform
-                        .bias = Some(burn::module::Param::from_tensor(__b_zero.clone()));
+                        .bias = Some(burn::module::Param::from_tensor(b_zero.clone()));
                     lstm1
                         .output_gate
                         .input_transform
                         .weight = burn::module::Param::from_tensor(
-                        __w_dir.clone().slice_dim(0, 8..16).transpose(),
+                        w_dir.clone().slice_dim(0, 8..16).transpose(),
                     );
                     lstm1
                         .output_gate
                         .hidden_transform
                         .weight = burn::module::Param::from_tensor(
-                        __r_dir.clone().slice_dim(0, 8..16).transpose(),
+                        r_dir.clone().slice_dim(0, 8..16).transpose(),
                     );
                     lstm1
                         .output_gate
                         .input_transform
                         .bias = Some(
                         burn::module::Param::from_tensor(
-                            __b_dir.clone().slice_dim(0, 8..16)
-                                + __b_dir.clone().slice_dim(0, 40..48),
+                            b_dir.clone().slice_dim(0, 8..16)
+                                + b_dir.clone().slice_dim(0, 40..48),
                         ),
                     );
                     lstm1
                         .output_gate
                         .hidden_transform
-                        .bias = Some(burn::module::Param::from_tensor(__b_zero.clone()));
+                        .bias = Some(burn::module::Param::from_tensor(b_zero.clone()));
                     lstm1
                         .cell_gate
                         .input_transform
                         .weight = burn::module::Param::from_tensor(
-                        __w_dir.clone().slice_dim(0, 24..32).transpose(),
+                        w_dir.clone().slice_dim(0, 24..32).transpose(),
                     );
                     lstm1
                         .cell_gate
                         .hidden_transform
                         .weight = burn::module::Param::from_tensor(
-                        __r_dir.clone().slice_dim(0, 24..32).transpose(),
+                        r_dir.clone().slice_dim(0, 24..32).transpose(),
                     );
                     lstm1
                         .cell_gate
                         .input_transform
                         .bias = Some(
                         burn::module::Param::from_tensor(
-                            __b_dir.clone().slice_dim(0, 24..32)
-                                + __b_dir.clone().slice_dim(0, 56..64),
+                            b_dir.clone().slice_dim(0, 24..32)
+                                + b_dir.clone().slice_dim(0, 56..64),
                         ),
                     );
                     lstm1
                         .cell_gate
                         .hidden_transform
-                        .bias = Some(burn::module::Param::from_tensor(__b_zero.clone()));
+                        .bias = Some(burn::module::Param::from_tensor(b_zero.clone()));
                 }
                 let (output_seq, final_state) = lstm1.forward(input, None);
                 (

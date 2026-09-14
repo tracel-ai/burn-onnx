@@ -696,39 +696,35 @@ mod tests {
                 let mut rnn1 = RnnConfig::new(4, 8, true)
                     .with_batch_first(false)
                     .init(&self.device);
-                let __w = W;
-                let __r = R;
-                let __b = B;
                 {
-                    let __w_dir = __w.select_dim::<2>(0, 0);
-                    let __r_dir = __r.select_dim::<2>(0, 0);
-                    let __b_dir = __b.select_dim::<1>(0, 0);
-                    let __b_zero = __b_dir.clone().slice_dim(0, 0..8).zeros_like();
+                    let w_dir = W.select_dim::<2>(0, 0);
+                    let r_dir = R.select_dim::<2>(0, 0);
+                    let b_dir = B.select_dim::<1>(0, 0);
+                    let b_zero = b_dir.clone().slice_dim(0, 0..8).zeros_like();
                     rnn1
                         .gate
                         .input_transform
                         .weight = burn::module::Param::from_tensor(
-                        __w_dir.clone().slice_dim(0, 0..8).transpose(),
+                        w_dir.clone().slice_dim(0, 0..8).transpose(),
                     );
                     rnn1
                         .gate
                         .hidden_transform
                         .weight = burn::module::Param::from_tensor(
-                        __r_dir.clone().slice_dim(0, 0..8).transpose(),
+                        r_dir.clone().slice_dim(0, 0..8).transpose(),
                     );
                     rnn1
                         .gate
                         .input_transform
                         .bias = Some(
                         burn::module::Param::from_tensor(
-                            __b_dir.clone().slice_dim(0, 0..8)
-                                + __b_dir.clone().slice_dim(0, 8..16),
+                            b_dir.clone().slice_dim(0, 0..8) + b_dir.clone().slice_dim(0, 8..16),
                         ),
                     );
                     rnn1
                         .gate
                         .hidden_transform
-                        .bias = Some(burn::module::Param::from_tensor(__b_zero.clone()));
+                        .bias = Some(burn::module::Param::from_tensor(b_zero.clone()));
                 }
                 let (output_seq, final_state) = rnn1.forward(input, None);
                 (
@@ -760,27 +756,27 @@ mod tests {
                 let mut rnn1 = BiRnnConfig::new(4, 8, true)
                     .with_batch_first(false)
                     .init(&self.device);
-                let __w = W;
-                let __r = R;
-                let __b = B;
+                let w = W;
+                let r = R;
+                let b = B;
                 {
-                    let __w_dir = __w.clone().select_dim::<2>(0, 0);
-                    let __r_dir = __r.clone().select_dim::<2>(0, 0);
-                    let __b_dir = __b.clone().select_dim::<1>(0, 0);
-                    let __b_zero = __b_dir.clone().slice_dim(0, 0..8).zeros_like();
+                    let w_dir = w.clone().select_dim::<2>(0, 0);
+                    let r_dir = r.clone().select_dim::<2>(0, 0);
+                    let b_dir = b.clone().select_dim::<1>(0, 0);
+                    let b_zero = b_dir.clone().slice_dim(0, 0..8).zeros_like();
                     rnn1
                         .forward
                         .gate
                         .input_transform
                         .weight = burn::module::Param::from_tensor(
-                        __w_dir.clone().slice_dim(0, 0..8).transpose(),
+                        w_dir.clone().slice_dim(0, 0..8).transpose(),
                     );
                     rnn1
                         .forward
                         .gate
                         .hidden_transform
                         .weight = burn::module::Param::from_tensor(
-                        __r_dir.clone().slice_dim(0, 0..8).transpose(),
+                        r_dir.clone().slice_dim(0, 0..8).transpose(),
                     );
                     rnn1
                         .forward
@@ -788,34 +784,33 @@ mod tests {
                         .input_transform
                         .bias = Some(
                         burn::module::Param::from_tensor(
-                            __b_dir.clone().slice_dim(0, 0..8)
-                                + __b_dir.clone().slice_dim(0, 8..16),
+                            b_dir.clone().slice_dim(0, 0..8) + b_dir.clone().slice_dim(0, 8..16),
                         ),
                     );
                     rnn1
                         .forward
                         .gate
                         .hidden_transform
-                        .bias = Some(burn::module::Param::from_tensor(__b_zero.clone()));
+                        .bias = Some(burn::module::Param::from_tensor(b_zero.clone()));
                 }
                 {
-                    let __w_dir = __w.select_dim::<2>(0, 1);
-                    let __r_dir = __r.select_dim::<2>(0, 1);
-                    let __b_dir = __b.select_dim::<1>(0, 1);
-                    let __b_zero = __b_dir.clone().slice_dim(0, 0..8).zeros_like();
+                    let w_dir = w.select_dim::<2>(0, 1);
+                    let r_dir = r.select_dim::<2>(0, 1);
+                    let b_dir = b.select_dim::<1>(0, 1);
+                    let b_zero = b_dir.clone().slice_dim(0, 0..8).zeros_like();
                     rnn1
                         .reverse
                         .gate
                         .input_transform
                         .weight = burn::module::Param::from_tensor(
-                        __w_dir.clone().slice_dim(0, 0..8).transpose(),
+                        w_dir.clone().slice_dim(0, 0..8).transpose(),
                     );
                     rnn1
                         .reverse
                         .gate
                         .hidden_transform
                         .weight = burn::module::Param::from_tensor(
-                        __r_dir.clone().slice_dim(0, 0..8).transpose(),
+                        r_dir.clone().slice_dim(0, 0..8).transpose(),
                     );
                     rnn1
                         .reverse
@@ -823,15 +818,14 @@ mod tests {
                         .input_transform
                         .bias = Some(
                         burn::module::Param::from_tensor(
-                            __b_dir.clone().slice_dim(0, 0..8)
-                                + __b_dir.clone().slice_dim(0, 8..16),
+                            b_dir.clone().slice_dim(0, 0..8) + b_dir.clone().slice_dim(0, 8..16),
                         ),
                     );
                     rnn1
                         .reverse
                         .gate
                         .hidden_transform
-                        .bias = Some(burn::module::Param::from_tensor(__b_zero.clone()));
+                        .bias = Some(burn::module::Param::from_tensor(b_zero.clone()));
                 }
                 let (output_seq, final_state) = rnn1.forward(input, None);
                 (

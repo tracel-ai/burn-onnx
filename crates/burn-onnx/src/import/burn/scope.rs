@@ -1,5 +1,5 @@
 use onnx_ir::{Argument, ir::ArgType};
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote::quote;
 use std::collections::HashMap;
 
@@ -51,7 +51,7 @@ impl Scope {
 
     /// Use a tensor variable, cloning it if it was registered multiple times and the tensor will still be used afterward.
     pub fn tensor_use_owned(&mut self, arg: &Argument, node_position: usize) -> TokenStream {
-        let name = Ident::new(&arg.name, Span::call_site());
+        let name = super::shadow_check::value_ident(&arg.name);
 
         if let Some(variable) = self.variables.get_mut(&arg.name) {
             let mut count = 0;

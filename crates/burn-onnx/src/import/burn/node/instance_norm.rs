@@ -79,29 +79,28 @@ impl NodeCodegen for InstanceNormalizationNode {
 
         // Spatial dims are collapsed into a single hidden axis before reducing
         // (mirrors Burn's internal `group_norm` shape strategy). The channel
-        // dim for the affine reshape is read from `__dims` at runtime so we
+        // dim for the affine reshape is read from `dims` at runtime so we
         // don't need scale's static shape to be known at codegen time.
         let scale = scope.arg(&self.inputs[1]);
         let bias = scope.arg(&self.inputs[2]);
         let rank = x_arg.ty.rank();
         let epsilon = self.config.epsilon;
-        let affine_shape = channel_broadcast_shape(rank, quote! { __channels });
+        let affine_shape = channel_broadcast_shape(rank, quote! { channels });
 
         quote! {
             let #output = {
-                let __x = #x;
-                let __dims = __x.dims();
-                let __batch = __dims[0];
-                let __channels = __dims[1];
-                let __hidden: usize = __dims[2..].iter().product();
-                let __hidden_f = __hidden as f64;
-                let __x3 = __x.reshape([__batch, __channels, __hidden]);
-                let __mean = __x3.clone().sum_dim(2).div_scalar(__hidden_f);
-                let __centered = __x3.sub(__mean);
-                let __var = __centered.clone().square().sum_dim(2).div_scalar(__hidden_f);
-                let __normalized = __centered.div(__var.add_scalar(#epsilon).sqrt());
-                __normalized
-                    .reshape(__dims)
+                let dims = #x.dims();
+                let batch = dims[0];
+                let channels = dims[1];
+                let hidden: usize = dims[2..].iter().product();
+                let hidden_f = hidden as f64;
+                let x3 = #x.reshape([batch, channels, hidden]);
+                let mean = x3.clone().sum_dim(2).div_scalar(hidden_f);
+                let centered = x3.sub(mean);
+                let var = centered.clone().square().sum_dim(2).div_scalar(hidden_f);
+                let normalized = centered.div(var.add_scalar(#epsilon).sqrt());
+                normalized
+                    .reshape(dims)
                     .mul(#scale.reshape(#affine_shape))
                     .add(#bias.reshape(#affine_shape))
             };
@@ -178,21 +177,20 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<4>, scale: Tensor<1>, bias: Tensor<1>) -> Tensor<4> {
             let output = {
-                let __x = input;
-                let __dims = __x.dims();
-                let __batch = __dims[0];
-                let __channels = __dims[1];
-                let __hidden: usize = __dims[2..].iter().product();
-                let __hidden_f = __hidden as f64;
-                let __x3 = __x.reshape([__batch, __channels, __hidden]);
-                let __mean = __x3.clone().sum_dim(2).div_scalar(__hidden_f);
-                let __centered = __x3.sub(__mean);
-                let __var = __centered.clone().square().sum_dim(2).div_scalar(__hidden_f);
-                let __normalized = __centered.div(__var.add_scalar(0.00001f64).sqrt());
-                __normalized
-                    .reshape(__dims)
-                    .mul(scale.reshape([1usize, __channels, 1usize, 1usize]))
-                    .add(bias.reshape([1usize, __channels, 1usize, 1usize]))
+                let dims = input.dims();
+                let batch = dims[0];
+                let channels = dims[1];
+                let hidden: usize = dims[2..].iter().product();
+                let hidden_f = hidden as f64;
+                let x3 = input.reshape([batch, channels, hidden]);
+                let mean = x3.clone().sum_dim(2).div_scalar(hidden_f);
+                let centered = x3.sub(mean);
+                let var = centered.clone().square().sum_dim(2).div_scalar(hidden_f);
+                let normalized = centered.div(var.add_scalar(0.00001f64).sqrt());
+                normalized
+                    .reshape(dims)
+                    .mul(scale.reshape([1usize, channels, 1usize, 1usize]))
+                    .add(bias.reshape([1usize, channels, 1usize, 1usize]))
             };
             output
         }

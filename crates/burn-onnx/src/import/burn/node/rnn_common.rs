@@ -102,7 +102,7 @@ pub(crate) struct ModuleExpr {
     /// Kept separate from `setup` so that it stays a bare path, cheap to splice more
     /// than once. Folding the two together would make every splice carry the whole
     /// weight-loading block, and a caller that spliced it into two branches would
-    /// emit the `let __w = ...;` bindings twice - which `scope.arg` has already
+    /// emit the `let w = ...;` bindings twice - which `scope.arg` has already
     /// handed out as a move, and which no snapshot test would catch.
     pub expr: TokenStream,
 }
@@ -214,8 +214,21 @@ fn load_runtime_weights(
         .map(|arg| scope.arg(arg));
 
     let gate_count = layout.count();
-    let bind_bias = b.map(|b| quote! { let __b = #b; });
-    let has_bias = bind_bias.is_some();
+    let has_bias = b.is_some();
+
+    // A bidirectional module reads each packed tensor once per direction, so the
+    // argument is bound to a local first; unidirectional splices it directly.
+    let (bind_weights, w, r, b) = if num_directions == 2 {
+        let bind_bias = b.map(|b| quote! { let b = #b; });
+        let bind = quote! {
+            let w = #w;
+            let r = #r;
+            #bind_bias
+        };
+        (bind, quote! { w }, quote! { r }, quote! { b })
+    } else {
+        (quote! {}, w, r, b.unwrap_or_default())
+    };
 
     let mut directions = quote! {};
     for direction in 0..num_directions {
@@ -237,10 +250,10 @@ fn load_runtime_weights(
         let zero_bias = (has_bias && matches!(layout.bias(), BiasLayout::Merged)).then(|| {
             let hidden = hidden_size.to_tokens();
             // Every gate's zeroed hidden bias has the same shape, so build one.
-            quote! { let __b_zero = __b_dir.clone().slice_dim(0, 0..#hidden).zeros_like(); }
+            quote! { let b_zero = b_dir.clone().slice_dim(0, 0..#hidden).zeros_like(); }
         });
         let bias_dir = has_bias.then(|| {
-            quote! { let __b_dir = __b #reuse.select_dim::<1>(0, #index); }
+            quote! { let b_dir = #b #reuse.select_dim::<1>(0, #index); }
         });
 
         let mut gates = quote! {};
@@ -253,10 +266,10 @@ fn load_runtime_weights(
             // wants [in, hidden_size].
             gates.extend(quote! {
                 #gate_owner.#gate.input_transform.weight = burn::module::Param::from_tensor(
-                    __w_dir.clone().slice_dim(0, #start..#end).transpose(),
+                    w_dir.clone().slice_dim(0, #start..#end).transpose(),
                 );
                 #gate_owner.#gate.hidden_transform.weight = burn::module::Param::from_tensor(
-                    __r_dir.clone().slice_dim(0, #start..#end).transpose(),
+                    r_dir.clone().slice_dim(0, #start..#end).transpose(),
                 );
             });
 
@@ -270,27 +283,27 @@ fn load_runtime_weights(
             gates.extend(match layout.bias() {
                 BiasLayout::Split => quote! {
                     #gate_owner.#gate.input_transform.bias = Some(burn::module::Param::from_tensor(
-                        __b_dir.clone().slice_dim(0, #start..#end),
+                        b_dir.clone().slice_dim(0, #start..#end),
                     ));
                     #gate_owner.#gate.hidden_transform.bias = Some(burn::module::Param::from_tensor(
-                        __b_dir.clone().slice_dim(0, #rb_start..#rb_end),
+                        b_dir.clone().slice_dim(0, #rb_start..#rb_end),
                     ));
                 },
                 BiasLayout::Merged => quote! {
                     #gate_owner.#gate.input_transform.bias = Some(burn::module::Param::from_tensor(
-                        __b_dir.clone().slice_dim(0, #start..#end)
-                            + __b_dir.clone().slice_dim(0, #rb_start..#rb_end),
+                        b_dir.clone().slice_dim(0, #start..#end)
+                            + b_dir.clone().slice_dim(0, #rb_start..#rb_end),
                     ));
                     #gate_owner.#gate.hidden_transform.bias =
-                        Some(burn::module::Param::from_tensor(__b_zero.clone()));
+                        Some(burn::module::Param::from_tensor(b_zero.clone()));
                 },
             });
         }
 
         directions.extend(quote! {
             {
-                let __w_dir = __w #reuse.select_dim::<2>(0, #index);
-                let __r_dir = __r #reuse.select_dim::<2>(0, #index);
+                let w_dir = #w #reuse.select_dim::<2>(0, #index);
+                let r_dir = #r #reuse.select_dim::<2>(0, #index);
                 #bias_dir
                 #zero_bias
                 #gates
@@ -299,9 +312,7 @@ fn load_runtime_weights(
     }
 
     quote! {
-        let __w = #w;
-        let __r = #r;
-        #bind_bias
+        #bind_weights
         #directions
     }
 }

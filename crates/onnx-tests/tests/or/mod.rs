@@ -1,6 +1,6 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(or, or_scalar, or_broadcast);
+include_models!(or, or_scalar, or_broadcast, or_shape_broadcast);
 
 #[cfg(test)]
 mod tests {
@@ -126,5 +126,23 @@ mod tests {
 
         result1.to_data().assert_eq(&expected1, true);
         result2.to_data().assert_eq(&expected2, true);
+    }
+
+    #[test]
+    fn or_shape_broadcast() {
+        let device = Default::default();
+        let model: or_shape_broadcast::Model = or_shape_broadcast::Model::default();
+
+        let input_a = Tensor::<1>::zeros([3], &device);
+        let input_b = Tensor::<1>::zeros([7], &device);
+        let input_c = Tensor::<4>::zeros([2, 3, 4, 5], &device);
+        let input_d = Tensor::<4>::zeros([9, 1, 4, 2], &device);
+
+        let (lhs_bc, rhs_bc, same) = model.forward(input_a, input_b, input_c, input_d);
+
+        // greater_1 = [1], greater_4 = [0, 1, 0, 1]
+        assert_eq!(lhs_bc, [1i64, 1, 1, 1]);
+        assert_eq!(rhs_bc, [1i64, 1, 1, 1]);
+        assert_eq!(same, [0i64, 1, 0, 1]);
     }
 }

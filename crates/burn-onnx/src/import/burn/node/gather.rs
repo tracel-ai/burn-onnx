@@ -39,7 +39,7 @@ fn resolve_scalar_index_token(
     } else if index_arg.ty.is_scalar_tensor() {
         let tensor = scope.arg(index_arg);
         let native_expr = on_device_to_native(quote! { #tensor }, &index_arg.ty.elem_type());
-        let temp = Ident::new("__scalar_idx", Span::call_site());
+        let temp = Ident::new("scalar_idx", Span::call_site());
         (quote! { let #temp = #native_expr; }, quote! { #temp })
     } else {
         let index = arg_to_ident(index_arg);
@@ -725,8 +725,8 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, values: Tensor<1>, position: Tensor<1, Int>) -> Tensor<1> {
             let result = {
-                let __scalar_idx = (position).into_scalar::<i64>();
-                values.slice(s![__scalar_idx])
+                let scalar_idx = (position).into_scalar::<i64>();
+                values.slice(s![scalar_idx])
             };
             result
         }
