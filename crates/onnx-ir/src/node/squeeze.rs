@@ -100,6 +100,7 @@ impl NodeProcessor for SqueezeProcessor {
         // Runtime axes still fix the output rank when their count is known
         let runtime_axes_count = match &axes {
             Some(SqueezeInput::Runtime(axes_ref)) => match &node.inputs[axes_ref.input_index].ty {
+                ArgType::Tensor(t) if t.rank == 0 => Some(1),
                 ArgType::Tensor(t) if t.rank == 1 => t
                     .static_shape
                     .as_ref()
@@ -130,6 +131,13 @@ impl NodeProcessor for SqueezeProcessor {
                         tensor.rank - count
                     }
                     (None, None) => {
+                        // Runtime axes of unknown count leave the output rank open, and
+                        // squeezing every size-1 dim would only be right by chance.
+                        if matches!(axes, Some(SqueezeInput::Runtime(_))) {
+                            return Err(ProcessError::Custom(
+                                "Squeeze: Cannot infer output rank when the number of runtime axes is unknown".to_string(),
+                            ));
+                        }
                         // When axes is None, ONNX spec squeezes all dimensions of size 1
                         if let Some(ref static_shape) = tensor.static_shape {
                             static_shape.iter().filter(|dim| **dim != Some(1)).count()
@@ -389,6 +397,36 @@ mod tests {
             }
             _ => panic!("Expected tensor output"),
         }
+    }
+
+    #[test]
+    fn test_squeeze_runtime_scalar_axis() {
+        // A native scalar axis is a single axis
+        let mut node = TestNodeBuilder::new(NodeType::Squeeze, "test_runtime_squeeze")
+            .input_tensor_f32("data", 4, Some(vec![1, 3, 1, 5]))
+            .input_scalar_i64("axes")
+            .output_tensor_f32("squeezed", 4, None)
+            .build();
+        let processor = SqueezeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        assert!(matches!(&node.outputs[0].ty, ArgType::Tensor(t) if t.rank == 3));
+    }
+
+    #[test]
+    fn test_squeeze_runtime_axes_unknown_count_rejected() {
+        // Axes of unknown length could remove any number of dims
+        let mut node = TestNodeBuilder::new(NodeType::Squeeze, "test_runtime_squeeze")
+            .input_tensor_f32("data", 4, Some(vec![1, 3, 1, 5]))
+            .input_tensor_i64("axes", 1, None)
+            .output_tensor_f32("squeezed", 4, None)
+            .build();
+        let processor = SqueezeProcessor;
+        let prefs = OutputPreferences::new();
+        let result = processor.infer_types(&mut node, 16, &prefs);
+        assert!(
+            matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("runtime axes"))
+        );
     }
 
     // TODO: Missing test for squeezing dimension that is not size 1 - should fail.

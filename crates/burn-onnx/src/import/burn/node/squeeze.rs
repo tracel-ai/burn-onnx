@@ -48,6 +48,10 @@ impl NodeCodegen for onnx_ir::squeeze::SqueezeNode {
                                 let __raw_axes: alloc::vec::Vec<i64> =
                                     #axes_expr.iter().copied().collect();
                             },
+                            ArgType::ScalarNative(_) => quote! {
+                                let __raw_axes: alloc::vec::Vec<i64> =
+                                    alloc::vec![#axes_expr as i64];
+                            },
                             _ => quote! {
                                 let __raw_axes: alloc::vec::Vec<i64> = #axes_expr
                                     .to_data()
@@ -246,6 +250,38 @@ mod tests {
         pub fn forward(&self, input: Tensor<3>, axes: [i64; 1]) -> Tensor<2> {
             let output = {
                 let __raw_axes: alloc::vec::Vec<i64> = axes.iter().copied().collect();
+                let __rank: i64 = 3;
+                let __axes: alloc::vec::Vec<isize> = __raw_axes
+                    .into_iter()
+                    .map(|v| (if v < 0 { v + __rank } else { v }) as isize)
+                    .collect();
+                input.squeeze_dims::<2>(&__axes)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_squeeze_runtime_axes_scalar() {
+        use onnx_ir::ir::RuntimeInputRef;
+        let config = SqueezeConfig {
+            axes: Some(SqueezeInput::Runtime(RuntimeInputRef::new(
+                "axis".to_string(),
+                1,
+            ))),
+        };
+        let node = SqueezeNodeBuilder::new("squeeze_rt_scalar")
+            .input_tensor("input", 3, DType::F32)
+            .input_scalar("axis", DType::I64)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>, axis: i64) -> Tensor<2> {
+            let output = {
+                let __raw_axes: alloc::vec::Vec<i64> = alloc::vec![axis as i64];
                 let __rank: i64 = 3;
                 let __axes: alloc::vec::Vec<isize> = __raw_axes
                     .into_iter()
