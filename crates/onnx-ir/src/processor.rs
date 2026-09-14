@@ -3,7 +3,10 @@
 //! This module defines the `NodeProcessor` trait with support for type preferences
 //! and proper error handling.
 
-use crate::ir::{Argument, Node, RawNode};
+use crate::{
+    ArgType,
+    ir::{Argument, Node, RawNode},
+};
 use std::collections::HashMap;
 
 // Re-export registry types for backward compatibility
@@ -659,13 +662,29 @@ pub fn compute_broadcast_rank(inputs: &[crate::ir::Argument]) -> usize {
     })
 }
 
+pub fn logical_shape(arg_type: &ArgType, static_shape: Vec<Option<usize>>) -> Vec<Option<usize>> {
+    match arg_type {
+        ArgType::Tensor(_) => static_shape,
+        ArgType::ScalarTensor(_) => vec![Some(1)],
+        ArgType::ScalarNative(_) => vec![],
+        ArgType::Shape(r) => vec![Some(*r)],
+    }
+}
+
 /// Compute broadcast static shape from multiple inputs (NumPy-style broadcasting)
 pub fn compute_broadcast_static_shape(
     inputs: &[crate::ir::Argument],
 ) -> Option<Vec<Option<usize>>> {
     let static_shapes: Vec<_> = inputs
         .iter()
-        .filter_map(|input| input.ty.static_shape().cloned())
+        .map(|input| {
+            let concrete = input
+                .ty
+                .static_shape()
+                .cloned()
+                .unwrap_or_else(|| vec![None; input.ty.rank()]);
+            logical_shape(&input.ty, concrete)
+        })
         .collect();
 
     if static_shapes.is_empty() {
@@ -691,19 +710,19 @@ pub fn compute_broadcast_static_shape(
         let offset = max_rank - shape.len();
         for (i, dim) in shape.iter().enumerate() {
             let result_idx = offset + i;
+
             match (result[result_idx], *dim) {
-                (_, None) | (None, _) => {
-                    // If either dim is symbolic, result is symbolic
-                    result[result_idx] = None;
-                }
-                (Some(cur), Some(d)) => {
-                    if cur == 1 {
-                        result[result_idx] = Some(d);
-                    } else if d != 1 && d != cur {
-                        // Incompatible broadcast
-                        return None;
-                    }
-                }
+                // 1 bc to anything
+                (Some(1), d) => result[result_idx] = d,
+                (_, Some(1)) => {}
+                // a symbolic dim resolves to the known one
+                // in a valid model it must be 1 or equal to it
+                (None, d) => result[result_idx] = d,
+                (Some(_), None) => {}
+                // both known and equal, nothing to do
+                (Some(cur), Some(d)) if cur == d => {}
+                // Incompatible broadcast
+                (Some(_), Some(_)) => return None,
             }
         }
     }
@@ -737,13 +756,21 @@ pub fn broadcast_output_type(
         .any(|input| matches!(&input.ty, ArgType::Shape(_)));
 
     if has_shape && !has_real_tensor {
-        let shape_rank = inputs
-            .iter()
-            .find_map(|input| match &input.ty {
-                ArgType::Shape(rank) => Some(*rank),
-                _ => None,
-            })
-            .expect("Shape input must exist");
+        // logical shape is [] or [Some(k)] so the bc result is a single concrete length
+        let shape_rank = compute_broadcast_static_shape(inputs)
+            .and_then(|s| s.first().copied().flatten())
+            .unwrap_or_else(|| {
+                // incompatible shapes
+                // degrade to longest instead of panicking
+                inputs
+                    .iter()
+                    .filter_map(|input| match &input.ty {
+                        ArgType::Shape(rank) => Some(*rank),
+                        _ => None,
+                    })
+                    .max()
+                    .unwrap_or(1)
+            });
 
         return ArgType::Shape(shape_rank);
     }
@@ -895,10 +922,9 @@ mod tests {
     }
 
     #[test]
-    fn test_broadcast_static_shape_rank_mismatch_returns_none() {
-        // Regression: when only one input has a static shape but its rank
-        // doesn't match the broadcast rank, we should return None instead
-        // of incorrectly propagating the shape.
+    fn test_broadcast_static_shape_rank_mismatch_right_aligns() {
+        // Regression: a rank 1 static shape must not be propagated against a rank 4 static shape
+        // it is right aligned into the bc rank, so the result is bc rank long
         let inputs = vec![
             Argument {
                 name: "a".to_string(),
@@ -922,9 +948,9 @@ mod tests {
             },
         ];
 
-        // Broadcast rank is 4, but only static shape is [2] (rank 1). Should be None.
-        let result = compute_broadcast_static_shape(&inputs);
-        assert!(result.is_none());
+        let result = compute_broadcast_static_shape(&inputs).expect("rank-aligned result");
+        assert_eq!(result.len(), compute_broadcast_rank(&inputs));
+        assert_eq!(result, vec![None, None, None, Some(2)]);
     }
 
     #[test]

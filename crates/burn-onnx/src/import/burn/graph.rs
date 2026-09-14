@@ -1,4 +1,4 @@
-use super::{BurnImports, Scope, ToTokens};
+use super::{BurnImports, Scope, ToTokens, shadow_check};
 use crate::LoadStrategy;
 use crate::burn::custom_op::HookRegistry;
 use crate::burn::node::NodeCodegen;
@@ -261,11 +261,12 @@ impl BurnGraph {
 
         let partition = self.compute_partition();
 
-        if let Some(partition) = partition {
+        let tokens = if let Some(partition) = partition {
             self.codegen_partitioned(partition)
         } else {
             self.codegen_flat()
-        }
+        };
+        shadow_check::strip(tokens)
     }
 
     /// Generate flat code (no submodules) for small graphs.
@@ -425,11 +426,15 @@ impl BurnGraph {
             let output_return = crate::burn::codegen_return_expr(chunk_outputs);
 
             let mut forward_body = quote! {};
+            let mut shadow_check = shadow_check::Checker::for_params(chunk_inputs);
             for (local_pos, node) in chunk_nodes.iter().enumerate() {
                 let mut scope_at_pos = scope.at_position(local_pos);
                 let code = node_forward(node, &mut scope_at_pos, &self.hooks);
+                expect_checked(shadow_check.check(&node_site(node), &code));
                 forward_body.extend(code);
             }
+            let site = format!("the {struct_name}::forward() return");
+            expect_checked(shadow_check.check(&site, &output_return));
 
             let submodule_def = quote! {
                 #[derive(Module, Debug)]
@@ -501,6 +506,20 @@ impl BurnGraph {
 
         let input_conversions = self.codegen_boundary_input_conversions();
         let boundary_conversions = self.codegen_boundary_output_conversions();
+
+        // No node runs here, but the invariant that every forward() body is
+        // checked keeps a future `let` in the chaining code honest.
+        expect_checked(
+            shadow_check::Checker::for_params(&self.graph_input_args).check(
+                "the Model::forward() body",
+                &quote! {
+                    #input_conversions
+                    #(#forward_calls)*
+                    #boundary_conversions
+                    #output_return_def
+                },
+            ),
+        );
 
         let codegen_default = match &self.default {
             Some(default) => {
@@ -788,13 +807,22 @@ impl BurnGraph {
         let input_conversions = self.codegen_boundary_input_conversions();
 
         let mut body = quote! {};
+        let mut shadow_check = shadow_check::Checker::for_params(&self.graph_input_args);
+        expect_checked(shadow_check.check("the forward() input conversions", &input_conversions));
         for (index, node) in self.nodes.iter().enumerate() {
             let mut scope_at_pos = self.scope.at_position(index);
             let code = node_forward(node, &mut scope_at_pos, &self.hooks);
+            expect_checked(shadow_check.check(&node_site(node), &code));
             body.extend(code);
         }
 
         let boundary_conversions = self.codegen_boundary_output_conversions();
+        // The output conversions and the return read graph values too, after
+        // every node's function-scope temporaries are in place.
+        expect_checked(shadow_check.check(
+            "the forward() return",
+            &quote! { #boundary_conversions #output_return_def },
+        ));
 
         // TODO Return the result without a `let` binding from a block,
         // otherwise let_and_return error will be triggered by clippy.
@@ -975,6 +1003,23 @@ impl BurnGraph {
 // ============================================================================
 
 type FieldTuple = (proc_macro2::Ident, TokenStream, Option<TokenStream>);
+
+/// Unwrap the shadow check at the codegen boundary.
+///
+/// Like `expect_hook` in `node_codegen.rs`, `BurnGraph::codegen` has no error
+/// channel, so a check failure surfaces as a panic that names the site and
+/// the value.
+fn expect_checked(result: Result<(), shadow_check::CheckError>) {
+    if let Err(error) = result {
+        panic!("{error}");
+    }
+}
+
+/// The shadow check label for a node: its name and op type, so a build
+/// failure can be reported against the operator.
+fn node_site(node: &Node) -> String {
+    format!("node `{}` ({:?})", node.name(), node.node_type())
+}
 
 /// Render a burnpack path as `&str` for embedding into generated source.
 ///
@@ -1531,10 +1576,7 @@ mod tests {
     }
 
     /// Two Clip nodes chained through a single intermediate tensor,
-    /// each with its own independent runtime scalar bounds. The
-    /// generated `__clip_min` / `__clip_max` temporaries must each
-    /// live inside their own per-node block so clone-tracking and
-    /// name resolution don't interleave across the two instances.
+    /// each with its own independent runtime scalar bounds.
     fn build_two_clip_chain() -> BurnGraph {
         use onnx_ir::clip::{ClipConfig, ClipNodeBuilder};
         use onnx_ir::node::clip::ClipInput;
@@ -1579,93 +1621,179 @@ mod tests {
         graph
     }
 
-    /// Walk the generated Rust text and return the list of innermost
-    /// `{ ... }` blocks (as substrings of `code`, without the braces).
-    /// Used by scoping regression tests: counting raw occurrences of a
-    /// `let __foo` binding is not enough because the same bindings at
-    /// the outer `forward` scope would still pass. An innermost-block
-    /// scan lets us assert that the bindings sit inside a per-node
-    /// subscope, not at the function top level.
-    ///
-    /// "Innermost" means the block contains no nested `{...}` children.
-    /// Tracked per-block on the stack so siblings don't pollute each
-    /// other (a parent with one inner child is still a parent — not
-    /// innermost — but its other children can still qualify).
-    fn innermost_blocks(code: &str) -> Vec<&str> {
-        let bytes = code.as_bytes();
-        let mut stack: Vec<(usize, bool)> = Vec::new();
-        let mut innermost: Vec<(usize, usize)> = Vec::new();
-        for (i, &b) in bytes.iter().enumerate() {
-            match b {
-                b'{' => {
-                    if let Some(last) = stack.last_mut() {
-                        last.1 = true;
-                    }
-                    stack.push((i, false));
-                }
-                b'}' => {
-                    if let Some((open, has_inner)) = stack.pop()
-                        && !has_inner
-                    {
-                        innermost.push((open + 1, i));
-                    }
-                }
-                _ => {}
-            }
-        }
-        innermost.into_iter().map(|(s, e)| &code[s..e]).collect()
-    }
-
-    /// Regression test for #317, issue 6: verifies that runtime-bound Clip
-    /// nodes emit their `__clip_min` / `__clip_max` temporaries inside
-    /// per-node block scopes rather than at the outer `forward` scope.
-    /// Without the wrapper block, both `let __clip_min = ...;` bindings
-    /// would land at the outer scope — still legal Rust, but
-    /// clone-tracking for the runtime-bound inputs and variable
-    /// resolution for downstream consumers would interleave across nodes
-    /// in hard-to-debug ways.
-    ///
-    /// The test walks the generated code to find every innermost `{ ... }`
-    /// block and counts the ones that contain both a `let __clip_min = `
-    /// and a `let __clip_max = `. That count must be exactly two (one per
-    /// Clip node). A raw `code.matches(...).count() == 2` would also pass
-    /// if both bindings were at the outer scope, which is exactly the
-    /// regression we are trying to rule out.
+    /// Regression test for #317, issue 6: two runtime-bound Clip nodes in
+    /// the same forward() must each clamp with their own bounds rather than
+    /// sharing temporaries that resolve to the wrong node's inputs.
     #[test]
-    fn multi_instance_clip_scoping() {
+    fn multi_instance_clip_bounds() {
         let graph = build_two_clip_chain();
         let code = format_tokens(graph.codegen());
 
-        let scoped_blocks: Vec<&str> = innermost_blocks(&code)
-            .into_iter()
-            .filter(|b| b.contains("let __clip_min = ") && b.contains("let __clip_max = "))
-            .collect();
+        assert!(
+            code.contains("input.clamp((min0 as f64), (max0 as f64))"),
+            "first clip should clamp with its own bounds:\n{code}"
+        );
+        assert!(
+            code.contains("t0.clamp((min1 as f64), (max1 as f64))"),
+            "second clip should clamp with its own bounds:\n{code}"
+        );
+    }
 
-        assert_eq!(
-            scoped_blocks.len(),
-            2,
-            "expected exactly two innermost blocks each containing \
-             both `let __clip_min =` and `let __clip_max =`, got \
-             {} such blocks. Full generated code:\n{code}",
-            scoped_blocks.len()
+    /// Hook whose forward leaks a temporary to function scope, the shape the
+    /// shadow check has to carry from one node to the next.
+    struct LeakyTempOp;
+
+    impl crate::ext::CustomOp for LeakyTempOp {
+        fn op_type(&self) -> &str {
+            "LeakyTemp"
+        }
+
+        fn domain(&self) -> &str {
+            "test"
+        }
+
+        fn infer_output_types(
+            &self,
+            node: &onnx_ir::CustomNode,
+        ) -> Result<Vec<ArgType>, onnx_ir::ProcessError> {
+            Ok(vec![node.inputs[0].ty.clone()])
+        }
+
+        fn forward(
+            &self,
+            node: &onnx_ir::CustomNode,
+            ctx: &mut crate::ext::CodegenContext<'_, '_>,
+        ) -> Result<TokenStream, onnx_ir::ProcessError> {
+            let input = ctx.arg(&node.inputs[0]);
+            let out = crate::burn::node_traits::arg_to_ident(&node.outputs[0]);
+            Ok(quote! {
+                let actual_idx = 1usize;
+                let #out = #input;
+            })
+        }
+    }
+
+    fn f32_matrix(name: &str) -> onnx_ir::Argument {
+        use onnx_ir::ir::TensorType;
+        onnx_ir::Argument::new(name, ArgType::Tensor(TensorType::new(DType::F32, 2, None)))
+    }
+
+    /// The LeakyTemp node `leaky1`, from `input` to `t0`.
+    fn leaky_temp_node() -> Node {
+        Node::Custom(onnx_ir::CustomNode::new(
+            "leaky1",
+            "LeakyTemp",
+            "test",
+            vec![f32_matrix("input")],
+            vec![f32_matrix("t0")],
+            Default::default(),
+            3,
+        ))
+    }
+
+    fn leaky_temp_hooks() -> Arc<HookRegistry> {
+        let mut registry = HookRegistry::default();
+        registry.add_custom_op(Box::new(LeakyTempOp));
+        Arc::new(registry)
+    }
+
+    /// An Abs node reading a graph input named `actual_idx`, which the leaked
+    /// temporary shadows when both are in the same function scope.
+    fn hostile_abs(name: &str) -> Node {
+        Node::Abs(
+            AbsNodeBuilder::new(name)
+                .input_tensor("actual_idx", 2, DType::F32)
+                .output_tensor("hostile_out", 2, DType::F32)
+                .build(),
+        )
+    }
+
+    /// `n` Abs nodes chained from `t0` to `t{n}`, enough to push the graph
+    /// over the partition threshold.
+    fn abs_chain(n: usize) -> impl Iterator<Item = Node> {
+        (1..=n).map(|i| {
+            Node::Abs(
+                AbsNodeBuilder::new(format!("abs_chain{i}"))
+                    .input_tensor(&format!("t{}", i - 1), 2, DType::F32)
+                    .output_tensor(&format!("t{i}"), 2, DType::F32)
+                    .build(),
+            )
+        })
+    }
+
+    /// `leaky1` followed by `nodes`, which must contain a chain of length `n`
+    /// and one hostile Abs; the graph returns `t{n}` and `hostile_out`.
+    fn leaky_graph(nodes: impl IntoIterator<Item = Node>, n: usize) -> BurnGraph {
+        let mut graph = BurnGraph::default();
+        graph.register(leaky_temp_node());
+        for node in nodes {
+            graph.register(node);
+        }
+        graph.register_input_output(
+            vec!["input".to_string(), "actual_idx".to_string()],
+            vec![format!("t{n}"), "hostile_out".to_string()],
+            &[],
+            &[],
+        );
+        graph.with_hooks(leaky_temp_hooks())
+    }
+
+    /// A temporary declared at `forward()` scope by one node stays visible to
+    /// every later node, so the check has to carry it across node boundaries.
+    #[test]
+    #[should_panic(
+        expected = "node `abs1` (Abs) reads the graph value `actual_idx` while a temporary named `actual_idx` declared by node `leaky1`"
+    )]
+    fn function_scope_temporary_shadowing_a_later_input_is_rejected() {
+        leaky_graph([hostile_abs("abs1")], 0).codegen();
+    }
+
+    /// The return reads graph values after every node ran, so it is checked
+    /// against the function-scope temporaries too.
+    #[test]
+    #[should_panic(expected = "the forward() return reads the graph value `actual_idx`")]
+    fn function_scope_temporary_shadowing_a_returned_input_is_rejected() {
+        let mut graph = BurnGraph::default();
+        graph.register(leaky_temp_node());
+
+        // `actual_idx` is a graph input passed straight through to the outputs,
+        // so no node declares it and the arguments are given explicitly.
+        graph.register_input_output(
+            vec!["input".to_string(), "actual_idx".to_string()],
+            vec!["t0".to_string(), "actual_idx".to_string()],
+            &[f32_matrix("input"), f32_matrix("actual_idx")],
+            &[f32_matrix("t0"), f32_matrix("actual_idx")],
         );
 
-        // Belt-and-braces: each scoped block must declare exactly one
-        // `__clip_min` and one `__clip_max`. A block containing two
-        // `__clip_min` bindings would mean two clip nodes collapsed into
-        // a single scope, which is the bug we are guarding against.
-        for (idx, block) in scoped_blocks.iter().enumerate() {
-            assert_eq!(
-                block.matches("let __clip_min = ").count(),
-                1,
-                "block {idx} should declare exactly one __clip_min, got:\n{block}"
-            );
-            assert_eq!(
-                block.matches("let __clip_max = ").count(),
-                1,
-                "block {idx} should declare exactly one __clip_max, got:\n{block}"
-            );
-        }
+        graph.with_hooks(leaky_temp_hooks()).codegen();
+    }
+
+    /// Each submodule body runs through the check as well.
+    #[test]
+    #[should_panic(
+        expected = "node `abs1` (Abs) reads the graph value `actual_idx` while a temporary named `actual_idx` declared by node `leaky1`"
+    )]
+    fn partitioned_submodule_body_is_checked() {
+        let nodes = [hostile_abs("abs1")].into_iter().chain(abs_chain(250));
+        let mut graph = leaky_graph(nodes, 250);
+        assert!(
+            graph.compute_partition().is_some(),
+            "graph should partition"
+        );
+        graph.codegen();
+    }
+
+    /// A function-scope temporary in one submodule is not in scope in another,
+    /// so the hostile read is fine once a cut separates it from the leak.
+    #[test]
+    fn partitioned_submodules_have_separate_function_scopes() {
+        let nodes = abs_chain(250).chain([hostile_abs("abs_hostile")]);
+        let code = format_tokens(leaky_graph(nodes, 250).codegen());
+        assert!(code.contains("pub struct Submodule2"), "{code}");
+        assert!(
+            code.contains("let hostile_out = actual_idx.abs();"),
+            "{code}"
+        );
     }
 
     #[test]

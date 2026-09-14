@@ -41,11 +41,8 @@ impl NodeCodegen for onnx_ir::dropout::DropoutNode {
         let rank = input_arg.ty.rank();
         quote! {
             let #y = #input;
-            let #mask = {
-                let __dropout_ones: Tensor<#rank, burn::tensor::Int> =
-                    Tensor::ones(#y.shape(), &self.device);
-                __dropout_ones.not_equal_elem(0i64)
-            };
+            let #mask = Tensor::<#rank, burn::tensor::Int>::ones(#y.shape(), &self.device)
+                .not_equal_elem(0i64);
         }
     }
 }
@@ -94,13 +91,8 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2, Bool>) {
             let output = input;
-            let mask = {
-                let __dropout_ones: Tensor<2usize, burn::tensor::Int> = Tensor::ones(
-                    output.shape(),
-                    &self.device,
-                );
-                __dropout_ones.not_equal_elem(0i64)
-            };
+            let mask = Tensor::<2usize, burn::tensor::Int>::ones(output.shape(), &self.device)
+                .not_equal_elem(0i64);
             (output, mask)
         }
         ");

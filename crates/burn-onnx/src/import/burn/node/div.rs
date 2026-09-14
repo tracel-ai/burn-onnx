@@ -46,23 +46,23 @@ impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
                 }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => quote! { #lhs / #rhs },
-            (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
-                {
-                    let mut result = #lhs;
-                    for (result_item, rhs_item) in result.iter_mut().zip(#rhs.iter()) {
-                        *result_item = if *rhs_item != 0 { *result_item / *rhs_item } else { *result_item };
-                    }
-                    result
-                }
-            },
+            (ArgType::Shape(lhs_len), ArgType::Shape(rhs_len)) => {
+                broadcast_helpers::shape_binary_elementwise(
+                    quote! { #lhs },
+                    *lhs_len,
+                    quote! { #rhs },
+                    *rhs_len,
+                    |a, b| quote! { if #b != 0 { #a / #b } else { #a } },
+                )
+            }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_scalar() => {
                 let scalar_expr = scalar_as_i64(rhs_arg, rhs.clone());
                 quote! {
                     {
                         let mut result = #lhs;
-                        let __scalar = #scalar_expr;
+                        let scalar = #scalar_expr;
                         for result_item in result.iter_mut() {
-                            *result_item = if __scalar != 0 { *result_item / __scalar } else { *result_item };
+                            *result_item = if scalar != 0 { *result_item / scalar } else { *result_item };
                         }
                         result
                     }
@@ -73,9 +73,9 @@ impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
                 quote! {
                     {
                         let mut result = #rhs;
-                        let __scalar = #scalar_expr;
+                        let scalar = #scalar_expr;
                         for result_item in result.iter_mut() {
-                            *result_item = if *result_item != 0 { __scalar / *result_item } else { __scalar };
+                            *result_item = if *result_item != 0 { scalar / *result_item } else { scalar };
                         }
                         result
                     }
@@ -286,15 +286,59 @@ mod tests {
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
             let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item = if *rhs_item != 0 {
-                        *result_item / *rhs_item
-                    } else {
-                        *result_item
-                    };
-                }
-                result
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __rhs[__i] != 0 { __lhs[__i] / __rhs[__i] } else { __lhs[__i] })
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_lhs() {
+        let node = DivNodeBuilder::new("div1")
+            .input_shape("lhs", 1)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __rhs[__i] != 0 { __lhs[0] / __rhs[__i] } else { __lhs[0] })
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_rhs() {
+        let node = DivNodeBuilder::new("div1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 1)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 1]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __rhs[0] != 0 { __lhs[__i] / __rhs[0] } else { __lhs[__i] })
             };
             output
         }
@@ -314,10 +358,10 @@ mod tests {
         pub fn forward(&self, lhs: [i64; 4], rhs: i64) -> [i64; 4] {
             let output = {
                 let mut result = lhs;
-                let __scalar = rhs as i64;
+                let scalar = rhs as i64;
                 for result_item in result.iter_mut() {
-                    *result_item = if __scalar != 0 {
-                        *result_item / __scalar
+                    *result_item = if scalar != 0 {
+                        *result_item / scalar
                     } else {
                         *result_item
                     };
@@ -340,10 +384,10 @@ mod tests {
         pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<1, Int>) -> [i64; 4] {
             let output = {
                 let mut result = lhs;
-                let __scalar = (rhs).into_scalar::<i64>() as i64;
+                let scalar = (rhs).into_scalar::<i64>() as i64;
                 for result_item in result.iter_mut() {
-                    *result_item = if __scalar != 0 {
-                        *result_item / __scalar
+                    *result_item = if scalar != 0 {
+                        *result_item / scalar
                     } else {
                         *result_item
                     };
@@ -366,12 +410,12 @@ mod tests {
         pub fn forward(&self, lhs: i64, rhs: [i64; 4]) -> [i64; 4] {
             let output = {
                 let mut result = rhs;
-                let __scalar = lhs as i64;
+                let scalar = lhs as i64;
                 for result_item in result.iter_mut() {
                     *result_item = if *result_item != 0 {
-                        __scalar / *result_item
+                        scalar / *result_item
                     } else {
-                        __scalar
+                        scalar
                     };
                 }
                 result
@@ -392,12 +436,12 @@ mod tests {
         pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 4]) -> [i64; 4] {
             let output = {
                 let mut result = rhs;
-                let __scalar = (lhs).into_scalar::<i64>() as i64;
+                let scalar = (lhs).into_scalar::<i64>() as i64;
                 for result_item in result.iter_mut() {
                     *result_item = if *result_item != 0 {
-                        __scalar / *result_item
+                        scalar / *result_item
                     } else {
-                        __scalar
+                        scalar
                     };
                 }
                 result

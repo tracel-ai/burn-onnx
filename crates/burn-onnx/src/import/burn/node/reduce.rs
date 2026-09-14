@@ -25,13 +25,13 @@ enum Axes {
     Noop,
     /// Known at build time. An empty list means every dimension.
     Static(Vec<usize>),
-    /// Read from a runtime input into the `__axes` local that `binding` declares.
+    /// Read from a runtime input into the `axes` local that `binding` declares.
     Runtime { binding: TokenStream },
 }
 
 /// Name of the generated local holding runtime axes.
 fn runtime_axes_ident() -> TokenStream {
-    quote! { __axes }
+    quote! { axes }
 }
 
 impl Axes {
@@ -653,9 +653,9 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3>, axes: Tensor<1, Int>) -> Tensor<3> {
             let output = {
-                let __axes: alloc::vec::Vec<i64> = axes.into_data().iter::<i64>().collect();
-                let __axes = if __axes.is_empty() { (0..3i64).collect() } else { __axes };
-                input.sum_dims(&__axes)
+                let axes: alloc::vec::Vec<i64> = axes.into_data().iter::<i64>().collect();
+                let axes = if axes.is_empty() { (0..3i64).collect() } else { axes };
+                input.sum_dims(&axes)
             };
             output
         }
@@ -675,9 +675,9 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3>, axes: Tensor<1, Int>) -> Tensor<2> {
             let output = {
-                let __axes: alloc::vec::Vec<i64> = axes.into_data().iter::<i64>().collect();
-                let __axes = if __axes.is_empty() { (0..3i64).collect() } else { __axes };
-                input.mean_dims(&__axes).squeeze_dims::<2usize>(&__axes)
+                let axes: alloc::vec::Vec<i64> = axes.into_data().iter::<i64>().collect();
+                let axes = if axes.is_empty() { (0..3i64).collect() } else { axes };
+                input.mean_dims(&axes).squeeze_dims::<2usize>(&axes)
             };
             output
         }
@@ -774,9 +774,9 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3>, axes: Tensor<1, Int>) -> Tensor<3> {
             let output = {
-                let __axes: alloc::vec::Vec<i64> = axes.into_data().iter::<i64>().collect();
-                let __axes = if __axes.is_empty() { (0..3i64).collect() } else { __axes };
-                input.sum_dims(&__axes)
+                let axes: alloc::vec::Vec<i64> = axes.into_data().iter::<i64>().collect();
+                let axes = if axes.is_empty() { (0..3i64).collect() } else { axes };
+                input.sum_dims(&axes)
             };
             output
         }
@@ -797,12 +797,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3, Bool>, axes: Tensor<1, Int>) -> Tensor<2, Bool> {
             let output = {
-                let __axes: alloc::vec::Vec<i64> = axes.into_data().iter::<i64>().collect();
-                let __axes = if __axes.is_empty() { (0..3i64).collect() } else { __axes };
-                __axes
-                    .iter()
+                let axes: alloc::vec::Vec<i64> = axes.into_data().iter::<i64>().collect();
+                let axes = if axes.is_empty() { (0..3i64).collect() } else { axes };
+                axes.iter()
                     .fold(input, |tensor, axis| { tensor.any_dim(*axis) })
-                    .squeeze_dims::<2usize>(&__axes)
+                    .squeeze_dims::<2usize>(&axes)
             };
             output
         }
@@ -823,9 +822,9 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3>, axes: [i64; 2]) -> Tensor<3> {
             let output = {
-                let __axes: alloc::vec::Vec<i64> = axes.to_vec();
-                let __axes = if __axes.is_empty() { (0..3i64).collect() } else { __axes };
-                input.sum_dims(&__axes)
+                let axes: alloc::vec::Vec<i64> = axes.to_vec();
+                let axes = if axes.is_empty() { (0..3i64).collect() } else { axes };
+                input.sum_dims(&axes)
             };
             output
         }

@@ -18,6 +18,13 @@ pub use crate::burn::node_traits::{Field, create_deferred_tensor};
 /// `ScalarTensor` inputs: it bypasses clone tracking, producing generated
 /// code that moves a tensor still needed elsewhere. Inputs go through
 /// [`CodegenContext::arg`] instead.
+///
+/// The ident carries an internal tag that codegen strips before writing the
+/// file. Splice it into your `quote!` output only; use `arg.name` when you
+/// need the name as a string or as the stem of another identifier. Binding an
+/// output under a plain `Ident` built from its name is reported as a
+/// shadowing error at codegen time, since the checker cannot tell it from a
+/// temporary.
 pub use crate::burn::node_traits::arg_to_ident;
 
 pub use onnx_ir::{
@@ -49,6 +56,10 @@ impl<'a, 'b> CodegenContext<'a, 'b> {
     /// Handles clone tracking for on-device values (`Tensor`, `ScalarTensor`)
     /// and bare identifiers for host values (`ScalarNative`, `Shape`), exactly
     /// like the built-in nodes' `scope.arg()`.
+    ///
+    /// The tokens carry an internal tag that codegen strips before writing the
+    /// file; splice them into your `quote!` output only, and use `arg.name`
+    /// when you need the name as a string.
     pub fn arg(&mut self, arg: &Argument) -> proc_macro2::TokenStream {
         self.inner.arg(arg)
     }
@@ -76,6 +87,7 @@ impl<'a> Imports<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::burn::shadow_check::strip;
     use crate::burn::{BurnImports, Scope};
     use onnx_ir::ir::TensorType;
 
@@ -98,15 +110,18 @@ mod tests {
         scope.tensor_register_future_use(&arg, 1);
         scope.tensor_register_future_use(&arg, 2);
 
-        // Two future uses remain after the first: expect a clone
+        // Two future uses remain after the first: expect a clone. The ident is
+        // tagged until codegen writes the file.
         let mut at_pos = scope.at_position(1);
         let mut ctx = CodegenContext { inner: &mut at_pos };
-        assert_eq!(ctx.arg(&arg).to_string(), "input1 . clone ()");
+        let tokens = ctx.arg(&arg);
+        assert_eq!(tokens.to_string(), "__arg_input1 . clone ()");
+        assert_eq!(strip(tokens).to_string(), "input1 . clone ()");
 
         // Last use: moved, no clone
         let mut at_pos = scope.at_position(2);
         let mut ctx = CodegenContext { inner: &mut at_pos };
-        assert_eq!(ctx.arg(&arg).to_string(), "input1");
+        assert_eq!(strip(ctx.arg(&arg)).to_string(), "input1");
     }
 
     #[test]
@@ -115,7 +130,7 @@ mod tests {
         let mut scope = Scope::default();
         let mut at_pos = scope.at_position(0);
         let mut ctx = CodegenContext { inner: &mut at_pos };
-        assert_eq!(ctx.arg(&arg).to_string(), "alpha");
+        assert_eq!(strip(ctx.arg(&arg)).to_string(), "alpha");
     }
 
     #[test]

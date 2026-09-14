@@ -891,84 +891,81 @@ mod tests {
                 let mut gru1 = burn::nn::gru::GruConfig::new(4, 8, true)
                     .with_reset_after(false)
                     .init(&self.device);
-                let __w = W;
-                let __r = R;
-                let __b = B;
                 {
-                    let __w_dir = __w.select_dim::<2>(0, 0);
-                    let __r_dir = __r.select_dim::<2>(0, 0);
-                    let __b_dir = __b.select_dim::<1>(0, 0);
+                    let w_dir = W.select_dim::<2>(0, 0);
+                    let r_dir = R.select_dim::<2>(0, 0);
+                    let b_dir = B.select_dim::<1>(0, 0);
                     gru1
                         .update_gate
                         .input_transform
                         .weight = burn::module::Param::from_tensor(
-                        __w_dir.clone().slice_dim(0, 0..8).transpose(),
+                        w_dir.clone().slice_dim(0, 0..8).transpose(),
                     );
                     gru1
                         .update_gate
                         .hidden_transform
                         .weight = burn::module::Param::from_tensor(
-                        __r_dir.clone().slice_dim(0, 0..8).transpose(),
+                        r_dir.clone().slice_dim(0, 0..8).transpose(),
                     );
                     gru1
                         .update_gate
                         .input_transform
                         .bias = Some(
-                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 0..8)),
+                        burn::module::Param::from_tensor(b_dir.clone().slice_dim(0, 0..8)),
                     );
                     gru1
                         .update_gate
                         .hidden_transform
                         .bias = Some(
-                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 24..32)),
+                        burn::module::Param::from_tensor(b_dir.clone().slice_dim(0, 24..32)),
                     );
                     gru1
                         .reset_gate
                         .input_transform
                         .weight = burn::module::Param::from_tensor(
-                        __w_dir.clone().slice_dim(0, 8..16).transpose(),
+                        w_dir.clone().slice_dim(0, 8..16).transpose(),
                     );
                     gru1
                         .reset_gate
                         .hidden_transform
                         .weight = burn::module::Param::from_tensor(
-                        __r_dir.clone().slice_dim(0, 8..16).transpose(),
+                        r_dir.clone().slice_dim(0, 8..16).transpose(),
                     );
                     gru1
                         .reset_gate
                         .input_transform
                         .bias = Some(
-                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 8..16)),
+                        burn::module::Param::from_tensor(b_dir.clone().slice_dim(0, 8..16)),
                     );
                     gru1
                         .reset_gate
                         .hidden_transform
                         .bias = Some(
-                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 32..40)),
+                        burn::module::Param::from_tensor(b_dir.clone().slice_dim(0, 32..40)),
                     );
                     gru1
                         .new_gate
                         .input_transform
                         .weight = burn::module::Param::from_tensor(
-                        __w_dir.clone().slice_dim(0, 16..24).transpose(),
+                        w_dir.clone().slice_dim(0, 16..24).transpose(),
                     );
                     gru1
                         .new_gate
                         .hidden_transform
                         .weight = burn::module::Param::from_tensor(
-                        __r_dir.clone().slice_dim(0, 16..24).transpose(),
+                        r_dir.clone().slice_dim(0, 16..24).transpose(),
                     );
                     gru1
                         .new_gate
                         .input_transform
                         .bias = Some(
-                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 16..24)),
+                        burn::module::Param::from_tensor(b_dir.clone().slice_dim(0, 16..24)),
                     );
                     gru1
                         .new_gate
                         .hidden_transform
                         .bias = Some(
-                        burn::module::Param::from_tensor(__b_dir.clone().slice_dim(0, 40..48)),
+                        burn::module::Param::from_tensor(b_dir.clone().slice_dim(0, 40..48)),
                     );
                 }
                 let gru_output = gru1.forward(input.swap_dims(0, 1), None);

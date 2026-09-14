@@ -1,6 +1,13 @@
 // Include the models for this node type
 use crate::include_models;
-include_models!(sub, sub_int, sub_shape, sub_broadcast, sub_shape_tensor);
+include_models!(
+    sub,
+    sub_broadcast,
+    sub_int,
+    sub_shape,
+    sub_shape_broadcast,
+    sub_shape_tensor
+);
 
 #[cfg(test)]
 mod tests {
@@ -132,5 +139,19 @@ mod tests {
 
         result1.to_data().assert_eq(&expected1, true);
         result2.to_data().assert_eq(&expected2, true);
+    }
+
+    #[test]
+    fn sub_shape_broadcast() {
+        let device = Default::default();
+        let model: sub_shape_broadcast::Model = sub_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([3], &device);
+        let input_4d = Tensor::<4>::zeros([2, 30, 4, 5], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [1i64, -27, -1, -2]);
+        assert_eq!(rhs_bc, [-1i64, 27, 1, 2]);
     }
 }

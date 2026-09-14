@@ -11,6 +11,7 @@ mod imports;
 mod argument_helpers;
 mod partition;
 mod scope;
+pub(crate) mod shadow_check;
 
 pub(crate) use argument_helpers::*;
 pub(crate) use codegen::ToTokens;

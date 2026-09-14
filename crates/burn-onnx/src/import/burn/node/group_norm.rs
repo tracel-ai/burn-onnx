@@ -90,56 +90,55 @@ impl NodeCodegen for GroupNormalizationNode {
         // Reshape to [N, num_groups, hidden] before reducing so a single
         // `sum_dim(2)` averages across the per-group spatial+channel slice
         // (mirrors Burn's internal `group_norm`). The channel dim for the
-        // affine reshape is read from `__dims` at runtime so we don't need
+        // affine reshape is read from `dims` at runtime so we don't need
         // scale's static shape to be known at codegen time.
         let scale = scope.arg(&self.inputs[1]);
         let bias = scope.arg(&self.inputs[2]);
         let rank = x_arg.ty.rank();
         let epsilon = self.config.epsilon;
         let num_groups = self.config.num_groups.to_tokens();
-        let affine_shape = channel_broadcast_shape(rank, quote! { __dims[1] });
+        let affine_shape = channel_broadcast_shape(rank, quote! { dims[1] });
 
-        // Body uses `__x`, `__scale`, `__bias` so the wrapper can decide whether
-        // to bind them directly or via an F32 cast for the full_precision case.
-        let body = quote! {
-            let __dims = __x.dims();
-            let __batch = __dims[0];
-            let __num_groups: usize = #num_groups;
-            let __spatial: usize = __dims[2..].iter().product();
-            let __hidden: usize = __dims[1] * __spatial / __num_groups;
-            let __hidden_f = __hidden as f64;
-            let __x3 = __x.reshape([__batch, __num_groups, __hidden]);
-            let __mean = __x3.clone().sum_dim(2).div_scalar(__hidden_f);
-            let __centered = __x3.sub(__mean);
-            let __var = __centered.clone().square().sum_dim(2).div_scalar(__hidden_f);
-            let __normalized = __centered.div(__var.add_scalar(#epsilon).sqrt());
-            __normalized
-                .reshape(__dims)
-                .mul(__scale.reshape(#affine_shape))
-                .add(__bias.reshape(#affine_shape))
+        // The full_precision wrapper casts the operands to F32 first, so the
+        // body takes them as expressions rather than naming the inputs directly.
+        let body = |x: TokenStream, scale: TokenStream, bias: TokenStream| {
+            quote! {
+                let dims = #x.dims();
+                let batch = dims[0];
+                let num_groups: usize = #num_groups;
+                let spatial: usize = dims[2..].iter().product();
+                let hidden: usize = dims[1] * spatial / num_groups;
+                let hidden_f = hidden as f64;
+                let x3 = #x.reshape([batch, num_groups, hidden]);
+                let mean = x3.clone().sum_dim(2).div_scalar(hidden_f);
+                let centered = x3.sub(mean);
+                let var = centered.clone().square().sum_dim(2).div_scalar(hidden_f);
+                let normalized = centered.div(var.add_scalar(#epsilon).sqrt());
+                normalized
+                    .reshape(dims)
+                    .mul(#scale.reshape(#affine_shape))
+                    .add(#bias.reshape(#affine_shape))
+            }
         };
 
         if self.config.full_precision {
             // Cast scale and bias to F32 alongside x so the affine multiply
             // doesn't dtype-mismatch when the runtime inputs are bf16/f16.
+            let body = body(quote! { x }, quote! { scale }, quote! { bias });
             quote! {
                 let #output = {
-                    let __orig_dtype = #input.dtype();
-                    let __x = #input.cast(burn::tensor::DType::F32);
-                    let __scale = #scale.cast(burn::tensor::DType::F32);
-                    let __bias = #bias.cast(burn::tensor::DType::F32);
-                    let __result = { #body };
-                    __result.cast(__orig_dtype)
+                    let dtype = #input.dtype();
+                    let x = #input.cast(burn::tensor::DType::F32);
+                    let scale = #scale.cast(burn::tensor::DType::F32);
+                    let bias = #bias.cast(burn::tensor::DType::F32);
+                    let result = { #body };
+                    result.cast(dtype)
                 };
             }
         } else {
+            let body = body(input, scale, bias);
             quote! {
-                let #output = {
-                    let __x = #input;
-                    let __scale = #scale;
-                    let __bias = #bias;
-                    #body
-                };
+                let #output = { #body };
             }
         }
     }
@@ -222,24 +221,21 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<4>, scale: Tensor<1>, bias: Tensor<1>) -> Tensor<4> {
             let output = {
-                let __x = input;
-                let __scale = scale;
-                let __bias = bias;
-                let __dims = __x.dims();
-                let __batch = __dims[0];
-                let __num_groups: usize = 2;
-                let __spatial: usize = __dims[2..].iter().product();
-                let __hidden: usize = __dims[1] * __spatial / __num_groups;
-                let __hidden_f = __hidden as f64;
-                let __x3 = __x.reshape([__batch, __num_groups, __hidden]);
-                let __mean = __x3.clone().sum_dim(2).div_scalar(__hidden_f);
-                let __centered = __x3.sub(__mean);
-                let __var = __centered.clone().square().sum_dim(2).div_scalar(__hidden_f);
-                let __normalized = __centered.div(__var.add_scalar(0.00001f64).sqrt());
-                __normalized
-                    .reshape(__dims)
-                    .mul(__scale.reshape([1usize, __dims[1], 1usize, 1usize]))
-                    .add(__bias.reshape([1usize, __dims[1], 1usize, 1usize]))
+                let dims = input.dims();
+                let batch = dims[0];
+                let num_groups: usize = 2;
+                let spatial: usize = dims[2..].iter().product();
+                let hidden: usize = dims[1] * spatial / num_groups;
+                let hidden_f = hidden as f64;
+                let x3 = input.reshape([batch, num_groups, hidden]);
+                let mean = x3.clone().sum_dim(2).div_scalar(hidden_f);
+                let centered = x3.sub(mean);
+                let var = centered.clone().square().sum_dim(2).div_scalar(hidden_f);
+                let normalized = centered.div(var.add_scalar(0.00001f64).sqrt());
+                normalized
+                    .reshape(dims)
+                    .mul(scale.reshape([1usize, dims[1], 1usize, 1usize]))
+                    .add(bias.reshape([1usize, dims[1], 1usize, 1usize]))
             };
             output
         }
@@ -253,28 +249,28 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<4>, scale: Tensor<1>, bias: Tensor<1>) -> Tensor<4> {
             let output = {
-                let __orig_dtype = input.dtype();
-                let __x = input.cast(burn::tensor::DType::F32);
-                let __scale = scale.cast(burn::tensor::DType::F32);
-                let __bias = bias.cast(burn::tensor::DType::F32);
-                let __result = {
-                    let __dims = __x.dims();
-                    let __batch = __dims[0];
-                    let __num_groups: usize = 2;
-                    let __spatial: usize = __dims[2..].iter().product();
-                    let __hidden: usize = __dims[1] * __spatial / __num_groups;
-                    let __hidden_f = __hidden as f64;
-                    let __x3 = __x.reshape([__batch, __num_groups, __hidden]);
-                    let __mean = __x3.clone().sum_dim(2).div_scalar(__hidden_f);
-                    let __centered = __x3.sub(__mean);
-                    let __var = __centered.clone().square().sum_dim(2).div_scalar(__hidden_f);
-                    let __normalized = __centered.div(__var.add_scalar(0.00001f64).sqrt());
-                    __normalized
-                        .reshape(__dims)
-                        .mul(__scale.reshape([1usize, __dims[1], 1usize, 1usize]))
-                        .add(__bias.reshape([1usize, __dims[1], 1usize, 1usize]))
+                let dtype = input.dtype();
+                let x = input.cast(burn::tensor::DType::F32);
+                let scale = scale.cast(burn::tensor::DType::F32);
+                let bias = bias.cast(burn::tensor::DType::F32);
+                let result = {
+                    let dims = x.dims();
+                    let batch = dims[0];
+                    let num_groups: usize = 2;
+                    let spatial: usize = dims[2..].iter().product();
+                    let hidden: usize = dims[1] * spatial / num_groups;
+                    let hidden_f = hidden as f64;
+                    let x3 = x.reshape([batch, num_groups, hidden]);
+                    let mean = x3.clone().sum_dim(2).div_scalar(hidden_f);
+                    let centered = x3.sub(mean);
+                    let var = centered.clone().square().sum_dim(2).div_scalar(hidden_f);
+                    let normalized = centered.div(var.add_scalar(0.00001f64).sqrt());
+                    normalized
+                        .reshape(dims)
+                        .mul(scale.reshape([1usize, dims[1], 1usize, 1usize]))
+                        .add(bias.reshape([1usize, dims[1], 1usize, 1usize]))
                 };
-                __result.cast(__orig_dtype)
+                result.cast(dtype)
             };
             output
         }

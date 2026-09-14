@@ -79,7 +79,18 @@ Key principles:
   `ScalarTensor`) and bare idents for host values (`ScalarNative`, `Shape`)
 - Use `arg_to_ident()` only for outputs and host-side values. Never use it for `ScalarTensor`
   inputs (it skips clone tracking)
-- Scope temporary variables in block expressions to avoid name collisions
+- Scope temporary variables in block expressions to avoid name collisions. Use plain names inside
+  the block (`let axis_size = ...`), never `__`-prefixed ones (`__lhs`, `__gather_input`)
+- Graph values keep their ONNX names, so a temporary can shadow one that the same scope reads
+  later (`let k = ...; #input.topk(k)` with a data input named `k`). `shadow_check` fails codegen
+  for that. It tells the two apart by a tag on every ident from `scope.arg()` / `arg_to_ident()`:
+  splice those into `quote!` only, never `.to_string()` them or derive other names from them (use
+  `arg.name`). An `Ident::new(&arg.name)` or `format_ident!("{}", arg.name)` is untagged: as a
+  binding it counts as a temporary, as a read it is reported when the name is a graph value
+- Do not rebind an interpolated input just to give it a local name (`let __lhs = #lhs;`). Use
+  `#lhs` directly. A binding is only warranted when the value is consumed by value more than once,
+  needs `mut`, or changes type (e.g. a `.into_scalar()` readback or a cast), and it takes a plain
+  name too
 - `insta` snapshot tests for ALL codegen branches (inline snapshots only:
   `assert_snapshot!(code, @r"...")`)
 - **Always specify explicit dtypes in generated code.** Never rely on the device's default

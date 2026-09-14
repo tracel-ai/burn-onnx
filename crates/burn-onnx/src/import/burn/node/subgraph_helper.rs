@@ -67,7 +67,7 @@ pub(super) fn generate_outer_scope_bindings(
         }
 
         if let Some(outer_input) = outer_scope_inputs.get(idx) {
-            let var_name = quote::format_ident!("{}", scope_ref_name);
+            let var_name = crate::burn::shadow_check::value_ident(scope_ref_name);
             let outer_var = scope.at_position(node_position).arg(outer_input);
 
             match &outer_input.ty {

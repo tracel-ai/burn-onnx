@@ -23,10 +23,19 @@ pub struct Field {
 impl Field {
     /// Create a field from a name, type tokens, and initialization tokens.
     ///
-    /// Panics if `name` is empty.
+    /// Panics if `name` is empty, or if it was built by stringifying an
+    /// `arg_to_ident()` result: the struct field would be renamed when the
+    /// file is written while the burnpack weight path kept the tag.
     pub fn new<S: AsRef<str>>(name: S, ty: TokenStream, init: TokenStream) -> Self {
         if name.as_ref().is_empty() {
             panic!("Field with type {ty:?} was passed with empty name");
+        }
+        if super::shadow_check::is_tagged_name(name.as_ref()) {
+            panic!(
+                "Field name {:?} was built from a graph value ident; use the argument's name, \
+                 not arg_to_ident()",
+                name.as_ref()
+            );
         }
         Self {
             name: Ident::new(name.as_ref(), Span::call_site()),
@@ -162,8 +171,12 @@ pub fn extract_node_data(
 
 /// Helper function to convert an Argument's name to a proc_macro2::Ident.
 ///
-/// This is commonly used in the forward() method to generate variable names
-/// for inputs and outputs.
+/// Use it for output bindings and host-side values in `forward()`.
+///
+/// The returned ident is tagged for `shadow_check` (`__arg_<name>`) and the
+/// tag is stripped when the model file is written. Only splice it into
+/// generated tokens: stringifying it or deriving another identifier from it
+/// (`format_ident!("{}_len", ident)`) leaks the tag. Use `arg.name` for that.
 ///
 /// # Arguments
 ///
@@ -171,9 +184,9 @@ pub fn extract_node_data(
 ///
 /// # Returns
 ///
-/// A proc_macro2::Ident with the argument's name
+/// The tagged ident for the argument
 pub fn arg_to_ident(arg: &Argument) -> proc_macro2::Ident {
-    proc_macro2::Ident::new(&arg.name, proc_macro2::Span::call_site())
+    super::shadow_check::value_ident(&arg.name)
 }
 
 // ============================================================================
