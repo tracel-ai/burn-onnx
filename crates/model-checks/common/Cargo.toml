@@ -5,4 +5,4 @@ edition = "2024"
 publish = false
 
 [dependencies]
-dirs = "6"
+dirs = "7"

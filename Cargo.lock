@@ -724,7 +724,7 @@ dependencies = [
  "burn-std",
  "csv",
  "derive-new",
- "dirs",
+ "dirs 6.0.0",
  "flate2",
  "globwalk",
  "image",
@@ -1571,7 +1571,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -2787,6 +2787,15 @@ name = "dirs"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
+name = "dirs"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d57d423b3c82e89b9a24ca3091fee61f456a26edbd28d26c65906f4bc1dcd8f"
 dependencies = [
  "dirs-sys",
 ]
@@ -4952,7 +4961,7 @@ checksum = "4a0b3262dc837d2513fe2ef31ff8461352ef932dcca31ba0c0abe33547cf6b9b"
 name = "model-checks-common"
 version = "0.1.0"
 dependencies = [
- "dirs",
+ "dirs 7.0.0",
 ]
 
 [[package]]
@@ -7684,7 +7693,7 @@ dependencies = [
  "bytes",
  "cc",
  "constcat",
- "dirs",
+ "dirs 6.0.0",
  "liblzma",
  "serde",
  "serde_json",
