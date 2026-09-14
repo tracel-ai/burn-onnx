@@ -23,7 +23,9 @@ include_simplified_models!(
     simplify_permute_via_shape_gather,
     simplify_sdpa_coalesce,
     simplify_sdpa_prescale_alias,
-    simplify_constant_fold
+    simplify_constant_fold,
+    simplify_reshape_concat_shape,
+    simplify_resize_sizes_from_shape
 );
 
 /// Extract the `forward` method body from generated source code.
@@ -502,6 +504,93 @@ mod tests {
         pub fn forward(&self, x: Tensor<3>) -> i64 {
                 let mul1_out1 = 12i64;
                 mul1_out1
+            }
+        }
+        ");
+    }
+
+    #[test]
+    fn reshape_concat_shape() {
+        let device = Default::default();
+        // `Model::default()` loads constants from the bpk; `new` would zero them.
+        let s = simplified::simplify_reshape_concat_shape::Model::default();
+        let u = unsimplified::simplify_reshape_concat_shape::Model::default();
+        let input = Tensor::<3>::from_floats(
+            [
+                [[0., 1., 2., 3.], [4., 5., 6., 7.], [8., 9., 10., 11.]],
+                [
+                    [12., 13., 14., 15.],
+                    [16., 17., 18., 19.],
+                    [20., 21., 22., 23.],
+                ],
+            ],
+            &device,
+        );
+        let out = s.forward(input.clone());
+        assert_eq!(out.dims(), [2, 12]);
+        assert_eq!(out.to_data(), u.forward(input).to_data());
+    }
+
+    #[test]
+    fn codegen_reshape_concat_shape() {
+        let s = simplified_source::simplify_reshape_concat_shape();
+        let u = unsimplified_source::simplify_reshape_concat_shape();
+        assert_codegen_differs(s, u, "reshape_concat_shape");
+        // The Concat folds to a constant only during simplification; the Reshape
+        // must still lift it so no unused `concat1_out1` binding is emitted.
+        insta::assert_snapshot!(extract_forward(s), @r"
+        pub fn forward(&self, x: Tensor<3>) -> Tensor<2> {
+                let reshape1_out1 = x.reshape([2, -1]);
+                reshape1_out1
+            }
+        }
+        ");
+    }
+
+    #[test]
+    fn resize_sizes_from_shape() {
+        let device = Default::default();
+        let s = simplified::simplify_resize_sizes_from_shape::Model::default();
+        let u = unsimplified::simplify_resize_sizes_from_shape::Model::default();
+        let input = Tensor::<4>::from_floats(
+            [[
+                [
+                    [0., 1., 2., 3.],
+                    [4., 5., 6., 7.],
+                    [8., 9., 10., 11.],
+                    [12., 13., 14., 15.],
+                ],
+                [
+                    [16., 17., 18., 19.],
+                    [20., 21., 22., 23.],
+                    [24., 25., 26., 27.],
+                    [28., 29., 30., 31.],
+                ],
+                [
+                    [32., 33., 34., 35.],
+                    [36., 37., 38., 39.],
+                    [40., 41., 42., 43.],
+                    [44., 45., 46., 47.],
+                ],
+            ]],
+            &device,
+        );
+        let out = s.forward(input.clone());
+        assert_eq!(out.dims(), [1, 3, 8, 8]);
+        assert_eq!(out.to_data(), u.forward(input).to_data());
+    }
+
+    #[test]
+    fn codegen_resize_sizes_from_shape() {
+        let s = simplified_source::simplify_resize_sizes_from_shape();
+        let u = unsimplified_source::simplify_resize_sizes_from_shape();
+        assert_codegen_differs(s, u, "resize_sizes_from_shape");
+        // The folded sizes are Shape-typed; Resize must read their value into a
+        // static config instead of referencing the lifted (nameless) input.
+        insta::assert_snapshot!(extract_forward(s), @r"
+        pub fn forward(&self, x: Tensor<4>) -> Tensor<4> {
+                let resize1_out1 = self.resize1.forward(x);
+                resize1_out1
             }
         }
         ");

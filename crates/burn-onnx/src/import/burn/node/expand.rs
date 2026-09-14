@@ -44,6 +44,7 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
         // For Shape inputs, convert [i64; N] array to a 1D Int tensor and expand.
         if let ArgType::Shape(shape_rank) = &input_arg.ty {
             let shape_rank = shape_rank.to_tokens();
+            let shape_dim_offset = dim_offset(output_rank, 1);
             return quote! {
                 let #output = {
                     let onnx_shape: [i64; #output_rank] = #shape;
@@ -55,7 +56,7 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
                     let mut shape = onnx_shape;
                     #[allow(clippy::needless_range_loop)]
                     for i in 0..1usize {
-                        let dim_offset = #output_rank - 1usize + i;
+                        let dim_offset = #shape_dim_offset;
                         if shape[dim_offset] == 1 && input_dims[i] > 1 {
                             shape[dim_offset] = input_dims[i] as i64;
                         }
@@ -108,6 +109,7 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
 
         // ONNX Expand uses max-semantics: output_dim = max(input_dim, shape_dim)
         let input_rank = input_arg.ty.rank();
+        let dim_offset = dim_offset(output_rank, input_rank);
         quote! {
             let #output = {
                 let onnx_shape: [i64; #output_rank] = #shape;
@@ -115,7 +117,7 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
                 let mut shape = onnx_shape;
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..#input_rank {
-                    let dim_offset = #output_rank - #input_rank + i;
+                    let dim_offset = #dim_offset;
                     if shape[dim_offset] == 1 && input_dims[i] > 1 {
                         shape[dim_offset] = input_dims[i] as i64;
                     }
@@ -123,6 +125,18 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
                 #input.expand(shape)
             };
         }
+    }
+}
+
+/// Index expression `output_rank - input_rank + i` for the right-aligned broadcast loop,
+/// with the rank difference folded at codegen time.
+///
+/// Emitting the subtraction verbatim produces `3usize - 3usize + i` when the ranks match,
+/// which trips clippy's deny-by-default `eq_op` lint in the generated code.
+fn dim_offset(output_rank: usize, input_rank: usize) -> TokenStream {
+    match output_rank.saturating_sub(input_rank) {
+        0 => quote! { i },
+        offset => quote! { #offset + i },
     }
 }
 
@@ -156,7 +170,7 @@ mod tests {
                 let mut shape = onnx_shape;
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..2usize {
-                    let dim_offset = 3usize - 2usize + i;
+                    let dim_offset = 1usize + i;
                     if shape[dim_offset] == 1 && input_dims[i] > 1 {
                         shape[dim_offset] = input_dims[i] as i64;
                     }
@@ -180,7 +194,33 @@ mod tests {
                 let mut shape = onnx_shape;
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..2usize {
-                    let dim_offset = 3usize - 2usize + i;
+                    let dim_offset = 1usize + i;
+                    if shape[dim_offset] == 1 && input_dims[i] > 1 {
+                        shape[dim_offset] = input_dims[i] as i64;
+                    }
+                }
+                input.expand(shape)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_expand_same_rank() {
+        // Equal ranks fold the offset away instead of emitting `3usize - 3usize + i`,
+        // which clippy's deny-by-default `eq_op` rejects.
+        let node = create_expand_node_static("expand1", 3, vec![2, 3, 4]);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
+            let output = {
+                let onnx_shape: [i64; 3usize] = [2, 3, 4];
+                let input_dims = input.dims();
+                let mut shape = onnx_shape;
+                #[allow(clippy::needless_range_loop)]
+                for i in 0..3usize {
+                    let dim_offset = i;
                     if shape[dim_offset] == 1 && input_dims[i] > 1 {
                         shape[dim_offset] = input_dims[i] as i64;
                     }
@@ -316,7 +356,45 @@ mod tests {
                 let mut shape = onnx_shape;
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..1usize {
-                    let dim_offset = 2usize - 1usize + i;
+                    let dim_offset = 1usize + i;
+                    if shape[dim_offset] == 1 && input_dims[i] > 1 {
+                        shape[dim_offset] = input_dims[i] as i64;
+                    }
+                }
+                input_tensor.expand(shape)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_expand_shape_as_data_rank1_output() {
+        // Rank-1 output from a Shape input: the offset folds to `i` rather than
+        // `1usize - 1usize + i`.
+        let config = ExpandConfig::Static(vec![3]);
+        let node = ExpandNodeBuilder::new("expand1")
+            .input_shape("shape_out", 3)
+            .output_tensor("output", 1, DType::I64)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, shape_out: [i64; 3]) -> Tensor<1, Int> {
+            let output = {
+                let onnx_shape: [i64; 1usize] = [3];
+                let input_tensor = Tensor::<
+                    1,
+                    Int,
+                >::from_data(
+                    burn::tensor::TensorData::from(shape_out.as_slice()),
+                    (&self.device, burn::tensor::DType::I64),
+                );
+                let input_dims = [3];
+                let mut shape = onnx_shape;
+                #[allow(clippy::needless_range_loop)]
+                for i in 0..1usize {
+                    let dim_offset = i;
                     if shape[dim_offset] == 1 && input_dims[i] > 1 {
                         shape[dim_offset] = input_dims[i] as i64;
                     }
