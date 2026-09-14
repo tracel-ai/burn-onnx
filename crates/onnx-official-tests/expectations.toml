@@ -5201,9 +5201,7 @@ status = "pass"
 status = "pass"
 
 [test_squeeze_negative_axes]
-status = "fail-compare"
-reason = "runtime squeeze axes: negative indices are normalized but burn squeeze_dims still rejects multi-axis squeeze; needs ordering fix"
-tracking = "#314"
+status = "pass"
 
 [test_stft]
 status = "skip-codegen"

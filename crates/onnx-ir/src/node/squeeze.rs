@@ -97,6 +97,20 @@ impl NodeProcessor for SqueezeProcessor {
             None => None,
         };
 
+        // Runtime axes still fix the output rank when their count is known
+        let runtime_axes_count = match &axes {
+            Some(SqueezeInput::Runtime(axes_ref)) => match &node.inputs[axes_ref.input_index].ty {
+                ArgType::Tensor(t) if t.rank == 1 => t
+                    .static_shape
+                    .as_ref()
+                    .and_then(|shape| shape.first().copied().flatten()),
+                ArgType::Shape(count) => Some(*count),
+                ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => Some(1),
+                _ => None,
+            },
+            _ => None,
+        };
+
         // TODO: Missing validation that axes values are in valid range [-rank, rank-1].
         // Out-of-bounds axes should be rejected but aren't validated here.
 
@@ -105,8 +119,17 @@ impl NodeProcessor for SqueezeProcessor {
 
         match &node.inputs[0].ty {
             ArgType::Tensor(tensor) => {
-                let output_rank = match axes_vec {
-                    None => {
+                let output_rank = match (&axes_vec, runtime_axes_count) {
+                    (None, Some(count)) => {
+                        if count > tensor.rank {
+                            return Err(ProcessError::Custom(format!(
+                                "Squeeze: Cannot squeeze {} axes from a rank {} tensor",
+                                count, tensor.rank
+                            )));
+                        }
+                        tensor.rank - count
+                    }
+                    (None, None) => {
                         // When axes is None, ONNX spec squeezes all dimensions of size 1
                         if let Some(ref static_shape) = tensor.static_shape {
                             static_shape.iter().filter(|dim| **dim != Some(1)).count()
@@ -116,7 +139,7 @@ impl NodeProcessor for SqueezeProcessor {
                             ));
                         }
                     }
-                    Some(ref axes_vec) => {
+                    (Some(axes_vec), _) => {
                         // Validate that we're not trying to squeeze more axes than the tensor has
                         if axes_vec.len() > tensor.rank {
                             return Err(ProcessError::Custom(format!(
@@ -141,8 +164,10 @@ impl NodeProcessor for SqueezeProcessor {
                         .static_shape
                         .clone()
                         .unwrap_or_else(|| vec![None; tensor.rank]);
-                    match axes_vec {
-                        None => {
+                    match (&axes_vec, runtime_axes_count) {
+                        // Which dims the runtime axes remove is unknown here
+                        (None, Some(_)) => None,
+                        (None, None) => {
                             // Squeeze all dims of size 1
                             Some(
                                 input_shape
@@ -152,7 +177,7 @@ impl NodeProcessor for SqueezeProcessor {
                                     .collect(),
                             )
                         }
-                        Some(ref axes_vec) => {
+                        (Some(axes_vec), _) => {
                             // Normalize axes and remove those positions
                             let rank = tensor.rank as i64;
                             let remove: Vec<usize> = axes_vec
@@ -344,6 +369,26 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
         assert!(matches!(config.axes, Some(SqueezeInput::Runtime(ref arg)) if arg.name == "axes"));
+    }
+
+    #[test]
+    fn test_squeeze_runtime_axes_known_count() {
+        // One runtime axis out of two size-1 dims: only one dim is removed
+        let mut node = TestNodeBuilder::new(NodeType::Squeeze, "test_runtime_squeeze")
+            .input_tensor_f32("data", 4, Some(vec![1, 3, 1, 5]))
+            .input_tensor_i64("axes", 1, Some(vec![1]))
+            .output_tensor_f32("squeezed", 4, None)
+            .build();
+        let processor = SqueezeProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        match &node.outputs[0].ty {
+            ArgType::Tensor(tensor) => {
+                assert_eq!(tensor.rank, 3);
+                assert_eq!(tensor.static_shape, None);
+            }
+            _ => panic!("Expected tensor output"),
+        }
     }
 
     // TODO: Missing test for squeezing dimension that is not size 1 - should fail.
