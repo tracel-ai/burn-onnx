@@ -333,15 +333,11 @@ fn forward_tensor_gather(
                     // unchecked, like ScatterElements.
                     quote! {
                         let #output = {
-                            let __gather_input = #input;
-                            let __gather_axis_size = __gather_input.dims()[#dim] as i64;
-                            let __gather_indices = #index;
-                            let __gather_negative = __gather_indices.clone().lower_elem(0i64);
-                            let __gather_corrected = __gather_indices.clone() + __gather_axis_size;
-                            let __gather_indices =
-                                __gather_indices.mask_where(__gather_negative, __gather_corrected);
-                            __gather_input
-                                .take::<#index_rank_lit, #final_rank_lit>(#dim, __gather_indices)
+                            let axis_size = #input.dims()[#dim] as i64;
+                            let negative = #index.clone().lower_elem(0i64);
+                            let corrected = #index.clone() + axis_size;
+                            let indices = #index.mask_where(negative, corrected);
+                            #input.take::<#index_rank_lit, #final_rank_lit>(#dim, indices)
                         };
                     }
                 }
@@ -834,14 +830,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, embedding: Tensor<2>, row_indices: Tensor<1, Int>) -> Tensor<2> {
             let gathered = {
-                let __gather_input = embedding;
-                let __gather_axis_size = __gather_input.dims()[0] as i64;
-                let __gather_indices = row_indices;
-                let __gather_negative = __gather_indices.clone().lower_elem(0i64);
-                let __gather_corrected = __gather_indices.clone() + __gather_axis_size;
-                let __gather_indices = __gather_indices
-                    .mask_where(__gather_negative, __gather_corrected);
-                __gather_input.take::<1, 2>(0, __gather_indices)
+                let axis_size = embedding.dims()[0] as i64;
+                let negative = row_indices.clone().lower_elem(0i64);
+                let corrected = row_indices.clone() + axis_size;
+                let indices = row_indices.mask_where(negative, corrected);
+                embedding.take::<1, 2>(0, indices)
             };
             gathered
         }
@@ -861,14 +854,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, feature_map: Tensor<3>, feature_ids: Tensor<1, Int>) -> Tensor<3> {
             let selected_features = {
-                let __gather_input = feature_map;
-                let __gather_axis_size = __gather_input.dims()[1] as i64;
-                let __gather_indices = feature_ids;
-                let __gather_negative = __gather_indices.clone().lower_elem(0i64);
-                let __gather_corrected = __gather_indices.clone() + __gather_axis_size;
-                let __gather_indices = __gather_indices
-                    .mask_where(__gather_negative, __gather_corrected);
-                __gather_input.take::<1, 3>(1, __gather_indices)
+                let axis_size = feature_map.dims()[1] as i64;
+                let negative = feature_ids.clone().lower_elem(0i64);
+                let corrected = feature_ids.clone() + axis_size;
+                let indices = feature_ids.mask_where(negative, corrected);
+                feature_map.take::<1, 3>(1, indices)
             };
             selected_features
         }
@@ -888,14 +878,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, source: Tensor<3>, indices_2d: Tensor<2, Int>) -> Tensor<4> {
             let result = {
-                let __gather_input = source;
-                let __gather_axis_size = __gather_input.dims()[0] as i64;
-                let __gather_indices = indices_2d;
-                let __gather_negative = __gather_indices.clone().lower_elem(0i64);
-                let __gather_corrected = __gather_indices.clone() + __gather_axis_size;
-                let __gather_indices = __gather_indices
-                    .mask_where(__gather_negative, __gather_corrected);
-                __gather_input.take::<2, 4>(0, __gather_indices)
+                let axis_size = source.dims()[0] as i64;
+                let negative = indices_2d.clone().lower_elem(0i64);
+                let corrected = indices_2d.clone() + axis_size;
+                let indices = indices_2d.mask_where(negative, corrected);
+                source.take::<2, 4>(0, indices)
             };
             result
         }
@@ -915,14 +902,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input_data: Tensor<4>, index_tensor: Tensor<3, Int>) -> Tensor<6> {
             let output_data = {
-                let __gather_input = input_data;
-                let __gather_axis_size = __gather_input.dims()[1] as i64;
-                let __gather_indices = index_tensor;
-                let __gather_negative = __gather_indices.clone().lower_elem(0i64);
-                let __gather_corrected = __gather_indices.clone() + __gather_axis_size;
-                let __gather_indices = __gather_indices
-                    .mask_where(__gather_negative, __gather_corrected);
-                __gather_input.take::<3, 6>(1, __gather_indices)
+                let axis_size = input_data.dims()[1] as i64;
+                let negative = index_tensor.clone().lower_elem(0i64);
+                let corrected = index_tensor.clone() + axis_size;
+                let indices = index_tensor.mask_where(negative, corrected);
+                input_data.take::<3, 6>(1, indices)
             };
             output_data
         }

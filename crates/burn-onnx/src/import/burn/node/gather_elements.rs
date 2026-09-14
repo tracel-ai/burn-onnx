@@ -21,13 +21,11 @@ impl NodeCodegen for onnx_ir::gather_elements::GatherElementsNode {
         // like ScatterElements.
         quote! {
             let #output = {
-                let __ge_input = #input;
-                let __ge_axis_size = __ge_input.dims()[#dim] as i64;
-                let __ge_indices = #index;
-                let __ge_negative = __ge_indices.clone().lower_elem(0i64);
-                let __ge_corrected = __ge_indices.clone() + __ge_axis_size;
-                let __ge_indices = __ge_indices.mask_where(__ge_negative, __ge_corrected);
-                __ge_input.gather(#dim, __ge_indices)
+                let axis_size = #input.dims()[#dim] as i64;
+                let negative = #index.clone().lower_elem(0i64);
+                let corrected = #index.clone() + axis_size;
+                let indices = #index.mask_where(negative, corrected);
+                #input.gather(#dim, indices)
             };
         }
     }
@@ -58,13 +56,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>, indices: Tensor<2, Int>) -> Tensor<2> {
             let output = {
-                let __ge_input = input;
-                let __ge_axis_size = __ge_input.dims()[1] as i64;
-                let __ge_indices = indices;
-                let __ge_negative = __ge_indices.clone().lower_elem(0i64);
-                let __ge_corrected = __ge_indices.clone() + __ge_axis_size;
-                let __ge_indices = __ge_indices.mask_where(__ge_negative, __ge_corrected);
-                __ge_input.gather(1, __ge_indices)
+                let axis_size = input.dims()[1] as i64;
+                let negative = indices.clone().lower_elem(0i64);
+                let corrected = indices.clone() + axis_size;
+                let indices = indices.mask_where(negative, corrected);
+                input.gather(1, indices)
             };
             output
         }
