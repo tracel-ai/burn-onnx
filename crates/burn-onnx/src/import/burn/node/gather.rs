@@ -327,8 +327,22 @@ fn forward_tensor_gather(
                     let index_rank_lit = proc_macro2::Literal::usize_unsuffixed(index_rank);
                     let final_rank_lit = proc_macro2::Literal::usize_unsuffixed(final_rank);
 
+                    // ONNX allows indices down to `-dim_size` along the gather axis, which
+                    // `take` does not accept, so fold negatives first. Indices outside
+                    // `[-dim_size, dim_size - 1]` are an error per the ONNX spec and stay
+                    // unchecked, like ScatterElements.
                     quote! {
-                        let #output = #input.take::<#index_rank_lit, #final_rank_lit>(#dim, #index);
+                        let #output = {
+                            let __gather_input = #input;
+                            let __gather_axis_size = __gather_input.dims()[#dim] as i64;
+                            let __gather_indices = #index;
+                            let __gather_negative = __gather_indices.clone().lower_elem(0i64);
+                            let __gather_corrected = __gather_indices.clone() + __gather_axis_size;
+                            let __gather_indices =
+                                __gather_indices.mask_where(__gather_negative, __gather_corrected);
+                            __gather_input
+                                .take::<#index_rank_lit, #final_rank_lit>(#dim, __gather_indices)
+                        };
                     }
                 }
                 ArgType::Shape(_) => {
@@ -819,7 +833,16 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, embedding: Tensor<2>, row_indices: Tensor<1, Int>) -> Tensor<2> {
-            let gathered = embedding.take::<1, 2>(0, row_indices);
+            let gathered = {
+                let __gather_input = embedding;
+                let __gather_axis_size = __gather_input.dims()[0] as i64;
+                let __gather_indices = row_indices;
+                let __gather_negative = __gather_indices.clone().lower_elem(0i64);
+                let __gather_corrected = __gather_indices.clone() + __gather_axis_size;
+                let __gather_indices = __gather_indices
+                    .mask_where(__gather_negative, __gather_corrected);
+                __gather_input.take::<1, 2>(0, __gather_indices)
+            };
             gathered
         }
         ");
@@ -837,7 +860,16 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, feature_map: Tensor<3>, feature_ids: Tensor<1, Int>) -> Tensor<3> {
-            let selected_features = feature_map.take::<1, 3>(1, feature_ids);
+            let selected_features = {
+                let __gather_input = feature_map;
+                let __gather_axis_size = __gather_input.dims()[1] as i64;
+                let __gather_indices = feature_ids;
+                let __gather_negative = __gather_indices.clone().lower_elem(0i64);
+                let __gather_corrected = __gather_indices.clone() + __gather_axis_size;
+                let __gather_indices = __gather_indices
+                    .mask_where(__gather_negative, __gather_corrected);
+                __gather_input.take::<1, 3>(1, __gather_indices)
+            };
             selected_features
         }
         ");
@@ -855,7 +887,16 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, source: Tensor<3>, indices_2d: Tensor<2, Int>) -> Tensor<4> {
-            let result = source.take::<2, 4>(0, indices_2d);
+            let result = {
+                let __gather_input = source;
+                let __gather_axis_size = __gather_input.dims()[0] as i64;
+                let __gather_indices = indices_2d;
+                let __gather_negative = __gather_indices.clone().lower_elem(0i64);
+                let __gather_corrected = __gather_indices.clone() + __gather_axis_size;
+                let __gather_indices = __gather_indices
+                    .mask_where(__gather_negative, __gather_corrected);
+                __gather_input.take::<2, 4>(0, __gather_indices)
+            };
             result
         }
         ");
@@ -873,7 +914,16 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input_data: Tensor<4>, index_tensor: Tensor<3, Int>) -> Tensor<6> {
-            let output_data = input_data.take::<3, 6>(1, index_tensor);
+            let output_data = {
+                let __gather_input = input_data;
+                let __gather_axis_size = __gather_input.dims()[1] as i64;
+                let __gather_indices = index_tensor;
+                let __gather_negative = __gather_indices.clone().lower_elem(0i64);
+                let __gather_corrected = __gather_indices.clone() + __gather_axis_size;
+                let __gather_indices = __gather_indices
+                    .mask_where(__gather_negative, __gather_corrected);
+                __gather_input.take::<3, 6>(1, __gather_indices)
+            };
             output_data
         }
         ");
