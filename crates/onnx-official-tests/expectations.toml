@@ -5464,35 +5464,25 @@ status = "pass"
 status = "pass"
 
 [test_tril_neg]
-status = "fail-compare"
-reason = "tril op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_tril_one_row_neg]
 status = "pass"
 
 [test_tril_out_neg]
-status = "fail-compare"
-reason = "tril op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_tril_out_pos]
-status = "fail-compare"
-reason = "tril op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_tril_pos]
-status = "fail-compare"
-reason = "tril op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_tril_square]
 status = "pass"
 
 [test_tril_square_neg]
-status = "fail-compare"
-reason = "tril op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_tril_zero]
 status = "pass"
@@ -5501,37 +5491,25 @@ status = "pass"
 status = "pass"
 
 [test_triu_neg]
-status = "fail-compare"
-reason = "triu op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_triu_one_row]
-status = "fail-compare"
-reason = "triu op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_triu_out_neg_out]
-status = "fail-compare"
-reason = "triu op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_triu_out_pos]
-status = "fail-compare"
-reason = "triu op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_triu_pos]
-status = "fail-compare"
-reason = "triu op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_triu_square]
 status = "pass"
 
 [test_triu_square_neg]
-status = "fail-compare"
-reason = "triu op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_triu_zero]
 status = "pass"

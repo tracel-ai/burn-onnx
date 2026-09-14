@@ -231,7 +231,9 @@ fn trilu(graph: &OnnxGraph) {
       Config:
         TriluConfig {
             upper: true,
-            diagonal: 0,
+            diagonal: Static(
+                0,
+            ),
         }
     "#);
 }

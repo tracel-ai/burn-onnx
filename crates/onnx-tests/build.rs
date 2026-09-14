@@ -582,6 +582,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/topk/topk_negative_axis.onnx")
         .input("tests/trilu/trilu_upper.onnx")
         .input("tests/trilu/trilu_lower.onnx")
+        .input("tests/trilu/trilu_runtime_k.onnx")
         .input("tests/transpose/transpose.onnx")
         .input("tests/unsqueeze/unsqueeze_runtime_axes.onnx")
         .input("tests/unsqueeze/unsqueeze_like.onnx")
