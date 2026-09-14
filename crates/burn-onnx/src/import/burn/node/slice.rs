@@ -18,7 +18,12 @@ impl NodeCodegen for onnx_ir::slice::SliceNode {
 
         match &input_arg.ty {
             ArgType::Tensor(tensor) => {
-                let steps_guard = runtime_steps_assertion(self, scope);
+                // The runtime-bounds path reads `steps` itself.
+                let steps_guard = if has_runtime_tensor_bounds(self) {
+                    quote! {}
+                } else {
+                    runtime_steps_assertion(self, scope)
+                };
                 let body = generate_tensor_slice(self, input_arg, tensor.rank, scope, &output);
                 quote! { #steps_guard #body }
             }
@@ -138,81 +143,9 @@ fn generate_tensor_slice(
                 (&start_arg.ty, &end_arg.ty),
                 (ArgType::Tensor(_), ArgType::Tensor(_))
             ) {
-                // Both 1D tensors: extract values from tensors at runtime
-                let start_name = arg_to_ident(start_arg);
-                let end_name = arg_to_ident(end_arg);
-
-                // Generate code to extract values from tensors
-                let start_data_var = quote! { start_data };
-                let start_vec_var = quote! { start_vec };
-                let end_data_var = quote! { end_data };
-                let end_vec_var = quote! { end_vec };
-
-                // ONNX default: axes = 0..len(starts). onnx-ir applies this
-                // at extract_config time whenever the starts length is known
-                // (static values, or a tensor with a known first-dim
-                // static_shape). If we still don't have static axes, fall
-                // back to the input rank AND emit a runtime length assertion
-                // so a len(starts) != rank mismatch (rare but not
-                // impossible) surfaces as a clear panic rather than a
-                // silent out-of-range index.
-                let (axes_vec, expected_len): (Vec<i64>, Option<usize>) = match &node.config.axes {
-                    Some(onnx_ir::slice::SliceInput::Static(axes)) => {
-                        (axes.clone(), Some(axes.len()))
-                    }
-                    _ => {
-                        let n_static = match &start_arg.ty {
-                            ArgType::Tensor(t) => t
-                                .static_shape
-                                .as_ref()
-                                .and_then(|s| s.first().copied().flatten()),
-                            _ => None,
-                        };
-                        let n = n_static.unwrap_or(rank);
-                        // Only enforce a runtime length check when the
-                        // fallback to `rank` was used — if the Static
-                        // length was known we already trust it.
-                        (
-                            (0..n as i64).collect(),
-                            if n_static.is_none() { Some(n) } else { None },
-                        )
-                    }
-                };
-                // Build ranges respecting the axes
-                let mut ranges = vec![quote! { .. }; rank];
-                for (idx, &axis) in axes_vec.iter().enumerate() {
-                    let axis_idx = axis as usize;
-                    if axis_idx < rank {
-                        let vec_idx = proc_macro2::Literal::usize_unsuffixed(idx);
-                        ranges[axis_idx] = quote! {
-                            #start_vec_var[#vec_idx] as usize..#end_vec_var[#vec_idx] as usize
-                        };
-                    }
-                }
-                let len_assertion = if let Some(n) = expected_len {
-                    let n_lit = proc_macro2::Literal::usize_unsuffixed(n);
-                    quote! {
-                        assert!(
-                            #start_vec_var.len() == #n_lit && #end_vec_var.len() == #n_lit,
-                            "Slice: runtime starts/ends length ({}, {}) does not match \
-                             the codegen-assumed default axes length ({}); the ONNX model \
-                             either needs an explicit axes input or the starts tensor needs \
-                             a static_shape so onnx-ir can derive axes at IR time",
-                            #start_vec_var.len(), #end_vec_var.len(), #n_lit
-                        );
-                    }
-                } else {
-                    quote! {}
-                };
-
-                return quote! {
-                    let #start_data_var = #start_name.to_data();
-                    let #start_vec_var: alloc::vec::Vec<i64> = #start_data_var.iter::<i64>().collect();
-                    let #end_data_var = #end_name.to_data();
-                    let #end_vec_var: alloc::vec::Vec<i64> = #end_data_var.iter::<i64>().collect();
-                    #len_assertion
-                    let #output = #input.slice(s![#(#ranges),*]);
-                };
+                return generate_runtime_bounds_slice(
+                    node, start_arg, end_arg, rank, scope, &input, output,
+                );
             } else if matches!(
                 (&start_arg.ty, &end_arg.ty),
                 (
@@ -554,7 +487,8 @@ fn axis_range(start: i64, end: i64, step: i64, dim: Option<usize>) -> Option<Tok
 /// slice on a dynamic axis into the runtime path for nothing.
 ///
 /// `generate_runtime_dim_slice` emits the reverse half of this arithmetic as a
-/// closure for axes sized only at runtime; keep the two in sync.
+/// closure for axes sized only at runtime, and `generate_runtime_bounds_slice`
+/// emits all of it for runtime bounds; keep the three in sync.
 fn slice_bounds(start: i64, end: i64, step: i64, dim: i64) -> (usize, usize) {
     if dim == 0 {
         return (0, 0);
@@ -610,10 +544,121 @@ fn generate_runtime_dim_slice(
     }
 }
 
+/// Whether `starts` and `ends` are both runtime 1-D tensors, the case
+/// `generate_runtime_bounds_slice` handles.
+fn has_runtime_tensor_bounds(node: &onnx_ir::slice::SliceNode) -> bool {
+    match (&node.config.starts, &node.config.ends) {
+        (
+            onnx_ir::slice::SliceInput::Runtime(start_ref),
+            onnx_ir::slice::SliceInput::Runtime(end_ref),
+        ) => matches!(
+            (
+                &node.inputs[start_ref.input_index].ty,
+                &node.inputs[end_ref.input_index].ty
+            ),
+            (ArgType::Tensor(_), ArgType::Tensor(_))
+        ),
+        _ => false,
+    }
+}
+
+/// Slice with `starts` and `ends` read from runtime tensors. `axes` and
+/// `steps` may be static, runtime or absent, so every bound is resolved
+/// against the input's dims at runtime, with the same clamping as
+/// `slice_bounds`.
+fn generate_runtime_bounds_slice(
+    node: &onnx_ir::slice::SliceNode,
+    start_arg: &Argument,
+    end_arg: &Argument,
+    rank: usize,
+    scope: &mut ScopeAtPosition<'_>,
+    input: &TokenStream,
+    output: &proc_macro2::Ident,
+) -> TokenStream {
+    let starts = arg_to_ident(start_arg);
+    let ends = arg_to_ident(end_arg);
+    let rank_lit = Literal::usize_unsuffixed(rank);
+    let rank_i64 = Literal::i64_suffixed(rank as i64);
+
+    // ONNX defaults: axes = 0..len(starts), steps = 1.
+    let axes = match &node.config.axes {
+        Some(axes) => runtime_i64_vec(node, axes, scope),
+        None => quote! { (0..slice_starts.len() as i64).collect() },
+    };
+    let steps = match &node.config.steps {
+        Some(steps) => runtime_i64_vec(node, steps, scope),
+        None => quote! { alloc::vec![1i64; slice_starts.len()] },
+    };
+
+    quote! {
+        let #output = {
+            let slice_input = #input;
+            let slice_dims = slice_input.dims();
+            let slice_starts: alloc::vec::Vec<i64> = #starts.to_data().iter::<i64>().collect();
+            let slice_ends: alloc::vec::Vec<i64> = #ends.to_data().iter::<i64>().collect();
+            let slice_axes: alloc::vec::Vec<i64> = #axes;
+            let slice_steps: alloc::vec::Vec<i64> = #steps;
+            let mut slices = [burn::tensor::Slice::full(); #rank_lit];
+            for (i, &axis) in slice_axes.iter().enumerate() {
+                let axis = (if axis < 0 { axis + #rank_i64 } else { axis }) as usize;
+                let dim = slice_dims[axis] as i64;
+                let resolve = |v: i64| if v < 0 { v.saturating_add(dim) } else { v };
+                let step = slice_steps[i];
+                // See `axis_range`: ONNX stops before `end` walking backwards, Burn
+                // takes a forward range and reverses the traversal.
+                let (lo, hi) = if dim == 0 {
+                    (0, 0)
+                } else if step < 0 {
+                    let hi = resolve(slice_starts[i]).clamp(-1, dim - 1) + 1;
+                    ((resolve(slice_ends[i]).clamp(-1, dim - 1) + 1).min(hi), hi)
+                } else {
+                    let lo = resolve(slice_starts[i]).clamp(0, dim);
+                    (lo, resolve(slice_ends[i]).clamp(0, dim).max(lo))
+                };
+                slices[axis] = burn::tensor::Slice::new(lo as isize, Some(hi as isize), step as isize);
+            }
+            slice_input.slice(slices)
+        };
+    }
+}
+
+/// An `alloc::vec::Vec<i64>` expression for a static or runtime `axes` /
+/// `steps` parameter.
+fn runtime_i64_vec(
+    node: &onnx_ir::slice::SliceNode,
+    param: &onnx_ir::slice::SliceInput,
+    scope: &mut ScopeAtPosition<'_>,
+) -> TokenStream {
+    match param {
+        onnx_ir::slice::SliceInput::Static(values) => {
+            let values = values.iter().map(|&v| Literal::i64_suffixed(v));
+            quote! { alloc::vec![#(#values),*] }
+        }
+        onnx_ir::slice::SliceInput::Runtime(param_ref) => {
+            let arg = &node.inputs[param_ref.input_index];
+            match &arg.ty {
+                ArgType::Tensor(_) => {
+                    let name = arg_to_ident(arg);
+                    quote! { #name.to_data().iter::<i64>().collect() }
+                }
+                ArgType::Shape(_) => {
+                    let name = arg_to_ident(arg);
+                    quote! { #name.to_vec() }
+                }
+                ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
+                    let value = scalar_as_i64(arg, scope.arg(arg));
+                    quote! { alloc::vec![#value] }
+                }
+            }
+        }
+    }
+}
+
 /// Assert at model-run time that a runtime `steps` really is 1.
 ///
-/// The runtime-bound slice paths emit a plain forward range and never read
-/// `steps`, so a non-unit value would silently select the wrong elements. The
+/// The runtime-bound slice paths other than `generate_runtime_bounds_slice`
+/// emit a plain forward range and never read `steps`, so a non-unit value would
+/// silently select the wrong elements. The
 /// value cannot be checked here, and rejecting the model is not an option: the
 /// ONNX backend test suite passes every Slice parameter as a graph input, so a
 /// runtime `steps` is normal and virtually always 1. Check it where the value
@@ -1551,8 +1596,8 @@ mod tests {
     #[test]
     fn test_slice_runtime_tensor_default_axes() {
         // Both starts/ends arrive as runtime 1-D tensors and no axes
-        // input is provided. starts has a static_shape of [2], so the
-        // codegen should default axes to [0, 1] (not the input rank 3).
+        // input is provided, so axes default to 0..len(starts) at runtime
+        // (here [0, 1], not the input rank 3).
         let config = SliceConfig {
             starts: SliceInput::Runtime(RuntimeInputRef {
                 name: "starts".to_string(),
@@ -1580,17 +1625,112 @@ mod tests {
             starts: Tensor<1, Int>,
             ends: Tensor<1, Int>,
         ) -> Tensor<3> {
-            let start_data = starts.to_data();
-            let start_vec: alloc::vec::Vec<i64> = start_data.iter::<i64>().collect();
-            let end_data = ends.to_data();
-            let end_vec: alloc::vec::Vec<i64> = end_data.iter::<i64>().collect();
-            let y = x
-                .slice(
-                    s![
-                        start_vec[0] as usize..end_vec[0] as usize, start_vec[1] as usize
-                        ..end_vec[1] as usize, ..
-                    ],
-                );
+            let y = {
+                let slice_input = x;
+                let slice_dims = slice_input.dims();
+                let slice_starts: alloc::vec::Vec<i64> = starts
+                    .to_data()
+                    .iter::<i64>()
+                    .collect();
+                let slice_ends: alloc::vec::Vec<i64> = ends.to_data().iter::<i64>().collect();
+                let slice_axes: alloc::vec::Vec<i64> = (0..slice_starts.len() as i64).collect();
+                let slice_steps: alloc::vec::Vec<i64> = alloc::vec![1i64; slice_starts.len()];
+                let mut slices = [burn::tensor::Slice::full(); 3];
+                for (i, &axis) in slice_axes.iter().enumerate() {
+                    let axis = (if axis < 0 { axis + 3i64 } else { axis }) as usize;
+                    let dim = slice_dims[axis] as i64;
+                    let resolve = |v: i64| if v < 0 { v.saturating_add(dim) } else { v };
+                    let step = slice_steps[i];
+                    let (lo, hi) = if dim == 0 {
+                        (0, 0)
+                    } else if step < 0 {
+                        let hi = resolve(slice_starts[i]).clamp(-1, dim - 1) + 1;
+                        ((resolve(slice_ends[i]).clamp(-1, dim - 1) + 1).min(hi), hi)
+                    } else {
+                        let lo = resolve(slice_starts[i]).clamp(0, dim);
+                        (lo, resolve(slice_ends[i]).clamp(0, dim).max(lo))
+                    };
+                    slices[axis] = burn::tensor::Slice::new(
+                        lo as isize,
+                        Some(hi as isize),
+                        step as isize,
+                    );
+                }
+                slice_input.slice(slices)
+            };
+            y
+        }
+        ");
+    }
+
+    #[test]
+    fn test_slice_runtime_tensor_axes_and_steps() {
+        // Every parameter arrives as a runtime tensor, as in the ONNX backend
+        // tests: axes and steps are read at runtime rather than assumed.
+        let runtime = |name: &str, input_index| {
+            SliceInput::Runtime(RuntimeInputRef {
+                name: name.to_string(),
+                input_index,
+            })
+        };
+        let config = SliceConfig {
+            starts: runtime("starts", 1),
+            ends: runtime("ends", 2),
+            axes: Some(runtime("axes", 3)),
+            steps: Some(runtime("steps", 4)),
+        };
+        let node = SliceNodeBuilder::new("slice1")
+            .input_tensor("x", 2, DType::F32)
+            .input_tensor_shape("starts", vec![1], DType::I64)
+            .input_tensor_shape("ends", vec![1], DType::I64)
+            .input_tensor_shape("axes", vec![1], DType::I64)
+            .input_tensor_shape("steps", vec![1], DType::I64)
+            .output_tensor("y", 2, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            x: Tensor<2>,
+            starts: Tensor<1, Int>,
+            ends: Tensor<1, Int>,
+            axes: Tensor<1, Int>,
+            steps: Tensor<1, Int>,
+        ) -> Tensor<2> {
+            let y = {
+                let slice_input = x;
+                let slice_dims = slice_input.dims();
+                let slice_starts: alloc::vec::Vec<i64> = starts
+                    .to_data()
+                    .iter::<i64>()
+                    .collect();
+                let slice_ends: alloc::vec::Vec<i64> = ends.to_data().iter::<i64>().collect();
+                let slice_axes: alloc::vec::Vec<i64> = axes.to_data().iter::<i64>().collect();
+                let slice_steps: alloc::vec::Vec<i64> = steps.to_data().iter::<i64>().collect();
+                let mut slices = [burn::tensor::Slice::full(); 2];
+                for (i, &axis) in slice_axes.iter().enumerate() {
+                    let axis = (if axis < 0 { axis + 2i64 } else { axis }) as usize;
+                    let dim = slice_dims[axis] as i64;
+                    let resolve = |v: i64| if v < 0 { v.saturating_add(dim) } else { v };
+                    let step = slice_steps[i];
+                    let (lo, hi) = if dim == 0 {
+                        (0, 0)
+                    } else if step < 0 {
+                        let hi = resolve(slice_starts[i]).clamp(-1, dim - 1) + 1;
+                        ((resolve(slice_ends[i]).clamp(-1, dim - 1) + 1).min(hi), hi)
+                    } else {
+                        let lo = resolve(slice_starts[i]).clamp(0, dim);
+                        (lo, resolve(slice_ends[i]).clamp(0, dim).max(lo))
+                    };
+                    slices[axis] = burn::tensor::Slice::new(
+                        lo as isize,
+                        Some(hi as isize),
+                        step as isize,
+                    );
+                }
+                slice_input.slice(slices)
+            };
             y
         }
         ");

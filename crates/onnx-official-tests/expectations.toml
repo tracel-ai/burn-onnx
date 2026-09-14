@@ -5008,27 +5008,19 @@ status = "pass"
 status = "pass"
 
 [test_slice_end_out_of_bounds]
-status = "fail-compare"
-reason = "slice with negative indices or out-of-bounds ends: codegen default-axes path does not normalize negatives (pre-existing)"
-tracking = "#314"
+status = "pass"
 
 [test_slice_neg]
-status = "fail-compare"
-reason = "slice with negative indices or out-of-bounds ends: codegen default-axes path does not normalize negatives (pre-existing)"
-tracking = "#314"
+status = "pass"
 
 [test_slice_neg_steps]
-status = "fail-compare"
-reason = "slice with negative indices or out-of-bounds ends: codegen default-axes path does not normalize negatives (pre-existing)"
-tracking = "#314"
+status = "pass"
 
 [test_slice_negative_axes]
 status = "pass"
 
 [test_slice_start_out_of_bounds]
-status = "fail-compare"
-reason = "slice with negative indices or out-of-bounds ends: codegen default-axes path does not normalize negatives (pre-existing)"
-tracking = "#314"
+status = "pass"
 
 [test_softmax_axis_0]
 status = "pass"
