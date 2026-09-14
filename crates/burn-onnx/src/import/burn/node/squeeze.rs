@@ -49,7 +49,7 @@ impl NodeCodegen for onnx_ir::squeeze::SqueezeNode {
                                     #axes_expr.iter().copied().collect();
                             },
                             ArgType::ScalarNative(_) => quote! {
-                                let __raw_axes: alloc::vec::Vec<i64> =
+                                let raw_axes: alloc::vec::Vec<i64> =
                                     alloc::vec![#axes_expr as i64];
                             },
                             _ => quote! {
@@ -281,13 +281,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3>, axis: i64) -> Tensor<2> {
             let output = {
-                let __raw_axes: alloc::vec::Vec<i64> = alloc::vec![axis as i64];
-                let __rank: i64 = 3;
-                let __axes: alloc::vec::Vec<isize> = __raw_axes
+                let raw_axes: alloc::vec::Vec<i64> = alloc::vec![axis as i64];
+                let rank: i64 = 3;
+                let axes: alloc::vec::Vec<isize> = raw_axes
                     .into_iter()
-                    .map(|v| (if v < 0 { v + __rank } else { v }) as isize)
+                    .map(|v| (if v < 0 { v + rank } else { v }) as isize)
                     .collect();
-                input.squeeze_dims::<2>(&__axes)
+                input.squeeze_dims::<2>(&axes)
             };
             output
         }
