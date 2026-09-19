@@ -17,7 +17,7 @@ metal = ["burn/metal", "burn/autotune", "burn/fusion"]
 bisect = []
 
 [dependencies]
-burn = { workspace = true }
+burn = { workspace = true, features = ["signal"] }
 burn-store = { workspace = true, features = ["std"] }
 model-checks-common = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
