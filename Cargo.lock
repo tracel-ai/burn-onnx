@@ -24,19 +24,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
 dependencies = [
  "cfg-if",
- "cipher 0.4.4",
+ "cipher",
  "cpufeatures 0.2.17",
-]
-
-[[package]]
-name = "aes"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1fc76eaeac4c9164506c466d4ffdd8ec9d0c5bf57ee97177c4d8eceb3a0e138"
-dependencies = [
- "cipher 0.5.1",
- "cpubits",
- "cpufeatures 0.3.0",
 ]
 
 [[package]]
@@ -479,16 +468,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "block-buffer"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdd35008169921d80bc60d3d0ab416eecb028c4cd653352907921d95084790be"
-dependencies = [
- "hybrid-array",
- "zeroize",
-]
-
-[[package]]
 name = "block2"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -559,12 +538,13 @@ checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
 [[package]]
 name = "burn"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-core",
  "burn-linalg",
  "burn-nn",
  "burn-optim",
+ "burn-signal",
  "burn-std",
  "burn-store",
  "burn-vision",
@@ -573,7 +553,7 @@ dependencies = [
 [[package]]
 name = "burn-autodiff"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-std",
@@ -588,7 +568,7 @@ dependencies = [
 [[package]]
 name = "burn-backend"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-std",
  "cubecl",
@@ -606,7 +586,7 @@ dependencies = [
 [[package]]
 name = "burn-backend-extension"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -616,7 +596,7 @@ dependencies = [
 [[package]]
 name = "burn-capture"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-ir",
@@ -630,7 +610,7 @@ dependencies = [
 [[package]]
 name = "burn-core"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-backend-extension",
@@ -639,6 +619,7 @@ dependencies = [
  "burn-dataset",
  "burn-derive",
  "burn-dispatch",
+ "burn-fusion",
  "burn-ir",
  "burn-pack",
  "burn-rocm",
@@ -660,7 +641,7 @@ dependencies = [
 [[package]]
 name = "burn-cpu"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -671,7 +652,7 @@ dependencies = [
 [[package]]
 name = "burn-cubecl"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-cubecl-fusion",
@@ -690,7 +671,7 @@ dependencies = [
 [[package]]
 name = "burn-cubecl-fusion"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-fusion",
@@ -708,7 +689,7 @@ dependencies = [
 [[package]]
 name = "burn-cuda"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -719,7 +700,7 @@ dependencies = [
 [[package]]
 name = "burn-dataset"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-std",
  "csv",
@@ -741,8 +722,9 @@ dependencies = [
 [[package]]
 name = "burn-derive"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
+ "burn-einsum",
  "derive-new",
  "proc-macro2",
  "quote",
@@ -752,7 +734,7 @@ dependencies = [
 [[package]]
 name = "burn-dispatch"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-autodiff",
  "burn-backend",
@@ -764,12 +746,18 @@ dependencies = [
  "burn-remote",
  "burn-tch",
  "paste",
+ "portable-atomic",
 ]
+
+[[package]]
+name = "burn-einsum"
+version = "0.22.0-pre.3"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 
 [[package]]
 name = "burn-flex"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-ir",
@@ -786,7 +774,7 @@ dependencies = [
 [[package]]
 name = "burn-fusion"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-ir",
@@ -809,7 +797,7 @@ dependencies = [
 [[package]]
 name = "burn-ir"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-std",
@@ -820,7 +808,7 @@ dependencies = [
 [[package]]
 name = "burn-linalg"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-core",
  "burn-cubecl",
@@ -833,7 +821,7 @@ dependencies = [
 [[package]]
 name = "burn-ndarray"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "atomic_float",
  "burn-backend",
@@ -852,7 +840,7 @@ dependencies = [
 [[package]]
 name = "burn-nn"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-core",
  "burn-linalg",
@@ -1162,7 +1150,7 @@ dependencies = [
 [[package]]
 name = "burn-optim"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-core",
  "burn-derive",
@@ -1177,7 +1165,7 @@ dependencies = [
 [[package]]
 name = "burn-pack"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-std",
  "byteorder",
@@ -1188,7 +1176,7 @@ dependencies = [
 [[package]]
 name = "burn-remote"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-fusion",
@@ -1210,7 +1198,7 @@ dependencies = [
 [[package]]
 name = "burn-rocm"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -1221,7 +1209,7 @@ dependencies = [
 [[package]]
 name = "burn-router"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-fusion",
@@ -1234,9 +1222,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "burn-signal"
+version = "0.22.0-pre.3"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
+dependencies = [
+ "burn-autodiff",
+ "burn-core",
+ "burn-cubecl",
+ "burn-flex",
+ "burn-fusion",
+ "burn-router",
+ "burn-std",
+ "burn-tch",
+ "tch",
+]
+
+[[package]]
 name = "burn-std"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -1264,7 +1268,7 @@ dependencies = [
 [[package]]
 name = "burn-store"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-core",
  "burn-pack",
@@ -1273,20 +1277,16 @@ dependencies = [
  "half",
  "hashbrown 0.16.1",
  "memmap2",
- "num-traits",
+ "pytorch-reader",
  "regex",
  "safetensors 0.7.0",
- "serde",
- "tar",
  "textdistance",
- "thiserror 2.0.20",
- "zip 8.6.0",
 ]
 
 [[package]]
 name = "burn-tch"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "cc",
@@ -1299,11 +1299,12 @@ dependencies = [
 [[package]]
 name = "burn-tensor"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-derive",
  "burn-dispatch",
+ "burn-einsum",
  "burn-std",
  "colored",
  "derive-new",
@@ -1314,7 +1315,7 @@ dependencies = [
 [[package]]
 name = "burn-vision"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "aligned-vec",
  "bon",
@@ -1335,7 +1336,7 @@ dependencies = [
 [[package]]
 name = "burn-wgpu"
 version = "0.22.0-pre.3"
-source = "git+https://github.com/tracel-ai/burn?rev=1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d#1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -1392,15 +1393,6 @@ checksum = "bdb116a6ef3f6c3698828873ad02c3014b3c85cadb88496095628e3ef1e347f8"
 dependencies = [
  "bzip2-sys",
  "libc",
-]
-
-[[package]]
-name = "bzip2"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3a53fac24f34a81bc9954b5d6cfce0c21e18ec6959f44f56e8e90e4bb7c346c"
-dependencies = [
- "libbz2-rs-sys",
 ]
 
 [[package]]
@@ -1492,18 +1484,8 @@ version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
 dependencies = [
- "crypto-common 0.1.7",
- "inout 0.1.4",
-]
-
-[[package]]
-name = "cipher"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e34d8227fe1ba289043aeb13792056ff80fd6de1a9f49137a5f499de8e8c78ea"
-dependencies = [
- "crypto-common 0.2.1",
- "inout 0.2.2",
+ "crypto-common",
+ "inout",
 ]
 
 [[package]]
@@ -1548,12 +1530,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
-name = "cmov"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
-
-[[package]]
 name = "codespan-reporting"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1571,7 +1547,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.2",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -1650,12 +1626,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b396d1f76d455557e1218ec8066ae14bba60b4b36ecd55577ba979f5db7ecaa"
 
 [[package]]
-name = "const-oid"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
-
-[[package]]
 name = "const-random"
 version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1686,12 +1656,6 @@ name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
-
-[[package]]
-name = "constant_time_eq"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
 name = "constcat"
@@ -1819,12 +1783,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cpubits"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ef0c543070d296ea414df2dd7625d1b24866ce206709d8a4a424f28377f5861"
-
-[[package]]
 name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1853,9 +1811,9 @@ dependencies = [
 
 [[package]]
 name = "crc32fast"
-version = "1.5.0"
+version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
+checksum = "01a7799fd6b852db0e61728dde9a204c423b44d689dbd432522543614b490e78"
 dependencies = [
  "cfg-if",
 ]
@@ -1908,15 +1866,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crypto-common"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77727bb15fa921304124b128af125e7e3b968275d1b108b379190264f4423710"
-dependencies = [
- "hybrid-array",
-]
-
-[[package]]
 name = "csv"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1938,18 +1887,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "ctutils"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e"
-dependencies = [
- "cmov",
-]
-
-[[package]]
 name = "cubecl"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "cubecl-core",
  "cubecl-cpu",
@@ -1957,6 +1897,7 @@ dependencies = [
  "cubecl-environment",
  "cubecl-hip",
  "cubecl-ir",
+ "cubecl-metal",
  "cubecl-runtime",
  "cubecl-std",
  "cubecl-wgpu",
@@ -1965,8 +1906,8 @@ dependencies = [
 
 [[package]]
 name = "cubecl-common"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "bytemuck",
  "cfg_aliases",
@@ -1989,8 +1930,8 @@ dependencies = [
 
 [[package]]
 name = "cubecl-core"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "bitflags 2.13.1",
  "bytemuck",
@@ -2013,14 +1954,13 @@ dependencies = [
  "pliron",
  "serde",
  "serde_json",
- "tracing",
  "variadics_please",
 ]
 
 [[package]]
 name = "cubecl-cpp"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "bytemuck",
  "cubecl-common",
@@ -2042,8 +1982,8 @@ dependencies = [
 
 [[package]]
 name = "cubecl-cpu"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "bytemuck",
  "crossbeam-utils",
@@ -2051,7 +1991,7 @@ dependencies = [
  "cubecl-core",
  "cubecl-environment",
  "cubecl-llvm",
- "cubecl-runtime",
+ "cubecl-server",
  "cubecl-std",
  "derive-new",
  "libc",
@@ -2064,27 +2004,27 @@ dependencies = [
 
 [[package]]
 name = "cubecl-cuda"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "bytemuck",
  "cubecl-common",
  "cubecl-core",
  "cubecl-cpp",
  "cubecl-environment",
- "cubecl-runtime",
+ "cubecl-llvm",
+ "cubecl-server",
  "cudarc",
  "derive-new",
  "half",
  "log",
  "serde",
- "tracing",
 ]
 
 [[package]]
 name = "cubecl-environment"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "async-channel",
  "backtrace",
@@ -2111,15 +2051,14 @@ dependencies = [
  "serde_json",
  "spin",
  "toml",
- "tracing",
  "wasm-bindgen-futures",
  "web-time",
 ]
 
 [[package]]
 name = "cubecl-hip"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "bytemuck",
  "cubecl-common",
@@ -2128,29 +2067,29 @@ dependencies = [
  "cubecl-environment",
  "cubecl-hip-sys",
  "cubecl-llvm",
- "cubecl-runtime",
+ "cubecl-server",
  "derive-new",
  "half",
  "log",
  "paste",
  "serde",
- "tracing",
 ]
 
 [[package]]
 name = "cubecl-hip-sys"
-version = "7.1.5280200"
+version = "7.14.6085001"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcdd98f72d6f17836a0477bcd5ae5dd6b57a80fb62a3c0919f867a231f897f28"
+checksum = "3ba92853ebdf935ce68fdf96e4631a121ab72ce078201371ce7ace26603597f6"
 dependencies = [
  "libc",
+ "libloading 0.8.9",
  "regex",
 ]
 
 [[package]]
 name = "cubecl-ir"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "bumpalo",
  "cubecl-common",
@@ -2180,8 +2119,8 @@ dependencies = [
 
 [[package]]
 name = "cubecl-llvm"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "cc",
  "cubecl-core",
@@ -2199,10 +2138,9 @@ dependencies = [
 
 [[package]]
 name = "cubecl-macros"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
- "cubecl-common",
  "darling 0.24.0",
  "derive-new",
  "derive_more",
@@ -2217,8 +2155,8 @@ dependencies = [
 
 [[package]]
 name = "cubecl-macros-internal"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "darling 0.24.0",
  "inflections",
@@ -2228,9 +2166,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "cubecl-metal"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
+dependencies = [
+ "block2",
+ "bytemuck",
+ "cubecl-common",
+ "cubecl-core",
+ "cubecl-cpp",
+ "cubecl-environment",
+ "cubecl-ir",
+ "cubecl-server",
+ "derive-new",
+ "half",
+ "hashbrown 0.17.1",
+ "log",
+ "objc2",
+ "objc2-foundation",
+ "objc2-metal",
+ "serde",
+]
+
+[[package]]
 name = "cubecl-opt"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "cubecl-common",
  "cubecl-core",
@@ -2250,8 +2211,8 @@ dependencies = [
 
 [[package]]
 name = "cubecl-runtime"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "buildid",
  "bytemuck",
@@ -2274,14 +2235,41 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.20",
  "toml",
- "tracing",
  "wasm-bindgen-futures",
 ]
 
 [[package]]
+name = "cubecl-server"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
+dependencies = [
+ "buildid",
+ "bytemuck",
+ "cfg-if",
+ "cfg_aliases",
+ "cubecl-common",
+ "cubecl-environment",
+ "cubecl-ir",
+ "cubecl-runtime",
+ "cubecl-zspace",
+ "derive-new",
+ "derive_more",
+ "foldhash 0.2.0",
+ "futures-util",
+ "hashbrown 0.17.1",
+ "itertools 0.15.0",
+ "log",
+ "pliron",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "cubecl-std"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "cubecl-common",
  "cubecl-core",
@@ -2297,8 +2285,8 @@ dependencies = [
 
 [[package]]
 name = "cubecl-wgpu"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "bytemuck",
  "cfg-if",
@@ -2309,7 +2297,7 @@ dependencies = [
  "cubecl-environment",
  "cubecl-ir",
  "cubecl-opt",
- "cubecl-runtime",
+ "cubecl-server",
  "derive-new",
  "derive_more",
  "half",
@@ -2322,15 +2310,14 @@ dependencies = [
  "pliron",
  "sanitize-filename",
  "thiserror 2.0.20",
- "tracing",
  "wasm-bindgen-futures",
  "wgpu",
 ]
 
 [[package]]
 name = "cubecl-zspace"
-version = "0.11.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubecl?rev=359770be3c9fe69c0b0f4c6f7697062a86bbf4a8#359770be3c9fe69c0b0f4c6f7697062a86bbf4a8"
+version = "0.11.0-pre.4"
+source = "git+https://github.com/tracel-ai/cubecl?rev=2a3c997dafc43081d58c1417111c35c726dc46d6#2a3c997dafc43081d58c1417111c35c726dc46d6"
 dependencies = [
  "derive-new",
  "serde",
@@ -2340,7 +2327,7 @@ dependencies = [
 [[package]]
 name = "cubek"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "cubecl",
  "cubek-attention",
@@ -2358,7 +2345,7 @@ dependencies = [
 [[package]]
 name = "cubek-attention"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "bytemuck",
  "cubecl",
@@ -2372,7 +2359,7 @@ dependencies = [
 [[package]]
 name = "cubek-convolution"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "bytemuck",
  "cubecl",
@@ -2388,7 +2375,7 @@ dependencies = [
 [[package]]
 name = "cubek-fft"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "cubecl",
 ]
@@ -2396,7 +2383,7 @@ dependencies = [
 [[package]]
 name = "cubek-interpolate"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "cubecl",
  "cubecl-common",
@@ -2409,7 +2396,7 @@ dependencies = [
 [[package]]
 name = "cubek-matmul"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "bytemuck",
  "cubecl",
@@ -2423,7 +2410,7 @@ dependencies = [
 [[package]]
 name = "cubek-pool"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "cubecl",
  "cubecl-common",
@@ -2433,7 +2420,7 @@ dependencies = [
 [[package]]
 name = "cubek-quant"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "cubecl",
  "cubecl-common",
@@ -2445,7 +2432,7 @@ dependencies = [
 [[package]]
 name = "cubek-random"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "cubecl",
  "cubecl-common",
@@ -2460,7 +2447,7 @@ dependencies = [
 [[package]]
 name = "cubek-reduce"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "cubecl",
  "cubek-std",
@@ -2473,7 +2460,7 @@ dependencies = [
 [[package]]
 name = "cubek-std"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "cubecl",
  "cubecl-common",
@@ -2482,7 +2469,7 @@ dependencies = [
 [[package]]
 name = "cubek-tile"
 version = "0.3.0-pre.3"
-source = "git+https://github.com/tracel-ai/cubek?rev=7ace55c61fcba35e36f40d4c40caadc4bd7da613#7ace55c61fcba35e36f40d4c40caadc4bd7da613"
+source = "git+https://github.com/tracel-ai/cubek?rev=f7a6a64703086582062fe200fd9f65e08922cab6#f7a6a64703086582062fe200fd9f65e08922cab6"
 dependencies = [
  "bytemuck",
  "cubecl",
@@ -2659,12 +2646,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f578e8e2c440e7297e008bb5486a3a8a194775224bbc23729b0dbdfaeebf162e"
 
 [[package]]
-name = "deflate64"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac6b926516df9c60bfa16e107b21086399f8285a44ca9711344b9e553c5146e2"
-
-[[package]]
 name = "defmt"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2764,22 +2745,9 @@ version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
- "block-buffer 0.10.4",
- "crypto-common 0.1.7",
+ "block-buffer",
+ "crypto-common",
  "subtle",
-]
-
-[[package]]
-name = "digest"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4850db49bf08e663084f7fb5c87d202ef91a3907271aff24a94eb97ff039153c"
-dependencies = [
- "block-buffer 0.12.0",
- "const-oid",
- "crypto-common 0.2.1",
- "ctutils",
- "zeroize",
 ]
 
 [[package]]
@@ -4035,16 +4003,7 @@ version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
 dependencies = [
- "digest 0.10.7",
-]
-
-[[package]]
-name = "hmac"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
-dependencies = [
- "digest 0.11.2",
+ "digest",
 ]
 
 [[package]]
@@ -4100,15 +4059,6 @@ name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
-
-[[package]]
-name = "hybrid-array"
-version = "0.4.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08d46837a0ed51fe95bd3b05de33cd64a1ee88fc797477ca48446872504507c5"
-dependencies = [
- "typenum",
-]
 
 [[package]]
 name = "hyper"
@@ -4398,15 +4348,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "inout"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4250ce6452e92010fdf7268ccc5d14faa80bb12fc741938534c58f16804e03c7"
-dependencies = [
- "hybrid-array",
-]
-
-[[package]]
 name = "insta"
 version = "1.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4645,12 +4586,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
 
 [[package]]
-name = "libbz2-rs-sys"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3a6a8c165077efc8f3a971534c50ea6a1a18b329ef4a66e897a7e3a1494565f"
-
-[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4848,15 +4783,6 @@ name = "lzma-rust2"
 version = "0.15.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e20f57f9918e5bd7bc58c22cdd70a6afc7375d4dd9683af5f2b34bd3d2bba619"
-
-[[package]]
-name = "lzma-rust2"
-version = "0.16.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47bb1e988e6fb779cf720ad431242d3f03167c1b3f2b1aae7f1a94b2495b36ae"
-dependencies = [
- "sha2",
-]
 
 [[package]]
 name = "macerator"
@@ -5531,7 +5457,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf211e3776eea6aec988552fa118dd746d70e1b1e5e244058d1c98015f3e5872"
 dependencies = [
  "hmac-sha256",
- "lzma-rust2 0.15.8",
+ "lzma-rust2",
  "ureq 3.3.0",
 ]
 
@@ -5603,20 +5529,10 @@ version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83a0692ec44e4cf1ef28ca317f14f8f07da2d95ec3fa01f86e4467b725e60917"
 dependencies = [
- "digest 0.10.7",
- "hmac 0.12.1",
+ "digest",
+ "hmac",
  "password-hash",
  "sha2",
-]
-
-[[package]]
-name = "pbkdf2"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "112d82ceb8c5bf524d9af484d4e4970c9fd5a0cc15ba14ad93dccd28873b0629"
-dependencies = [
- "digest 0.11.2",
- "hmac 0.13.0",
 ]
 
 [[package]]
@@ -5727,8 +5643,9 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "pliron"
-version = "0.17.0"
-source = "git+https://github.com/pliron-org/pliron.git?rev=e23ff9faa16425f2bd995aa92d960dee6721f9aa#e23ff9faa16425f2bd995aa92d960dee6721f9aa"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4569fbc8e56df3331511fbdf266664e97c851c894840a4dc166c1505c94a2492"
 dependencies = [
  "awint",
  "combine",
@@ -5754,8 +5671,9 @@ dependencies = [
 
 [[package]]
 name = "pliron-derive"
-version = "0.17.0"
-source = "git+https://github.com/pliron-org/pliron.git?rev=e23ff9faa16425f2bd995aa92d960dee6721f9aa#e23ff9faa16425f2bd995aa92d960dee6721f9aa"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f3aac081c3e21485f283f602816a337d4810e0c1b36191804e95dcca506ce66"
 dependencies = [
  "combine",
  "convert_case 0.11.0",
@@ -5768,8 +5686,9 @@ dependencies = [
 
 [[package]]
 name = "pliron-llvm"
-version = "0.17.0"
-source = "git+https://github.com/pliron-org/pliron.git?rev=e23ff9faa16425f2bd995aa92d960dee6721f9aa#e23ff9faa16425f2bd995aa92d960dee6721f9aa"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bb66ac18b5f3aecfe37b74d9b4e3c9f845cddf86601eacfb89d9b17406b3a02"
 dependencies = [
  "bitflags 2.13.1",
  "llvm-sys",
@@ -5824,12 +5743,6 @@ name = "powerfmt"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
-
-[[package]]
-name = "ppmd-rust"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efca4c95a19a79d1c98f791f10aebd5c1363b473244630bb7dbde1dc98455a24"
 
 [[package]]
 name = "ppv-lite86"
@@ -6030,6 +5943,20 @@ name = "pxfm"
 version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
+
+[[package]]
+name = "pytorch-reader"
+version = "0.22.0-pre.3"
+source = "git+https://github.com/tracel-ai/burn?rev=3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29#3a93fbfc0f6517c9165031f8b2fbbe8523ff5c29"
+dependencies = [
+ "byteorder",
+ "crc32fast",
+ "num-traits",
+ "serde",
+ "tar",
+ "thiserror 2.0.20",
+ "zip 8.6.0",
+]
 
 [[package]]
 name = "qoi"
@@ -6951,18 +6878,7 @@ checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
- "digest 0.10.7",
-]
-
-[[package]]
-name = "sha1"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aacc4cc499359472b4abe1bf11d0b12e688af9a805fa5e3016f9a386dc2d0214"
-dependencies = [
- "cfg-if",
- "cpufeatures 0.3.0",
- "digest 0.11.2",
+ "digest",
 ]
 
 [[package]]
@@ -6973,7 +6889,7 @@ checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
- "digest 0.10.7",
+ "digest",
 ]
 
 [[package]]
@@ -6988,7 +6904,7 @@ version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77fd7028345d415a4034cf8777cd4f8ab1851274233b45f84e3d955502d93874"
 dependencies = [
- "digest 0.10.7",
+ "digest",
  "keccak",
 ]
 
@@ -7478,7 +7394,6 @@ checksum = "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
 dependencies = [
  "deranged",
  "itoa",
- "js-sys",
  "num-conv",
  "powerfmt",
  "serde_core",
@@ -7687,7 +7602,7 @@ checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 [[package]]
 name = "tracel-llvm-bundler"
 version = "23.1.0-1"
-source = "git+https://github.com/tracel-ai/tracel-llvm.git?rev=809d73e1a49bba4c7fbe858ade27a983921b1ca8#809d73e1a49bba4c7fbe858ade27a983921b1ca8"
+source = "git+https://github.com/tracel-ai/tracel-llvm.git?rev=4769fd52f2205435134d6a3c606f94aad6876155#4769fd52f2205435134d6a3c606f94aad6876155"
 dependencies = [
  "anyhow",
  "bytes",
@@ -8994,18 +8909,18 @@ version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "760394e246e4c28189f19d488c058bf16f564016aefac5d32bb1f3b51d5e9261"
 dependencies = [
- "aes 0.8.4",
+ "aes",
  "byteorder",
- "bzip2 0.4.4",
- "constant_time_eq 0.1.5",
+ "bzip2",
+ "constant_time_eq",
  "crc32fast",
  "crossbeam-utils",
  "flate2",
- "hmac 0.12.1",
- "pbkdf2 0.11.0",
- "sha1 0.10.6",
+ "hmac",
+ "pbkdf2",
+ "sha1",
  "time",
- "zstd 0.11.2+zstd.1.5.2",
+ "zstd",
 ]
 
 [[package]]
@@ -9014,25 +8929,11 @@ version = "8.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
 dependencies = [
- "aes 0.9.1",
- "bzip2 0.6.1",
- "constant_time_eq 0.4.2",
  "crc32fast",
- "deflate64",
  "flate2",
- "getrandom 0.4.2",
- "hmac 0.13.0",
  "indexmap",
- "lzma-rust2 0.16.2",
  "memchr",
- "pbkdf2 0.13.0",
- "ppmd-rust",
- "sha1 0.11.0",
- "time",
  "typed-path",
- "zeroize",
- "zopfli",
- "zstd 0.13.3",
 ]
 
 [[package]]
@@ -9048,33 +8949,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 
 [[package]]
-name = "zopfli"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f05cd8797d63865425ff89b5c4a48804f35ba0ce8d125800027ad6017d2b5249"
-dependencies = [
- "bumpalo",
- "crc32fast",
- "log",
- "simd-adler32",
-]
-
-[[package]]
 name = "zstd"
 version = "0.11.2+zstd.1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20cc960326ece64f010d2d2107537f26dc589a6573a316bd5b1dba685fa5fde4"
 dependencies = [
- "zstd-safe 5.0.2+zstd.1.5.2",
-]
-
-[[package]]
-name = "zstd"
-version = "0.13.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
-dependencies = [
- "zstd-safe 7.2.4",
+ "zstd-safe",
 ]
 
 [[package]]
@@ -9084,15 +8964,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d2a5585e04f9eea4b2a3d1eca508c4dee9592a89ef6f450c11719da0726f4db"
 dependencies = [
  "libc",
- "zstd-sys",
-]
-
-[[package]]
-name = "zstd-safe"
-version = "7.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"
-dependencies = [
  "zstd-sys",
 ]
 
