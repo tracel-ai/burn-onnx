@@ -2300,19 +2300,13 @@ status = "pass"
 status = "pass"
 
 [test_gridsample_nearest]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_gridsample_nearest_align_corners_0_additional_1]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_gridsample_nearest_align_corners_1_additional_1]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_gridsample_reflection_padding]
 status = "pass"
