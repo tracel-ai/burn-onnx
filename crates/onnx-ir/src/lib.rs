@@ -21,6 +21,9 @@ pub use node::*;
 pub use pipeline::{Error, MissingHook, OnnxGraphBuilder, normalize_domain};
 pub use processor::ProcessError;
 
+/// The trait `ModelProto::parse_from_bytes` and `write_to_bytes` come from, so a
+/// caller reading or writing a model needs no `protobuf` dependency of its own.
+pub use protobuf::Message;
 /// Generated protobuf bindings for the ONNX wire format messages that
 /// sibling crates need to decode on-disk artifacts.
 ///
@@ -35,11 +38,17 @@ pub use processor::ProcessError;
 ///   shape and dtype metadata so it can emit per-test harness glue with
 ///   the correct rank and element type.
 ///
-/// The inner namespaces (`type_proto::Tensor`, `tensor_shape_proto::
+/// * `NodeProto` / `AttributeProto` / `AttributeType` let a caller rewrite
+///   a graph before importing it (set an attribute on every node of a
+///   kind, add a node); an attribute's type is an enum the caller has to
+///   name to set it, which is why that one nested type is re-exported.
+///
+/// The other inner namespaces (`type_proto::Tensor`, `tensor_shape_proto::
 /// Dimension`, etc.) stay private. Callers can still reach them via
 /// method calls on values of the re-exported outer types — Rust allows
 /// public method calls on references to private types as long as the
 /// private type is never named in user code.
 pub use protos::{
-    GraphProto, ModelProto, TensorProto, TensorShapeProto, TypeProto, ValueInfoProto,
+    AttributeProto, GraphProto, ModelProto, NodeProto, TensorProto, TensorShapeProto, TypeProto,
+    ValueInfoProto, attribute_proto::AttributeType,
 };
