@@ -78,7 +78,7 @@ functionality.
 | [Gemm][62]                       | ✅             | ✅           |
 | [GlobalAveragePool][63]          | ✅             | ✅           |
 | [GlobalLpPool][64]               | ✅             | ✅           |
-| [GlobalMaxPool][65]              | ❌             | ❌           |
+| [GlobalMaxPool][65]              | ✅             | ✅           |
 | [Greater][66]                    | ✅             | ✅           |
 | [GreaterOrEqual][67]             | ✅             | ✅           |
 | [GridSample][68]                 | ✅             | ✅           |
@@ -169,7 +169,7 @@ functionality.
 | [Round][147]                     | ✅             | ✅           |
 | [Scaler][206]                    | ✅             | ✅           |
 | [Scan][148]                      | ✅             | ✅           |
-| [Scatter][149]                   | ❌             | ✅           |
+| [Scatter][149]                   | ✅             | ✅           |
 | [ScatterElements][150]           | ✅             | ✅           |
 | [ScatterND][151]                 | ✅             | ✅           |
 | [Selu][152]                      | ✅             | ✅           |
@@ -197,7 +197,7 @@ functionality.
 | [SplitToSequence][174]           | ❌             | ❌           |
 | [Sqrt][175]                      | ✅             | ✅           |
 | [Squeeze][176]                   | ✅             | ✅           |
-| [STFT][177]                      | ✅             | ✅           |
+| [STFT][177]                      | ✅             | ✅²          |
 | [StringConcat][201]              | ❌             | ❌           |
 | [StringNormalizer][178]          | ❌             | ❌           |
 | [StringSplit][202]               | ❌             | ❌           |
@@ -221,6 +221,10 @@ functionality.
 | [Unsqueeze][193]                 | ✅             | ✅           |
 
 ¹ Requires `burn/vision`; backend support follows Burn Vision.
+
+² Non-power-of-two `frame_length` computes the DFT as an f64 matmul for accuracy. On
+devices without f64 (e.g. Metal) it falls back to f32, which can lose precision in
+near-zero spectral bins.
 
 [1]: https://onnx.ai/onnx/operators/onnx__Abs.html "ONNX Abs"
 [2]: https://onnx.ai/onnx/operators/onnx__Acos.html "ONNX Acos"

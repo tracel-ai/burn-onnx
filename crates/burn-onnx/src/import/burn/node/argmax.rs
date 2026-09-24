@@ -32,14 +32,12 @@ impl NodeCodegen for onnx_ir::node::argmax::ArgMaxNode {
             let axis_isize = axis_usize as isize;
             quote! {
                 {
-                    let __argmax_input = #input;
-                    let __argmax_axis_size =
-                        __argmax_input.shape()[#axis_usize] as i64;
-                    __argmax_input
+                    let axis_size = #input.shape()[#axis_usize] as i64;
+                    #input
                         .flip([#axis_isize])
                         .argmax(#axis)
                         .mul_scalar(-1i64)
-                        .add_scalar(__argmax_axis_size - 1)
+                        .add_scalar(axis_size - 1)
                 }
             }
         } else {
@@ -172,13 +170,8 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3>) -> Tensor<3, Int> {
             let output = {
-                let __argmax_input = input;
-                let __argmax_axis_size = __argmax_input.shape()[1usize] as i64;
-                __argmax_input
-                    .flip([1isize])
-                    .argmax(1)
-                    .mul_scalar(-1i64)
-                    .add_scalar(__argmax_axis_size - 1)
+                let axis_size = input.shape()[1usize] as i64;
+                input.flip([1isize]).argmax(1).mul_scalar(-1i64).add_scalar(axis_size - 1)
             }
                 .cast(burn::tensor::DType::I64);
             output
@@ -198,13 +191,8 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<4>) -> Tensor<3, Int> {
             let argmax_result = {
-                let __argmax_input = input;
-                let __argmax_axis_size = __argmax_input.shape()[2usize] as i64;
-                __argmax_input
-                    .flip([2isize])
-                    .argmax(2)
-                    .mul_scalar(-1i64)
-                    .add_scalar(__argmax_axis_size - 1)
+                let axis_size = input.shape()[2usize] as i64;
+                input.flip([2isize]).argmax(2).mul_scalar(-1i64).add_scalar(axis_size - 1)
             };
             let output = argmax_result.squeeze_dim::<3usize>(2).cast(burn::tensor::DType::I64);
             output

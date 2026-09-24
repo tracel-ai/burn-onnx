@@ -51,31 +51,25 @@ impl NodeCodegen for onnx_ir::one_hot_encoder::OneHotEncoderNode {
                 // and num_categories for the last dim.
                 let ones: Vec<TokenStream> = (0..input_rank).map(|_| quote! { 1usize }).collect();
 
-                match tensor_type.dtype {
-                    DType::I32 | DType::I64 => quote! {
-                        {
-                            let x = #input.cast(burn::tensor::DType::I64);
-                            let x_unsqueezed = x.unsqueeze_dim(#input_rank);
-                            let cats = self.#field_name.clone().reshape([#(#ones,)* #num_categories]);
-                            x_unsqueezed.equal(cats).float().cast(burn::tensor::DType::F32)
-                        }
-                    },
-                    DType::F32 | DType::F64 => quote! {
-                        {
-                            let x = #input.cast(burn::tensor::DType::F64);
-                            let x_unsqueezed = x.unsqueeze_dim(#input_rank);
-                            let cats = self.#field_name
-                                .clone()
-                                .float()
-                                .cast(burn::tensor::DType::F64)
-                                .reshape([#(#ones,)* #num_categories]);
-                            x_unsqueezed.equal(cats).float().cast(burn::tensor::DType::F32)
-                        }
-                    },
+                // The spec casts float inputs to integers and looks them up in
+                // cats_int64s, so every input compares in I64.
+                let x = match tensor_type.dtype {
+                    DType::I32 | DType::I64 => quote! { #input.cast(burn::tensor::DType::I64) },
+                    DType::F32 | DType::F64 => {
+                        quote! { #input.int().cast(burn::tensor::DType::I64) }
+                    }
                     _ => unreachable!(
                         "OneHotEncoder input dtype is validated in onnx-ir; got {:?}",
                         tensor_type.dtype
                     ),
+                };
+                quote! {
+                    {
+                        let x = #x;
+                        let x_unsqueezed = x.unsqueeze_dim(#input_rank);
+                        let cats = self.#field_name.clone().reshape([#(#ones,)* #num_categories]);
+                        x_unsqueezed.equal(cats).float().cast(burn::tensor::DType::F32)
+                    }
                 }
             }
             ty => {
@@ -113,17 +107,12 @@ mod tests {
         );
         let node = OneHotEncoderNode::new("ohe1".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
+        assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<1>) -> Tensor<2> {
             let output = {
-                let x = input.cast(burn::tensor::DType::F64);
+                let x = input.int().cast(burn::tensor::DType::I64);
                 let x_unsqueezed = x.unsqueeze_dim(1usize);
-                let cats = self
-                    .ohe1
-                    .clone()
-                    .float()
-                    .cast(burn::tensor::DType::F64)
-                    .reshape([1usize, 4usize]);
+                let cats = self.ohe1.clone().reshape([1usize, 4usize]);
                 x_unsqueezed.equal(cats).float().cast(burn::tensor::DType::F32)
             };
             output
@@ -144,17 +133,12 @@ mod tests {
         );
         let node = OneHotEncoderNode::new("ohe2".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
+        assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> Tensor<3> {
             let output = {
-                let x = input.cast(burn::tensor::DType::F64);
+                let x = input.int().cast(burn::tensor::DType::I64);
                 let x_unsqueezed = x.unsqueeze_dim(2usize);
-                let cats = self
-                    .ohe2
-                    .clone()
-                    .float()
-                    .cast(burn::tensor::DType::F64)
-                    .reshape([1usize, 1usize, 3usize]);
+                let cats = self.ohe2.clone().reshape([1usize, 1usize, 3usize]);
                 x_unsqueezed.equal(cats).float().cast(burn::tensor::DType::F32)
             };
             output
@@ -201,17 +185,12 @@ mod tests {
         );
         let node = OneHotEncoderNode::new("ohe4".to_string(), vec![input], vec![output], config);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
+        assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<1>) -> Tensor<2> {
             let output = {
-                let x = input.cast(burn::tensor::DType::F64);
+                let x = input.int().cast(burn::tensor::DType::I64);
                 let x_unsqueezed = x.unsqueeze_dim(1usize);
-                let cats = self
-                    .ohe4
-                    .clone()
-                    .float()
-                    .cast(burn::tensor::DType::F64)
-                    .reshape([1usize, 3usize]);
+                let cats = self.ohe4.clone().reshape([1usize, 3usize]);
                 x_unsqueezed.equal(cats).float().cast(burn::tensor::DType::F32)
             };
             output
@@ -232,11 +211,32 @@ mod tests {
         );
         let node = OneHotEncoderNode::new("ohe1".to_string(), vec![input], vec![output], config);
         let code = codegen_field_init(&node);
-        assert_snapshot!(code, @"
+        assert_snapshot!(code, @r"
         let ohe1: Tensor<1, Int> = Tensor::<
             1,
             Int,
         >::from_data([0i64, 1i64, 2i64, 3i64], (device, burn::tensor::DType::I64));
+        ");
+    }
+
+    #[test]
+    fn test_onehotencoder_field_init_int_input() {
+        let config = OneHotEncoderConfig::new(Some(vec![0, 1, 2]), None, Some(1));
+        let input = onnx_ir::ir::Argument::new(
+            "input",
+            ArgType::Tensor(TensorType::new(DType::I64, 1, None)),
+        );
+        let output = onnx_ir::ir::Argument::new(
+            "output",
+            ArgType::Tensor(TensorType::new(DType::F32, 2, None)),
+        );
+        let node = OneHotEncoderNode::new("ohe1".to_string(), vec![input], vec![output], config);
+        let code = codegen_field_init(&node);
+        assert_snapshot!(code, @r"
+        let ohe1: Tensor<1, Int> = Tensor::<
+            1,
+            Int,
+        >::from_data([0i64, 1i64, 2i64], (device, burn::tensor::DType::I64));
         ");
     }
 }

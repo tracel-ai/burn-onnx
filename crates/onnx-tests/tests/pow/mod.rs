@@ -1,10 +1,10 @@
 use crate::include_models;
-include_models!(pow, pow_int, pow_broadcast);
+include_models!(pow, pow_int, pow_broadcast, pow_mixed);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Device, Int, Tensor, TensorData};
+    use burn::tensor::{DType, Device, Int, Tensor, TensorData, Tolerance};
 
     #[test]
     fn pow_int_with_tensor_and_scalar() {
@@ -85,6 +85,51 @@ mod tests {
 
         let expected = TensorData::from([[[[1.0000f32, 1.6000e+01, 7.2900e+02, 6.5536e+04]]]]);
 
-        output.to_data().assert_eq(&expected, true);
+        assert_eq!(output.dtype(), DType::F32);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
+    }
+
+    #[test]
+    fn pow_mixed_types() {
+        let device = Default::default();
+        let model: pow_mixed::Model = pow_mixed::Model::new(&device);
+        let f = Tensor::<1>::from_floats([-2.0, 1.5, 3.0, -1.0], &device);
+        let i = Tensor::<1, Int>::from_ints([3, 2, 4, 5], &device);
+        let fe = Tensor::<1>::from_floats([2.0, 3.0, 0.5, 1.0], &device);
+        let u = Tensor::<1, Int>::from_data(
+            TensorData::from([2u64, 3, 1, 4]),
+            (&device, burn::tensor::DType::U64),
+        );
+
+        let (float_int, int_float, float_uint) = model.forward(f, i, fe, u);
+
+        let tolerance = burn::tensor::Tolerance::default();
+        assert_eq!(float_int.dtype(), DType::F32);
+        float_int
+            .to_data()
+            .assert_approx_eq::<f32>(&TensorData::from([-8.0f32, 2.25, 81.0, -1.0]), tolerance);
+        int_float
+            .to_data()
+            .assert_eq(&TensorData::from([9i64, 8, 2, 5]), true);
+        assert_eq!(float_uint.dtype(), DType::F32);
+        float_uint
+            .to_data()
+            .assert_approx_eq::<f32>(&TensorData::from([4.0f32, 3.375, 3.0, 1.0]), tolerance);
+
+        // A fractional int ^ float result truncates toward zero, as in the onnx reference.
+        let (_, int_float, _) = model.forward(
+            Tensor::<1>::ones([4], &device),
+            Tensor::<1, Int>::from_ints([5, 7, 2, 10], &device),
+            Tensor::<1>::from_floats([0.5, 0.5, -1.0, 0.3], &device),
+            Tensor::<1, Int>::from_data(
+                TensorData::from([1u64, 1, 1, 1]),
+                (&device, burn::tensor::DType::U64),
+            ),
+        );
+        int_float
+            .to_data()
+            .assert_eq(&TensorData::from([2i64, 2, 0, 1]), true);
     }
 }

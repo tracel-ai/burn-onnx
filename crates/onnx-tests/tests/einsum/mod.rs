@@ -2,11 +2,13 @@ use crate::include_models;
 include_models!(
     einsum,
     einsum_ellipsis,
+    einsum_general,
     einsum_implicit,
     einsum_outer_int,
     einsum_reduction,
     einsum_sam,
     einsum_scalar,
+    einsum_scalar_ellipsis,
     einsum_scalar_scalar,
     einsum_shadow_rhs
 );
@@ -44,6 +46,52 @@ mod tests {
         let expected_batch =
             TensorData::from([[[1.0f32, 2.0], [3.0, 4.0]], [[10.0, 12.0], [14.0, 16.0]]]);
         batch_result.to_data().assert_eq(&expected_batch, true);
+    }
+
+    #[test]
+    fn einsum_general_forms() {
+        let device = Default::default();
+        let model = einsum_general::Model::default();
+
+        let sq = Tensor::<1, Int>::arange(0..9, &device)
+            .float()
+            .reshape([3, 3]);
+        let batch = Tensor::<1, Int>::arange(0..18, &device)
+            .float()
+            .reshape([2, 3, 3]);
+        let a = Tensor::<1, Int>::arange(0..6, &device)
+            .float()
+            .reshape([2, 3]);
+        let b = Tensor::<1, Int>::arange(0..12, &device)
+            .float()
+            .reshape([3, 4]);
+        let c = Tensor::<1, Int>::arange(0..8, &device)
+            .float()
+            .reshape([4, 2]);
+
+        let (transposed, diagonal, trace, batch_diagonal, chain, upper) =
+            model.forward(sq, batch, a, b, c);
+
+        transposed.to_data().assert_eq(
+            &TensorData::from([[0.0f32, 3.0], [1.0, 4.0], [2.0, 5.0]]),
+            true,
+        );
+        diagonal
+            .to_data()
+            .assert_eq(&TensorData::from([0.0f32, 4.0, 8.0]), true);
+        assert_eq!(trace, 12.0);
+        batch_diagonal.to_data().assert_eq(
+            &TensorData::from([[0.0f32, 4.0, 8.0], [9.0, 13.0, 17.0]]),
+            true,
+        );
+        chain.to_data().assert_eq(
+            &TensorData::from([[324.0f32, 422.0], [1008.0, 1304.0]]),
+            true,
+        );
+        upper.to_data().assert_eq(
+            &TensorData::from([[20.0f32, 23.0, 26.0, 29.0], [56.0, 68.0, 80.0, 92.0]]),
+            true,
+        );
     }
 
     #[test]
@@ -176,5 +224,31 @@ mod tests {
 
         let expected = TensorData::from([[432.0f32, 864.0, 1296.0], [765.0, 1530.0, 2295.0]]);
         output.to_data().assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn einsum_scalar_ellipsis() {
+        // Expected values from einsum_scalar_ellipsis.py (onnx ReferenceEvaluator).
+        let device = Default::default();
+        let model = einsum_scalar_ellipsis::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/einsum_scalar_ellipsis.bpk"),
+            &device,
+        );
+        let matrix = Tensor::<2>::from_floats([[1.0, 2.0], [3.0, 4.0]], &device);
+        let batch = Tensor::<3>::from_floats(
+            [[[0.0, 1.0], [2.0, 3.0]], [[4.0, 5.0], [6.0, 7.0]]],
+            &device,
+        );
+
+        let (scaled, batch_scaled, identity) = model.forward(2.0, matrix, batch);
+
+        scaled
+            .to_data()
+            .assert_eq(&TensorData::from([[2.0f32, 4.0], [6.0, 8.0]]), true);
+        batch_scaled.to_data().assert_eq(
+            &TensorData::from([[[0.0f32, 2.0], [4.0, 6.0]], [[8.0, 10.0], [12.0, 14.0]]]),
+            true,
+        );
+        assert_eq!(identity, 2.0);
     }
 }

@@ -1,5 +1,8 @@
-use proc_macro2::TokenStream;
+use onnx_ir::ir::ArgType;
+use proc_macro2::{Literal, TokenStream};
 use quote::quote;
+
+use crate::burn::ToTokens;
 
 /// Build the shape literal `[1, channels, 1, ..., 1]` of length `rank` used to
 /// broadcast a per-channel `[C]` tensor (gamma/beta/scale/bias) against an
@@ -32,34 +35,55 @@ pub(crate) fn leading_broadcast(
     quote! { (#expr).unsqueeze_dims(&[#(#dims),*]) }
 }
 
-/// Generates numpy-style broadcasting for a binary operation.
+/// Materializes a `Shape` operand (`[i64; N]`) as an Int tensor of shape `[N]` with the dtype of
+/// the on-device Int operand `other_ty`, then prepends unit dims so its rank matches
+/// `other_ty.rank()`. `N` stays on the last axis, per ONNX trailing-axis broadcasting.
+pub(crate) fn shape_operand_tensor(shape: TokenStream, other_ty: &ArgType) -> TokenStream {
+    let dtype = other_ty.elem_type().to_tokens();
+    let tensor = quote! {
+        Tensor::<1, burn::tensor::Int>::from_data(
+            burn::tensor::TensorData::from(&#shape as &[i64]),
+            (&self.device, #dtype)
+        )
+    };
+    leading_broadcast(tensor, 1, other_ty.rank())
+}
+
+/// Performs an element wise binary `op` over two `Shape` operands with numpy-style broadcasting of
+/// a length 1 operand.
 ///
-/// Expands both operands to a common shape (per-dimension max) before applying `op`.
-/// Both operands must already have the same rank (apply `leading_broadcast` first).
+/// Output length is `max(lhs_len, rhs_len)` matching what `broadcast_output_type` infers.
 ///
-/// Use this for operations where Burn does not guarantee internal broadcasting
-/// (e.g. `remainder`, see <https://github.com/tracel-ai/burn/issues/4712>).
-/// For `add`/`mul`/`sub`/`div`, Burn handles broadcasting natively, so this
-/// is not needed.
-pub(crate) fn broadcast_binary_op(
+/// An operand that is neither length 1 nor the output length cannot broadcast, we index it at 0
+/// nonetheless so that the generated code still compiles, c.f. `broadcast_output_type` incompatible
+/// handling.
+pub(crate) fn shape_binary_elementwise(
     lhs: TokenStream,
+    lhs_len: usize,
     rhs: TokenStream,
-    output_rank: usize,
-    op: TokenStream,
+    rhs_len: usize,
+    op: impl Fn(TokenStream, TokenStream) -> TokenStream,
 ) -> TokenStream {
-    let rank_lit = proc_macro2::Literal::usize_suffixed(output_rank);
+    let out_len = lhs_len.max(rhs_len);
+    let len_lit = Literal::usize_suffixed(out_len);
+
+    let lhs_idx = if lhs_len == out_len {
+        quote! { __i }
+    } else {
+        quote! { 0 }
+    };
+    let rhs_idx = if rhs_len == out_len {
+        quote! { __i }
+    } else {
+        quote! { 0 }
+    };
+    let elem = op(quote! { __lhs[#lhs_idx] }, quote! { __rhs[#rhs_idx] });
+
     quote! {
         {
             let __lhs = #lhs;
             let __rhs = #rhs;
-            let __lhs_dims: [usize; #rank_lit] = __lhs.dims();
-            let __rhs_dims: [usize; #rank_lit] = __rhs.dims();
-            let mut __shape = [0i64; #rank_lit];
-            #[allow(clippy::needless_range_loop)]
-            for __i in 0..#rank_lit {
-                __shape[__i] = core::cmp::max(__lhs_dims[__i] as i64, __rhs_dims[__i] as i64);
-            }
-            __lhs.expand(__shape).#op(__rhs.expand(__shape))
+            core::array::from_fn::<i64, #len_lit, _>(|__i| #elem)
         }
     }
 }

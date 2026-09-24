@@ -60,15 +60,10 @@ impl NodeProcessor for Conv2dProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // Lift weight (input[1]) and optional bias (input[2])
-        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
-            node.inputs[1].to_static()?;
-        }
-        if node.inputs.len() > 2 && node.inputs[2].is_constant() {
-            node.inputs[2].to_static()?;
-        }
-
-        Ok(())
+        // Weight (input[1]) and optional bias (input[2]) go into the module only when
+        // both are constants. Otherwise they stay graph values for the functional
+        // conv, which takes both as ordinary inputs.
+        crate::processor::lift_all_or_none(node, &[1, 2])
     }
 
     fn infer_types(
@@ -258,14 +253,6 @@ impl NodeProcessor for Conv2dProcessor {
         let mut group: usize = 1;
         let mut auto_pad = AutoPad::NotSet;
 
-        let weight_shape = node.inputs[1]
-            .value()
-            .ok_or_else(|| {
-                ProcessError::Custom("Conv2d: weight tensor must be present".to_string())
-            })?
-            .shape
-            .to_vec();
-
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
                 "kernel_shape" => kernel_shape = value.clone().into_i64s(),
@@ -281,6 +268,13 @@ impl NodeProcessor for Conv2dProcessor {
         let padding = padding_config_2d(&pads);
 
         let kernel_size = if kernel_shape.is_empty() {
+            let weight_shape = crate::node::padding::known_weight_shape(&node.inputs[1])
+                .ok_or_else(|| {
+                    ProcessError::Custom(
+                        "Conv2d: kernel_shape is not set and the weight shape is not known"
+                            .to_string(),
+                    )
+                })?;
             if weight_shape.len() != 4 {
                 return Err(ProcessError::Custom(format!(
                     "Conv2d: expected to infer kernel shape from a weight tensor of rank 4 but got shape {:?}",
@@ -499,6 +493,21 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         assert_eq!(config.kernel_size, [2, 2]); // Inferred via weight tensor shape
+    }
+
+    #[test]
+    fn test_conv2d_rejects_unknown_kernel_shape() {
+        // A runtime weight with no known shape leaves nothing to read the kernel from.
+        let node = TestNodeBuilder::new(NodeType::Conv2d, "test_conv2d")
+            .input_tensor_f32("data", 4, None)
+            .input_tensor_f32("weight", 4, None)
+            .output_tensor_f32("output", 4, None)
+            .build();
+        let result = Conv2dProcessor.extract_config(&node, 16);
+        assert!(matches!(
+            result,
+            Err(ProcessError::Custom(msg)) if msg.contains("kernel_shape is not set")
+        ));
     }
 
     #[test]

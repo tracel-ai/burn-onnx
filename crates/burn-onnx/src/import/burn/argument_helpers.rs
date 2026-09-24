@@ -7,7 +7,7 @@ use onnx_ir::{
     Argument,
     ir::{ArgType, DType},
 };
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
 use crate::burn::ToTokens;
@@ -84,24 +84,26 @@ pub fn on_device_to_native(input: TokenStream, dtype: &DType) -> TokenStream {
 /// where every value is converted to i64. A `ScalarTensor` lives on device, so
 /// it is read back rather than named directly.
 pub fn scalar_as_i64(arg: &Argument, value: TokenStream) -> TokenStream {
-    match &arg.ty {
-        ArgType::ScalarTensor(dtype) => {
-            let native = on_device_to_native(value, dtype);
-            quote! { #native as i64 }
-        }
-        _ => quote! { #value as i64 },
+    let value = match &arg.ty {
+        ArgType::ScalarTensor(dtype) => on_device_to_native(value, dtype),
+        _ => value,
+    };
+    if arg.ty.elem_type() == DType::I64 {
+        value
+    } else {
+        quote! { #value as i64 }
     }
 }
 
 /// Generate code to convert a ScalarTensor (Tensor<1>) to a Shape([i64; 1]).
 ///
-/// Produces: `{ let __v: T = <input>.into_scalar::<T>(); [__v as i64] }`
+/// Produces: `{ let v: T = <input>.into_scalar::<T>(); [v as i64] }`
 pub fn scalar_tensor_to_shape(input: TokenStream, dtype: &DType) -> TokenStream {
     let ty = scalar_type_tokens(dtype);
     quote! {
         {
-            let __v: #ty = #input.into_scalar::<#ty>();
-            [__v as i64]
+            let v: #ty = #input.into_scalar::<#ty>();
+            [v as i64]
         }
     }
 }
@@ -121,9 +123,10 @@ pub fn shape_to_native(input: TokenStream, dtype: &DType) -> TokenStream {
     quote! { #input[0] as #ty }
 }
 
-/// Get the argument identifier
+/// The tagged identifier for `arg` (see `shadow_check::value_ident`); splice
+/// it into tokens only, never stringify it.
 pub fn arg_ident(arg: &Argument) -> Ident {
-    Ident::new(&arg.name, Span::call_site())
+    super::shadow_check::value_ident(&arg.name)
 }
 
 /// Generate function parameters from a slice of arguments

@@ -32,7 +32,7 @@ mod tests {
             ]],
             &device,
         );
-        let (output1, output2, output3) = model.forward(input.clone(), input.clone(), input);
+        let (output1, output2, output3) = model.forward(input);
         let expected1 = TensorData::from([[[-1.135f32], [-0.978], [0.058], [0.548], [0.538]]]);
         let expected2 = TensorData::from([[
             [-0.569f32, -1.135, -0.591],
@@ -86,7 +86,7 @@ mod tests {
             ]]],
             &device,
         );
-        let (output1, output2, output3) = model.forward(input.clone(), input.clone(), input);
+        let (output1, output2, output3) = model.forward(input);
         let expected1 = TensorData::from([[[[0.008f32, -0.131, -0.208, 0.425]]]]);
         let expected2 = TensorData::from([[[
             [-0.045f32, 0.202, -0.050, -0.295, 0.162, 0.160],

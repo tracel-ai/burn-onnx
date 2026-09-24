@@ -617,6 +617,37 @@ fn log_softmax(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn lp_pool(graph: &OnnxGraph) {
+    let node = find_node(graph, "lppool2d");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    LpPool2d "lppool2d1"
+      Inputs:
+        lppool_input: F32[1, 3, 8, 8]
+      Outputs:
+        lppool2d1_out1: F32[1, 3, 8, 8]
+      Config:
+        LpPool2dConfig {
+            kernel_size: [
+                2,
+                2,
+            ],
+            strides: [
+                2,
+                2,
+            ],
+            padding: Valid,
+            dilation: [
+                1,
+                1,
+            ],
+            ceil_mode: false,
+            auto_pad: NotSet,
+            p: 2.0,
+        }
+    "#);
+}
+
+#[rstest]
 fn max_pool(graph: &OnnxGraph) {
     let node = find_node(graph, "maxpool2d");
     insta::assert_snapshot!(format!("{node}"), @r#"
@@ -642,6 +673,7 @@ fn max_pool(graph: &OnnxGraph) {
             ],
             ceil_mode: false,
             auto_pad: NotSet,
+            storage_order: 0,
         }
     "#);
 }
@@ -719,14 +751,14 @@ fn range(graph: &OnnxGraph) {
         range1_out1: F32[?]
       Config:
         RangeConfig {
-            start: Static(
-                0,
+            start: StaticFloat(
+                0.0,
             ),
-            limit: Static(
-                10,
+            limit: StaticFloat(
+                10.0,
             ),
-            delta: Static(
-                2,
+            delta: StaticFloat(
+                2.0,
             ),
         }
     "#);
@@ -1164,6 +1196,8 @@ fn top_k(graph: &OnnxGraph) {
             k: Static(
                 2,
             ),
+            largest: true,
+            sorted: true,
         }
     "#);
 }

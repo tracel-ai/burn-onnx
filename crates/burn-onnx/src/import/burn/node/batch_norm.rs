@@ -60,32 +60,10 @@ impl NodeCodegen for BatchNormalizationNode {
                 let var = scope.arg(&self.inputs[4]);
                 let epsilon = config.epsilon;
 
-                // Determine the input rank from the type info
-                let rank = match &self.inputs[0].ty {
-                    ArgType::Tensor(t) => t.rank,
-                    _ => panic!("BatchNorm input must be a tensor"),
-                };
-
-                // Build the reshape dimensions: [1, C, 1, 1, ...] for broadcasting
-                // scale/bias/mean/var are 1D tensors of shape [C], need to broadcast
-                // to match input shape [N, C, D1, D2, ...]
-                let unsqueeze_dims: Vec<isize> = {
-                    // For rank-D input, unsqueeze dim 0 and dims 2..rank-1
-                    let mut dims = vec![0isize]; // prepend batch dim
-                    for i in 2..rank {
-                        dims.push(i as isize);
-                    }
-                    dims
-                };
-
                 quote! {
-                    let #output = {
-                        let scale = #scale.unsqueeze_dims(&[#(#unsqueeze_dims),*]);
-                        let bias = #bias.unsqueeze_dims(&[#(#unsqueeze_dims),*]);
-                        let mean = #mean.unsqueeze_dims(&[#(#unsqueeze_dims),*]);
-                        let var = #var.unsqueeze_dims(&[#(#unsqueeze_dims),*]);
-                        (#input - mean) / (var + #epsilon).sqrt() * scale + bias
-                    };
+                    let #output = burn::tensor::module::batch_norm(
+                        #input, #scale, #bias, #mean, #var, #epsilon,
+                    );
                 }
             }
         }
@@ -97,9 +75,7 @@ impl NodeCodegen for BatchNormalizationNode {
                 imports.register("burn::nn::BatchNorm");
                 imports.register("burn::nn::BatchNormConfig");
             }
-            BatchNormConfig::Runtime(_) => {
-                // No module imports needed for inline math
-            }
+            BatchNormConfig::Runtime(_) => {}
         }
     }
 
@@ -223,13 +199,14 @@ mod tests {
             mean: Tensor<1>,
             var: Tensor<1>,
         ) -> Tensor<3> {
-            let output = {
-                let scale = scale.unsqueeze_dims(&[0isize, 2isize]);
-                let bias = bias.unsqueeze_dims(&[0isize, 2isize]);
-                let mean = mean.unsqueeze_dims(&[0isize, 2isize]);
-                let var = var.unsqueeze_dims(&[0isize, 2isize]);
-                (input - mean) / (var + 0.00001f64).sqrt() * scale + bias
-            };
+            let output = burn::tensor::module::batch_norm(
+                input,
+                scale,
+                bias,
+                mean,
+                var,
+                0.00001f64,
+            );
             output
         }
         ");
@@ -248,13 +225,14 @@ mod tests {
             mean: Tensor<1>,
             var: Tensor<1>,
         ) -> Tensor<4> {
-            let output = {
-                let scale = scale.unsqueeze_dims(&[0isize, 2isize, 3isize]);
-                let bias = bias.unsqueeze_dims(&[0isize, 2isize, 3isize]);
-                let mean = mean.unsqueeze_dims(&[0isize, 2isize, 3isize]);
-                let var = var.unsqueeze_dims(&[0isize, 2isize, 3isize]);
-                (input - mean) / (var + 0.00001f64).sqrt() * scale + bias
-            };
+            let output = burn::tensor::module::batch_norm(
+                input,
+                scale,
+                bias,
+                mean,
+                var,
+                0.00001f64,
+            );
             output
         }
         ");
@@ -273,13 +251,14 @@ mod tests {
             mean: Tensor<1>,
             var: Tensor<1>,
         ) -> Tensor<5> {
-            let output = {
-                let scale = scale.unsqueeze_dims(&[0isize, 2isize, 3isize, 4isize]);
-                let bias = bias.unsqueeze_dims(&[0isize, 2isize, 3isize, 4isize]);
-                let mean = mean.unsqueeze_dims(&[0isize, 2isize, 3isize, 4isize]);
-                let var = var.unsqueeze_dims(&[0isize, 2isize, 3isize, 4isize]);
-                (input - mean) / (var + 0.00001f64).sqrt() * scale + bias
-            };
+            let output = burn::tensor::module::batch_norm(
+                input,
+                scale,
+                bias,
+                mean,
+                var,
+                0.00001f64,
+            );
             output
         }
         ");
@@ -298,13 +277,40 @@ mod tests {
             mean: Tensor<1>,
             var: Tensor<1>,
         ) -> Tensor<4> {
-            let output = {
-                let scale = scale.clone().unsqueeze_dims(&[0isize, 2isize, 3isize]);
-                let bias = bias.clone().unsqueeze_dims(&[0isize, 2isize, 3isize]);
-                let mean = mean.clone().unsqueeze_dims(&[0isize, 2isize, 3isize]);
-                let var = var.clone().unsqueeze_dims(&[0isize, 2isize, 3isize]);
-                (input.clone() - mean) / (var + 0.00001f64).sqrt() * scale + bias
-            };
+            let output = burn::tensor::module::batch_norm(
+                input.clone(),
+                scale.clone(),
+                bias.clone(),
+                mean.clone(),
+                var.clone(),
+                0.00001f64,
+            );
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_batch_norm_runtime_forward_rank2() {
+        let node = create_runtime_batch_norm_node("batch_norm1", 2);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<2>,
+            scale: Tensor<1>,
+            bias: Tensor<1>,
+            mean: Tensor<1>,
+            var: Tensor<1>,
+        ) -> Tensor<2> {
+            let output = burn::tensor::module::batch_norm(
+                input,
+                scale,
+                bias,
+                mean,
+                var,
+                0.00001f64,
+            );
             output
         }
         ");

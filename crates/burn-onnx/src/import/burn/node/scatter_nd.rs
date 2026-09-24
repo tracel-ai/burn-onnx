@@ -60,10 +60,13 @@ impl NodeCodegen for onnx_ir::scatter_nd::ScatterNDNode {
             quote! {
                 let #output = {
                     #normalize
-                    let __scatter_nd_data = #data.int().cast(burn::tensor::DType::I64);
-                    let __scatter_nd_updates = #updates.int().cast(burn::tensor::DType::I64);
-                    __scatter_nd_data
-                        .scatter_nd(__nd_indices_norm, __scatter_nd_updates, #update_op)
+                    #data.int()
+                        .cast(burn::tensor::DType::I64)
+                        .scatter_nd(
+                            indices_norm,
+                            #updates.int().cast(burn::tensor::DType::I64),
+                            #update_op,
+                        )
                         .bool()
                 };
             }
@@ -71,7 +74,7 @@ impl NodeCodegen for onnx_ir::scatter_nd::ScatterNDNode {
             quote! {
                 let #output = {
                     #normalize
-                    #data.scatter_nd(__nd_indices_norm, #updates, #update_op)
+                    #data.scatter_nd(indices_norm, #updates, #update_op)
                 };
             }
         }
@@ -104,34 +107,28 @@ mod tests {
             updates: Tensor<1>,
         ) -> Tensor<1> {
             let output = {
-                let __nd_data_dims = data.dims();
-                let __nd_indices = indices.cast(burn::tensor::DType::I64);
-                let __nd_idx_dims = __nd_indices.dims();
-                let __nd_k = __nd_idx_dims[2 - 1];
-                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    __nd_k,
-                );
-                for __nd_i in 0..__nd_k {
-                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
+                let data_dims = data.dims();
+                let indices_i64 = indices.cast(burn::tensor::DType::I64);
+                let idx_dims = indices_i64.dims();
+                let k = idx_dims[2 - 1];
+                let mut dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(k);
+                for i in 0..k {
+                    dim_sizes.push(data_dims[0 + i] as i64);
                 }
-                let mut __nd_bcast_shape = [1usize; 2];
-                __nd_bcast_shape[2 - 1] = __nd_k;
-                let __nd_dims_tensor = Tensor::<
+                let mut bcast_shape = [1usize; 2];
+                bcast_shape[2 - 1] = k;
+                let dims_tensor = Tensor::<
                     1,
                     Int,
                 >::from_data(
-                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        burn::tensor::TensorData::from(dim_sizes.as_slice()),
                         (&self.device, burn::tensor::DType::I64),
                     )
-                    .reshape(__nd_bcast_shape);
-                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
-                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
-                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
-                data.scatter_nd(
-                    __nd_indices_norm,
-                    updates,
-                    burn::tensor::IndexingUpdateOp::Assign,
-                )
+                    .reshape(bcast_shape);
+                let negative = indices_i64.clone().lower_elem(0i64);
+                let corrected = indices_i64.clone() + dims_tensor;
+                let indices_norm = indices_i64.mask_where(negative, corrected);
+                data.scatter_nd(indices_norm, updates, burn::tensor::IndexingUpdateOp::Assign)
             };
             output
         }
@@ -157,30 +154,28 @@ mod tests {
             updates: Tensor<1>,
         ) -> Tensor<1> {
             let output = {
-                let __nd_data_dims = data.dims();
-                let __nd_indices = indices.cast(burn::tensor::DType::I64);
-                let __nd_idx_dims = __nd_indices.dims();
-                let __nd_k = __nd_idx_dims[2 - 1];
-                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    __nd_k,
-                );
-                for __nd_i in 0..__nd_k {
-                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
+                let data_dims = data.dims();
+                let indices_i64 = indices.cast(burn::tensor::DType::I64);
+                let idx_dims = indices_i64.dims();
+                let k = idx_dims[2 - 1];
+                let mut dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(k);
+                for i in 0..k {
+                    dim_sizes.push(data_dims[0 + i] as i64);
                 }
-                let mut __nd_bcast_shape = [1usize; 2];
-                __nd_bcast_shape[2 - 1] = __nd_k;
-                let __nd_dims_tensor = Tensor::<
+                let mut bcast_shape = [1usize; 2];
+                bcast_shape[2 - 1] = k;
+                let dims_tensor = Tensor::<
                     1,
                     Int,
                 >::from_data(
-                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        burn::tensor::TensorData::from(dim_sizes.as_slice()),
                         (&self.device, burn::tensor::DType::I64),
                     )
-                    .reshape(__nd_bcast_shape);
-                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
-                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
-                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
-                data.scatter_nd(__nd_indices_norm, updates, burn::tensor::IndexingUpdateOp::Add)
+                    .reshape(bcast_shape);
+                let negative = indices_i64.clone().lower_elem(0i64);
+                let corrected = indices_i64.clone() + dims_tensor;
+                let indices_norm = indices_i64.mask_where(negative, corrected);
+                data.scatter_nd(indices_norm, updates, burn::tensor::IndexingUpdateOp::Add)
             };
             output
         }
@@ -206,30 +201,28 @@ mod tests {
             updates: Tensor<1>,
         ) -> Tensor<1> {
             let output = {
-                let __nd_data_dims = data.dims();
-                let __nd_indices = indices.cast(burn::tensor::DType::I64);
-                let __nd_idx_dims = __nd_indices.dims();
-                let __nd_k = __nd_idx_dims[2 - 1];
-                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    __nd_k,
-                );
-                for __nd_i in 0..__nd_k {
-                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
+                let data_dims = data.dims();
+                let indices_i64 = indices.cast(burn::tensor::DType::I64);
+                let idx_dims = indices_i64.dims();
+                let k = idx_dims[2 - 1];
+                let mut dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(k);
+                for i in 0..k {
+                    dim_sizes.push(data_dims[0 + i] as i64);
                 }
-                let mut __nd_bcast_shape = [1usize; 2];
-                __nd_bcast_shape[2 - 1] = __nd_k;
-                let __nd_dims_tensor = Tensor::<
+                let mut bcast_shape = [1usize; 2];
+                bcast_shape[2 - 1] = k;
+                let dims_tensor = Tensor::<
                     1,
                     Int,
                 >::from_data(
-                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        burn::tensor::TensorData::from(dim_sizes.as_slice()),
                         (&self.device, burn::tensor::DType::I64),
                     )
-                    .reshape(__nd_bcast_shape);
-                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
-                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
-                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
-                data.scatter_nd(__nd_indices_norm, updates, burn::tensor::IndexingUpdateOp::Mul)
+                    .reshape(bcast_shape);
+                let negative = indices_i64.clone().lower_elem(0i64);
+                let corrected = indices_i64.clone() + dims_tensor;
+                let indices_norm = indices_i64.mask_where(negative, corrected);
+                data.scatter_nd(indices_norm, updates, burn::tensor::IndexingUpdateOp::Mul)
             };
             output
         }
@@ -255,30 +248,28 @@ mod tests {
             updates: Tensor<1>,
         ) -> Tensor<1> {
             let output = {
-                let __nd_data_dims = data.dims();
-                let __nd_indices = indices.cast(burn::tensor::DType::I64);
-                let __nd_idx_dims = __nd_indices.dims();
-                let __nd_k = __nd_idx_dims[2 - 1];
-                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    __nd_k,
-                );
-                for __nd_i in 0..__nd_k {
-                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
+                let data_dims = data.dims();
+                let indices_i64 = indices.cast(burn::tensor::DType::I64);
+                let idx_dims = indices_i64.dims();
+                let k = idx_dims[2 - 1];
+                let mut dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(k);
+                for i in 0..k {
+                    dim_sizes.push(data_dims[0 + i] as i64);
                 }
-                let mut __nd_bcast_shape = [1usize; 2];
-                __nd_bcast_shape[2 - 1] = __nd_k;
-                let __nd_dims_tensor = Tensor::<
+                let mut bcast_shape = [1usize; 2];
+                bcast_shape[2 - 1] = k;
+                let dims_tensor = Tensor::<
                     1,
                     Int,
                 >::from_data(
-                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        burn::tensor::TensorData::from(dim_sizes.as_slice()),
                         (&self.device, burn::tensor::DType::I64),
                     )
-                    .reshape(__nd_bcast_shape);
-                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
-                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
-                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
-                data.scatter_nd(__nd_indices_norm, updates, burn::tensor::IndexingUpdateOp::Max)
+                    .reshape(bcast_shape);
+                let negative = indices_i64.clone().lower_elem(0i64);
+                let corrected = indices_i64.clone() + dims_tensor;
+                let indices_norm = indices_i64.mask_where(negative, corrected);
+                data.scatter_nd(indices_norm, updates, burn::tensor::IndexingUpdateOp::Max)
             };
             output
         }
@@ -304,30 +295,28 @@ mod tests {
             updates: Tensor<1>,
         ) -> Tensor<1> {
             let output = {
-                let __nd_data_dims = data.dims();
-                let __nd_indices = indices.cast(burn::tensor::DType::I64);
-                let __nd_idx_dims = __nd_indices.dims();
-                let __nd_k = __nd_idx_dims[2 - 1];
-                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    __nd_k,
-                );
-                for __nd_i in 0..__nd_k {
-                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
+                let data_dims = data.dims();
+                let indices_i64 = indices.cast(burn::tensor::DType::I64);
+                let idx_dims = indices_i64.dims();
+                let k = idx_dims[2 - 1];
+                let mut dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(k);
+                for i in 0..k {
+                    dim_sizes.push(data_dims[0 + i] as i64);
                 }
-                let mut __nd_bcast_shape = [1usize; 2];
-                __nd_bcast_shape[2 - 1] = __nd_k;
-                let __nd_dims_tensor = Tensor::<
+                let mut bcast_shape = [1usize; 2];
+                bcast_shape[2 - 1] = k;
+                let dims_tensor = Tensor::<
                     1,
                     Int,
                 >::from_data(
-                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        burn::tensor::TensorData::from(dim_sizes.as_slice()),
                         (&self.device, burn::tensor::DType::I64),
                     )
-                    .reshape(__nd_bcast_shape);
-                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
-                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
-                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
-                data.scatter_nd(__nd_indices_norm, updates, burn::tensor::IndexingUpdateOp::Min)
+                    .reshape(bcast_shape);
+                let negative = indices_i64.clone().lower_elem(0i64);
+                let corrected = indices_i64.clone() + dims_tensor;
+                let indices_norm = indices_i64.mask_where(negative, corrected);
+                data.scatter_nd(indices_norm, updates, burn::tensor::IndexingUpdateOp::Min)
             };
             output
         }
@@ -353,34 +342,28 @@ mod tests {
             updates: Tensor<1, Int>,
         ) -> Tensor<2, Int> {
             let output = {
-                let __nd_data_dims = data.dims();
-                let __nd_indices = indices.cast(burn::tensor::DType::I64);
-                let __nd_idx_dims = __nd_indices.dims();
-                let __nd_k = __nd_idx_dims[2 - 1];
-                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    __nd_k,
-                );
-                for __nd_i in 0..__nd_k {
-                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
+                let data_dims = data.dims();
+                let indices_i64 = indices.cast(burn::tensor::DType::I64);
+                let idx_dims = indices_i64.dims();
+                let k = idx_dims[2 - 1];
+                let mut dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(k);
+                for i in 0..k {
+                    dim_sizes.push(data_dims[0 + i] as i64);
                 }
-                let mut __nd_bcast_shape = [1usize; 2];
-                __nd_bcast_shape[2 - 1] = __nd_k;
-                let __nd_dims_tensor = Tensor::<
+                let mut bcast_shape = [1usize; 2];
+                bcast_shape[2 - 1] = k;
+                let dims_tensor = Tensor::<
                     1,
                     Int,
                 >::from_data(
-                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        burn::tensor::TensorData::from(dim_sizes.as_slice()),
                         (&self.device, burn::tensor::DType::I64),
                     )
-                    .reshape(__nd_bcast_shape);
-                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
-                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
-                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
-                data.scatter_nd(
-                    __nd_indices_norm,
-                    updates,
-                    burn::tensor::IndexingUpdateOp::Assign,
-                )
+                    .reshape(bcast_shape);
+                let negative = indices_i64.clone().lower_elem(0i64);
+                let corrected = indices_i64.clone() + dims_tensor;
+                let indices_norm = indices_i64.mask_where(negative, corrected);
+                data.scatter_nd(indices_norm, updates, burn::tensor::IndexingUpdateOp::Assign)
             };
             output
         }
@@ -406,35 +389,32 @@ mod tests {
             updates: Tensor<1, Bool>,
         ) -> Tensor<1, Bool> {
             let output = {
-                let __nd_data_dims = data.dims();
-                let __nd_indices = indices.cast(burn::tensor::DType::I64);
-                let __nd_idx_dims = __nd_indices.dims();
-                let __nd_k = __nd_idx_dims[2 - 1];
-                let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(
-                    __nd_k,
-                );
-                for __nd_i in 0..__nd_k {
-                    __nd_dim_sizes.push(__nd_data_dims[0 + __nd_i] as i64);
+                let data_dims = data.dims();
+                let indices_i64 = indices.cast(burn::tensor::DType::I64);
+                let idx_dims = indices_i64.dims();
+                let k = idx_dims[2 - 1];
+                let mut dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(k);
+                for i in 0..k {
+                    dim_sizes.push(data_dims[0 + i] as i64);
                 }
-                let mut __nd_bcast_shape = [1usize; 2];
-                __nd_bcast_shape[2 - 1] = __nd_k;
-                let __nd_dims_tensor = Tensor::<
+                let mut bcast_shape = [1usize; 2];
+                bcast_shape[2 - 1] = k;
+                let dims_tensor = Tensor::<
                     1,
                     Int,
                 >::from_data(
-                        burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+                        burn::tensor::TensorData::from(dim_sizes.as_slice()),
                         (&self.device, burn::tensor::DType::I64),
                     )
-                    .reshape(__nd_bcast_shape);
-                let __nd_mask = __nd_indices.clone().lower_elem(0i64);
-                let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
-                let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
-                let __scatter_nd_data = data.int().cast(burn::tensor::DType::I64);
-                let __scatter_nd_updates = updates.int().cast(burn::tensor::DType::I64);
-                __scatter_nd_data
+                    .reshape(bcast_shape);
+                let negative = indices_i64.clone().lower_elem(0i64);
+                let corrected = indices_i64.clone() + dims_tensor;
+                let indices_norm = indices_i64.mask_where(negative, corrected);
+                data.int()
+                    .cast(burn::tensor::DType::I64)
                     .scatter_nd(
-                        __nd_indices_norm,
-                        __scatter_nd_updates,
+                        indices_norm,
+                        updates.int().cast(burn::tensor::DType::I64),
                         burn::tensor::IndexingUpdateOp::Assign,
                     )
                     .bool()

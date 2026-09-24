@@ -123,7 +123,7 @@ impl ChannelScale {
             .ok_or_else(|| {
                 ProcessError::Custom("ChannelScale requires a constant scale input".to_string())
             })?
-            .to_vec::<f32>()
+            .try_to_vec::<f32>()
             .map_err(|_| ProcessError::Custom("ChannelScale scale must be f32".to_string()))
     }
 }

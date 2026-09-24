@@ -89,10 +89,10 @@ impl NodeCodegen for PReluNode {
 
         quote! {
             let #output = {
-                let __x = #x;
-                __x.clone()
+                let x = #x;
+                x.clone()
                     .clamp_min(0_f64)
-                    .add(#slope_aligned.mul(__x.clamp_max(0_f64)))
+                    .add(#slope_aligned.mul(x.clamp_max(0_f64)))
             };
         }
     }
@@ -161,10 +161,10 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<4>, slope: Tensor<3>) -> Tensor<4> {
             let output = {
-                let __x = input;
-                __x.clone()
+                let x = input;
+                x.clone()
                     .clamp_min(0_f64)
-                    .add((slope).unsqueeze_dims(&[0isize]).mul(__x.clamp_max(0_f64)))
+                    .add((slope).unsqueeze_dims(&[0isize]).mul(x.clamp_max(0_f64)))
             };
             output
         }
@@ -183,8 +183,8 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3>, slope: Tensor<3>) -> Tensor<3> {
             let output = {
-                let __x = input;
-                __x.clone().clamp_min(0_f64).add(slope.mul(__x.clamp_max(0_f64)))
+                let x = input;
+                x.clone().clamp_min(0_f64).add(slope.mul(x.clamp_max(0_f64)))
             };
             output
         }

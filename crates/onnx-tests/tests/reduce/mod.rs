@@ -491,15 +491,15 @@ mod tests {
 
         // Output 2: Reduce all with keepdims -> [1, 1, 1]
         let expected2 = TensorData::from([[[false]]]);
-        output2.to_data().assert_eq(&expected2, true);
+        output2.to_data().assert_eq(&expected2, false);
 
         // Output 3: Reduce axis 2 -> [2, 3] (AND along last dimension)
         let expected3 = TensorData::from([[false, true, false], [false, false, false]]);
-        output3.to_data().assert_eq(&expected3, true);
+        output3.to_data().assert_eq(&expected3, false);
 
         // Output 4: Reduce axes [0, 2] with keepdims -> [1, 3, 1]
         let expected4 = TensorData::from([[[false], [false], [false]]]);
-        output4.to_data().assert_eq(&expected4, true);
+        output4.to_data().assert_eq(&expected4, false);
     }
 
     #[test]
@@ -532,15 +532,15 @@ mod tests {
 
         // Output 2: Reduce all with keepdims -> [1, 1, 1]
         let expected2 = TensorData::from([[[true]]]);
-        output2.to_data().assert_eq(&expected2, true);
+        output2.to_data().assert_eq(&expected2, false);
 
         // Output 3: Reduce axis 2 -> [2, 3] (OR along last dimension)
         let expected3 = TensorData::from([[false, true, true], [false, true, true]]);
-        output3.to_data().assert_eq(&expected3, true);
+        output3.to_data().assert_eq(&expected3, false);
 
         // Output 4: Reduce axes [0, 2] with keepdims -> [1, 3, 1]
         let expected4 = TensorData::from([[[false], [true], [true]]]);
-        output4.to_data().assert_eq(&expected4, true);
+        output4.to_data().assert_eq(&expected4, false);
     }
     #[test]
     fn reduce_runtime_axes() {

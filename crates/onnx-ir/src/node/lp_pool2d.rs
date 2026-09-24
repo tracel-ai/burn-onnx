@@ -3,10 +3,15 @@
 //! 2D Lp pooling operation.
 //!
 //! **ONNX Spec**: <https://onnx.ai/onnx/operators/onnx__LpPool.html>
+//!
+//! ## Opset Versions
+//! - **Opset 1**: Initial version. `p` is a FLOAT attribute.
+//! - **Opset 2**: `p` becomes an INT attribute.
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
 
 use crate::ir::{Argument, Node, RawNode};
+use crate::node::global_lp_pool::extract_p;
 use crate::node::padding::{AutoPad, PaddingConfig2d, padding_config_2d};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
@@ -27,8 +32,9 @@ pub struct LpPool2dConfig {
     pub ceil_mode: bool,
     /// Auto padding mode
     pub auto_pad: AutoPad,
-    /// Norm type p (defaults to 2)
-    pub p: i64,
+    /// Norm type p (defaults to 2). Held as a float because opset 1 declares `p` as
+    /// FLOAT and does not restrict it to whole numbers.
+    pub p: f64,
 }
 
 /// Node representation for LpPool2d operation
@@ -105,13 +111,7 @@ impl NodeProcessor for LpPool2dProcessor {
                     }
                 }
                 "p" => {
-                    let p = value.clone().into_i64();
-                    if p <= 0 {
-                        return Err(ProcessError::Custom(format!(
-                            "LpPool2d: p must be > 0, got {}",
-                            p
-                        )));
-                    }
+                    extract_p(node)?;
                 }
                 "ceil_mode" => {
                     let ceil_mode = value.clone().into_i64();
@@ -181,7 +181,6 @@ impl NodeProcessor for LpPool2dProcessor {
         let mut dilations = vec![1, 1];
         let mut ceil_mode: i64 = 0;
         let mut auto_pad = AutoPad::NotSet;
-        let mut p: i64 = 2;
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
@@ -191,11 +190,11 @@ impl NodeProcessor for LpPool2dProcessor {
                 "dilations" => dilations = value.clone().into_i64s(),
                 "ceil_mode" => ceil_mode = value.clone().into_i64(),
                 "auto_pad" => auto_pad = AutoPad::parse(&value.clone().into_string())?,
-                "p" => p = value.clone().into_i64(),
                 _ => {}
             }
         }
 
+        let p = extract_p(node)?;
         let padding = padding_config_2d(&pads);
 
         let config = LpPool2dConfig::new(
@@ -270,7 +269,7 @@ mod tests {
         assert_eq!(config.kernel_size, [2, 3]);
         assert_eq!(config.strides, [1, 2]);
         assert_eq!(config.dilation, [1, 1]);
-        assert_eq!(config.p, 2);
+        assert_eq!(config.p, 2.0);
         assert!(!config.ceil_mode);
         assert!(matches!(
             config.padding,
@@ -289,7 +288,7 @@ mod tests {
 
         assert_eq!(config.kernel_size, [3, 3]);
         assert_eq!(config.strides, [2, 2]);
-        assert_eq!(config.p, 4);
+        assert_eq!(config.p, 4.0);
     }
 
     #[test]
@@ -394,7 +393,7 @@ mod tests {
         let err = processor
             .infer_types(&mut p_zero, 16, &prefs)
             .expect_err("Expected non-positive p to fail");
-        assert!(format!("{}", err).contains("LpPool2d: p must be > 0"));
+        assert!(format!("{}", err).contains("p must be finite and > 0"));
     }
 
     /// Pins `validate_auto_pad` into this processor's `infer_types`. Without the call the node
@@ -418,5 +417,21 @@ mod tests {
             err.contains(&crate::node::padding::SameBlocker::SameLower.to_string()),
             "{err}"
         );
+    }
+
+    /// Opset 1 declares `p` as FLOAT, and it may be fractional.
+    #[test]
+    fn test_lppool2d_opset1_float_p() {
+        let mut node = TestNodeBuilder::new(NodeType::LpPool2d, "test_float_p")
+            .input_tensor_f32("data", 4, None)
+            .output_tensor_f32("output", 4, None)
+            .attr_ints("kernel_shape", vec![2, 2])
+            .attr_float("p", 1.5)
+            .build();
+        let processor = LpPool2dProcessor;
+        let prefs = OutputPreferences::new();
+        processor.infer_types(&mut node, 1, &prefs).unwrap();
+        let config = processor.extract_config(&node, 1).unwrap();
+        assert_eq!(config.p, 1.5);
     }
 }

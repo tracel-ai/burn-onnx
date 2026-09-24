@@ -326,7 +326,7 @@ define_node_enum! {
     Resize => resize::ResizeNode,
     /// Deprecated predecessor of Resize; shares its node and codegen.
     Upsample => resize::ResizeNode,
-    Scatter => unsupported::ScatterNode,
+    Scatter => scatter_elements::ScatterElementsNode,
     ScatterElements => scatter_elements::ScatterElementsNode,
     ScatterND => scatter_nd::ScatterNDNode,
     Shape => shape::ShapeNode,
@@ -362,7 +362,7 @@ define_node_enum! {
     MaxPool3d => max_pool3d::MaxPool3dNode,
     GlobalAveragePool => global_avg_pool::GlobalAveragePoolNode,
     GlobalLpPool => global_lp_pool::GlobalLpPoolNode,
-    GlobalMaxPool => unsupported::GlobalMaxPoolNode,
+    GlobalMaxPool => global_max_pool::GlobalMaxPoolNode,
 
     // NORMALIZATION
     BatchNormalization => batch_norm::BatchNormalizationNode,

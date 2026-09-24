@@ -107,6 +107,64 @@ mod tests {
     }
 
     #[test]
+    fn lp_normalization_zero_norm() {
+        // An all-zero slice has norm 0. The ONNX reference (onnx >= 1.22)
+        // returns 0 there instead of 0/0 = NaN.
+        let device = Default::default();
+        let input = Tensor::<3>::from_floats(
+            [
+                [
+                    [3.0, 4.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0],
+                ],
+                [
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.0, 6.0, 8.0, 0.0],
+                    [0.0, 0.0, -2.0, 0.0],
+                ],
+            ],
+            &device,
+        );
+
+        let model: lp_normalization_default::Model = lp_normalization_default::Model::default();
+        let expected = TensorData::from([
+            [
+                [0.6f32, 0.8, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 0.0],
+            ],
+            [
+                [0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.6, 0.8, 0.0],
+                [0.0, 0.0, -1.0, 0.0],
+            ],
+        ]);
+        model
+            .forward(input.clone())
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
+
+        let model: lp_normalization_l1_axis1::Model = lp_normalization_l1_axis1::Model::default();
+        let expected = TensorData::from([
+            [
+                [0.75f32, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+                [0.25, 0.0, 0.0, 0.0],
+            ],
+            [
+                [0.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.8, 0.0],
+                [0.0, 0.0, -0.2, 0.0],
+            ],
+        ]);
+        model
+            .forward(input)
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
+    }
+
+    #[test]
     fn lp_normalization_l2_negative_axis() {
         // axis=-2 on rank-3 resolves to axis=1.
         let device = Default::default();

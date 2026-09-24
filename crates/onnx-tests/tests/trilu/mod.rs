@@ -1,5 +1,5 @@
 use crate::include_models;
-include_models!(trilu_lower, trilu_upper);
+include_models!(trilu_lower, trilu_runtime_k, trilu_upper);
 
 #[cfg(test)]
 mod tests {
@@ -36,5 +36,37 @@ mod tests {
         let output = model.forward(input).to_data();
 
         output.assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn trilu_runtime_k() {
+        let device = Default::default();
+        let model: trilu_runtime_k::Model = trilu_runtime_k::Model::new(&device);
+        let input = || {
+            Tensor::<2>::from_floats(
+                [[1., 2., 3., 4.], [5., 6., 7., 8.], [9., 10., 11., 12.]],
+                &device,
+            )
+        };
+
+        let below = model.forward(input(), -1).to_data();
+        below.assert_eq(
+            &TensorData::from([
+                [0.0_f32, 0.0, 0.0, 0.0],
+                [5.0, 0.0, 0.0, 0.0],
+                [9.0, 10.0, 0.0, 0.0],
+            ]),
+            true,
+        );
+
+        let above = model.forward(input(), 2).to_data();
+        above.assert_eq(
+            &TensorData::from([
+                [1.0_f32, 2.0, 3.0, 0.0],
+                [5.0, 6.0, 7.0, 8.0],
+                [9.0, 10.0, 11.0, 12.0],
+            ]),
+            true,
+        );
     }
 }

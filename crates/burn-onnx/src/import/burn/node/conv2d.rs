@@ -11,6 +11,9 @@ impl NodeCodegen for onnx_ir::conv2d::Conv2dNode {
     }
 
     fn field(&self) -> Option<Field> {
+        if !self.inputs[1].is_static() {
+            return None;
+        }
         let name = Ident::new(&self.name, Span::call_site());
         let weight_shape = self.inputs[1]
             .ty
@@ -22,7 +25,7 @@ impl NodeCodegen for onnx_ir::conv2d::Conv2dNode {
         let stride = self.config.stride.to_tokens();
         let dilation = self.config.dilation.to_tokens();
         let groups = groups.to_tokens();
-        let bias = self.inputs.len() == 3;
+        let bias = self.inputs.get(2).is_some_and(|bias| !bias.is_optional());
 
         let input_spatial = onnx_ir::node::padding::static_spatial_dims(&self.inputs[0].ty);
         let padding = crate::burn::codegen::resolve_auto_pad_2d(
@@ -52,6 +55,9 @@ impl NodeCodegen for onnx_ir::conv2d::Conv2dNode {
     }
 
     fn collect_tensors(&self, field_name: &str) -> Vec<PackTensor> {
+        if !self.inputs[1].is_static() {
+            return vec![];
+        }
         use crate::burn::node_traits::create_deferred_tensor;
 
         let mut tensors = vec![];
@@ -78,6 +84,26 @@ impl NodeCodegen for onnx_ir::conv2d::Conv2dNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
+        // A runtime weight has no module to live in, so the functional op takes it.
+        if !self.inputs[1].is_static() {
+            let (top, left, bottom, right) = self.config.padding.as_tuple();
+            let explicit = [(top, bottom), (left, right)];
+            let geometry = super::conv_helpers::ConvGeometry {
+                auto_pad: &self.config.auto_pad,
+                explicit: &explicit,
+                kernel: &self.config.kernel_size,
+                stride: &self.config.stride,
+                dilation: &self.config.dilation,
+                groups: self.config.groups,
+            };
+            return super::conv_helpers::functional_conv(
+                scope,
+                &self.inputs,
+                &self.outputs[0],
+                "conv2d",
+                geometry,
+            );
+        }
         let input = scope.arg(self.inputs.first().unwrap());
         let output = arg_to_ident(self.outputs.first().unwrap());
         let field = Ident::new(&self.name, Span::call_site());
@@ -88,6 +114,9 @@ impl NodeCodegen for onnx_ir::conv2d::Conv2dNode {
     }
 
     fn register_imports(&self, imports: &mut BurnImports) {
+        if !self.inputs[1].is_static() {
+            return;
+        }
         imports.register("burn::nn::PaddingConfig2d");
         imports.register("burn::nn::conv::Conv2d");
         imports.register("burn::nn::conv::Conv2dConfig");
@@ -258,6 +287,104 @@ mod tests {
             .with_groups(1)
             .with_bias(true)
             .init(device);
+        ");
+    }
+    #[test]
+    fn test_conv2d_runtime_weight() {
+        let node = {
+            let config = Conv2dConfig::new(
+                [3, 3],
+                [1, 1],
+                PaddingConfig2d::Explicit(1, 1, 1, 1),
+                [1, 1],
+                1,
+                AutoPad::NotSet,
+            );
+
+            Conv2dNodeBuilder::new("conv1")
+                .input_tensor("input", 4, DType::F32)
+                .input_tensor("weight", 4, DType::F32)
+                .input_tensor("bias", 1, DType::F32)
+                .output_tensor("output", 4, DType::F32)
+                .config(config)
+                .build()
+        };
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<4>,
+            weight: Tensor<4>,
+            bias: Tensor<1>,
+        ) -> Tensor<4> {
+            let output = burn::tensor::module::conv2d(
+                input,
+                weight,
+                Some(bias),
+                burn::tensor::ops::ConvOptions::new_with_padding(
+                    [1, 1],
+                    [(1usize, 1usize), (1usize, 1usize)],
+                    [1, 1],
+                    1,
+                ),
+            );
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_conv2d_runtime_weight_dynamic_same_padding() {
+        let config = Conv2dConfig::new(
+            [2, 2],
+            [1, 1],
+            PaddingConfig2d::Valid,
+            [1, 1],
+            1,
+            AutoPad::SameUpper,
+        );
+        let node = Conv2dNodeBuilder::new("conv1")
+            .input_tensor("input", 4, DType::F32)
+            .input_tensor("weight", 4, DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<4>, weight: Tensor<4>) -> Tensor<4> {
+            let output = {
+                let padding = {
+                    let dims = input.dims();
+                    [
+                        {
+                            let size = dims[2usize];
+                            let total = (size.div_ceil(1usize).saturating_sub(1) * 1usize
+                                + 2usize)
+                                .saturating_sub(size);
+                            let small = total / 2;
+                            let big = total - small;
+                            (small, big)
+                        },
+                        {
+                            let size = dims[3usize];
+                            let total = (size.div_ceil(1usize).saturating_sub(1) * 1usize
+                                + 2usize)
+                                .saturating_sub(size);
+                            let small = total / 2;
+                            let big = total - small;
+                            (small, big)
+                        },
+                    ]
+                };
+                burn::tensor::module::conv2d(
+                    input,
+                    weight,
+                    None,
+                    burn::tensor::ops::ConvOptions::new_with_padding([1, 1], padding, [1, 1], 1),
+                )
+            };
+            output
+        }
         ");
     }
 }

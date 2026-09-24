@@ -25,7 +25,7 @@ impl NodeCodegen for onnx_ir::unsqueeze::UnsqueezeNode {
                     ArgType::Tensor(_) => {
                         let tensor_name = arg_to_ident(axes_arg);
                         quote! {
-                            #tensor_name.to_data().convert::<i64>().into_vec::<i64>().unwrap()
+                            #tensor_name.to_data().convert::<i64>().try_into_vec::<i64>().unwrap()
                         }
                     }
                     _ => panic!(
@@ -180,6 +180,30 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> Tensor<3> {
             let output: Tensor<3> = input.unsqueeze_dims::<3>(&[2]);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_unsqueeze_runtime_axes_tensor() {
+        use onnx_ir::ir::RuntimeInputRef;
+        let config = UnsqueezeConfig::Runtime(RuntimeInputRef::new("axes".to_string(), 1));
+
+        let node = UnsqueezeNodeBuilder::new("unsqueeze_rt")
+            .input_tensor("input", 2, DType::F32)
+            .input_tensor("axes", 1, DType::I64)
+            .output_tensor("output", 3, DType::F32)
+            .config(config)
+            .build();
+
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>, axes: Tensor<1, Int>) -> Tensor<3> {
+            let output: Tensor<3> = input
+                .unsqueeze_dims::<
+                    3,
+                >(&axes.to_data().convert::<i64>().try_into_vec::<i64>().unwrap());
             output
         }
         ");

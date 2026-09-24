@@ -1,13 +1,15 @@
 // Import the shared macro
 use crate::include_models;
 include_models!(
-    modulo,
-    mod_scalar,
-    mod_remainder,
-    mod_fmod,
     mod_broadcast_fixed,
     mod_broadcast_remainder_fixed,
-    mod_shape
+    mod_fmod,
+    mod_remainder,
+    mod_scalar,
+    mod_shape,
+    mod_shape_broadcast,
+    modulo,
+    mod_int_fmod
 );
 
 #[cfg(test)]
@@ -182,5 +184,53 @@ mod tests {
         assert!((values[2] - (-1.5)).abs() < 0.001);
         assert!((values[3] - (-0.5)).abs() < 0.001);
         assert!((values[4] - 2.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn mod_shape_broadcast() {
+        let device = Default::default();
+        let model: mod_shape_broadcast::Model = mod_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([2], &device);
+        let input_4d = Tensor::<4>::zeros([2, 30, 4, 5], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [0i64, 2, 2, 2]);
+        assert_eq!(rhs_bc, [0i64, 0, 0, 1]);
+    }
+
+    #[test]
+    fn mod_int_fmod() {
+        let device = Default::default();
+        let model: mod_int_fmod::Model = mod_int_fmod::Model::new(&device);
+        let int64 = |values: [i64; 8]| {
+            Tensor::<1, burn::tensor::Int>::from_data(
+                TensorData::from(values),
+                (&device, burn::tensor::DType::I64),
+            )
+        };
+        let x = int64([7, -7, 7, -7, 6, -6, 0, 5]);
+        let y = int64([3, 3, -3, -3, 3, -3, 4, 7]);
+
+        let a = Tensor::<2, burn::tensor::Int>::from_data(
+            TensorData::from([[7i64], [-7]]),
+            (&device, burn::tensor::DType::I64),
+        );
+        let b = Tensor::<1, burn::tensor::Int>::from_data(
+            TensorData::from([3i64, -3, 4]),
+            (&device, burn::tensor::DType::I64),
+        );
+
+        let (z, zs, zb, zd) = model.forward(x, y, -4, a, b);
+
+        z.to_data()
+            .assert_eq(&TensorData::from([1i64, -1, 1, -1, 0, 0, 0, 5]), true);
+        zs.to_data()
+            .assert_eq(&TensorData::from([3i64, -3, 3, -3, 2, -2, 0, 1]), true);
+        zb.to_data()
+            .assert_eq(&TensorData::from([[1i64, 1, 3], [-1, -1, -3]]), true);
+        zd.to_data()
+            .assert_eq(&TensorData::from([-1i64, -1, -1, -1, -1, -1, 0, -4]), true);
     }
 }

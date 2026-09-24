@@ -20,7 +20,7 @@ crates/onnx-official-tests/
 ├── Cargo.toml
 ├── build.rs                # data-driven codegen + per-test harness emission
 ├── expectations.toml       # declarative source of truth for every upstream test
-├── vendor/node/            # upstream test data, vendored from onnx v1.19.0
+├── vendor/node/            # upstream test data, vendored from onnx v1.22.0
 │   └── test_<name>/
 │       ├── model.onnx
 │       └── test_data_set_0/{input_*.pb, output_0.pb}
@@ -47,15 +47,19 @@ crates/onnx-official-tests/
 ## Vendored test data
 
 The data under `vendor/node/` is copied verbatim from [`onnx/onnx`](https://github.com/onnx/onnx) at
-tag `v1.19.0`. It's a direct commit (~35 MB across ~1600 test directories) rather than a submodule
+tag `v1.22.0`. It's a direct commit (~38 MB across ~1760 test directories) rather than a submodule
 or LFS-backed tree so clean checkouts stay self-contained and CI needs no network access.
+
+v1.22.0 is the last release that ships these files. onnx v1.23.0 removed them from the repository
+(onnx/onnx#7959) and generates them on the fly from `onnx/backend/test/case/node/` instead, so
+`refresh-onnx-tests` cannot download anything newer.
 
 To refresh against a new ONNX release, use the xtask helper:
 
 ```sh
-cargo xtask refresh-onnx-tests --version 1.19.0
+cargo xtask refresh-onnx-tests --version 1.22.0
 # sanity-check the URL and paths first:
-cargo xtask refresh-onnx-tests --version 1.19.0 --dry-run
+cargo xtask refresh-onnx-tests --version 1.22.0 --dry-run
 ```
 
 The helper downloads the release tarball, extracts `onnx/backend/test/data/node/`, and replaces

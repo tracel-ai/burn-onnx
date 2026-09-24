@@ -15,8 +15,18 @@ impl NodeCodegen for onnx_ir::gather_elements::GatherElementsNode {
         let index = scope.arg(&self.inputs[1]);
         let output = arg_to_ident(self.outputs.first().unwrap());
 
+        // ONNX allows indices down to `-dim_size` along the gather axis, which burn's
+        // `gather` does not accept, so fold negatives first. Indices outside
+        // `[-dim_size, dim_size - 1]` are an error per the ONNX spec and stay unchecked,
+        // like ScatterElements.
         quote! {
-            let #output = #input.gather(#dim, #index);
+            let #output = {
+                let axis_size = #input.dims()[#dim] as i64;
+                let negative = #index.clone().lower_elem(0i64);
+                let corrected = #index.clone() + axis_size;
+                let indices = #index.mask_where(negative, corrected);
+                #input.gather(#dim, indices)
+            };
         }
     }
 }
@@ -45,7 +55,13 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>, indices: Tensor<2, Int>) -> Tensor<2> {
-            let output = input.gather(1, indices);
+            let output = {
+                let axis_size = input.dims()[1] as i64;
+                let negative = indices.clone().lower_elem(0i64);
+                let corrected = indices.clone() + axis_size;
+                let indices = indices.mask_where(negative, corrected);
+                input.gather(1, indices)
+            };
             output
         }
         ");

@@ -5,6 +5,7 @@
 pub(crate) mod prelude;
 
 pub(crate) mod broadcast_helpers;
+pub(crate) mod conv_helpers;
 pub(crate) mod indexing_helpers;
 pub(crate) mod rnn_common;
 mod subgraph_helper;
@@ -79,6 +80,7 @@ pub(crate) mod gelu;
 pub(crate) mod gemm;
 pub(crate) mod global_avg_pool;
 pub(crate) mod global_lp_pool;
+pub(crate) mod global_max_pool;
 pub(crate) mod greater;
 pub(crate) mod greater_equal;
 pub(crate) mod grid_sample;

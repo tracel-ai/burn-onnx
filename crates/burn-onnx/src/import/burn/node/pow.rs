@@ -30,17 +30,17 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
         // Determine power type based on RHS type
         let power_type = match &rhs_arg.ty {
             ArgType::Tensor(t) => match &t.dtype {
-                dtype if dtype.is_int() => PowerType::Int,
+                dtype if dtype.is_int() || dtype.is_uint() => PowerType::Int,
                 dtype if dtype.is_float() => PowerType::Float,
                 _ => panic!("pow function requires RHS to be int or float type"),
             },
             ArgType::ScalarTensor(dtype) => match dtype {
-                dtype if dtype.is_int() => PowerType::Int,
+                dtype if dtype.is_int() || dtype.is_uint() => PowerType::Int,
                 dtype if dtype.is_float() => PowerType::Float,
                 _ => panic!("pow function requires RHS to be int or float type"),
             },
             ArgType::ScalarNative(dtype) => match dtype {
-                dtype if dtype.is_int() => PowerType::Int,
+                dtype if dtype.is_int() || dtype.is_uint() => PowerType::Int,
                 dtype if dtype.is_float() => PowerType::Float,
                 _ => panic!("pow function requires RHS to be int or float type"),
             },
@@ -55,7 +55,15 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                     broadcast_helpers::leading_broadcast(quote! { #lhs }, lhs_rank, rhs_rank);
                 let rhs_bc =
                     broadcast_helpers::leading_broadcast(quote! { #rhs }, rhs_rank, lhs_rank);
-                quote! { #lhs_bc.powi(#rhs_bc) }
+                // powi takes an exponent of the base's kind. On a float base it
+                // dispatches to powf, so the integer exponent is cast to the base's dtype.
+                let lhs_dtype = lhs_ty.elem_type();
+                if lhs_dtype.is_float() {
+                    let dtype = lhs_dtype.to_tokens();
+                    quote! { #lhs_bc.powi(#rhs_bc.float().cast(#dtype)) }
+                } else {
+                    quote! { #lhs_bc.powi(#rhs_bc) }
+                }
             }
             (PowerType::Float, lhs_ty, rhs_ty)
                 if lhs_ty.is_on_device() && rhs_ty.is_on_device() =>
@@ -66,7 +74,18 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                     broadcast_helpers::leading_broadcast(quote! { #lhs }, lhs_rank, rhs_rank);
                 let rhs_bc =
                     broadcast_helpers::leading_broadcast(quote! { #rhs }, rhs_rank, lhs_rank);
-                quote! { #lhs_bc.powf(#rhs_bc) }
+                // An integer base is raised in the exponent's float type; ONNX keeps the
+                // base's type for the result.
+                let lhs_dtype = lhs_ty.elem_type();
+                if lhs_dtype.is_float() {
+                    quote! { #lhs_bc.powf(#rhs_bc) }
+                } else {
+                    let float_dtype = rhs_ty.elem_type().to_tokens();
+                    let int_dtype = lhs_dtype.to_tokens();
+                    quote! {
+                        #lhs_bc.float().cast(#float_dtype).powf(#rhs_bc).int().cast(#int_dtype)
+                    }
+                }
             }
             // ScalarNative + ScalarNative (native Rust pow)
             (PowerType::Float, ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
@@ -122,7 +141,7 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                         )
                     }
                 };
-                quote! { #base.powi(#rhs) }
+                quote! { #base.powi(#rhs.float().cast(#dtype_tokens)) }
             }
             // on_device + ScalarNative
             (PowerType::Int, _, ArgType::ScalarNative(_)) => quote! { #lhs.powi_scalar(#rhs) },
@@ -248,7 +267,7 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, base: Tensor<2>, exponent: Tensor<2, Int>) -> Tensor<2> {
-            let output = base.powi(exponent);
+            let output = base.powi(exponent.float().cast(burn::tensor::DType::F32));
             output
         }
         ");
@@ -263,7 +282,10 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, base: Tensor<3>, exponent: Tensor<2, Int>) -> Tensor<3> {
-            let output = base.powi((exponent).unsqueeze_dims(&[0isize]));
+            let output = base
+                .powi(
+                    (exponent).unsqueeze_dims(&[0isize]).float().cast(burn::tensor::DType::F32),
+                );
             output
         }
         ");
@@ -278,7 +300,9 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, base: Tensor<2>, exponent: Tensor<3, Int>) -> Tensor<3> {
-            let output = (base).unsqueeze_dims(&[0isize]).powi(exponent);
+            let output = (base)
+                .unsqueeze_dims(&[0isize])
+                .powi(exponent.float().cast(burn::tensor::DType::F32));
             output
         }
         ");
@@ -293,7 +317,13 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, base: Tensor<3>, exponent: Tensor<1, Int>) -> Tensor<3> {
-            let output = base.powi((exponent).unsqueeze_dims(&[0isize, 1isize]));
+            let output = base
+                .powi(
+                    (exponent)
+                        .unsqueeze_dims(&[0isize, 1isize])
+                        .float()
+                        .cast(burn::tensor::DType::F32),
+                );
             output
         }
         ");
@@ -308,7 +338,9 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, base: Tensor<1>, exponent: Tensor<3, Int>) -> Tensor<3> {
-            let output = (base).unsqueeze_dims(&[0isize, 1isize]).powi(exponent);
+            let output = (base)
+                .unsqueeze_dims(&[0isize, 1isize])
+                .powi(exponent.float().cast(burn::tensor::DType::F32));
             output
         }
         ");
@@ -448,7 +480,7 @@ mod tests {
                     (&self.device, burn::tensor::DType::F32),
                 )
                 .unsqueeze_dims(&[0isize])
-                .powi(exponent);
+                .powi(exponent.float().cast(burn::tensor::DType::F32));
             output
         }
         ");
@@ -470,6 +502,41 @@ mod tests {
                     (&self.device, burn::tensor::DType::F32),
                 )
                 .powf(exponent);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_pow_float_base_int_exponent() {
+        let node = PowNodeBuilder::new("pow1")
+            .input_tensor("base", 1, DType::F32)
+            .input_tensor("exponent", 1, DType::I64)
+            .output_tensor("output", 1, DType::F32)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, base: Tensor<1>, exponent: Tensor<1, Int>) -> Tensor<1> {
+            let output = base.powi(exponent.float().cast(burn::tensor::DType::F32));
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_pow_int_base_float_exponent() {
+        let node = PowNodeBuilder::new("pow1")
+            .input_tensor("base", 1, DType::I64)
+            .input_tensor("exponent", 1, DType::F32)
+            .output_tensor("output", 1, DType::I64)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, base: Tensor<1, Int>, exponent: Tensor<1>) -> Tensor<1, Int> {
+            let output = base
+                .float()
+                .cast(burn::tensor::DType::F32)
+                .powf(exponent)
+                .int()
+                .cast(burn::tensor::DType::I64);
             output
         }
         ");

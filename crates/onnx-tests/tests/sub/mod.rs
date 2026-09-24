@@ -1,10 +1,19 @@
 // Include the models for this node type
 use crate::include_models;
-include_models!(sub, sub_int, sub_shape, sub_broadcast, sub_shape_tensor);
+include_models!(
+    sub,
+    sub_broadcast,
+    sub_int,
+    sub_shape,
+    sub_shape_broadcast,
+    sub_shape_rank_lift,
+    sub_shape_tensor
+);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec::Vec;
     use burn::tensor::{DType, Device, Int, Tensor, TensorData};
 
     #[test]
@@ -132,5 +141,46 @@ mod tests {
 
         result1.to_data().assert_eq(&expected1, true);
         result2.to_data().assert_eq(&expected2, true);
+    }
+
+    #[test]
+    fn sub_shape_broadcast() {
+        let device = Default::default();
+        let model: sub_shape_broadcast::Model = sub_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([3], &device);
+        let input_4d = Tensor::<4>::zeros([2, 30, 4, 5], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [1i64, -27, -1, -2]);
+        assert_eq!(rhs_bc, [-1i64, 27, 1, 2]);
+    }
+
+    #[test]
+    fn sub_shape_operand_with_rank4_tensor() {
+        // dim0 of x's shape (B = 2) is a length 1 Shape, lifted to rank 4 before the op.
+        // Outputs are `x - 2` and `2 - x`.
+        let device = Default::default();
+        let model: sub_shape_rank_lift::Model = sub_shape_rank_lift::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/sub_shape_rank_lift.bpk"),
+            &device,
+        );
+
+        let values: Vec<i64> = (1..=120).collect();
+        let x = Tensor::<4, Int>::from_data(
+            TensorData::new(values.clone(), [2, 3, 4, 5]),
+            (&device, burn::tensor::DType::I64),
+        );
+        let (tensor_shape, shape_tensor) = model.forward(x);
+
+        let expected1: Vec<i64> = values.iter().map(|&v| v - 2).collect();
+        let expected2: Vec<i64> = values.iter().map(|&v| 2 - v).collect();
+        tensor_shape
+            .to_data()
+            .assert_eq(&TensorData::new(expected1, [2, 3, 4, 5]), true);
+        shape_tensor
+            .to_data()
+            .assert_eq(&TensorData::new(expected2, [2, 3, 4, 5]), true);
     }
 }

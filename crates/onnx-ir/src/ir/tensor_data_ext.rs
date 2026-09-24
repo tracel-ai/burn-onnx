@@ -75,6 +75,7 @@ impl TensorDataExt for burn_tensor::TensorData {
         match self.dtype {
             DType::I64 => Ok(self.as_slice::<i64>()?[0]),
             DType::I32 => Ok(self.as_slice::<i32>()?[0] as i64),
+            DType::I16 => Ok(self.as_slice::<i16>()?[0] as i64),
             DType::I8 => Ok(self.as_slice::<i8>()?[0] as i64),
             DType::U8 => Ok(self.as_slice::<u8>()?[0] as i64),
             DType::U16 => Ok(self.as_slice::<u16>()?[0] as i64),

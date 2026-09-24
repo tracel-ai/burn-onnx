@@ -9,19 +9,15 @@
 //!   `epsilon`, and `stash_type` attributes. Includes support for optional Mean and InvStdDev outputs.
 //!
 //! **Implementation Note**: Requires at least 2 inputs (X and Scale; Bias is optional).
-//! Accepts 1-3 outputs (Y required, optional Mean and InvStdDev).
-//!
-//! ## Missing Test Coverage
-//! - TODO: No test for optional bias (2 inputs) - Spec allows B to be optional but implementation requires 3 inputs
-//! - TODO: No test for custom epsilon values - Only default epsilon=1e-5 tested
-//! - TODO: No test for stash_type=0 behavior - Test exists but no verification of computational precision difference
-//! - TODO: No test for axis != -1 cases (positive axis values) - Only axis=-1 tested
-//! - TODO: No test for edge cases: zero-variance inputs, constant inputs, very large/small values
-//! - TODO: No test for optional Mean and InvStdDev outputs - Implementation doesn't support multiple outputs
+//! Accepts 1-3 outputs (Y required, optional Mean and InvStdDev). Scale and Bias are
+//! lifted into a module only when Scale is a 1-D constant, `axis` is the last axis, Bias
+//! is absent or constant, and neither optional output is used; otherwise both stay
+//! graph values.
+
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
 
-use crate::ir::{Argument, Node, RawNode};
+use crate::ir::{ArgType, Argument, DType, Node, RawNode, TensorType};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -33,6 +29,9 @@ pub struct LayerNormConfig {
     pub epsilon: f64,
     /// Whether to use full precision for intermediate calculations (stash_type == 1)
     pub full_precision: bool,
+    /// First normalized axis, as given in the model (negative counts from the end).
+    #[new(value = "-1")]
+    pub axis: i64,
 }
 
 impl LayerNormConfig {
@@ -45,6 +44,12 @@ impl LayerNormConfig {
     /// Set the full_precision value
     pub fn with_full_precision(mut self, full_precision: bool) -> Self {
         self.full_precision = full_precision;
+        self
+    }
+
+    /// Set the axis value
+    pub fn with_axis(mut self, axis: i64) -> Self {
+        self.axis = axis;
         self
     }
 }
@@ -60,6 +65,11 @@ pub struct LayerNormalizationNode {
 
 pub(crate) struct LayerNormProcessor;
 
+/// Whether the optional Mean or InvStdDev output is used.
+fn uses_statistics(node: &RawNode) -> bool {
+    node.outputs.iter().skip(1).any(|arg| !arg.is_optional())
+}
+
 impl NodeProcessor for LayerNormProcessor {
     type Config = LayerNormConfig;
 
@@ -72,41 +82,28 @@ impl NodeProcessor for LayerNormProcessor {
         }
     }
 
-    fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // Lift scale (input 1) and bias (input 2)
-        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
-            node.inputs[1].to_static()?;
+    fn lift_constants(&self, node: &mut RawNode, opset: usize) -> Result<(), ProcessError> {
+        // A module holds a single [features] scale over the last axis. Anything else
+        // (a multi-axis scale, or the statistics outputs) goes through the functional
+        // op, which takes scale and bias as graph values.
+        let rank = node.inputs[0].ty.rank() as i64;
+        let axis = self.extract_config(node, opset)?.axis;
+        let axis_is_last = rank > 0 && axis.rem_euclid(rank) == rank - 1;
+        if node.inputs[1].ty.rank() != 1 || !axis_is_last || uses_statistics(node) {
+            return Ok(());
         }
-        if node.inputs.len() > 2 && node.inputs[2].is_constant() {
-            node.inputs[2].to_static()?;
-        }
-
-        Ok(())
+        crate::processor::lift_all_or_none(node, &[1, 2])
     }
 
     fn infer_types(
         &self,
         node: &mut RawNode,
-        _opset: usize,
+        opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        // TODO: Validate input tensor dtype is floating-point type - Type constraint T not enforced - burn/crates/onnx-ir/src/node/layer_norm.rs:101
-        // TODO: Validate Scale tensor rank matches normalized dimensions - Spec requires Scale to match normalized shape - burn/crates/onnx-ir/src/node/layer_norm.rs:101
-        // Validate axis attribute before extracting config
-        let weight_shape = node.inputs[1]
-            .value()
-            .ok_or_else(|| {
-                ProcessError::Custom("LayerNorm: weight tensor must be present".to_string())
-            })?
-            .shape
-            .to_vec();
-
-        let mut axis = -1;
-
-        for (key, value) in node.attrs.iter() {
+        for key in node.attrs.keys() {
             match key.as_str() {
-                "axis" => axis = value.clone().into_i64(),
-                "epsilon" | "stash_type" => {}
+                "axis" | "epsilon" | "stash_type" => {}
                 _ => {
                     return Err(ProcessError::InvalidAttribute {
                         name: key.clone(),
@@ -116,18 +113,64 @@ impl NodeProcessor for LayerNormProcessor {
             }
         }
 
-        // TODO: Validate epsilon > 0 for numerical stability - Negative or zero epsilon could cause issues - burn/crates/onnx-ir/src/node/layer_norm.rs:132
-        // TODO: Validate stash_type is 1 or unspecified - Spec only defines stash_type=1 (float), other values undefined - burn/crates/onnx-ir/src/node/layer_norm.rs:132
-        // TODO: Validate axis is within valid range for input tensor rank - Out of bounds axis should be rejected - burn/crates/onnx-ir/src/node/layer_norm.rs:132
+        // TODO: Validate input tensor dtype is floating-point type - Type constraint T not enforced
+        let input = match &node.inputs[0].ty {
+            ArgType::Tensor(tensor) => tensor.clone(),
+            other => {
+                return Err(ProcessError::TypeMismatch {
+                    expected: "Tensor".to_string(),
+                    actual: format!("{other:?}"),
+                });
+            }
+        };
 
-        if axis != -1 && axis != weight_shape.len() as i64 - 1 {
-            return Err(ProcessError::Custom(
-                "LayerNorm: normalization is only supported on the last axis right now".to_string(),
-            ));
+        let config = self.extract_config(node, opset)?;
+        let rank = input.rank as i64;
+        if config.axis < -rank || config.axis >= rank {
+            return Err(ProcessError::Custom(format!(
+                "LayerNorm: axis {} is out of range for rank {rank}",
+                config.axis
+            )));
+        }
+        let axis = config.axis.rem_euclid(rank) as usize;
+
+        // Scale (and Bias) broadcast against the normalized axes X.shape[axis..].
+        let normalized_rank = input.rank - axis;
+        for (index, name) in [(1, "scale"), (2, "bias")] {
+            if let Some(arg) = node.get_input(index)
+                && arg.ty.rank() > normalized_rank
+            {
+                return Err(ProcessError::Custom(format!(
+                    "LayerNorm: {name} must have at most rank {normalized_rank} for axis {}, got rank {}",
+                    config.axis,
+                    arg.ty.rank()
+                )));
+            }
         }
 
-        // Output type is same as input
         crate::processor::same_as_input(node);
+
+        // Mean and InvStdDev keep X's rank with the normalized axes reduced to 1. They
+        // are float32 under stash_type=1, as the computation is.
+        let stat_dtype = if config.full_precision {
+            DType::F32
+        } else {
+            input.dtype
+        };
+        let stat_shape = input.static_shape.as_ref().map(|shape| {
+            shape
+                .iter()
+                .enumerate()
+                .map(|(i, dim)| if i < axis { *dim } else { Some(1) })
+                .collect()
+        });
+        for output in node.outputs.iter_mut().skip(1) {
+            output.ty = ArgType::Tensor(TensorType {
+                dtype: stat_dtype,
+                rank: input.rank,
+                static_shape: stat_shape.clone(),
+            });
+        }
 
         Ok(())
     }
@@ -135,18 +178,21 @@ impl NodeProcessor for LayerNormProcessor {
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
         let mut epsilon = 1e-5;
         let mut stash_type = 1; // Default value is 1 (full precision)
+        let mut axis = -1;
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
-                "axis" => {}
+                "axis" => axis = value.clone().into_i64(),
                 "epsilon" => epsilon = value.clone().into_f32(),
                 "stash_type" => stash_type = value.clone().into_i64(),
                 _ => {}
             }
         }
 
+        // TODO: Validate epsilon > 0 for numerical stability - Negative or zero epsilon could cause issues
+        // TODO: Validate stash_type is 1 or unspecified - Spec only defines stash_type=1 (float), other values undefined
         let full_precision = stash_type == 1;
-        let config = LayerNormConfig::new(epsilon as f64, full_precision);
+        let config = LayerNormConfig::new(epsilon as f64, full_precision).with_axis(axis);
         Ok(config)
     }
 
@@ -213,30 +259,20 @@ mod tests {
     }
 
     #[test]
-    fn test_layer_norm_config_invalid_axis() {
-        // For a 1D weight tensor with shape [num_features],
-        // both axis=0 (the first and only dim) and axis=-1 (the last dim) are valid
-        // So we need to use a 2D weight tensor to test the invalid axis case
-
-        // Create a custom node with a 2D weight tensor
-        let weight_data = vec![1.0; 32 * 64]; // 2D weight tensor
-        let bias_data = vec![0.0; 32 * 64];
-
+    fn test_layer_norm_rejects_scale_above_normalized_rank() {
+        // axis=-1 normalizes a single axis, so a rank-2 scale cannot broadcast to it.
         let node = TestNodeBuilder::new(NodeType::LayerNormalization, "test_layernorm_invalid")
             .input_tensor_f32("X", 3, None)
-            .input_tensor_f32_data("scale", weight_data, vec![32, 64]) // 2D shape
-            .input_tensor_f32_data("bias", bias_data, vec![32, 64])
+            .input_tensor_f32_data("scale", vec![1.0; 32 * 64], vec![32, 64])
+            .input_tensor_f32_data("bias", vec![0.0; 32 * 64], vec![32, 64])
             .output_tensor_f32("output", 3, None)
             .attr_float("epsilon", 1e-5)
-            .attr_int("axis", 0) // axis=0 is NOT the last dimension for 2D weight
+            .attr_int("axis", -1)
             .attr_int("stash_type", 1)
             .build_with_graph_data(17);
 
-        // Now axis=0 should trigger an error since it's not the last dimension (1)
         let mut node = node;
-        let processor = LayerNormProcessor;
-        let prefs = OutputPreferences::new();
-        let result = processor.infer_types(&mut node, 17, &prefs);
+        let result = LayerNormProcessor.infer_types(&mut node, 17, &OutputPreferences::new());
         assert!(matches!(result, Err(ProcessError::Custom(_))));
     }
 }

@@ -6,13 +6,13 @@ license.workspace = true
 
 [features]
 default = ["test-flex"]
-test-wgpu = ["burn/wgpu", "burn/fusion"]
+test-wgpu = ["burn/wgpu", "burn/fusion", "burn/std"]
 test-flex = ["burn/flex"]
 test-tch = ["burn/tch"]
-test-metal = ["burn/metal", "burn/fusion"]
+test-metal = ["burn/metal", "burn/fusion", "burn/std"]
 
 [dev-dependencies]
-burn = { workspace = true, features = ["vision", "linalg"] }
+burn = { workspace = true, features = ["vision", "linalg", "signal"] }
 burn-store = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 float-cmp = { workspace = true }

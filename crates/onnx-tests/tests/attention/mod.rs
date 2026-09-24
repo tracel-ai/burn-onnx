@@ -13,7 +13,11 @@ include_models!(
     attention_qk_output_0,
     attention_qk_output_1,
     attention_qk_output_2,
-    attention_qk_output_3
+    attention_qk_output_3,
+    attention_gqa_causal,
+    attention_kv_cache_causal,
+    attention_padding_mask_causal,
+    attention_softcap_bias
 );
 
 #[cfg(test)]
@@ -230,8 +234,8 @@ mod tests {
         let (q, k, v, attn_mask, past_k, past_v) = cached_attn_inputs();
 
         let (_, _, _, qk_output) = model.forward(q, k, v, attn_mask, past_k, past_v);
-        #[allow(clippy::approx_constant)]
-        let expected_qk = TensorData::from([[[[0.0f32, 0.707106], [0.707106, 0.0]]]]);
+        // Mode 1 is the product after the softcap, before the mask.
+        let expected_qk = TensorData::from([[[[0.0f32, 0.67904], [0.67904, 0.0]]]]);
 
         qk_output
             .to_data()
@@ -268,5 +272,145 @@ mod tests {
         qk_output
             .to_data()
             .assert_approx_eq::<f32>(&expected_qk, Tolerance::default());
+    }
+
+    #[test]
+    fn attention_gqa_causal() {
+        let device = Default::default();
+        let model = attention_gqa_causal::Model::new(&device);
+        let seq = |shape: [usize; 4], scale: f32| {
+            let n = shape.iter().product::<usize>() as i64;
+            Tensor::<1, burn::tensor::Int>::arange(0..n, &device)
+                .float()
+                .reshape(shape)
+                .mul_scalar(scale)
+                .remainder_scalar(1.7)
+                .sub_scalar(0.8)
+        };
+        let mask = Tensor::<2>::from_floats([[0.0, -0.5, 0.3], [0.2, 0.0, -1.0]], &device);
+
+        let y = model.forward(
+            seq([1, 4, 2, 4], 0.37),
+            seq([1, 2, 3, 4], 0.23),
+            seq([1, 2, 3, 4], 0.41),
+            mask,
+        );
+
+        y.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[
+                [
+                    [-0.8f32, -0.39, 0.02, 0.43],
+                    [-0.091_481, -0.415_921, -0.005_921, 0.404_078],
+                ],
+                [
+                    [-0.8, -0.39, 0.02, 0.43],
+                    [-0.102_567, -0.415_516, -0.005_516, 0.404_484],
+                ],
+                [
+                    [0.72, -0.57, -0.16, 0.25],
+                    [0.700_911, -0.589_089, -0.179_089, 0.230_911],
+                ],
+                [
+                    [0.72, -0.57, -0.16, 0.25],
+                    [0.685_064, -0.604_937, -0.194_936, 0.215_064],
+                ],
+            ]]),
+            burn::tensor::Tolerance::absolute(1e-4),
+        );
+    }
+
+    fn seq<const D: usize>(shape: [usize; D], scale: f32) -> Tensor<D> {
+        let device = Default::default();
+        let n = shape.iter().product::<usize>() as i64;
+        Tensor::<1, Int>::arange(0..n, &device)
+            .float()
+            .reshape(shape)
+            .mul_scalar(scale)
+            .remainder_scalar(1.7)
+            .sub_scalar(0.8)
+    }
+
+    #[test]
+    fn attention_kv_cache_causal() {
+        // A decode step: the causal mask is offset by the two cached keys, so the
+        // single new query sees all three.
+        let device = Default::default();
+        let model = attention_kv_cache_causal::Model::new(&device);
+
+        let (y, present_k, _) = model.forward(
+            seq([1, 2, 1, 4], 0.37),
+            seq([1, 2, 1, 4], 0.23),
+            seq([1, 2, 1, 4], 0.41),
+            seq([1, 2, 2, 4], 0.29),
+            seq([1, 2, 2, 4], 0.53),
+        );
+
+        assert_eq!(present_k.dims(), [1, 2, 3, 4]);
+        y.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[
+                [[-0.72138f32, -0.23987, 0.241639, 0.404923]],
+                [[0.447403, -0.204451, -0.27166, 0.218809]],
+            ]]),
+            Tolerance::absolute(1e-4),
+        );
+    }
+
+    #[test]
+    fn attention_padding_mask_causal() {
+        // A [batch, 1, 1, keys] padding mask broadcast against a non-square causal
+        // mask. The second batch hides every key, so its rows are zeros.
+        let device = Default::default();
+        let model = attention_padding_mask_causal::Model::new(&device);
+        let mask = Tensor::<4, Bool>::from_data(
+            TensorData::from([[[[true, true, false]]], [[[false, false, false]]]]),
+            &device,
+        );
+
+        let y = model.forward(
+            seq([2, 2, 2, 4], 0.37),
+            seq([2, 2, 3, 4], 0.23),
+            seq([2, 2, 3, 4], 0.41),
+            mask,
+        );
+
+        y.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([
+                [
+                    [
+                        [-0.8f32, -0.39, 0.02, 0.43],
+                        [-0.010_162, -0.418_897, -0.008_897, 0.401_103],
+                    ],
+                    [
+                        [0.72, -0.57, -0.16, 0.25],
+                        [0.693_164, -0.596_837, -0.186_837, 0.223_164],
+                    ],
+                ],
+                [[[0.0; 4], [0.0; 4]], [[0.0; 4], [0.0; 4]]],
+            ]),
+            Tolerance::absolute(1e-4),
+        );
+    }
+
+    #[test]
+    fn attention_softcap_bias() {
+        // The softcap is applied before the additive mask.
+        let device = Default::default();
+        let model = attention_softcap_bias::Model::new(&device);
+        let mask = Tensor::<2>::from_floats([[0.0, 3.0, -2.0], [2.5, 0.0, 1.0]], &device);
+
+        let y = model.forward(
+            seq([1, 1, 2, 4], 1.37),
+            seq([1, 1, 3, 4], 1.23),
+            seq([1, 1, 3, 4], 0.41),
+            mask,
+        );
+
+        y.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[[
+                [0.699_025f32, -0.445_199, -0.035_199, 0.374_801],
+                [-0.461_619, -0.412_644, -0.002_644, 0.407_356],
+            ]]]),
+            Tolerance::absolute(1e-4),
+        );
     }
 }

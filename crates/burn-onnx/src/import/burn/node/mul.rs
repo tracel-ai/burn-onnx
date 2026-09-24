@@ -35,23 +35,23 @@ impl NodeCodegen for onnx_ir::node::arithmetic::MulNode {
                 quote! { #lhs * #rhs }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => quote! { #lhs * #rhs },
-            (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
-                {
-                    let mut result = #lhs;
-                    for (result_item, rhs_item) in result.iter_mut().zip(#rhs.iter()) {
-                        *result_item = result_item.saturating_mul(*rhs_item);
-                    }
-                    result
-                }
-            },
+            (ArgType::Shape(lhs_len), ArgType::Shape(rhs_len)) => {
+                broadcast_helpers::shape_binary_elementwise(
+                    quote! { #lhs },
+                    *lhs_len,
+                    quote! { #rhs },
+                    *rhs_len,
+                    |a, b| quote! { (#a).saturating_mul(#b) },
+                )
+            }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_scalar() => {
                 let scalar_expr = scalar_as_i64(rhs_arg, rhs.clone());
                 quote! {
                     {
                         let mut result = #lhs;
-                        let __scalar = #scalar_expr;
+                        let scalar = #scalar_expr;
                         for result_item in result.iter_mut() {
-                            *result_item = result_item.saturating_mul(__scalar);
+                            *result_item = result_item.saturating_mul(scalar);
                         }
                         result
                     }
@@ -62,31 +62,21 @@ impl NodeCodegen for onnx_ir::node::arithmetic::MulNode {
                 quote! {
                     {
                         let mut result = #rhs;
-                        let __scalar = #scalar_expr;
+                        let scalar = #scalar_expr;
                         for result_item in result.iter_mut() {
-                            *result_item = result_item.saturating_mul(__scalar);
+                            *result_item = result_item.saturating_mul(scalar);
                         }
                         result
                     }
                 }
             }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
-                let dtype_tokens = rhs_ty.elem_type().to_tokens();
-                quote! {
-                    Tensor::<1, burn::tensor::Int>::from_data(
-                        burn::tensor::TensorData::from(&#lhs as &[i64]),
-                        (&self.device, #dtype_tokens)
-                    ).mul(#rhs)
-                }
+                let lhs_bc = broadcast_helpers::shape_operand_tensor(quote! { #lhs }, rhs_ty);
+                quote! { #lhs_bc.mul(#rhs) }
             }
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
-                let dtype_tokens = lhs_ty.elem_type().to_tokens();
-                quote! {
-                    #lhs.mul(Tensor::<1, burn::tensor::Int>::from_data(
-                        burn::tensor::TensorData::from(&#rhs as &[i64]),
-                        (&self.device, #dtype_tokens)
-                    ))
-                }
+                let rhs_bc = broadcast_helpers::shape_operand_tensor(quote! { #rhs }, lhs_ty);
+                quote! { #lhs.mul(#rhs_bc) }
             }
             _ => unreachable!(
                 "mul: unsupported input types: {:?}, {:?}",
@@ -260,11 +250,59 @@ mod tests {
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
             let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item = result_item.saturating_mul(*rhs_item);
-                }
-                result
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| (__lhs[__i]).saturating_mul(__rhs[__i]))
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_lhs() {
+        let node = MulNodeBuilder::new("mul1")
+            .input_shape("lhs", 1)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| (__lhs[0]).saturating_mul(__rhs[__i]))
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_rhs() {
+        let node = MulNodeBuilder::new("mul1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 1)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 1]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| (__lhs[__i]).saturating_mul(__rhs[0]))
             };
             output
         }
@@ -284,9 +322,9 @@ mod tests {
         pub fn forward(&self, lhs: [i64; 4], rhs: i64) -> [i64; 4] {
             let output = {
                 let mut result = lhs;
-                let __scalar = rhs as i64;
+                let scalar = rhs;
                 for result_item in result.iter_mut() {
-                    *result_item = result_item.saturating_mul(__scalar);
+                    *result_item = result_item.saturating_mul(scalar);
                 }
                 result
             };
@@ -306,9 +344,9 @@ mod tests {
         pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<1, Int>) -> [i64; 4] {
             let output = {
                 let mut result = lhs;
-                let __scalar = (rhs).into_scalar::<i64>() as i64;
+                let scalar = (rhs).into_scalar::<i64>();
                 for result_item in result.iter_mut() {
-                    *result_item = result_item.saturating_mul(__scalar);
+                    *result_item = result_item.saturating_mul(scalar);
                 }
                 result
             };
@@ -328,9 +366,9 @@ mod tests {
         pub fn forward(&self, lhs: i64, rhs: [i64; 4]) -> [i64; 4] {
             let output = {
                 let mut result = rhs;
-                let __scalar = lhs as i64;
+                let scalar = lhs;
                 for result_item in result.iter_mut() {
-                    *result_item = result_item.saturating_mul(__scalar);
+                    *result_item = result_item.saturating_mul(scalar);
                 }
                 result
             };
@@ -350,9 +388,9 @@ mod tests {
         pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 4]) -> [i64; 4] {
             let output = {
                 let mut result = rhs;
-                let __scalar = (lhs).into_scalar::<i64>() as i64;
+                let scalar = (lhs).into_scalar::<i64>();
                 for result_item in result.iter_mut() {
-                    *result_item = result_item.saturating_mul(__scalar);
+                    *result_item = result_item.saturating_mul(scalar);
                 }
                 result
             };
@@ -403,6 +441,54 @@ mod tests {
                         burn::tensor::TensorData::from(&rhs as &[i64]),
                         (&self.device, burn::tensor::DType::I64),
                     ),
+                );
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_tensor_rank3() {
+        let node = MulNodeBuilder::new("mul1")
+            .input_shape("lhs", 1)
+            .input_tensor("rhs", 3, DType::I64)
+            .output_tensor("output", 3, DType::I64)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: Tensor<3, Int>) -> Tensor<3, Int> {
+            let output = (Tensor::<
+                1,
+                burn::tensor::Int,
+            >::from_data(
+                burn::tensor::TensorData::from(&lhs as &[i64]),
+                (&self.device, burn::tensor::DType::I64),
+            ))
+                .unsqueeze_dims(&[0isize, 1isize])
+                .mul(rhs);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_tensor_rank3_shape() {
+        let node = MulNodeBuilder::new("mul1")
+            .input_tensor("lhs", 3, DType::I64)
+            .input_shape("rhs", 1)
+            .output_tensor("output", 3, DType::I64)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: Tensor<3, Int>, rhs: [i64; 1]) -> Tensor<3, Int> {
+            let output = lhs
+                .mul(
+                    (Tensor::<
+                        1,
+                        burn::tensor::Int,
+                    >::from_data(
+                        burn::tensor::TensorData::from(&rhs as &[i64]),
+                        (&self.device, burn::tensor::DType::I64),
+                    ))
+                        .unsqueeze_dims(&[0isize, 1isize]),
                 );
             output
         }

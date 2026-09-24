@@ -30,30 +30,22 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                     broadcast_helpers::leading_broadcast(quote! { #rhs }, rhs_rank, lhs_rank);
 
                 let expr = if self.config.fmod {
-                    quote! { #lhs_bc.fmod(#rhs_bc) }
+                    fmod(lhs_bc, rhs_bc, &lhs_ty.elem_type())
                 } else {
-                    // Burn's remainder does not broadcast internally
-                    let output_rank = lhs_rank.max(rhs_rank);
-                    broadcast_helpers::broadcast_binary_op(
-                        lhs_bc,
-                        rhs_bc,
-                        output_rank,
-                        quote! { remainder },
-                    )
+                    quote! { #lhs_bc.remainder(#rhs_bc) }
                 };
                 quote! {
                     let #output = #expr;
                 }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
-                let mod_op = if self.config.fmod {
-                    quote! { fmod_scalar }
+                let expr = if self.config.fmod {
+                    fmod_scalar(lhs, rhs, &lhs_ty.elem_type())
                 } else {
-                    quote! { remainder_scalar }
+                    quote! { #lhs.remainder_scalar(#rhs) }
                 };
-
                 quote! {
-                    let #output = #lhs.#mod_op(#rhs);
+                    let #output = #expr;
                 }
             }
             (ArgType::ScalarNative(lhs_dtype), ArgType::ScalarNative(_)) => {
@@ -105,14 +97,9 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 };
 
                 let expr = if self.config.fmod {
-                    quote! { #lhs_tensor.fmod(#rhs) }
+                    fmod(lhs_tensor, quote! { #rhs }, dtype)
                 } else {
-                    broadcast_helpers::broadcast_binary_op(
-                        lhs_tensor,
-                        quote! { #rhs },
-                        rhs_rank,
-                        quote! { remainder },
-                    )
+                    quote! { #lhs_tensor.remainder(#rhs) }
                 };
                 quote! {
                     let #output = #expr;
@@ -126,15 +113,16 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
             // config.fmod variants here. If a future producer ever lets negative
             // Shape values reach this arm, the `fmod=0` path would need to switch
             // to `rem_euclid` to match ONNX semantics.
-            (ArgType::Shape(_), ArgType::Shape(_)) => {
+            (ArgType::Shape(lhs_len), ArgType::Shape(rhs_len)) => {
+                let expr = broadcast_helpers::shape_binary_elementwise(
+                    quote! { #lhs },
+                    *lhs_len,
+                    quote! { #rhs },
+                    *rhs_len,
+                    |a, b| quote! { #a % #b },
+                );
                 quote! {
-                    let #output = {
-                        let mut result = #lhs;
-                        for (result_item, rhs_item) in result.iter_mut().zip(#rhs.iter()) {
-                            *result_item %= *rhs_item;
-                        }
-                        result
-                    };
+                    let #output = #expr;
                 }
             }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_scalar() => {
@@ -142,9 +130,9 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 quote! {
                     let #output = {
                         let mut result = #lhs;
-                        let __scalar = #scalar_expr;
+                        let scalar = #scalar_expr;
                         for result_item in result.iter_mut() {
-                            *result_item %= __scalar;
+                            *result_item %= scalar;
                         }
                         result
                     };
@@ -155,9 +143,9 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 quote! {
                     let #output = {
                         let mut result = #rhs;
-                        let __scalar = #scalar_expr;
+                        let scalar = #scalar_expr;
                         for result_item in result.iter_mut() {
-                            *result_item = __scalar % *result_item;
+                            *result_item = scalar % *result_item;
                         }
                         result
                     };
@@ -172,7 +160,7 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                     )
                 };
                 let expr = if self.config.fmod {
-                    quote! { #lhs_tensor.fmod(#rhs) }
+                    fmod(lhs_tensor, quote! { #rhs }, &rhs_ty.elem_type())
                 } else {
                     quote! { #lhs_tensor.remainder(#rhs) }
                 };
@@ -189,7 +177,7 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                     )
                 };
                 let expr = if self.config.fmod {
-                    quote! { #lhs.fmod(#rhs_tensor) }
+                    fmod(quote! { #lhs }, rhs_tensor, &lhs_ty.elem_type())
                 } else {
                     quote! { #lhs.remainder(#rhs_tensor) }
                 };
@@ -205,12 +193,58 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
     }
 }
 
+/// ONNX `fmod=1` (truncated: the result takes the dividend's sign) of two tensors.
+///
+/// burn's `fmod` is float-only. For integers, `|a| mod |b|` agrees between the floored
+/// `remainder` burn has and truncation, so the dividend's sign is applied afterwards.
+/// Unsigned values have no sign to fix.
+fn fmod(lhs: TokenStream, rhs: TokenStream, dtype: &DType) -> TokenStream {
+    if dtype.is_float() {
+        quote! { #lhs.fmod(#rhs) }
+    } else if dtype.is_uint() {
+        quote! { #lhs.remainder(#rhs) }
+    } else {
+        quote! {{
+            let dividend = #lhs;
+            dividend.clone().abs().remainder(#rhs.abs()) * dividend.sign()
+        }}
+    }
+}
+
+/// [`fmod`] with a native scalar divisor.
+fn fmod_scalar(lhs: TokenStream, rhs: TokenStream, dtype: &DType) -> TokenStream {
+    if dtype.is_float() {
+        quote! { #lhs.fmod_scalar(#rhs) }
+    } else if dtype.is_uint() {
+        quote! { #lhs.remainder_scalar(#rhs) }
+    } else {
+        quote! {{
+            let dividend = #lhs;
+            dividend.clone().abs().remainder_scalar((#rhs).abs()) * dividend.sign()
+        }}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::*;
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::modulo::{ModConfig, ModNodeBuilder};
+
+    #[test]
+    fn swapped_operand_names_are_accepted() {
+        // remainder is called on the operands directly, with no `lhs`/`rhs`
+        // temporaries that operands with those names could shadow.
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_tensor("rhs", 2, DType::F32)
+            .input_tensor("lhs", 2, DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        assert!(shadow_check_result(&node).is_ok());
+    }
 
     // --- on_device + on_device (same rank) ---
 
@@ -225,21 +259,7 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<2>, b: Tensor<2>) -> Tensor<2> {
-            let output = {
-                let __lhs = a;
-                let __rhs = b;
-                let __lhs_dims: [usize; 2usize] = __lhs.dims();
-                let __rhs_dims: [usize; 2usize] = __rhs.dims();
-                let mut __shape = [0i64; 2usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..2usize {
-                    __shape[__i] = core::cmp::max(
-                        __lhs_dims[__i] as i64,
-                        __rhs_dims[__i] as i64,
-                    );
-                }
-                __lhs.expand(__shape).remainder(__rhs.expand(__shape))
-            };
+            let output = a.remainder(b);
             output
         }
         ");
@@ -275,21 +295,7 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<2>, b: Tensor<3>) -> Tensor<3> {
-            let output = {
-                let __lhs = (a).unsqueeze_dims(&[0isize]);
-                let __rhs = b;
-                let __lhs_dims: [usize; 3usize] = __lhs.dims();
-                let __rhs_dims: [usize; 3usize] = __rhs.dims();
-                let mut __shape = [0i64; 3usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..3usize {
-                    __shape[__i] = core::cmp::max(
-                        __lhs_dims[__i] as i64,
-                        __rhs_dims[__i] as i64,
-                    );
-                }
-                __lhs.expand(__shape).remainder(__rhs.expand(__shape))
-            };
+            let output = (a).unsqueeze_dims(&[0isize]).remainder(b);
             output
         }
         ");
@@ -306,21 +312,7 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<3>, b: Tensor<2>) -> Tensor<3> {
-            let output = {
-                let __lhs = a;
-                let __rhs = (b).unsqueeze_dims(&[0isize]);
-                let __lhs_dims: [usize; 3usize] = __lhs.dims();
-                let __rhs_dims: [usize; 3usize] = __rhs.dims();
-                let mut __shape = [0i64; 3usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..3usize {
-                    __shape[__i] = core::cmp::max(
-                        __lhs_dims[__i] as i64,
-                        __rhs_dims[__i] as i64,
-                    );
-                }
-                __lhs.expand(__shape).remainder(__rhs.expand(__shape))
-            };
+            let output = a.remainder((b).unsqueeze_dims(&[0isize]));
             output
         }
         ");
@@ -373,21 +365,7 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<3>, b: Tensor<1>) -> Tensor<3> {
-            let output = {
-                let __lhs = a;
-                let __rhs = (b).unsqueeze_dims(&[0isize, 1isize]);
-                let __lhs_dims: [usize; 3usize] = __lhs.dims();
-                let __rhs_dims: [usize; 3usize] = __rhs.dims();
-                let mut __shape = [0i64; 3usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..3usize {
-                    __shape[__i] = core::cmp::max(
-                        __lhs_dims[__i] as i64,
-                        __rhs_dims[__i] as i64,
-                    );
-                }
-                __lhs.expand(__shape).remainder(__rhs.expand(__shape))
-            };
+            let output = a.remainder((b).unsqueeze_dims(&[0isize, 1isize]));
             output
         }
         ");
@@ -421,21 +399,7 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: Tensor<1>, b: Tensor<1>) -> Tensor<1> {
-            let output = {
-                let __lhs = a;
-                let __rhs = b;
-                let __lhs_dims: [usize; 1usize] = __lhs.dims();
-                let __rhs_dims: [usize; 1usize] = __rhs.dims();
-                let mut __shape = [0i64; 1usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..1usize {
-                    __shape[__i] = core::cmp::max(
-                        __lhs_dims[__i] as i64,
-                        __rhs_dims[__i] as i64,
-                    );
-                }
-                __lhs.expand(__shape).remainder(__rhs.expand(__shape))
-            };
+            let output = a.remainder(b);
             output
         }
         ");
@@ -559,27 +523,14 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, a: f32, b: Tensor<2>) -> Tensor<2> {
-            let output = {
-                let __lhs = Tensor::<
-                    1,
-                >::from_data(
-                        burn::tensor::TensorData::from([a as f64]),
-                        (&self.device, burn::tensor::DType::F32),
-                    )
-                    .unsqueeze_dims(&[0isize]);
-                let __rhs = b;
-                let __lhs_dims: [usize; 2usize] = __lhs.dims();
-                let __rhs_dims: [usize; 2usize] = __rhs.dims();
-                let mut __shape = [0i64; 2usize];
-                #[allow(clippy::needless_range_loop)]
-                for __i in 0..2usize {
-                    __shape[__i] = core::cmp::max(
-                        __lhs_dims[__i] as i64,
-                        __rhs_dims[__i] as i64,
-                    );
-                }
-                __lhs.expand(__shape).remainder(__rhs.expand(__shape))
-            };
+            let output = Tensor::<
+                1,
+            >::from_data(
+                    burn::tensor::TensorData::from([a as f64]),
+                    (&self.device, burn::tensor::DType::F32),
+                )
+                .unsqueeze_dims(&[0isize])
+                .remainder(b);
             output
         }
         ");
@@ -611,23 +562,90 @@ mod tests {
 
     // --- Shape + Shape ---
 
+    // `fmod` coverage for the Shape/Shape, Shape/ScalarNative, and
+    // ScalarNative/Shape arms: these arms deliberately ignore config.fmod
+    // because Shape values are non-negative in practice and Rust's `%`
+    // coincides with both fmod and remainder on non-negative integers.
+    // These tests pin that behavior so any accidental split of an arm into
+    // fmod/remainder branches shows up as a snapshot diff.
     #[test]
-    fn test_mod_shape_shape() {
-        let config = ModConfig::new(false);
+    fn test_fmod_shape_shape() {
+        let config = ModConfig::new(true);
         let node = ModNodeBuilder::new("mod1")
-            .input_shape("lhs", 3)
-            .input_shape("rhs", 3)
-            .output_shape("output", 3)
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
             .config(config)
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: [i64; 3], rhs: [i64; 3]) -> [i64; 3] {
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
             let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item %= *rhs_item;
-                }
-                result
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<i64, 4usize, _>(|__i| __lhs[__i] % __rhs[__i])
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape() {
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<i64, 4usize, _>(|__i| __lhs[__i] % __rhs[__i])
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_lhs() {
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_shape("lhs", 1)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<i64, 4usize, _>(|__i| __lhs[0] % __rhs[__i])
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_rhs() {
+        let config = ModConfig::new(false);
+        let node = ModNodeBuilder::new("mod1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 1)
+            .output_shape("output", 4)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 1]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<i64, 4usize, _>(|__i| __lhs[__i] % __rhs[0])
             };
             output
         }
@@ -649,9 +667,9 @@ mod tests {
         pub fn forward(&self, lhs: [i64; 3], rhs: i64) -> [i64; 3] {
             let output = {
                 let mut result = lhs;
-                let __scalar = rhs as i64;
+                let scalar = rhs;
                 for result_item in result.iter_mut() {
-                    *result_item %= __scalar;
+                    *result_item %= scalar;
                 }
                 result
             };
@@ -675,9 +693,9 @@ mod tests {
         pub fn forward(&self, lhs: i64, rhs: [i64; 3]) -> [i64; 3] {
             let output = {
                 let mut result = rhs;
-                let __scalar = lhs as i64;
+                let scalar = lhs;
                 for result_item in result.iter_mut() {
-                    *result_item = __scalar % *result_item;
+                    *result_item = scalar % *result_item;
                 }
                 result
             };
@@ -723,14 +741,16 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, lhs: [i64; 3], rhs: Tensor<1, Int>) -> Tensor<1, Int> {
-            let output = Tensor::<
-                1,
-                burn::tensor::Int,
-            >::from_data(
+            let output = {
+                let dividend = Tensor::<
+                    1,
+                    burn::tensor::Int,
+                >::from_data(
                     burn::tensor::TensorData::from(&lhs as &[i64]),
                     (&self.device, burn::tensor::DType::I64),
-                )
-                .fmod(rhs);
+                );
+                dividend.clone().abs().remainder(rhs.abs()) * dividend.sign()
+            };
             output
         }
         ");
@@ -773,45 +793,21 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 3]) -> Tensor<1, Int> {
-            let output = lhs
-                .fmod(
-                    Tensor::<
-                        1,
-                        burn::tensor::Int,
-                    >::from_data(
-                        burn::tensor::TensorData::from(&rhs as &[i64]),
-                        (&self.device, burn::tensor::DType::I64),
-                    ),
-                );
-            output
-        }
-        ");
-    }
-
-    // `fmod` coverage for the Shape/Shape, Shape/ScalarNative, and
-    // ScalarNative/Shape arms: these arms deliberately ignore config.fmod
-    // because Shape values are non-negative in practice and Rust's `%`
-    // coincides with both fmod and remainder on non-negative integers.
-    // These tests pin that behavior so any accidental split of an arm into
-    // fmod/remainder branches shows up as a snapshot diff.
-
-    #[test]
-    fn test_fmod_shape_shape() {
-        let config = ModConfig::new(true);
-        let node = ModNodeBuilder::new("mod1")
-            .input_shape("lhs", 3)
-            .input_shape("rhs", 3)
-            .output_shape("output", 3)
-            .config(config)
-            .build();
-        assert_snapshot!(codegen_forward_default(&node), @r"
-        pub fn forward(&self, lhs: [i64; 3], rhs: [i64; 3]) -> [i64; 3] {
             let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item %= *rhs_item;
-                }
-                result
+                let dividend = lhs;
+                dividend
+                    .clone()
+                    .abs()
+                    .remainder(
+                        Tensor::<
+                            1,
+                            burn::tensor::Int,
+                        >::from_data(
+                                burn::tensor::TensorData::from(&rhs as &[i64]),
+                                (&self.device, burn::tensor::DType::I64),
+                            )
+                            .abs(),
+                    ) * dividend.sign()
             };
             output
         }
@@ -831,9 +827,9 @@ mod tests {
         pub fn forward(&self, lhs: [i64; 3], rhs: i64) -> [i64; 3] {
             let output = {
                 let mut result = lhs;
-                let __scalar = rhs as i64;
+                let scalar = rhs;
                 for result_item in result.iter_mut() {
-                    *result_item %= __scalar;
+                    *result_item %= scalar;
                 }
                 result
             };
@@ -855,9 +851,9 @@ mod tests {
         pub fn forward(&self, lhs: i64, rhs: [i64; 3]) -> [i64; 3] {
             let output = {
                 let mut result = rhs;
-                let __scalar = lhs as i64;
+                let scalar = lhs;
                 for result_item in result.iter_mut() {
-                    *result_item = __scalar % *result_item;
+                    *result_item = scalar % *result_item;
                 }
                 result
             };
@@ -883,9 +879,9 @@ mod tests {
         pub fn forward(&self, lhs: [i64; 3], rhs: Tensor<1, Int>) -> [i64; 3] {
             let output = {
                 let mut result = lhs;
-                let __scalar = (rhs).into_scalar::<i64>() as i64;
+                let scalar = (rhs).into_scalar::<i64>();
                 for result_item in result.iter_mut() {
-                    *result_item %= __scalar;
+                    *result_item %= scalar;
                 }
                 result
             };
@@ -907,11 +903,91 @@ mod tests {
         pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 3]) -> [i64; 3] {
             let output = {
                 let mut result = rhs;
-                let __scalar = (lhs).into_scalar::<i64>() as i64;
+                let scalar = (lhs).into_scalar::<i64>();
                 for result_item in result.iter_mut() {
-                    *result_item = __scalar % *result_item;
+                    *result_item = scalar % *result_item;
                 }
                 result
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_int_fmod_tensor() {
+        let node = ModNodeBuilder::new("mod1")
+            .input_tensor("x", 1, DType::I64)
+            .input_tensor("y", 1, DType::I64)
+            .output_tensor("output", 1, DType::I64)
+            .config(ModConfig::new(true))
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, x: Tensor<1, Int>, y: Tensor<1, Int>) -> Tensor<1, Int> {
+            let output = {
+                let dividend = x;
+                dividend.clone().abs().remainder(y.abs()) * dividend.sign()
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_int_fmod_scalar() {
+        let node = ModNodeBuilder::new("mod1")
+            .input_tensor("x", 1, DType::I64)
+            .input_scalar("y", DType::I64)
+            .output_tensor("output", 1, DType::I64)
+            .config(ModConfig::new(true))
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, x: Tensor<1, Int>, y: i64) -> Tensor<1, Int> {
+            let output = {
+                let dividend = x;
+                dividend.clone().abs().remainder_scalar((y).abs()) * dividend.sign()
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_int_fmod_unsigned() {
+        // Unsigned values never differ in sign, so remainder is already fmod.
+        let node = ModNodeBuilder::new("mod1")
+            .input_tensor("x", 2, DType::U32)
+            .input_tensor("y", 1, DType::U32)
+            .output_tensor("output", 2, DType::U32)
+            .config(ModConfig::new(true))
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, x: Tensor<2, Int>, y: Tensor<1, Int>) -> Tensor<2, Int> {
+            let output = x.remainder((y).unsqueeze_dims(&[0isize]));
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_int_fmod_scalar_native_tensor() {
+        let node = ModNodeBuilder::new("mod1")
+            .input_scalar("a", DType::I64)
+            .input_tensor("b", 1, DType::I64)
+            .output_tensor("output", 1, DType::I64)
+            .config(ModConfig::new(true))
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, a: i64, b: Tensor<1, Int>) -> Tensor<1, Int> {
+            let output = {
+                let dividend = Tensor::<
+                    1,
+                    burn::tensor::Int,
+                >::from_data(
+                    burn::tensor::TensorData::from([a as i64]),
+                    (&self.device, burn::tensor::DType::I64),
+                );
+                dividend.clone().abs().remainder(b.abs()) * dividend.sign()
             };
             output
         }

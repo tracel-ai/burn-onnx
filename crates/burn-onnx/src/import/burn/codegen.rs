@@ -118,7 +118,7 @@ pub fn tensor_to_i64_vec(value: &TokenStream) -> TokenStream {
         #value
             .to_data()
             .convert::<i64>()
-            .into_vec::<i64>()
+            .try_into_vec::<i64>()
             .unwrap()
     }
 }
@@ -287,6 +287,84 @@ pub fn resolve_auto_pad_2d(
             }
         },
     }
+}
+
+/// Per-axis `(begin, end)` padding with `auto_pad` resolved against the static input
+/// size, for burn's functional conv and pool ops.
+///
+/// `None` when SAME padding depends on a spatial size known only at run time.
+pub fn resolve_padding_pairs(
+    auto_pad: &AutoPad,
+    explicit: &[(usize, usize)],
+    input_spatial: Option<&[usize]>,
+    kernel: &[usize],
+    stride: &[usize],
+    dilation: &[usize],
+) -> Option<Vec<(usize, usize)>> {
+    Some(match auto_pad {
+        AutoPad::NotSet => explicit.to_vec(),
+        AutoPad::Valid => vec![(0, 0); explicit.len()],
+        AutoPad::SameUpper | AutoPad::SameLower => {
+            let shape = input_spatial?;
+            (0..explicit.len())
+                .map(|i| {
+                    compute_auto_pad_1dim(auto_pad, shape[i], kernel[i], stride[i], dilation[i])
+                })
+                .collect()
+        }
+    })
+}
+
+/// SAME padding computed at run time from the spatial dimensions of `input`
+/// (`[batch, channels, spatial..]`), as `[(begin, end); N]` tokens. For inputs
+/// whose spatial size is only known then; mirrors [`compute_auto_pad_1dim`].
+pub fn runtime_same_padding(
+    auto_pad: &AutoPad,
+    input: &TokenStream,
+    kernel: &[usize],
+    stride: &[usize],
+    dilation: &[usize],
+) -> TokenStream {
+    let pairs = (0..kernel.len()).map(|i| {
+        let axis = i + 2;
+        let stride = stride[i];
+        let effective_kernel = (kernel[i] - 1) * dilation[i] + 1;
+        let pair = match auto_pad {
+            AutoPad::SameLower => quote! { (big, small) },
+            _ => quote! { (small, big) },
+        };
+        quote! {{
+            let size = dims[#axis];
+            let total = (size.div_ceil(#stride).saturating_sub(1) * #stride + #effective_kernel)
+                .saturating_sub(size);
+            let small = total / 2;
+            let big = total - small;
+            #pair
+        }}
+    });
+    quote! {{
+        let dims = #input.dims();
+        [#(#pairs),*]
+    }}
+}
+
+/// [`resolve_padding_pairs`] as the `[(begin, end); N]` tokens `ConvOptions` takes.
+pub fn conv_padding_pairs(
+    auto_pad: &AutoPad,
+    explicit: &[(usize, usize)],
+    input_spatial: Option<&[usize]>,
+    kernel: &[usize],
+    stride: &[usize],
+    dilation: &[usize],
+) -> Option<TokenStream> {
+    let pairs = resolve_padding_pairs(auto_pad, explicit, input_spatial, kernel, stride, dilation)?;
+    Some(padding_pairs_tokens(&pairs))
+}
+
+/// `(begin, end)` pads as `[(begin, end); N]` tokens.
+pub fn padding_pairs_tokens(pairs: &[(usize, usize)]) -> TokenStream {
+    let pairs = pairs.iter().map(|(begin, end)| quote! { (#begin, #end) });
+    quote! { [#(#pairs),*] }
 }
 
 /// Resolve auto_pad to the tokens of a `PaddingConfig3d`.

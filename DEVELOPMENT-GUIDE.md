@@ -227,6 +227,9 @@ For example, the squeeze operation in `crates/onnx-ir/src/node/squeeze.rs` conta
      (`Tensor`, `ScalarTensor`) and returns bare idents for host values (`ScalarNative`, `Shape`)
    - `arg_to_ident(argument)` - Converts argument name to an identifier. Use for output bindings and
      host-side values only. Never use for `ScalarTensor` inputs (it skips clone tracking)
+   - Both return identifiers carrying an internal tag that `shadow_check` uses to tell graph values
+     from temporaries; codegen strips it when the file is written. Splice them into `quote!` only.
+     For a string, or the stem of another identifier, use `argument.name`
 
    **Scalar type system**: ONNX scalar constants are represented as two `ArgType` variants:
    - `ScalarTensor(DType)` - A `Tensor<1>` on device (rank 1). Default for scalar constants.
@@ -1027,6 +1030,12 @@ Outputs: bind one local per output, named `arg_to_ident(&node.outputs[i])`.
 Downstream nodes find your results by those names. Single output:
 `let #out = ...;`. Multiple outputs: destructure,
 `let (#out0, #out1) = ...;`.
+
+Both `ctx.arg` and `arg_to_ident` return tokens carrying an internal tag that
+codegen strips before writing the file. Splice them into your `quote!` output
+only; use `arg.name` when you need the name as a string. An output bound under
+a plain identifier built from its name is reported as a shadowing error at
+codegen time, because the check cannot tell it from a temporary.
 
 In `infer_output_types`, populate `static_shape` on returned tensor types
 whenever it is computable from the inputs and attributes: downstream

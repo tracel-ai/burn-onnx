@@ -32,7 +32,7 @@ impl NodeCodegen for onnx_ir::topk::TopKNode {
         // tensor, or ONNX opset-10+'s rank-1 single-element tensor. Lower
         // whichever form to a `usize` local in a prelude block so (1) the
         // main topk_with_indices call stays readable and (2) multiple
-        // TopK nodes in the same forward() can't collide on `__topk_k`.
+        // TopK nodes in the same forward() can't collide on `k`.
         let (prelude, k) = match &self.config.k {
             onnx_ir::topk::TopKInput::Static(k_value) => (TokenStream::new(), k_value.to_tokens()),
             onnx_ir::topk::TopKInput::Runtime(r) => {
@@ -47,38 +47,42 @@ impl NodeCodegen for onnx_ir::topk::TopKNode {
                         // broken model produces an empty top-k result
                         // instead. Adding observability is tracked in
                         // tracel-ai/burn-onnx#328.
-                        quote! { let __topk_k: usize = (#ident as i64).max(0) as usize; }
+                        quote! { let k: usize = (#ident as i64).max(0) as usize; }
                     }
                     ArgType::ScalarTensor(_) | ArgType::Tensor(_) => {
                         let tensor = scope.arg(arg);
                         quote! {
-                            let __topk_k: usize = {
-                                let __data = #tensor.to_data().convert::<i64>();
-                                __data.as_slice::<i64>().unwrap()[0].max(0) as usize
+                            let k: usize = {
+                                let data = #tensor.to_data().convert::<i64>();
+                                data.as_slice::<i64>().unwrap()[0].max(0) as usize
                             };
                         }
                     }
                     other => panic!("TopK k must be a scalar or rank-1 tensor, got {other:?}"),
                 };
-                (prelude, quote! { __topk_k })
+                (prelude, quote! { k })
             }
         };
 
         let input = scope.arg(self.inputs.first().unwrap());
 
-        if prelude.is_empty() {
-            quote! {
-                let (#values_output, __topk_indices_raw) = #input.topk_with_indices(#k, #axis);
-                let #indices_output = __topk_indices_raw.cast(#indices_dtype_tokens);
-            }
+        // burn's topk only selects the largest; the smallest k are the head of an
+        // ascending sort.
+        let select = if self.config.largest {
+            quote! { #input.topk_with_indices(#k, #axis) }
         } else {
-            quote! {
-                let (#values_output, __topk_indices_raw) = {
-                    #prelude
-                    #input.topk_with_indices(#k, #axis)
-                };
-                let #indices_output = __topk_indices_raw.cast(#indices_dtype_tokens);
-            }
+            quote! {{
+                let (values, indices) = #input.sort_with_indices(#axis);
+                (values.narrow(#axis, 0, #k), indices.narrow(#axis, 0, #k))
+            }}
+        };
+
+        quote! {
+            let (#values_output, #indices_output) = {
+                #prelude
+                let (values, indices) = #select;
+                (values, indices.cast(#indices_dtype_tokens))
+            };
         }
     }
 }
@@ -92,7 +96,7 @@ mod tests {
 
     #[test]
     fn test_top_k() {
-        let config = TopKConfig::new(1, TopKInput::Static(5));
+        let config = TopKConfig::new(1, TopKInput::Static(5), true, true);
         let node = TopKNodeBuilder::new("topk1")
             .input_tensor("input", 2, DType::F32)
             .output_tensor("values", 2, DType::F32)
@@ -102,11 +106,58 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2, Int>) {
-            let (values, __topk_indices_raw) = input.topk_with_indices(5, 1);
-            let indices = __topk_indices_raw.cast(burn::tensor::DType::I64);
+            let (values, indices) = {
+                let (values, indices) = input.topk_with_indices(5, 1);
+                (values, indices.cast(burn::tensor::DType::I64))
+            };
             (values, indices)
         }
         ");
+    }
+
+    #[test]
+    fn test_top_k_smallest() {
+        let config = TopKConfig::new(1, TopKInput::Static(5), false, true);
+        let node = TopKNodeBuilder::new("topk1")
+            .input_tensor("input", 2, DType::F32)
+            .output_tensor("values", 2, DType::F32)
+            .output_tensor("indices", 2, DType::I64)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2, Int>) {
+            let (values, indices) = {
+                let (values, indices) = {
+                    let (values, indices) = input.sort_with_indices(1);
+                    (values.narrow(1, 0, 5), indices.narrow(1, 0, 5))
+                };
+                (values, indices.cast(burn::tensor::DType::I64))
+            };
+            (values, indices)
+        }
+        ");
+    }
+
+    #[test]
+    fn data_input_named_like_the_k_local_is_rejected() {
+        // `let k: usize = ...` precedes the read of the data input, so a data
+        // input named `k` would be read as the usize local.
+        let config = TopKConfig::new(
+            1,
+            TopKInput::Runtime(onnx_ir::ir::RuntimeInputRef::new("count".to_string(), 1)),
+            true,
+            true,
+        );
+        let node = TopKNodeBuilder::new("topk_rt")
+            .input_tensor("k", 2, DType::F32)
+            .input_tensor("count", 1, DType::I64)
+            .output_tensor("values", 2, DType::F32)
+            .output_tensor("indices", 2, DType::I64)
+            .config(config)
+            .build();
+        let error = shadow_check_result(&node).unwrap_err();
+        assert_eq!(error.name(), Some("k"));
     }
 
     #[test]
@@ -115,6 +166,8 @@ mod tests {
         let config = TopKConfig::new(
             1,
             TopKInput::Runtime(onnx_ir::ir::RuntimeInputRef::new("k".to_string(), 1)),
+            true,
+            true,
         );
         let node = TopKNodeBuilder::new("topk_rt")
             .input_tensor("input", 2, DType::F32)
@@ -130,14 +183,14 @@ mod tests {
             input: Tensor<2>,
             k: Tensor<1, Int>,
         ) -> (Tensor<2>, Tensor<2, Int>) {
-            let (values, __topk_indices_raw) = {
-                let __topk_k: usize = {
-                    let __data = k.to_data().convert::<i64>();
-                    __data.as_slice::<i64>().unwrap()[0].max(0) as usize
+            let (values, indices) = {
+                let k: usize = {
+                    let data = k.to_data().convert::<i64>();
+                    data.as_slice::<i64>().unwrap()[0].max(0) as usize
                 };
-                input.topk_with_indices(__topk_k, 1)
+                let (values, indices) = input.topk_with_indices(k, 1);
+                (values, indices.cast(burn::tensor::DType::I64))
             };
-            let indices = __topk_indices_raw.cast(burn::tensor::DType::I64);
             (values, indices)
         }
         ");

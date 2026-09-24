@@ -265,6 +265,7 @@ impl_node_codegen_dispatch! {
     GatherElements,
     GatherND,
     ScatterElements,
+    Scatter,
     ScatterND,
     Tile,
     Expand,
@@ -291,6 +292,7 @@ impl_node_codegen_dispatch! {
     MaxPool3d,
     GlobalAveragePool,
     GlobalLpPool,
+    GlobalMaxPool,
 
     // Normalization ops
     BatchNormalization,

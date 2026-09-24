@@ -103,6 +103,7 @@ fn layer_normalization(graph: &OnnxGraph) {
         LayerNormConfig {
             epsilon: 9.999999747378752e-6,
             full_precision: true,
+            axis: -1,
         }
     "#);
 }

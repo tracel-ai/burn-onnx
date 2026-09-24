@@ -3,13 +3,15 @@ include_models!(
     scatter_elements,
     scatter_elements_axis1,
     scatter_elements_add,
+    scatter_elements_add_partial,
     scatter_elements_mul,
     scatter_elements_max,
     scatter_elements_min,
     scatter_elements_bool,
     scatter_elements_3d,
     scatter_elements_1d,
-    scatter_elements_int
+    scatter_elements_int,
+    scatter_opset10
 );
 
 #[cfg(test)]
@@ -21,6 +23,23 @@ mod tests {
     fn scatter_elements_default() {
         let device = Default::default();
         let model: scatter_elements::Model = scatter_elements::Model::new(&device);
+
+        let data = Tensor::<2>::zeros([3, 3], &device);
+        let indices = Tensor::<2, Int>::from_ints([[1, 0, 2], [0, 2, 1]], &device);
+        let updates = Tensor::<2>::from_floats([[1.0, 1.1, 1.2], [2.0, 2.1, 2.2]], &device);
+
+        let output = model.forward(data, indices, updates);
+
+        let expected = TensorData::from([[2.0f32, 1.1, 0.0], [1.0, 0.0, 2.2], [0.0, 2.1, 1.2]]);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
+    }
+
+    #[test]
+    fn scatter_opset10() {
+        let device = Default::default();
+        let model: scatter_opset10::Model = scatter_opset10::Model::new(&device);
 
         let data = Tensor::<2>::zeros([3, 3], &device);
         let indices = Tensor::<2, Int>::from_ints([[1, 0, 2], [0, 2, 1]], &device);
@@ -83,6 +102,25 @@ mod tests {
         let output = model.forward(data, indices, updates);
 
         let expected = TensorData::from([[3.0f32, 2.1, 1.0], [2.0, 1.0, 3.2], [1.0, 3.1, 2.2]]);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
+    }
+
+    #[test]
+    fn scatter_elements_add_partial_indices() {
+        let device = Default::default();
+        let model: scatter_elements_add_partial::Model =
+            scatter_elements_add_partial::Model::new(&device);
+
+        // Indices cover only the first two columns; the third passes through.
+        let data = Tensor::<2>::ones([3, 3], &device);
+        let indices = Tensor::<2, Int>::from_ints([[1, 0], [2, 1]], &device);
+        let updates = Tensor::<2>::from_floats([[1.0, 2.0], [3.0, 4.0]], &device);
+
+        let output = model.forward(data, indices, updates);
+
+        let expected = TensorData::from([[1.0f32, 3.0, 1.0], [2.0, 5.0, 1.0], [4.0, 1.0, 1.0]]);
         output
             .to_data()
             .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
@@ -379,6 +417,64 @@ mod tests {
 
         // Targets are both set and cleared, which a logical-or scatter could not express.
         let expected = TensorData::from([[false, true, false], [false, true, true]]);
-        assert_eq!(output.to_data(), expected);
+        output.to_data().assert_eq(&expected, false);
+    }
+
+    // Indices narrower than data on a non-axis dimension take the scatter_nd path.
+
+    #[test]
+    fn scatter_elements_partial_indices() {
+        let device = Default::default();
+        let model: scatter_elements::Model = scatter_elements::Model::new(&device);
+
+        let data = Tensor::<2>::zeros([3, 3], &device);
+        let indices = Tensor::<2, Int>::from_ints([[1, 0], [2, 1]], &device);
+        let updates = Tensor::<2>::from_floats([[1.0, 2.0], [3.0, 4.0]], &device);
+
+        let output = model.forward(data, indices, updates);
+
+        let expected = TensorData::from([[0.0f32, 2.0, 0.0], [1.0, 4.0, 0.0], [3.0, 0.0, 0.0]]);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
+    }
+
+    #[test]
+    fn scatter_elements_max_partial_indices() {
+        let device = Default::default();
+        let model: scatter_elements_max::Model = scatter_elements_max::Model::new(&device);
+
+        let data =
+            Tensor::<2>::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], &device);
+        let indices = Tensor::<2, Int>::from_ints([[1, 0], [2, 1]], &device);
+        let updates = Tensor::<2>::from_floats([[9.5, 1.5], [3.0, 8.0]], &device);
+
+        let output = model.forward(data, indices, updates);
+
+        // [1,0]=max(4,9.5), [0,1]=max(2,1.5), [2,0]=max(7,3), [1,1]=max(5,8)
+        let expected = TensorData::from([[1.0f32, 2.0, 3.0], [9.5, 8.0, 6.0], [7.0, 8.0, 9.0]]);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
+    }
+
+    #[test]
+    fn scatter_elements_bool_partial_indices() {
+        let device = Default::default();
+        let model: scatter_elements_bool::Model = scatter_elements_bool::Model::new(&device);
+
+        let data = Tensor::<2, Bool>::from_bool(
+            TensorData::from([[true, true, true], [false, false, false]]),
+            &device,
+        );
+        // Axis 1; only the first row is scattered.
+        let indices = Tensor::<2, Int>::from_ints([[2, 0, 1]], &device);
+        let updates =
+            Tensor::<2, Bool>::from_bool(TensorData::from([[false, false, true]]), &device);
+
+        let output = model.forward(data, indices, updates);
+
+        let expected = TensorData::from([[false, true, false], [false, false, false]]);
+        output.to_data().assert_eq(&expected, false);
     }
 }

@@ -1,5 +1,11 @@
 use crate::include_models;
-include_models!(stft_basic, stft_full, stft_non_pow2, stft_with_window);
+include_models!(
+    stft_basic,
+    stft_full,
+    stft_large_non_pow2,
+    stft_non_pow2,
+    stft_with_window
+);
 
 #[cfg(test)]
 mod tests {
@@ -296,5 +302,49 @@ mod tests {
             &expected.to_data(),
             burn::tensor::Tolerance::rel_abs(1e-3, 1e-4),
         );
+    }
+
+    #[test]
+    fn stft_large_non_pow2() {
+        // n_fft = 400 through the matrix-DFT path. The input is a pure cosine at
+        // bin 7 with hop = n_fft, so every frame's exact spectrum is N/2 at bin 7
+        // and 0 elsewhere (see stft_large_non_pow2.py).
+        const N_FFT: usize = 400;
+        const BIN: usize = 7;
+        let device = Device::default();
+        let model: stft_large_non_pow2::Model = stft_large_non_pow2::Model::new(&device);
+
+        let signal: alloc::vec::Vec<f32> = (0..3 * N_FFT)
+            .map(|n| (2.0 * core::f64::consts::PI * (BIN * n) as f64 / N_FFT as f64).cos() as f32)
+            .collect();
+        let input = burn::tensor::Tensor::<3>::from_data(
+            burn::tensor::TensorData::new(signal, [1, 3 * N_FFT, 1]),
+            &device,
+        );
+
+        let output = model.forward(input);
+
+        let mut expected = alloc::vec![0.0f32; 3 * 201 * 2];
+        for frame in 0..3 {
+            expected[(frame * 201 + BIN) * 2] = (N_FFT / 2) as f32;
+        }
+        let expected = burn::tensor::TensorData::new(expected, [1, 3, 201, 2]);
+        let out = output.to_data();
+        let max_err = out
+            .as_slice::<f32>()
+            .unwrap()
+            .iter()
+            .zip(expected.as_slice::<f32>().unwrap())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        // Measured: ~1.2e-6 with the f64 matmul, ~7.6e-5 with the f32 fallback
+        // (Metal). The tight bound fails if an f64-capable device loses the
+        // f64 path.
+        let atol = if device.supports_dtype(burn::tensor::DType::F64) {
+            1e-5
+        } else {
+            5e-4
+        };
+        assert!(max_err < atol, "max abs error {max_err:e} exceeds {atol:e}");
     }
 }
