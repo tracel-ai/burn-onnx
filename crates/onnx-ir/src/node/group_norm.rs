@@ -15,7 +15,7 @@ use onnx_ir_derive::NodeBuilder;
 use crate::ir::{Argument, Node, RawNode};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
-    lift_all_or_none,
+    lift_all_or_none, validate_group_not_split,
 };
 
 /// Configuration for GroupNorm operations
@@ -65,6 +65,8 @@ impl NodeProcessor for GroupNormProcessor {
         opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
+        validate_group_not_split(node, &[1, 2])?;
+
         // TODO: Validate X tensor rank is at least 3 per ONNX spec (N x C x D1 x ... x Dn) - Missing rank validation
         // TODO: Validate scale and bias tensors have rank 1 and size matches num_channels - Missing shape validation
 
@@ -237,5 +239,23 @@ mod tests {
         assert!(node.inputs[1].is_constant());
         assert_eq!(node.inputs[1].name, "scale");
         assert!(node.inputs[2].is_dynamic());
+    }
+
+    #[test]
+    fn test_lifted_scale_with_runtime_bias_rejected() {
+        // A subgraph capturing an already-lifted outer scale alongside a body-input bias:
+        // the scale has no runtime name for codegen to reference.
+        let mut node = TestNodeBuilder::new(NodeType::GroupNormalization, "test_norm")
+            .input_tensor_f32("X", 3, None)
+            .input_tensor_f32_data("scale", vec![1.0; 4], vec![4])
+            .input_tensor_f32("bias", 1, None)
+            .output_tensor_f32("output", 3, None)
+            .build_with_graph_data(18);
+        node.inputs[1].to_static().unwrap();
+
+        let err = GroupNormProcessor
+            .infer_types(&mut node, 18, &OutputPreferences::new())
+            .expect_err("a lifted scale with a runtime bias must be rejected");
+        assert!(err.to_string().contains("input #1 is a build-time value"));
     }
 }

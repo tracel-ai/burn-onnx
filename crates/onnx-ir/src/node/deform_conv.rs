@@ -14,7 +14,7 @@ use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
 use crate::node::padding::{PaddingConfig2d, padding_config_2d};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
-    lift_all_or_none,
+    lift_all_or_none, validate_group_not_split,
 };
 
 /// Node representation for DeformConv operation
@@ -73,6 +73,8 @@ impl NodeProcessor for DeformConvProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
+        validate_group_not_split(node, &[1, 3])?;
+
         // Validate input X (rank 4)
         let tensor = match &node.inputs[0].ty {
             ArgType::Tensor(tensor) => tensor,
@@ -663,5 +665,28 @@ mod tests {
         assert!(node.inputs[1].is_constant());
         assert_eq!(node.inputs[1].name, "weight");
         assert!(node.inputs[3].is_dynamic());
+    }
+
+    #[test]
+    fn test_deform_conv_lifted_weight_with_runtime_bias_rejected() {
+        // A subgraph capturing an already-lifted outer weight alongside a body-input bias:
+        // the weight has no runtime name, and the module path cannot take the bias.
+        let mut node = create_test_node(
+            vec![2, 2],
+            vec![1, 1],
+            vec![0, 0, 0, 0],
+            vec![1, 1],
+            1,
+            1,
+            true,
+            false,
+        )
+        .build_with_graph_data(19);
+        node.inputs[1].to_static().unwrap();
+
+        let err = DeformConvProcessor
+            .infer_types(&mut node, 19, &OutputPreferences::new())
+            .expect_err("a lifted weight with a runtime bias must be rejected");
+        assert!(err.to_string().contains("input #1 is a build-time value"));
     }
 }

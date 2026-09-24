@@ -401,6 +401,39 @@ pub fn validate_uniform_group(
     Ok(())
 }
 
+/// Reject a group that pairs an already-lifted input with one supplied at run time.
+///
+/// For operators whose codegen can read a whole group at run time, a constant next to a
+/// graph input is fine: [`lift_all_or_none`] leaves both unlifted and named. An input that
+/// arrives already `Static` cannot be un-lifted, though, so it has no runtime name to be
+/// read by. A subgraph is the way one arises: a body that captures an already-lifted outer
+/// value alongside a body input. Stricter operators use [`validate_uniform_group`].
+pub fn validate_group_not_split(node: &RawNode, indices: &[usize]) -> Result<(), ProcessError> {
+    let provided = |index: &usize| {
+        node.inputs
+            .get(*index)
+            .filter(|arg| !arg.is_optional())
+            .map(|arg| (*index, arg))
+    };
+    let lifted = indices
+        .iter()
+        .filter_map(provided)
+        .find(|(_, arg)| arg.is_static());
+    let runtime = indices
+        .iter()
+        .filter_map(provided)
+        .find(|(_, arg)| arg.is_dynamic());
+    if let (Some((build, _)), Some((run, _))) = (lifted, runtime) {
+        return Err(ProcessError::Custom(format!(
+            "Node '{}': input #{build} is a build-time value captured from an outer graph \
+             while input #{run} is supplied at run time. They are consumed as a group, so \
+             this mixture is not supported.",
+            node.name
+        )));
+    }
+    Ok(())
+}
+
 /// Lift the inputs at `indices` to static values, but only if every one of them can be.
 ///
 /// Some operators split a group of inputs across the same piece of generated code, so

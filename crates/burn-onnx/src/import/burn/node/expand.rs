@@ -30,8 +30,9 @@ impl NodeCodegen for onnx_ir::expand::ExpandNode {
                 let shape_arg = &self.inputs[r.input_index];
                 let (shape_len, value) = match &shape_arg.ty {
                     ArgType::Tensor(tensor) => {
-                        // The length is only known from a static shape; otherwise it
-                        // must already match the output rank.
+                        // The length is only known from a static shape. Without one it is
+                        // assumed to equal the output rank; a shorter runtime shape then
+                        // panics in the `try_into` below instead of being padded.
                         let shape_len = tensor
                             .static_shape
                             .as_ref()
@@ -318,6 +319,84 @@ mod tests {
                     padded[2usize..].copy_from_slice(&requested);
                     padded
                 };
+                let input_dims = input.dims();
+                let mut shape = onnx_shape;
+                #[allow(clippy::needless_range_loop)]
+                for i in 0..3usize {
+                    let dim_offset = i;
+                    if shape[dim_offset] == 1 && input_dims[i] > 1 {
+                        shape[dim_offset] = input_dims[i] as i64;
+                    }
+                }
+                input.expand(shape)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_expand_runtime_tensor_shorter_shape() {
+        // The shape tensor's static length (1) is shorter than the output rank, so the
+        // values read at runtime are left-padded with 1s.
+        let node = ExpandNodeBuilder::new("expand1")
+            .input_tensor("input", 3, DType::F32)
+            .input_tensor_shape("shape", vec![1], DType::I64)
+            .output_tensor("output", 3, DType::F32)
+            .config(ExpandConfig::Runtime(RuntimeInputRef::new(
+                "shape".to_string(),
+                1,
+            )))
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>, shape: Tensor<1, Int>) -> Tensor<3> {
+            let output = {
+                let onnx_shape: [i64; 3usize] = {
+                    let requested: [i64; 1usize] = TryInto::<
+                        [i64; 1usize],
+                    >::try_into(shape.to_data().convert::<i64>().as_slice().unwrap())
+                        .unwrap();
+                    let mut padded = [1i64; 3usize];
+                    padded[2usize..].copy_from_slice(&requested);
+                    padded
+                };
+                let input_dims = input.dims();
+                let mut shape = onnx_shape;
+                #[allow(clippy::needless_range_loop)]
+                for i in 0..3usize {
+                    let dim_offset = i;
+                    if shape[dim_offset] == 1 && input_dims[i] > 1 {
+                        shape[dim_offset] = input_dims[i] as i64;
+                    }
+                }
+                input.expand(shape)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_expand_runtime_tensor_unknown_length() {
+        // Without a static length the shape tensor is read as the full output rank.
+        let node = ExpandNodeBuilder::new("expand1")
+            .input_tensor("input", 3, DType::F32)
+            .input_tensor("shape", 1, DType::I64)
+            .output_tensor("output", 3, DType::F32)
+            .config(ExpandConfig::Runtime(RuntimeInputRef::new(
+                "shape".to_string(),
+                1,
+            )))
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>, shape: Tensor<1, Int>) -> Tensor<3> {
+            let output = {
+                let onnx_shape: [i64; 3usize] = TryInto::<
+                    [i64; 3usize],
+                >::try_into(shape.to_data().convert::<i64>().as_slice().unwrap())
+                    .unwrap();
                 let input_dims = input.dims();
                 let mut shape = onnx_shape;
                 #[allow(clippy::needless_range_loop)]

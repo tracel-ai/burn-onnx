@@ -189,7 +189,8 @@ impl NodeProcessor for ExpandProcessor {
                                     // When len(shape) is unknown, this assumes same-rank
                                     // broadcasting (len(shape) <= input_rank), which is correct
                                     // for the known real-world case (SDXL UNet: 1D timestep
-                                    // expanded to 1D [batch_size]).
+                                    // expanded to 1D [batch_size]). Codegen cannot pad a shape
+                                    // of unknown length, so it must equal input_rank at runtime.
                                     match &node.inputs[0].ty {
                                         ArgType::Tensor(t) => t.rank,
                                         // Shape is always 1D
@@ -349,6 +350,53 @@ mod tests {
             ArgType::Tensor(tensor) => assert_eq!(tensor.rank, 3),
             _ => panic!("Expected tensor output"),
         }
+    }
+
+    #[test]
+    fn test_broadcast_static_shape_one_keeps_input_dim() {
+        // A `1` in `shape` keeps the input dim (max-semantics), known or not
+        assert_eq!(
+            broadcast_static_shape(&[1, 4], Some(&[Some(3), Some(1)]), 2),
+            vec![Some(3), Some(4)]
+        );
+        assert_eq!(
+            broadcast_static_shape(&[1, 4], Some(&[None, Some(1)]), 2),
+            vec![None, Some(4)]
+        );
+        assert_eq!(
+            broadcast_static_shape(&[1, 4], None, 2),
+            vec![None, Some(4)]
+        );
+    }
+
+    #[test]
+    fn test_broadcast_static_shape_right_aligns() {
+        // Shape longer than the input: the input's missing leading dims count as 1
+        assert_eq!(
+            broadcast_static_shape(&[2, 1, 4], Some(&[Some(3), Some(1)]), 3),
+            vec![Some(2), Some(3), Some(4)]
+        );
+        // Shape shorter than the input: the input's leading dims are kept
+        assert_eq!(
+            broadcast_static_shape(&[4], Some(&[Some(2), Some(3), Some(1)]), 3),
+            vec![Some(2), Some(3), Some(4)]
+        );
+    }
+
+    #[test]
+    fn test_expand_all_ones_shape_is_noop() {
+        // Expand([3, 4], [1, 1]) keeps the input shape, so the node can be removed
+        let mut node = TestNodeBuilder::new(NodeType::Expand, "test_expand")
+            .input_tensor_f32("input", 2, Some(vec![3, 4]))
+            .input_tensor_i64_data("shape", vec![1, 1], vec![2])
+            .output_tensor_f32("output", 0, None)
+            .build_with_graph_data(16);
+
+        ExpandProcessor
+            .infer_types(&mut node, 16, &OutputPreferences::new())
+            .unwrap();
+
+        assert!(ExpandProcessor.is_noop(&node));
     }
 
     #[test]
