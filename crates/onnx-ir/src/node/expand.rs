@@ -40,6 +40,33 @@ pub enum ExpandConfig {
 /// never meets the `rank != 1` check and needs rejecting explicitly.
 const SHAPE_NOT_1D: &str = "Expand: shape input must be a 1D tensor, got a rank-0 scalar";
 
+/// Static output shape of Expand: `shape` and the input dims, right-aligned to
+/// `output_rank`, with numpy max-semantics (a `1` in `shape` keeps the input dim).
+fn broadcast_static_shape(
+    shape: &[i64],
+    input_shape: Option<&[Option<usize>]>,
+    output_rank: usize,
+) -> Vec<Option<usize>> {
+    let shape_offset = output_rank - shape.len();
+    (0..output_rank)
+        .map(|i| {
+            let input_dim = input_shape.map(|dims| {
+                let offset = output_rank - dims.len();
+                if i < offset {
+                    Some(1)
+                } else {
+                    dims[i - offset]
+                }
+            });
+            match i.checked_sub(shape_offset).map(|j| shape[j]) {
+                Some(dim) if dim != 1 => Some(dim as usize),
+                // A missing or `1` shape dim takes the input dim
+                _ => input_dim.flatten(),
+            }
+        })
+        .collect()
+}
+
 pub(crate) struct ExpandProcessor;
 
 impl NodeProcessor for ExpandProcessor {
@@ -110,19 +137,32 @@ impl NodeProcessor for ExpandProcessor {
             ArgType::Shape(_) => DType::I64,
         };
 
+        // A shorter `shape` is right-aligned against the input, so the output keeps the
+        // input's leading dims.
+        let (input_rank, input_static_shape) = match &node.inputs[0].ty {
+            ArgType::Tensor(tensor) => (tensor.rank, tensor.static_shape.clone()),
+            ArgType::Shape(rank) => (1, Some(vec![Some(*rank)])),
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => (0, Some(vec![])),
+        };
+
         // Determine output type based on config
         match config {
             ExpandConfig::Static(shape) => {
                 // TODO: Validate shape values are positive or -1 per ONNX spec - Negative values other than -1 are invalid - Missing constraint validation
                 // TODO: Validate broadcasting rules - Per spec, input shape and target shape must be compatible for broadcasting - Missing broadcast validation
-                if shape.is_empty() {
-                    // Empty shape means scalar output
+                let output_rank = shape.len().max(input_rank);
+                if output_rank == 0 {
+                    // Empty shape on a scalar means scalar output
                     node.outputs[0].ty = ArgType::ScalarTensor(input_elem_type);
                 } else {
                     node.outputs[0].ty = ArgType::Tensor(TensorType {
                         dtype: input_elem_type,
-                        rank: shape.len(),
-                        static_shape: Some(shape.iter().map(|&dim| Some(dim as usize)).collect()),
+                        rank: output_rank,
+                        static_shape: Some(broadcast_static_shape(
+                            &shape,
+                            input_static_shape.as_deref(),
+                            output_rank,
+                        )),
                     });
                 }
             }
@@ -167,6 +207,8 @@ impl NodeProcessor for ExpandProcessor {
                         }
                     }
                 };
+                // Per ONNX spec, output rank = max(input_rank, len(shape)).
+                let output_rank = output_rank.max(input_rank);
 
                 if output_rank == 0 {
                     node.outputs[0].ty = ArgType::ScalarTensor(input_elem_type);
@@ -270,6 +312,41 @@ mod tests {
                 assert_eq!(tensor.rank, 3);
                 assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(3), Some(4)]));
             }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_expand_with_shorter_constant_shape() {
+        // A shape shorter than the input is right-aligned, so the output keeps the
+        // input rank and its leading dims: Expand([2, 1], [3]) -> [2, 3]
+        let mut node = TestNodeBuilder::new(NodeType::Expand, "test_expand")
+            .input_tensor_f32("input", 2, Some(vec![2, 1]))
+            .input_tensor_i64_data("shape", vec![3], vec![1])
+            .output_tensor_f32("output", 0, None)
+            .build_with_graph_data(16);
+
+        let prefs = OutputPreferences::new();
+        ExpandProcessor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(tensor) => {
+                assert_eq!(tensor.rank, 2);
+                assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(3)]));
+            }
+            _ => panic!("Expected tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_expand_with_shorter_runtime_shape() {
+        let mut node = create_test_node(3, None, Some(ArgType::Shape(1))).build();
+
+        let prefs = OutputPreferences::new();
+        ExpandProcessor.infer_types(&mut node, 16, &prefs).unwrap();
+
+        match &node.outputs[0].ty {
+            ArgType::Tensor(tensor) => assert_eq!(tensor.rank, 3),
             _ => panic!("Expected tensor output"),
         }
     }

@@ -1,6 +1,11 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(instance_norm1d, instance_norm2d, instance_norm3d);
+include_models!(
+    instance_norm1d,
+    instance_norm2d,
+    instance_norm3d,
+    instance_norm_runtime_bias
+);
 
 #[cfg(test)]
 mod tests {
@@ -162,6 +167,29 @@ mod tests {
                 ],
             ],
         ]);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
+    }
+
+    #[test]
+    fn instance_norm_runtime_bias() {
+        // Constant scale with a runtime bias: both stay runtime.
+        let device = Default::default();
+        let model = instance_norm_runtime_bias::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/instance_norm_runtime_bias.bpk"),
+            &device,
+        );
+
+        let input =
+            Tensor::<4>::from_floats([[[[0., 1.], [2., 3.]], [[4., 5.], [6., 7.]]]], &device);
+        let bias = Tensor::<1>::from_floats([1.0, -1.0], &device);
+
+        let output = model.forward(input, bias);
+        let expected = TensorData::from([[
+            [[0.32918227f32, 0.77639407], [1.2236059, 1.6708177]],
+            [[-3.683271, -1.8944237], [-0.10557634, 1.6832709]],
+        ]]);
         output
             .to_data()
             .assert_approx_eq::<f32>(&expected, Tolerance::default());
