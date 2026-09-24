@@ -88,6 +88,14 @@ fn fold_matching(
             None => continue,
         };
 
+        // Consumers were typed against the inferred output, so a folded Shape
+        // (e.g. a Concat of shapes) or scalar (e.g. a Squeeze of a Shape(1))
+        // keeps that type instead of becoming a Tensor.
+        let output_ty = match &node.outputs[0].ty {
+            ArgType::Tensor(_) => output_ty,
+            inferred => inferred.clone(),
+        };
+
         let output_name = node.outputs[0].name.clone();
 
         log::info!(
@@ -914,6 +922,25 @@ mod tests {
         assert_eq!(n.node_type, NodeType::Constant);
         let vals = n.inputs[0].value().unwrap().to_i64_vec().unwrap();
         assert_eq!(vals, vec![1, 2, 3, 4, 5]);
+        // The inferred output is Shape(5), so the folded constant keeps it
+        assert_eq!(n.outputs[0].ty, ArgType::Shape(5));
+    }
+
+    #[test]
+    fn test_squeeze_to_scalar_keeps_scalar_type() {
+        let nodes = vec![raw_node(
+            "squeeze",
+            NodeType::Squeeze,
+            vec![const_i64_vec("dim", &[3])],
+            vec![scalar_out("out", DType::I64)],
+        )];
+
+        let state = test_state();
+        let result = fold_constants(nodes, &mut [], &state);
+        let n = &result[0];
+        assert_eq!(n.node_type, NodeType::Constant);
+        assert_eq!(n.inputs[0].value().unwrap().to_i64_vec().unwrap(), vec![3]);
+        assert_eq!(n.outputs[0].ty, ArgType::ScalarNative(DType::I64));
     }
 
     #[test]

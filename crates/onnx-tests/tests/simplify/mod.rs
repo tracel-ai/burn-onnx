@@ -23,7 +23,11 @@ include_simplified_models!(
     simplify_permute_via_shape_gather,
     simplify_sdpa_coalesce,
     simplify_sdpa_prescale_alias,
-    simplify_constant_fold
+    simplify_constant_fold,
+    simplify_expand_shape_chain,
+    simplify_squeeze_shape_dim,
+    simplify_reshape_concat_shape,
+    simplify_resize_sizes_from_shape
 );
 
 /// Extract the `forward` method body from generated source code.
@@ -460,6 +464,61 @@ mod tests {
     }
 
     #[test]
+    fn expand_shape_chain() {
+        let device = Default::default();
+        let s = simplified::simplify_expand_shape_chain::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model_simplified/simplify_expand_shape_chain.bpk"
+            ),
+            &device,
+        );
+        let u = unsimplified::simplify_expand_shape_chain::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model_unsimplified/simplify_expand_shape_chain.bpk"
+            ),
+            &device,
+        );
+        let x = Tensor::<2>::from_floats([[1.0], [2.0]], &device);
+        let y = Tensor::<2>::zeros([2, 3], &device);
+        let expected = burn::tensor::TensorData::from([[1.0f32, 1.0, 1.0], [2.0, 2.0, 2.0]]);
+        s.forward(x.clone(), y.clone())
+            .into_data()
+            .assert_eq(&expected, true);
+        u.forward(x, y).into_data().assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn squeeze_shape_dim() {
+        let device = Default::default();
+        let s = simplified::simplify_squeeze_shape_dim::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model_simplified/simplify_squeeze_shape_dim.bpk"
+            ),
+            &device,
+        );
+        let u = unsimplified::simplify_squeeze_shape_dim::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model_unsimplified/simplify_squeeze_shape_dim.bpk"
+            ),
+            &device,
+        );
+        let x = Tensor::<1, burn::tensor::Int>::from_data(
+            burn::tensor::TensorData::from([10i64, 20]),
+            (&device, burn::tensor::DType::I64),
+        );
+        let y = Tensor::<2>::zeros([2, 3], &device);
+        let expected = burn::tensor::TensorData::from([13i64, 23]);
+        s.forward(x.clone(), y.clone())
+            .into_data()
+            .assert_eq(&expected, true);
+        u.forward(x, y).into_data().assert_eq(&expected, true);
+    }
+
+    #[test]
     fn constant_fold() {
         let device = Default::default();
         let s = simplified::simplify_constant_fold::Model::new(&device);
@@ -502,6 +561,93 @@ mod tests {
         pub fn forward(&self, x: Tensor<3>) -> i64 {
                 let mul1_out1 = 12i64;
                 mul1_out1
+            }
+        }
+        ");
+    }
+
+    #[test]
+    fn reshape_concat_shape() {
+        let device = Default::default();
+        // `Model::default()` loads constants from the bpk; `new` would zero them.
+        let s = simplified::simplify_reshape_concat_shape::Model::default();
+        let u = unsimplified::simplify_reshape_concat_shape::Model::default();
+        let input = Tensor::<3>::from_floats(
+            [
+                [[0., 1., 2., 3.], [4., 5., 6., 7.], [8., 9., 10., 11.]],
+                [
+                    [12., 13., 14., 15.],
+                    [16., 17., 18., 19.],
+                    [20., 21., 22., 23.],
+                ],
+            ],
+            &device,
+        );
+        let out = s.forward(input.clone());
+        assert_eq!(out.dims(), [2, 12]);
+        assert_eq!(out.to_data(), u.forward(input).to_data());
+    }
+
+    #[test]
+    fn codegen_reshape_concat_shape() {
+        let s = simplified_source::simplify_reshape_concat_shape();
+        let u = unsimplified_source::simplify_reshape_concat_shape();
+        assert_codegen_differs(s, u, "reshape_concat_shape");
+        // The Concat folds to a constant only during simplification; the Reshape
+        // must still lift it so no unused `concat1_out1` binding is emitted.
+        insta::assert_snapshot!(extract_forward(s), @r"
+        pub fn forward(&self, x: Tensor<3>) -> Tensor<2> {
+                let reshape1_out1 = x.reshape([2, -1]);
+                reshape1_out1
+            }
+        }
+        ");
+    }
+
+    #[test]
+    fn resize_sizes_from_shape() {
+        let device = Default::default();
+        let s = simplified::simplify_resize_sizes_from_shape::Model::default();
+        let u = unsimplified::simplify_resize_sizes_from_shape::Model::default();
+        let input = Tensor::<4>::from_floats(
+            [[
+                [
+                    [0., 1., 2., 3.],
+                    [4., 5., 6., 7.],
+                    [8., 9., 10., 11.],
+                    [12., 13., 14., 15.],
+                ],
+                [
+                    [16., 17., 18., 19.],
+                    [20., 21., 22., 23.],
+                    [24., 25., 26., 27.],
+                    [28., 29., 30., 31.],
+                ],
+                [
+                    [32., 33., 34., 35.],
+                    [36., 37., 38., 39.],
+                    [40., 41., 42., 43.],
+                    [44., 45., 46., 47.],
+                ],
+            ]],
+            &device,
+        );
+        let out = s.forward(input.clone());
+        assert_eq!(out.dims(), [1, 3, 8, 8]);
+        assert_eq!(out.to_data(), u.forward(input).to_data());
+    }
+
+    #[test]
+    fn codegen_resize_sizes_from_shape() {
+        let s = simplified_source::simplify_resize_sizes_from_shape();
+        let u = unsimplified_source::simplify_resize_sizes_from_shape();
+        assert_codegen_differs(s, u, "resize_sizes_from_shape");
+        // The folded sizes are Shape-typed; Resize must read their value into a
+        // static config instead of referencing the lifted (nameless) input.
+        insta::assert_snapshot!(extract_forward(s), @r"
+        pub fn forward(&self, x: Tensor<4>) -> Tensor<4> {
+                let resize1_out1 = self.resize1.forward(x);
+                resize1_out1
             }
         }
         ");
@@ -581,6 +727,81 @@ mod tests {
                     (matmul2_out1,)
                 };
                 matmul2_out1
+            }
+        }
+        ");
+    }
+
+    #[test]
+    fn codegen_expand_shape_chain() {
+        let s = simplified_source::simplify_expand_shape_chain();
+        let u = unsimplified_source::simplify_expand_shape_chain();
+        assert_codegen_differs(s, u, "expand_shape_chain");
+        // The folded Concat stays a Shape array, which Equal and Where read as `&[i64]`
+        insta::assert_snapshot!(extract_forward(s), @r"
+        pub fn forward(&self, x: Tensor<2>, y: Tensor<2>) -> Tensor<2> {
+                let concat1_out1: [i64; 2] = [1i64, 3i64];
+                let shape2_out1: [i64; 1] = [2i64];
+                let constantofshape1_out1 = Tensor::<
+                    1,
+                    Int,
+                >::from_data(
+                        burn::tensor::TensorData::from([1i64 as i64]),
+                        (&self.device, burn::tensor::DType::I64),
+                    )
+                    .reshape([1])
+                    .expand(shape2_out1);
+                let constant4_out1 = self.constant4.val();
+                let mul1_out1 = constantofshape1_out1.clone().mul(constant4_out1);
+                let equal1_out1 = Tensor::<
+                    1,
+                    burn::tensor::Int,
+                >::from_data(
+                        burn::tensor::TensorData::from(&concat1_out1 as &[i64]),
+                        (&self.device, burn::tensor::DType::I64),
+                    )
+                    .equal(mul1_out1);
+                let where1_out1 = Tensor::<
+                    1,
+                    burn::tensor::Int,
+                >::from_data(
+                        burn::tensor::TensorData::from(&concat1_out1 as &[i64]),
+                        (&self.device, burn::tensor::DType::I64),
+                    )
+                    .mask_where(equal1_out1, constantofshape1_out1);
+                let expand1_out1 = {
+                    let onnx_shape: [i64; 2usize] = TryInto::<
+                        [i64; 2usize],
+                    >::try_into(where1_out1.to_data().convert::<i64>().as_slice().unwrap())
+                        .unwrap();
+                    let input_dims = x.dims();
+                    let mut shape = onnx_shape;
+                    #[allow(clippy::needless_range_loop)]
+                    for i in 0..2usize {
+                        let dim_offset = i;
+                        if shape[dim_offset] == 1 && input_dims[i] > 1 {
+                            shape[dim_offset] = input_dims[i] as i64;
+                        }
+                    }
+                    x.expand(shape)
+                };
+                expand1_out1
+            }
+        }
+        ");
+    }
+
+    #[test]
+    fn codegen_squeeze_shape_dim() {
+        let s = simplified_source::simplify_squeeze_shape_dim();
+        let u = unsimplified_source::simplify_squeeze_shape_dim();
+        assert_codegen_differs(s, u, "squeeze_shape_dim");
+        // The folded Squeeze stays a native scalar, not a rank-0 tensor param
+        insta::assert_snapshot!(extract_forward(s), @r"
+        pub fn forward(&self, x: Tensor<1, Int>, y: Tensor<2>) -> Tensor<1, Int> {
+                let squeeze1_out1 = 3i64;
+                let add1_out1 = x.add_scalar(squeeze1_out1);
+                add1_out1
             }
         }
         ");

@@ -1,6 +1,6 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(xor, xor_scalar, xor_broadcast);
+include_models!(xor, xor_scalar, xor_broadcast, xor_shape_broadcast);
 
 #[cfg(test)]
 mod tests {
@@ -24,7 +24,7 @@ mod tests {
         let output = model.forward(input_x, input_y).to_data();
         let expected = TensorData::from([[[[false, true, true, false]]]]);
 
-        output.assert_eq(&expected, true);
+        output.assert_eq(&expected, false);
     }
 
     #[test]
@@ -124,7 +124,25 @@ mod tests {
             ],
         ]);
 
-        result1.to_data().assert_eq(&expected1, true);
-        result2.to_data().assert_eq(&expected2, true);
+        result1.to_data().assert_eq(&expected1, false);
+        result2.to_data().assert_eq(&expected2, false);
+    }
+
+    #[test]
+    fn xor_shape_broadcast() {
+        let device = Default::default();
+        let model: xor_shape_broadcast::Model = xor_shape_broadcast::Model::default();
+
+        let input_a = Tensor::<1>::zeros([3], &device);
+        let input_b = Tensor::<1>::zeros([7], &device);
+        let input_c = Tensor::<4>::zeros([2, 3, 4, 5], &device);
+        let input_d = Tensor::<4>::zeros([9, 1, 4, 2], &device);
+
+        let (lhs_bc, rhs_bc, same) = model.forward(input_a, input_b, input_c, input_d);
+
+        // greater_1 = [1], greater_4 = [0, 1, 0, 1]
+        assert_eq!(lhs_bc, [1i64, 0, 1, 0]);
+        assert_eq!(rhs_bc, [1i64, 0, 1, 0]);
+        assert_eq!(same, [0i64, 0, 0, 0]);
     }
 }

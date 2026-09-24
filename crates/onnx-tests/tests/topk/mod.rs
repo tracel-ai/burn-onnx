@@ -5,7 +5,8 @@ include_models!(
     topk_1d,
     topk_3d,
     topk_k_full,
-    topk_negative_axis
+    topk_negative_axis,
+    topk_smallest
 );
 
 #[cfg(test)]
@@ -240,5 +241,61 @@ mod tests {
 
         values.to_data().assert_eq(&expected_values, true);
         indices.to_data().assert_eq(&expected_indices, true);
+    }
+
+    #[test]
+    fn topk_smallest() {
+        let device = Default::default();
+        let model = topk_smallest::Model::new(&device);
+
+        let input = Tensor::<2>::from_floats(
+            [
+                [0.49671414, -0.1382643, 0.64768857, 1.5230298, -0.23415338],
+                [-0.23413695, 1.5792128, 0.7674347, -0.46947438, 0.54256004],
+                [-0.46341768, -0.46572974, 0.24196227, -1.9132802, -1.7249179],
+            ],
+            &device,
+        );
+        let (values, indices) = model.forward(input);
+
+        values.to_data().assert_eq(
+            &TensorData::from([
+                [-0.23415338f32, -0.1382643, 0.49671414],
+                [-0.46947438, -0.23413695, 0.54256004],
+                [-1.9132802, -1.7249179, -0.46572974],
+            ]),
+            true,
+        );
+        indices.to_data().assert_eq(
+            &TensorData::from([[4i64, 1, 0], [3, 0, 4], [3, 4, 1]]),
+            true,
+        );
+    }
+
+    #[test]
+    fn topk_smallest_ties() {
+        // ONNX breaks ties by the lower index. Expected values from the onnx
+        // ReferenceEvaluator on topk_smallest.onnx.
+        let device = Default::default();
+        let model = topk_smallest::Model::new(&device);
+
+        let input = Tensor::<2>::from_floats(
+            [
+                [2.0, 1.0, 1.0, 3.0, 1.0],
+                [5.0, 5.0, 5.0, 5.0, 5.0],
+                [0.0, -1.0, 0.0, -1.0, 2.0],
+            ],
+            &device,
+        );
+        let (values, indices) = model.forward(input);
+
+        values.to_data().assert_eq(
+            &TensorData::from([[1.0f32, 1.0, 1.0], [5.0, 5.0, 5.0], [-1.0, -1.0, 0.0]]),
+            true,
+        );
+        indices.to_data().assert_eq(
+            &TensorData::from([[1i64, 2, 4], [0, 1, 2], [1, 3, 0]]),
+            true,
+        );
     }
 }

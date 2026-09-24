@@ -26,6 +26,7 @@ use onnx_ir_derive::NodeBuilder;
 use crate::ir::{Argument, Node, RawNode};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
+    lift_all_or_none, validate_group_not_split,
 };
 
 /// Configuration for InstanceNorm operations
@@ -59,15 +60,10 @@ impl NodeProcessor for InstanceNormProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // Lift scale (input 1) and bias (input 2)
-        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
-            node.inputs[1].to_static()?;
-        }
-        if node.inputs.len() > 2 && node.inputs[2].is_constant() {
-            node.inputs[2].to_static()?;
-        }
-
-        Ok(())
+        // Scale (input 1) and bias (input 2) are lifted together or not at all: codegen
+        // takes the static path only when both are static, and otherwise references both
+        // by name, which a lifted input no longer has.
+        lift_all_or_none(node, &[1, 2])
     }
 
     fn infer_types(
@@ -76,6 +72,8 @@ impl NodeProcessor for InstanceNormProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
+        validate_group_not_split(node, &[1, 2])?;
+
         // TODO: Validate input tensor dtype is floating-point type - Type constraint T: tensor(float16), tensor(float), tensor(double), tensor(bfloat16) not enforced - burn/crates/onnx-ir/src/node/instance_norm.rs:88
         // TODO: Validate that scale and bias tensors are 1D and have size C matching the channel dimension of input - Shape mismatch could cause runtime errors - burn/crates/onnx-ir/src/node/instance_norm.rs:88
         // TODO: Validate that input tensor is at least 3D (N x C x D1 ...) - Spec requires minimum rank of 3 - burn/crates/onnx-ir/src/node/instance_norm.rs:88
@@ -155,5 +153,46 @@ mod tests {
         processor.infer_types(&mut node, 16, &prefs).unwrap();
 
         assert!(f64::abs(config.epsilon - 1e-5) < 1e-6);
+    }
+
+    #[test]
+    fn test_instance_norm_lifts_scale_and_bias_together() {
+        let mut node = create_test_node(1e-5, 4).build_with_graph_data(16);
+        InstanceNormProcessor.lift_constants(&mut node, 16).unwrap();
+        assert!(node.inputs[1].is_static() && node.inputs[2].is_static());
+    }
+
+    #[test]
+    fn test_instance_norm_mixed_scale_and_bias_not_lifted() {
+        // A constant scale next to a runtime bias must stay named: codegen references
+        // both by name unless both are static.
+        let mut node = TestNodeBuilder::new(NodeType::InstanceNormalization, "test_norm")
+            .input_tensor_f32("X", 3, None)
+            .input_tensor_f32_data("scale", vec![1.0; 4], vec![4])
+            .input_tensor_f32("bias", 1, None)
+            .output_tensor_f32("output", 3, None)
+            .build_with_graph_data(16);
+        InstanceNormProcessor.lift_constants(&mut node, 16).unwrap();
+        assert!(node.inputs[1].is_constant());
+        assert_eq!(node.inputs[1].name, "scale");
+        assert!(node.inputs[2].is_dynamic());
+    }
+
+    #[test]
+    fn test_lifted_scale_with_runtime_bias_rejected() {
+        // A subgraph capturing an already-lifted outer scale alongside a body-input bias:
+        // the scale has no runtime name for codegen to reference.
+        let mut node = TestNodeBuilder::new(NodeType::InstanceNormalization, "test_norm")
+            .input_tensor_f32("X", 3, None)
+            .input_tensor_f32_data("scale", vec![1.0; 4], vec![4])
+            .input_tensor_f32("bias", 1, None)
+            .output_tensor_f32("output", 3, None)
+            .build_with_graph_data(16);
+        node.inputs[1].to_static().unwrap();
+
+        let err = InstanceNormProcessor
+            .infer_types(&mut node, 16, &OutputPreferences::new())
+            .expect_err("a lifted scale with a runtime bias must be rejected");
+        assert!(err.to_string().contains("input #1 is a build-time value"));
     }
 }

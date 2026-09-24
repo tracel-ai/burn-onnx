@@ -570,11 +570,12 @@ pub(crate) fn build_graph_builder_from_proto_with_outer_scope(
     type_inference::infer_types(&state_rc, opset_version, hooks).map_err(Error::TypeInference)?;
 
     log::debug!(" PHASE 4: Post-processing ");
-    let (nodes, inputs, outputs) = post_processing::post_process(&state_rc, simplify);
+    let (nodes, inputs, outputs) =
+        post_processing::post_process(&state_rc, simplify, opset_version);
 
     let (mut nodes, inputs, mut outputs) = if simplify {
         log::debug!(" PHASE 4b: Simplification ");
-        crate::simplify::simplify_graph(nodes, inputs, outputs, &state_rc)
+        crate::simplify::simplify_graph(nodes, inputs, outputs, &state_rc, opset_version)
     } else {
         (nodes, inputs, outputs)
     };

@@ -9,10 +9,8 @@
 //! - **Opset 10**: Changed k from attribute to input, enabling dynamic k values. Supported float types only.
 //! - **Opset 11**: Added 'largest' and 'sorted' attributes for controlling output behavior. Added support for integer input types (int8, int16, int32, int64, uint8, uint16, uint32, uint64).
 //!
-//! **Implementation Note**: This implementation requires opset 10+ (k as input). Only largest=1 and sorted=1 are supported; other values are rejected.
-//!
-//! **FIXME**: The implementation only supports `largest=1` and `sorted=1`, rejecting other values.
-//! This is documented in the validation but these limitations should be clearly stated in the module docs.
+//! **Implementation Note**: `sorted=0` leaves the output order unspecified, so sorted output
+//! satisfies it too.
 //!
 //! ## Type Constraints
 //! - **T** (Opset 10): tensor(float16), tensor(float), tensor(double)
@@ -49,6 +47,10 @@ pub struct TopKConfig {
     pub axis: usize,
     /// The number of top elements to select.
     pub k: TopKInput,
+    /// Whether to select the largest (true) or smallest (false) elements.
+    pub largest: bool,
+    /// Whether the output must be sorted. When false the order is unspecified.
+    pub sorted: bool,
 }
 
 /// Node representation for TopK operation
@@ -92,23 +94,6 @@ impl NodeProcessor for TopKProcessor {
         // TODO: Missing validation that k <= dimension_size along axis.
         // If k is larger than the dimension, this should either be rejected or clamped.
         // ONNX spec behavior for k > dim_size is not well-defined.
-
-        // Validate largest and sorted attributes before config extraction
-        if let Some(largest) = node.attrs.get("largest")
-            && largest.clone().into_i64() != 1
-        {
-            return Err(ProcessError::Custom(
-                "TopK: only largest elements is supported".to_string(),
-            ));
-        }
-
-        if let Some(sorted) = node.attrs.get("sorted")
-            && sorted.clone().into_i64() != 1
-        {
-            return Err(ProcessError::Custom(
-                "TopK: only sorted elements is supported".to_string(),
-            ));
-        }
 
         // TODO: Missing validation that k is positive (k > 0).
         // Zero or negative k values should be rejected but aren't validated.
@@ -189,9 +174,17 @@ impl NodeProcessor for TopKProcessor {
         // TODO: Missing validation that axis is in valid range after normalization.
         // After converting negative axis, should verify 0 <= axis < rank.
 
+        let flag = |name: &str| {
+            node.attrs
+                .get(name)
+                .is_none_or(|value| value.clone().into_i64() != 0)
+        };
+
         let config = TopKConfig {
             axis: axis as usize,
             k,
+            largest: flag("largest"),
+            sorted: flag("sorted"),
         };
         Ok(config)
     }
@@ -404,7 +397,7 @@ mod tests {
 
     #[test]
     fn test_top_k_config_with_largest_false() {
-        // Test with largest attribute set to 0 (unsupported)
+        // Test with largest attribute set to 0 (smallest elements)
         let mut attrs = HashMap::new();
         attrs.insert("k".to_string(), AttributeValue::Int64(3));
         attrs.insert("largest".to_string(), AttributeValue::Int64(0));
@@ -413,14 +406,15 @@ mod tests {
         let mut node = node;
         let processor = TopKProcessor;
         let prefs = OutputPreferences::new();
-        let _config = processor.extract_config(&node, 16).unwrap();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::Custom(_))));
+        let config = processor.extract_config(&node, 16).unwrap();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        assert!(!config.largest);
+        assert!(config.sorted);
     }
 
     #[test]
     fn test_top_k_config_with_sorted_false() {
-        // Test with sorted attribute set to 0 (unsupported)
+        // Test with sorted attribute set to 0 (order unspecified)
         let mut attrs = HashMap::new();
         attrs.insert("k".to_string(), AttributeValue::Int64(3));
         attrs.insert("sorted".to_string(), AttributeValue::Int64(0));
@@ -429,9 +423,10 @@ mod tests {
         let mut node = node;
         let processor = TopKProcessor;
         let prefs = OutputPreferences::new();
-        let _config = processor.extract_config(&node, 16).unwrap();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::Custom(_))));
+        let config = processor.extract_config(&node, 16).unwrap();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        assert!(config.largest);
+        assert!(!config.sorted);
     }
 
     #[test]

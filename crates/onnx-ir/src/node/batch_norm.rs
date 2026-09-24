@@ -25,16 +25,16 @@ use crate::processor::{
 /// When all weight inputs (scale, bias, mean, var) are static initializers,
 /// we use `Static` which allows generating a `BatchNorm` module.
 /// When any weight input comes from another node at runtime, we use `Runtime`
-/// which generates inline math in the forward pass.
+/// which calls burn's functional `batch_norm` in the forward pass.
 #[derive(Debug, Clone)]
 pub enum BatchNormConfig {
     /// All weights are static initializers → use BatchNorm module
     Static(BatchNormStaticConfig),
-    /// Some weights are runtime tensors → generate inline math
+    /// Some weights are runtime tensors → call functional batch_norm
     Runtime(BatchNormRuntimeConfig),
 }
 
-/// Static BatchNorm config — all weights are known at build time.
+/// Static BatchNorm config: all weights are known at build time.
 #[derive(Debug, Clone, new)]
 pub struct BatchNormStaticConfig {
     /// Small constant added for numerical stability
@@ -43,7 +43,7 @@ pub struct BatchNormStaticConfig {
     pub momentum: f64,
 }
 
-/// Runtime BatchNorm config — weights come from other nodes.
+/// Runtime BatchNorm config: weights come from other nodes.
 #[derive(Debug, Clone, new)]
 pub struct BatchNormRuntimeConfig {
     /// Small constant added for numerical stability

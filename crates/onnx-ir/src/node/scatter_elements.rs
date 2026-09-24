@@ -10,6 +10,9 @@
 //! - **Opset 13**: Clarifications, bfloat16 support.
 //! - **Opset 16**: Added add/mul reduction.
 //! - **Opset 18**: Added max/min reduction.
+//!
+//! The deprecated `Scatter` operator (versions 9 and 11) is ScatterElements without a
+//! reduction, so [`ScatterProcessor`] builds the same node for it.
 
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
@@ -147,6 +150,47 @@ impl NodeProcessor for ScatterElementsProcessor {
             .expect("Config extraction failed");
 
         Node::ScatterElements(ScatterElementsNode {
+            name: builder.name,
+            inputs: builder.inputs,
+            outputs: builder.outputs,
+            config,
+        })
+    }
+}
+
+/// Processor for the deprecated `Scatter` operator, which opset 11 renamed to
+/// ScatterElements without changing its semantics.
+pub(crate) struct ScatterProcessor;
+
+impl NodeProcessor for ScatterProcessor {
+    type Config = ScatterElementsConfig;
+
+    fn spec(&self) -> NodeSpec {
+        NodeSpec {
+            min_opset: 9,
+            ..ScatterElementsProcessor.spec()
+        }
+    }
+
+    fn infer_types(
+        &self,
+        node: &mut RawNode,
+        opset: usize,
+        output_preferences: &OutputPreferences,
+    ) -> Result<(), ProcessError> {
+        ScatterElementsProcessor.infer_types(node, opset, output_preferences)
+    }
+
+    fn extract_config(&self, node: &RawNode, opset: usize) -> Result<Self::Config, ProcessError> {
+        ScatterElementsProcessor.extract_config(node, opset)
+    }
+
+    fn build_node(&self, builder: RawNode, opset: usize) -> Node {
+        let config = self
+            .extract_config(&builder, opset)
+            .expect("Config extraction failed");
+
+        Node::Scatter(ScatterElementsNode {
             name: builder.name,
             inputs: builder.inputs,
             outputs: builder.outputs,

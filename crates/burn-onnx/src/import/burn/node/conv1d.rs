@@ -12,6 +12,9 @@ impl NodeCodegen for onnx_ir::conv1d::Conv1dNode {
     }
 
     fn field(&self) -> Option<Field> {
+        if !self.inputs[1].is_static() {
+            return None;
+        }
         let name = Ident::new(&self.name, Span::call_site());
         let weight_shape = self.inputs[1]
             .ty
@@ -24,7 +27,7 @@ impl NodeCodegen for onnx_ir::conv1d::Conv1dNode {
         let stride = self.config.stride.to_tokens();
         let dilation = self.config.dilation.to_tokens();
         let groups = groups.to_tokens();
-        let bias = self.inputs.len() == 3;
+        let bias = self.inputs.get(2).is_some_and(|bias| !bias.is_optional());
 
         let input_spatial = onnx_ir::node::padding::static_spatial_dims(&self.inputs[0].ty);
         let padding = crate::burn::codegen::resolve_auto_pad_1d(
@@ -54,6 +57,26 @@ impl NodeCodegen for onnx_ir::conv1d::Conv1dNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
+        // A runtime weight has no module to live in, so the functional op takes it.
+        if !self.inputs[1].is_static() {
+            let (left, right) = self.config.padding.as_tuple();
+            let explicit = [(left, right)];
+            let geometry = super::conv_helpers::ConvGeometry {
+                auto_pad: &self.config.auto_pad,
+                explicit: &explicit,
+                kernel: &[self.config.kernel_size],
+                stride: &[self.config.stride],
+                dilation: &[self.config.dilation],
+                groups: self.config.groups,
+            };
+            return super::conv_helpers::functional_conv(
+                scope,
+                &self.inputs,
+                &self.outputs[0],
+                "conv1d",
+                geometry,
+            );
+        }
         let input = scope.arg(self.inputs.first().unwrap());
         let output = arg_to_ident(self.outputs.first().unwrap());
         let field = Ident::new(&self.name, Span::call_site());
@@ -64,12 +87,18 @@ impl NodeCodegen for onnx_ir::conv1d::Conv1dNode {
     }
 
     fn register_imports(&self, imports: &mut BurnImports) {
+        if !self.inputs[1].is_static() {
+            return;
+        }
         imports.register("burn::nn::PaddingConfig1d");
         imports.register("burn::nn::conv::Conv1d");
         imports.register("burn::nn::conv::Conv1dConfig");
     }
 
     fn collect_tensors(&self, field_name: &str) -> Vec<PackTensor> {
+        if !self.inputs[1].is_static() {
+            return vec![];
+        }
         use crate::burn::node_traits::create_deferred_tensor;
         let mut tensors = vec![];
 
@@ -210,6 +239,38 @@ mod tests {
             .with_groups(1)
             .with_bias(true)
             .init(device);
+        ");
+    }
+    #[test]
+    fn test_conv1d_runtime_weight() {
+        let node = {
+            let config =
+                Conv1dConfig::new(3, 1, 1, 1, PaddingConfig1d::Explicit(1, 1), AutoPad::NotSet);
+
+            Conv1dNodeBuilder::new("conv1")
+                .input_tensor("input", 3, DType::F32)
+                .input_tensor("weight", 3, DType::F32)
+                .input_tensor("bias", 1, DType::F32)
+                .output_tensor("output", 3, DType::F32)
+                .config(config)
+                .build()
+        };
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<3>,
+            weight: Tensor<3>,
+            bias: Tensor<1>,
+        ) -> Tensor<3> {
+            let output = burn::tensor::module::conv1d(
+                input,
+                weight,
+                Some(bias),
+                burn::tensor::ops::ConvOptions::new_with_padding([1], [(1usize, 1usize)], [1], 1),
+            );
+            output
+        }
         ");
     }
 }

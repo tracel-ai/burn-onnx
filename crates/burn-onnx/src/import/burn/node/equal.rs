@@ -10,65 +10,48 @@ impl NodeCodegen for onnx_ir::comparison::EqualNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
-        let lhs = self.inputs.first().unwrap();
-        let rhs = self.inputs.get(1).unwrap();
+        let lhs_arg = self.inputs.first().unwrap();
+        let rhs_arg = self.inputs.get(1).unwrap();
         let output = arg_to_ident(self.outputs.first().unwrap());
 
-        let lhs_value = scope.arg(lhs);
+        let lhs = scope.arg(lhs_arg);
+        let rhs = scope.arg(rhs_arg);
 
-        let rhs_value = scope.arg(rhs);
-
-        let function = match (&lhs.ty, &rhs.ty) {
+        let function = match (&lhs_arg.ty, &rhs_arg.ty) {
             (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
                 let lhs_rank = lhs_ty.rank();
                 let rhs_rank = rhs_ty.rank();
                 let lhs_bc =
-                    broadcast_helpers::leading_broadcast(quote! { #lhs_value }, lhs_rank, rhs_rank);
+                    broadcast_helpers::leading_broadcast(quote! { #lhs }, lhs_rank, rhs_rank);
                 let rhs_bc =
-                    broadcast_helpers::leading_broadcast(quote! { #rhs_value }, rhs_rank, lhs_rank);
+                    broadcast_helpers::leading_broadcast(quote! { #rhs }, rhs_rank, lhs_rank);
                 quote! { #lhs_bc.equal(#rhs_bc) }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
-                quote! { #lhs_value.equal_elem(#rhs_value) }
+                quote! { #lhs.equal_elem(#rhs) }
             }
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
-                quote! { #rhs_value.equal_elem(#lhs_value) }
+                quote! { #rhs.equal_elem(#lhs) }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
-                quote! { #lhs_value == #rhs_value }
+                quote! { #lhs == #rhs }
             }
-            (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
-                {
-                    let mut result = #lhs_value;
-                    for (result_item, rhs_item) in result.iter_mut().zip(#rhs_value.iter()) {
-                        *result_item = if result_item == rhs_item { 1i64 } else { 0i64 };
-                    }
-                    result
-                }
-            },
+            (ArgType::Shape(lhs_len), ArgType::Shape(rhs_len)) => {
+                broadcast_helpers::shape_binary_elementwise(
+                    quote! { #lhs },
+                    *lhs_len,
+                    quote! { #rhs },
+                    *rhs_len,
+                    |a, b| quote! { if #a == #b { 1i64 } else { 0i64 } },
+                )
+            }
             (ArgType::Shape(_), rhs_ty) if rhs_ty.is_on_device() => {
-                let dtype_tokens = rhs_ty.elem_type().to_tokens();
-                quote! {
-                    {
-                        let shape_tensor = Tensor::<1, Int>::from_data(
-                            burn::tensor::TensorData::from(#lhs_value.as_slice()),
-                            (&self.device, #dtype_tokens)
-                        );
-                        shape_tensor.equal(#rhs_value)
-                    }
-                }
+                let lhs_bc = broadcast_helpers::shape_operand_tensor(quote! { #lhs }, rhs_ty);
+                quote! { #lhs_bc.equal(#rhs) }
             }
             (lhs_ty, ArgType::Shape(_)) if lhs_ty.is_on_device() => {
-                let dtype_tokens = lhs_ty.elem_type().to_tokens();
-                quote! {
-                    {
-                        let shape_tensor = Tensor::<1, Int>::from_data(
-                            burn::tensor::TensorData::from(#rhs_value.as_slice()),
-                            (&self.device, #dtype_tokens)
-                        );
-                        #lhs_value.equal(shape_tensor)
-                    }
-                }
+                let rhs_bc = broadcast_helpers::shape_operand_tensor(quote! { #rhs }, lhs_ty);
+                quote! { #lhs.equal(#rhs_bc) }
             }
             _ => panic!(
                 "Comparison is supported for tensor, scalar, and shape operands in any combination"
@@ -241,11 +224,59 @@ mod tests {
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 4]) -> [i64; 4] {
             let output = {
-                let mut result = lhs;
-                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
-                    *result_item = if result_item == rhs_item { 1i64 } else { 0i64 };
-                }
-                result
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __lhs[__i] == __rhs[__i] { 1i64 } else { 0i64 })
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_lhs() {
+        let node = EqualNodeBuilder::new("equal1")
+            .input_shape("lhs", 1)
+            .input_shape("rhs", 4)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: [i64; 4]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __lhs[0] == __rhs[__i] { 1i64 } else { 0i64 })
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_shape_broadcast_rhs() {
+        let node = EqualNodeBuilder::new("equal1")
+            .input_shape("lhs", 4)
+            .input_shape("rhs", 1)
+            .output_shape("output", 4)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 4], rhs: [i64; 1]) -> [i64; 4] {
+            let output = {
+                let __lhs = lhs;
+                let __rhs = rhs;
+                core::array::from_fn::<
+                    i64,
+                    4usize,
+                    _,
+                >(|__i| if __lhs[__i] == __rhs[0] { 1i64 } else { 0i64 })
             };
             output
         }
@@ -263,16 +294,14 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, lhs: [i64; 4], rhs: Tensor<1, Int>) -> Tensor<1, Bool> {
-            let output = {
-                let shape_tensor = Tensor::<
-                    1,
-                    Int,
-                >::from_data(
-                    burn::tensor::TensorData::from(lhs.as_slice()),
+            let output = Tensor::<
+                1,
+                burn::tensor::Int,
+            >::from_data(
+                    burn::tensor::TensorData::from(&lhs as &[i64]),
                     (&self.device, burn::tensor::DType::I64),
-                );
-                shape_tensor.equal(rhs)
-            };
+                )
+                .equal(rhs);
             output
         }
         ");
@@ -287,16 +316,64 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, lhs: Tensor<1, Int>, rhs: [i64; 4]) -> Tensor<1, Bool> {
-            let output = {
-                let shape_tensor = Tensor::<
-                    1,
-                    Int,
-                >::from_data(
-                    burn::tensor::TensorData::from(rhs.as_slice()),
-                    (&self.device, burn::tensor::DType::I64),
+            let output = lhs
+                .equal(
+                    Tensor::<
+                        1,
+                        burn::tensor::Int,
+                    >::from_data(
+                        burn::tensor::TensorData::from(&rhs as &[i64]),
+                        (&self.device, burn::tensor::DType::I64),
+                    ),
                 );
-                lhs.equal(shape_tensor)
-            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_shape_tensor_rank3() {
+        let node = EqualNodeBuilder::new("equal1")
+            .input_shape("lhs", 1)
+            .input_tensor("rhs", 3, DType::I64)
+            .output_tensor("output", 3, DType::Bool(BoolStore::Native))
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: [i64; 1], rhs: Tensor<3, Int>) -> Tensor<3, Bool> {
+            let output = (Tensor::<
+                1,
+                burn::tensor::Int,
+            >::from_data(
+                burn::tensor::TensorData::from(&lhs as &[i64]),
+                (&self.device, burn::tensor::DType::I64),
+            ))
+                .unsqueeze_dims(&[0isize, 1isize])
+                .equal(rhs);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_tensor_rank3_shape() {
+        let node = EqualNodeBuilder::new("equal1")
+            .input_tensor("lhs", 3, DType::I64)
+            .input_shape("rhs", 1)
+            .output_tensor("output", 3, DType::Bool(BoolStore::Native))
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, lhs: Tensor<3, Int>, rhs: [i64; 1]) -> Tensor<3, Bool> {
+            let output = lhs
+                .equal(
+                    (Tensor::<
+                        1,
+                        burn::tensor::Int,
+                    >::from_data(
+                        burn::tensor::TensorData::from(&rhs as &[i64]),
+                        (&self.device, burn::tensor::DType::I64),
+                    ))
+                        .unsqueeze_dims(&[0isize, 1isize]),
+                );
             output
         }
         ");

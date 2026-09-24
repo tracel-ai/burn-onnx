@@ -13,7 +13,7 @@ impl NodeCodegen for onnx_ir::one_hot::OneHotNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
-        // Runtime depth/values are bound to `__onehot_*` locals inside a
+        // Runtime depth/values are bound to locals inside a
         // prelude block so (1) the main one_hot_fill call stays readable
         // and (2) multiple OneHot nodes in the same forward() can't
         // collide on the temporary names.
@@ -37,15 +37,15 @@ impl NodeCodegen for onnx_ir::one_hot::OneHotNode {
                         // (`log::warn!` or `debug_assert!`) is tracked in
                         // tracel-ai/burn-onnx#328.
                         prelude.extend(quote! {
-                            let __onehot_depth: usize = (#ident as i64).max(0) as usize;
+                            let depth: usize = (#ident as i64).max(0) as usize;
                         });
                     }
                     ArgType::ScalarTensor(_) | ArgType::Tensor(_) => {
                         let tensor = scope.arg(arg);
                         prelude.extend(quote! {
-                            let __onehot_depth: usize = {
-                                let __data = #tensor.to_data().convert::<i64>();
-                                __data.as_slice::<i64>().unwrap()[0].max(0) as usize
+                            let depth: usize = {
+                                let data = #tensor.to_data().convert::<i64>();
+                                data.as_slice::<i64>().unwrap()[0].max(0) as usize
                             };
                         });
                     }
@@ -53,7 +53,7 @@ impl NodeCodegen for onnx_ir::one_hot::OneHotNode {
                         panic!("OneHot depth must be a scalar or rank-1 tensor, got {other:?}")
                     }
                 }
-                quote! { __onehot_depth }
+                quote! { depth }
             }
         };
 
@@ -123,10 +123,10 @@ impl NodeCodegen for onnx_ir::one_hot::OneHotNode {
                         // values layout: [off_value, on_value]. Read as
                         // u64 so the full u64 range survives.
                         prelude.extend(quote! {
-                            let (__onehot_off_u, __onehot_on_u): (u64, u64) = {
-                                let __data = #tensor.to_data().convert::<u64>();
-                                let __slice = __data.as_slice::<u64>().unwrap();
-                                (__slice[0], __slice[1])
+                            let (off_value, on_value): (u64, u64) = {
+                                let data = #tensor.to_data().convert::<u64>();
+                                let slice = data.as_slice::<u64>().unwrap();
+                                (slice[0], slice[1])
                             };
                         });
                         // Use a 0/1 mask; the scale is applied later.
@@ -136,10 +136,10 @@ impl NodeCodegen for onnx_ir::one_hot::OneHotNode {
                         // values layout: [off_value, on_value]. Read as
                         // i64 so the full int64 range survives.
                         prelude.extend(quote! {
-                            let (__onehot_off_i, __onehot_on_i): (i64, i64) = {
-                                let __data = #tensor.to_data().convert::<i64>();
-                                let __slice = __data.as_slice::<i64>().unwrap();
-                                (__slice[0], __slice[1])
+                            let (off_value, on_value): (i64, i64) = {
+                                let data = #tensor.to_data().convert::<i64>();
+                                let slice = data.as_slice::<i64>().unwrap();
+                                (slice[0], slice[1])
                             };
                         });
                         // Use a 0/1 mask; the scale is applied later.
@@ -147,13 +147,13 @@ impl NodeCodegen for onnx_ir::one_hot::OneHotNode {
                     }
                     RuntimeValuesMode::Float => {
                         prelude.extend(quote! {
-                            let (__onehot_off, __onehot_on): (f32, f32) = {
-                                let __data = #tensor.to_data().convert::<f32>();
-                                let __slice = __data.as_slice::<f32>().unwrap();
-                                (__slice[0], __slice[1])
+                            let (off_value, on_value): (f32, f32) = {
+                                let data = #tensor.to_data().convert::<f32>();
+                                let slice = data.as_slice::<f32>().unwrap();
+                                (slice[0], slice[1])
                             };
                         });
-                        (quote! { __onehot_on }, quote! { __onehot_off })
+                        (quote! { on_value }, quote! { off_value })
                     }
                 }
             }
@@ -161,7 +161,7 @@ impl NodeCodegen for onnx_ir::one_hot::OneHotNode {
 
         // Build the `one_hot_fill` call as a trailing expression (no
         // `let #output = ...;`). Wrapping the prelude + expression inside
-        // a single block scopes the `__onehot_*` temporaries so multiple
+        // a single block scopes the temporaries so multiple
         // OneHot nodes in the same forward() don't collide.
         //
         // `one_hot_fill` returns a tensor whose element dtype comes from the
@@ -188,13 +188,13 @@ impl NodeCodegen for onnx_ir::one_hot::OneHotNode {
             match runtime_values_mode {
                 RuntimeValuesMode::UnsignedInt => quote! {
                     .cast(burn::tensor::DType::U64)
-                        .mul_scalar(__onehot_on_u.wrapping_sub(__onehot_off_u))
-                        .add_scalar(__onehot_off_u)
+                        .mul_scalar(on_value.wrapping_sub(off_value))
+                        .add_scalar(off_value)
                 },
                 RuntimeValuesMode::SignedInt => quote! {
                     .cast(burn::tensor::DType::I64)
-                        .mul_scalar(__onehot_on_i.wrapping_sub(__onehot_off_i))
-                        .add_scalar(__onehot_off_i)
+                        .mul_scalar(on_value.wrapping_sub(off_value))
+                        .add_scalar(off_value)
                 },
                 RuntimeValuesMode::Float => TokenStream::new(),
             }
@@ -402,17 +402,17 @@ mod tests {
             values: Tensor<1>,
         ) -> Tensor<2> {
             let output = {
-                let __onehot_depth: usize = {
-                    let __data = depth.to_data().convert::<i64>();
-                    __data.as_slice::<i64>().unwrap()[0].max(0) as usize
+                let depth: usize = {
+                    let data = depth.to_data().convert::<i64>();
+                    data.as_slice::<i64>().unwrap()[0].max(0) as usize
                 };
-                let (__onehot_off, __onehot_on): (f32, f32) = {
-                    let __data = values.to_data().convert::<f32>();
-                    let __slice = __data.as_slice::<f32>().unwrap();
-                    (__slice[0], __slice[1])
+                let (off_value, on_value): (f32, f32) = {
+                    let data = values.to_data().convert::<f32>();
+                    let slice = data.as_slice::<f32>().unwrap();
+                    (slice[0], slice[1])
                 };
                 indices
-                    .one_hot_fill(__onehot_depth, __onehot_on, __onehot_off, -1i64)
+                    .one_hot_fill(depth, on_value, off_value, -1i64)
                     .float()
                     .cast(burn::tensor::DType::F32)
             };
@@ -443,12 +443,12 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, indices: Tensor<1, Int>, depth: Tensor<1, Int>) -> Tensor<2> {
             let output = {
-                let __onehot_depth: usize = {
-                    let __data = depth.to_data().convert::<i64>();
-                    __data.as_slice::<i64>().unwrap()[0].max(0) as usize
+                let depth: usize = {
+                    let data = depth.to_data().convert::<i64>();
+                    data.as_slice::<i64>().unwrap()[0].max(0) as usize
                 };
                 indices
-                    .one_hot_fill(__onehot_depth, 1f32, 0f32, -1i64)
+                    .one_hot_fill(depth, 1f32, 0f32, -1i64)
                     .float()
                     .cast(burn::tensor::DType::F32)
             };
@@ -486,16 +486,16 @@ mod tests {
             values: Tensor<1, Int>,
         ) -> Tensor<2, Int> {
             let output = {
-                let (__onehot_off_i, __onehot_on_i): (i64, i64) = {
-                    let __data = values.to_data().convert::<i64>();
-                    let __slice = __data.as_slice::<i64>().unwrap();
-                    (__slice[0], __slice[1])
+                let (off_value, on_value): (i64, i64) = {
+                    let data = values.to_data().convert::<i64>();
+                    let slice = data.as_slice::<i64>().unwrap();
+                    (slice[0], slice[1])
                 };
                 indices
                     .one_hot_fill(5usize, 1f32, 0f32, -1i64)
                     .cast(burn::tensor::DType::I64)
-                    .mul_scalar(__onehot_on_i.wrapping_sub(__onehot_off_i))
-                    .add_scalar(__onehot_off_i)
+                    .mul_scalar(on_value.wrapping_sub(off_value))
+                    .add_scalar(off_value)
                     .cast(burn::tensor::DType::I64)
             };
             output
@@ -526,17 +526,17 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, indices: Tensor<1>, values: Tensor<1, Int>) -> Tensor<2, Int> {
             let output = {
-                let (__onehot_off_i, __onehot_on_i): (i64, i64) = {
-                    let __data = values.to_data().convert::<i64>();
-                    let __slice = __data.as_slice::<i64>().unwrap();
-                    (__slice[0], __slice[1])
+                let (off_value, on_value): (i64, i64) = {
+                    let data = values.to_data().convert::<i64>();
+                    let slice = data.as_slice::<i64>().unwrap();
+                    (slice[0], slice[1])
                 };
                 indices
                     .one_hot_fill(5usize, 1f32, 0f32, -1i64)
                     .int()
                     .cast(burn::tensor::DType::I64)
-                    .mul_scalar(__onehot_on_i.wrapping_sub(__onehot_off_i))
-                    .add_scalar(__onehot_off_i)
+                    .mul_scalar(on_value.wrapping_sub(off_value))
+                    .add_scalar(off_value)
                     .cast(burn::tensor::DType::I64)
             };
             output
@@ -572,16 +572,16 @@ mod tests {
             values: Tensor<1, Int>,
         ) -> Tensor<2, Int> {
             let output = {
-                let (__onehot_off_u, __onehot_on_u): (u64, u64) = {
-                    let __data = values.to_data().convert::<u64>();
-                    let __slice = __data.as_slice::<u64>().unwrap();
-                    (__slice[0], __slice[1])
+                let (off_value, on_value): (u64, u64) = {
+                    let data = values.to_data().convert::<u64>();
+                    let slice = data.as_slice::<u64>().unwrap();
+                    (slice[0], slice[1])
                 };
                 indices
                     .one_hot_fill(5usize, 1f32, 0f32, -1i64)
                     .cast(burn::tensor::DType::U64)
-                    .mul_scalar(__onehot_on_u.wrapping_sub(__onehot_off_u))
-                    .add_scalar(__onehot_off_u)
+                    .mul_scalar(on_value.wrapping_sub(off_value))
+                    .add_scalar(off_value)
                     .cast(burn::tensor::DType::U64)
             };
             output

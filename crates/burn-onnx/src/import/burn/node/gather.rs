@@ -39,7 +39,7 @@ fn resolve_scalar_index_token(
     } else if index_arg.ty.is_scalar_tensor() {
         let tensor = scope.arg(index_arg);
         let native_expr = on_device_to_native(quote! { #tensor }, &index_arg.ty.elem_type());
-        let temp = Ident::new("__scalar_idx", Span::call_site());
+        let temp = Ident::new("scalar_idx", Span::call_site());
         (quote! { let #temp = #native_expr; }, quote! { #temp })
     } else {
         let index = arg_to_ident(index_arg);
@@ -327,8 +327,18 @@ fn forward_tensor_gather(
                     let index_rank_lit = proc_macro2::Literal::usize_unsuffixed(index_rank);
                     let final_rank_lit = proc_macro2::Literal::usize_unsuffixed(final_rank);
 
+                    // ONNX allows indices down to `-dim_size` along the gather axis, which
+                    // `take` does not accept, so fold negatives first. Indices outside
+                    // `[-dim_size, dim_size - 1]` are an error per the ONNX spec and stay
+                    // unchecked, like ScatterElements.
                     quote! {
-                        let #output = #input.take::<#index_rank_lit, #final_rank_lit>(#dim, #index);
+                        let #output = {
+                            let axis_size = #input.dims()[#dim] as i64;
+                            let negative = #index.clone().lower_elem(0i64);
+                            let corrected = #index.clone() + axis_size;
+                            let indices = #index.mask_where(negative, corrected);
+                            #input.take::<#index_rank_lit, #final_rank_lit>(#dim, indices)
+                        };
                     }
                 }
                 ArgType::Shape(_) => {
@@ -711,8 +721,8 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, values: Tensor<1>, position: Tensor<1, Int>) -> Tensor<1> {
             let result = {
-                let __scalar_idx = (position).into_scalar::<i64>();
-                values.slice(s![__scalar_idx])
+                let scalar_idx = (position).into_scalar::<i64>();
+                values.slice(s![scalar_idx])
             };
             result
         }
@@ -819,7 +829,13 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, embedding: Tensor<2>, row_indices: Tensor<1, Int>) -> Tensor<2> {
-            let gathered = embedding.take::<1, 2>(0, row_indices);
+            let gathered = {
+                let axis_size = embedding.dims()[0] as i64;
+                let negative = row_indices.clone().lower_elem(0i64);
+                let corrected = row_indices.clone() + axis_size;
+                let indices = row_indices.mask_where(negative, corrected);
+                embedding.take::<1, 2>(0, indices)
+            };
             gathered
         }
         ");
@@ -837,7 +853,13 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, feature_map: Tensor<3>, feature_ids: Tensor<1, Int>) -> Tensor<3> {
-            let selected_features = feature_map.take::<1, 3>(1, feature_ids);
+            let selected_features = {
+                let axis_size = feature_map.dims()[1] as i64;
+                let negative = feature_ids.clone().lower_elem(0i64);
+                let corrected = feature_ids.clone() + axis_size;
+                let indices = feature_ids.mask_where(negative, corrected);
+                feature_map.take::<1, 3>(1, indices)
+            };
             selected_features
         }
         ");
@@ -855,7 +877,13 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, source: Tensor<3>, indices_2d: Tensor<2, Int>) -> Tensor<4> {
-            let result = source.take::<2, 4>(0, indices_2d);
+            let result = {
+                let axis_size = source.dims()[0] as i64;
+                let negative = indices_2d.clone().lower_elem(0i64);
+                let corrected = indices_2d.clone() + axis_size;
+                let indices = indices_2d.mask_where(negative, corrected);
+                source.take::<2, 4>(0, indices)
+            };
             result
         }
         ");
@@ -873,7 +901,13 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input_data: Tensor<4>, index_tensor: Tensor<3, Int>) -> Tensor<6> {
-            let output_data = input_data.take::<3, 6>(1, index_tensor);
+            let output_data = {
+                let axis_size = input_data.dims()[1] as i64;
+                let negative = index_tensor.clone().lower_elem(0i64);
+                let corrected = index_tensor.clone() + axis_size;
+                let indices = index_tensor.mask_where(negative, corrected);
+                input_data.take::<3, 6>(1, indices)
+            };
             output_data
         }
         ");

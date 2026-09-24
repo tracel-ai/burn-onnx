@@ -17,14 +17,10 @@ impl NodeCodegen for onnx_ir::trilu::TriluNode {
         let output = arg_to_ident(self.outputs.first().unwrap());
         let diagonal = match &self.config.diagonal {
             TriluDiagonal::Static(k) => k.to_tokens(),
-            TriluDiagonal::Runtime(k_ref) => {
-                let k_arg = &self.inputs[k_ref.input_index];
-                match &k_arg.ty {
-                    ArgType::ScalarNative(_) | ArgType::ScalarTensor(_) => {
-                        scalar_as_i64(k_arg, scope.arg(k_arg))
-                    }
-                    other => panic!("Trilu k must be a scalar, got {other:?}"),
-                }
+            TriluDiagonal::Runtime(runtime) => {
+                let arg = &self.inputs[runtime.input_index];
+                let value = scope.arg(arg);
+                scalar_as_i64(arg, value)
             }
         };
 
@@ -55,7 +51,6 @@ mod tests {
     use super::super::test_helpers::*;
     use burn::tensor::{BoolStore, DType};
     use insta::assert_snapshot;
-    use onnx_ir::ir::RuntimeInputRef;
     use onnx_ir::trilu::{TriluConfig, TriluDiagonal, TriluNodeBuilder};
 
     #[test]
@@ -93,6 +88,48 @@ mod tests {
     }
 
     #[test]
+    fn test_trilu_runtime_diagonal() {
+        let config = TriluConfig::new(
+            false,
+            TriluDiagonal::Runtime(onnx_ir::ir::RuntimeInputRef::new("k".to_string(), 1)),
+        );
+        let node = TriluNodeBuilder::new("tril1")
+            .input_tensor("input", 2, DType::F32)
+            .input_scalar("k", DType::I64)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>, k: i64) -> Tensor<2> {
+            let output = input.tril(k);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_trilu_runtime_diagonal_scalar_tensor() {
+        let config = TriluConfig::new(
+            true,
+            TriluDiagonal::Runtime(onnx_ir::ir::RuntimeInputRef::new("k".to_string(), 1)),
+        );
+        let node = TriluNodeBuilder::new("triu1")
+            .input_tensor("input", 2, DType::F32)
+            .input_scalar_tensor("k", DType::I32)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>, k: Tensor<1, Int>) -> Tensor<2> {
+            let output = input.triu((k).into_scalar::<i32>() as i64);
+            output
+        }
+        ");
+    }
+
+    #[test]
     fn test_trilu_bool_input_lower() {
         let config = TriluConfig::new(false, TriluDiagonal::Static(0));
         let node = TriluNodeBuilder::new("tril1")
@@ -122,48 +159,6 @@ mod tests {
         pub fn forward(&self, mask: Tensor<3, Bool>) -> Tensor<3, Bool> {
             let masked = mask.int().triu(-1).bool();
             masked
-        }
-        ");
-    }
-
-    #[test]
-    fn test_trilu_runtime_diagonal() {
-        let config = TriluConfig::new(
-            false,
-            TriluDiagonal::Runtime(RuntimeInputRef::new("k".to_string(), 1)),
-        );
-        let node = TriluNodeBuilder::new("tril1")
-            .input_tensor("input", 2, DType::F32)
-            .input_scalar("k", DType::I64)
-            .output_tensor("output", 2, DType::F32)
-            .config(config)
-            .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<2>, k: i64) -> Tensor<2> {
-            let output = input.tril(k as i64);
-            output
-        }
-        ");
-    }
-
-    #[test]
-    fn test_trilu_runtime_diagonal_on_device() {
-        let config = TriluConfig::new(
-            true,
-            TriluDiagonal::Runtime(RuntimeInputRef::new("k".to_string(), 1)),
-        );
-        let node = TriluNodeBuilder::new("triu1")
-            .input_tensor("input", 3, DType::F32)
-            .input_scalar_tensor("k", DType::I64)
-            .output_tensor("output", 3, DType::F32)
-            .config(config)
-            .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
-        pub fn forward(&self, input: Tensor<3>, k: Tensor<1, Int>) -> Tensor<3> {
-            let output = input.triu((k).into_scalar::<i64>() as i64);
-            output
         }
         ");
     }

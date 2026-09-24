@@ -1,5 +1,10 @@
 use crate::include_models;
-include_models!(deform_conv, deform_conv_bias, deform_conv_mask);
+include_models!(
+    deform_conv,
+    deform_conv_bias,
+    deform_conv_mask,
+    deform_conv_runtime_bias
+);
 
 #[cfg(test)]
 mod tests {
@@ -62,5 +67,25 @@ mod tests {
         // mask=ones is same as no mask, so same as bias result
         let expected_sum: f32 = 12.116_673;
         assert!(expected_sum.approx_eq(output_sum, (1.0e-4, 2)));
+    }
+
+    #[test]
+    fn deform_conv_runtime_bias() {
+        // Constant weight with a runtime bias: both stay runtime so the bias is applied.
+        let device = Default::default();
+        let model = deform_conv_runtime_bias::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/deform_conv_runtime_bias.bpk"),
+            &device,
+        );
+
+        let x = Tensor::<4>::from_floats([[[[0., 1., 2.], [3., 4., 5.], [6., 7., 8.]]]], &device);
+        let offset = Tensor::<4>::zeros([1, 8, 2, 2], &device);
+        let bias = Tensor::<1>::from_floats([0.5], &device);
+
+        let output = model.forward(x, offset, bias);
+        let expected = burn::tensor::TensorData::from([[[[27.5f32, 37.5], [57.5, 67.5]]]]);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::default());
     }
 }

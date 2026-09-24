@@ -36,10 +36,14 @@ pub struct AttentionNode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum AttentionQkMatmulOutputMode {
+    /// Mode 0: the raw `Q * K^T` product, scaled.
     #[default]
     Matmul,
-    MatmulPlusAttentionMask,
+    /// Mode 1: after the softcap, before the attention mask is added.
     MatmulAfterSoftcap,
+    /// Mode 2: after the softcap and the attention mask.
+    MatmulPlusAttentionMask,
+    /// Mode 3: after the softmax.
     MatmulAfterSoftmax,
 }
 
@@ -56,6 +60,18 @@ fn extract_tensor<'a>(
             ))),
         },
     }
+}
+
+/// Read a head-count attribute, which must be positive.
+fn head_count(name: &str, value: &crate::ir::AttributeValue) -> Result<usize, ProcessError> {
+    let count = value.clone().into_i64();
+    if count <= 0 {
+        return Err(ProcessError::InvalidAttribute {
+            name: name.to_string(),
+            reason: format!("must be positive, got {count}"),
+        });
+    }
+    Ok(count as usize)
 }
 
 pub(crate) struct AttentionProcessor;
@@ -131,9 +147,7 @@ impl NodeProcessor for AttentionProcessor {
         // TODO: Add test for very large qk_matmul_output dimensions - potential memory issues not validated
 
         // Get reference to config for validation
-        let config = self
-            .extract_config(node, opset)
-            .expect("Config extraction failed");
+        let config = self.extract_config(node, opset)?;
 
         if q.rank == 3 && (config.kv_num_heads.is_none() || config.q_num_heads.is_none()) {
             return Err(ProcessError::Custom(
@@ -141,8 +155,27 @@ impl NodeProcessor for AttentionProcessor {
             ));
         }
 
-        // TODO: Add validation that kv_num_heads and q_num_heads are positive - spec requires this but not validated
-        // TODO: Add validation that q_num_heads is divisible by kv_num_heads for GQA/MQA - common requirement not checked
+        // Head counts come from the attributes for rank 3 inputs and from axis 1 for
+        // rank 4. Each K/V head serves q_num_heads / kv_num_heads query heads.
+        let heads = |attr: Option<usize>, shape: &Option<Vec<Option<usize>>>| match q.rank {
+            3 => attr,
+            _ => shape.as_ref().and_then(|dims| dims[1]),
+        };
+        let q_heads = heads(config.q_num_heads, &q.static_shape);
+        let kv_heads = heads(config.kv_num_heads, &k.static_shape);
+        if q_heads == Some(0) || kv_heads == Some(0) {
+            return Err(ProcessError::Custom(
+                "Attention: q_num_heads and kv_num_heads must be positive".to_string(),
+            ));
+        }
+        if let (Some(q_heads), Some(kv_heads)) = (q_heads, kv_heads)
+            && q_heads % kv_heads != 0
+        {
+            return Err(ProcessError::Custom(format!(
+                "Attention: q_num_heads ({q_heads}) must be a multiple of kv_num_heads ({kv_heads})"
+            )));
+        }
+
         // TODO: Validate dimension compatibility between Q/K/V tensors beyond just rank matching
         // TODO: Add test coverage for attention_mask with wrong rank - only rank validation on Q/K/V, not mask
 
@@ -205,8 +238,8 @@ impl NodeProcessor for AttentionProcessor {
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
                 "is_causal" => is_causal = value.clone().into_i64() != 0,
-                "kv_num_heads" => kv_num_heads = Some(value.clone().into_i64() as usize),
-                "q_num_heads" => q_num_heads = Some(value.clone().into_i64() as usize),
+                "kv_num_heads" => kv_num_heads = Some(head_count(key, value)?),
+                "q_num_heads" => q_num_heads = Some(head_count(key, value)?),
                 "qk_matmul_output_mode" => {
                     let mode_value = value.clone().into_i64();
                     // Validate qk_matmul_output_mode range
@@ -220,8 +253,10 @@ impl NodeProcessor for AttentionProcessor {
                     }
                     qk_matmul_output_mode = match mode_value {
                         0 => AttentionQkMatmulOutputMode::Matmul,
-                        1 => AttentionQkMatmulOutputMode::MatmulPlusAttentionMask,
-                        2 => AttentionQkMatmulOutputMode::MatmulAfterSoftcap,
+                        // The current definition (onnx >= 1.22) applies softcap
+                        // before the mask, so mode 1 comes before mode 2.
+                        1 => AttentionQkMatmulOutputMode::MatmulAfterSoftcap,
+                        2 => AttentionQkMatmulOutputMode::MatmulPlusAttentionMask,
                         3 => AttentionQkMatmulOutputMode::MatmulAfterSoftmax,
                         _ => unreachable!(), // Already validated above
                     }
@@ -475,8 +510,8 @@ mod tests {
 
     #[rstest]
     #[case(0, AttentionQkMatmulOutputMode::Matmul)]
-    #[case(1, AttentionQkMatmulOutputMode::MatmulPlusAttentionMask)]
-    #[case(2, AttentionQkMatmulOutputMode::MatmulAfterSoftcap)]
+    #[case(1, AttentionQkMatmulOutputMode::MatmulAfterSoftcap)]
+    #[case(2, AttentionQkMatmulOutputMode::MatmulPlusAttentionMask)]
     #[case(3, AttentionQkMatmulOutputMode::MatmulAfterSoftmax)]
     fn test_qk_matmul_output(#[case] raw: i64, #[case] mode: AttentionQkMatmulOutputMode) {
         let node = create_simple_test_node(None, None, None, Some(raw), None, None, None);
@@ -486,5 +521,53 @@ mod tests {
         let config = processor.extract_config(&node, 23).unwrap();
         processor.infer_types(&mut node, 23, &prefs).unwrap();
         assert_eq!(config.qk_matmul_output_mode, mode);
+    }
+
+    fn heads_node(rank: usize, heads: [i64; 2], shapes: Option<[usize; 2]>) -> RawNode {
+        let (q_shape, kv_shape) = match shapes {
+            Some([q, kv]) => (Some(vec![1, q, 4, 8]), Some(vec![1, kv, 4, 8])),
+            None => (None, None),
+        };
+        let mut builder = TestNodeBuilder::new(NodeType::Attention, "test_attention")
+            .input_tensor_f32("q", rank, q_shape)
+            .input_tensor_f32("k", rank, kv_shape.clone())
+            .input_tensor_f32("v", rank, kv_shape)
+            .output_tensor_f32("y", rank, None);
+        if rank == 3 {
+            builder = builder
+                .attr_int("q_num_heads", heads[0])
+                .attr_int("kv_num_heads", heads[1]);
+        }
+        builder.build()
+    }
+
+    fn infer(mut node: RawNode) -> Result<(), ProcessError> {
+        AttentionProcessor.infer_types(&mut node, 23, &OutputPreferences::new())
+    }
+
+    #[test]
+    fn test_accepts_grouped_heads() {
+        assert!(infer(heads_node(3, [8, 2], None)).is_ok());
+        assert!(infer(heads_node(4, [0, 0], Some([8, 2]))).is_ok());
+    }
+
+    #[test]
+    fn test_rejects_heads_not_divisible() {
+        assert!(matches!(
+            infer(heads_node(3, [6, 4], None)),
+            Err(ProcessError::Custom(msg)) if msg.contains("multiple of kv_num_heads")
+        ));
+        assert!(matches!(
+            infer(heads_node(4, [0, 0], Some([6, 4]))),
+            Err(ProcessError::Custom(msg)) if msg.contains("multiple of kv_num_heads")
+        ));
+    }
+
+    #[test]
+    fn test_rejects_non_positive_head_count() {
+        assert!(matches!(
+            infer(heads_node(3, [8, -2], None)),
+            Err(ProcessError::InvalidAttribute { ref name, .. }) if name == "kv_num_heads"
+        ));
     }
 }

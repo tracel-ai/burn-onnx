@@ -133,7 +133,7 @@ impl Model {
             .await
             .unwrap()
             .convert::<f32>()
-            .to_vec()
+            .try_to_vec()
             .unwrap()
     }
 }

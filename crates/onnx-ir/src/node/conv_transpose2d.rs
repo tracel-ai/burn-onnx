@@ -63,15 +63,10 @@ impl NodeProcessor for Convtranspose2dProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // Lift weight (input[1]) and optional bias (input[2])
-        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
-            node.inputs[1].to_static()?;
-        }
-        if node.inputs.len() > 2 && node.inputs[2].is_constant() {
-            node.inputs[2].to_static()?;
-        }
-
-        Ok(())
+        // Weight (input[1]) and optional bias (input[2]) go into the module only when
+        // both are constants. Otherwise they stay graph values for the functional
+        // conv_transpose, which takes both as ordinary inputs.
+        crate::processor::lift_all_or_none(node, &[1, 2])
     }
 
     fn infer_types(
@@ -143,15 +138,13 @@ impl NodeProcessor for Convtranspose2dProcessor {
         }
 
         let kernel_size = if kernel_shape.is_empty() {
-            let weight_shape = node.inputs[1]
-                .value()
+            let weight_shape = crate::node::padding::known_weight_shape(&node.inputs[1])
                 .ok_or_else(|| {
                     ProcessError::Custom(
-                        "ConvTranspose2d: weight tensor must be present".to_string(),
-                    )
-                })?
-                .shape
-                .to_vec();
+                    "ConvTranspose2d: kernel_shape is not set and the weight shape is not known"
+                        .to_string(),
+                )
+                })?;
 
             if weight_shape.len() != 4 {
                 return Err(ProcessError::Custom(format!(

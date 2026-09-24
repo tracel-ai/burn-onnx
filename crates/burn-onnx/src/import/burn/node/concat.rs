@@ -146,26 +146,23 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
                     // by slicing arrays. onnx-ir only picks a Shape output when
                     // every tensor length is statically known, which is why the
                     // size can be fixed at codegen time.
-                    // The `__` prefix keeps these locals from being captured by
-                    // an ONNX value that happens to carry the same name.
                     let mut pushes = Vec::new();
                     for (i, input) in self.inputs.iter().enumerate() {
                         if matches!(input.ty, ArgType::Tensor(_)) {
                             let tensor = scope.arg(input);
                             let data_name =
-                                Ident::new(&format!("__tensor_data_{}", i), Span::call_site());
+                                Ident::new(&format!("tensor_data_{}", i), Span::call_site());
                             pushes.push(quote! {
                                 let #data_name = #tensor.cast(burn::tensor::DType::I64).to_data();
-                                __shape_parts.extend(#data_name.iter::<i64>());
+                                shape_parts.extend(#data_name.iter::<i64>());
                             });
                         } else if input.ty.is_scalar() {
                             let value = scalar_as_i64(input, scope.arg(input));
-                            pushes.push(quote! { __shape_parts.push(#value); });
+                            pushes.push(quote! { shape_parts.push(#value); });
                         } else {
                             let input_name = arg_to_ident(input);
-                            pushes.push(
-                                quote! { __shape_parts.extend_from_slice(&#input_name[..]); },
-                            );
+                            pushes
+                                .push(quote! { shape_parts.extend_from_slice(&#input_name[..]); });
                         }
                     }
 
@@ -176,14 +173,14 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
 
                     quote! {
                         let #output: [i64; #output_rank] = {
-                            let mut __shape_parts = alloc::vec::Vec::with_capacity(#output_rank);
+                            let mut shape_parts = alloc::vec::Vec::with_capacity(#output_rank);
                             #(#pushes)*
                             assert_eq!(
-                                __shape_parts.len(), #output_rank,
+                                shape_parts.len(), #output_rank,
                                 "Concat {}: expected {} shape elements, got {}",
-                                #node_name, #output_rank, __shape_parts.len()
+                                #node_name, #output_rank, shape_parts.len()
                             );
-                            __shape_parts.try_into().expect("length checked above")
+                            shape_parts.try_into().expect("length checked above")
                         };
                     }
                 } else {
@@ -406,7 +403,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, head: [i64; 2], mid: Tensor<1, Int>) -> [i64; 3] {
-            let output: [i64; 3usize] = [&head[..], &[(mid).into_scalar::<i64>() as i64][..]]
+            let output: [i64; 3usize] = [&head[..], &[(mid).into_scalar::<i64>()][..]]
                 .concat()
                 .try_into()
                 .unwrap();
@@ -431,19 +428,19 @@ mod tests {
         let code = codegen_forward_default(&node);
         // Spelled out separately from the snapshot: regenerating it must not
         // drop the prefix that keeps an ONNX value from capturing this local.
-        assert!(code.contains("__shape_parts"));
+        assert!(code.contains("shape_parts"));
         assert_snapshot!(code, @r#"
         pub fn forward(&self, dims: [i64; 3], extra: Tensor<1, Int>) -> [i64; 5] {
             let output: [i64; 5usize] = {
-                let mut __shape_parts = alloc::vec::Vec::with_capacity(5usize);
-                __shape_parts.extend_from_slice(&dims[..]);
-                let __tensor_data_1 = extra.cast(burn::tensor::DType::I64).to_data();
-                __shape_parts.extend(__tensor_data_1.iter::<i64>());
+                let mut shape_parts = alloc::vec::Vec::with_capacity(5usize);
+                shape_parts.extend_from_slice(&dims[..]);
+                let tensor_data_1 = extra.cast(burn::tensor::DType::I64).to_data();
+                shape_parts.extend(tensor_data_1.iter::<i64>());
                 assert_eq!(
-                    __shape_parts.len(), 5usize, "Concat {}: expected {} shape elements, got {}",
-                    "concat_shape_out", 5usize, __shape_parts.len()
+                    shape_parts.len(), 5usize, "Concat {}: expected {} shape elements, got {}",
+                    "concat_shape_out", 5usize, shape_parts.len()
                 );
-                __shape_parts.try_into().expect("length checked above")
+                shape_parts.try_into().expect("length checked above")
             };
             output
         }

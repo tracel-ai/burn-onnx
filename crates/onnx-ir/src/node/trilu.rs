@@ -23,12 +23,12 @@ use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
 
-/// Diagonal offset `k` of a Trilu node, either known at compile time or read at runtime.
+/// The diagonal offset `k`, known at build time or read from an input at run time.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TriluDiagonal {
-    /// Offset known at compile time (the default of 0 when `k` is absent).
+    /// Offset known at build time (0 when the input is absent).
     Static(i64),
-    /// Offset supplied by the runtime `k` input.
+    /// Offset read from a runtime scalar input.
     Runtime(RuntimeInputRef),
 }
 
@@ -76,7 +76,7 @@ impl NodeProcessor for TriluProcessor {
     fn infer_types(
         &self,
         node: &mut RawNode,
-        _opset: usize,
+        opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
         let input_rank = match &node.inputs[0].ty {
@@ -90,6 +90,8 @@ impl NodeProcessor for TriluProcessor {
                 input_rank
             )));
         }
+
+        self.extract_config(node, opset)?;
 
         // Infer output type
         crate::processor::same_as_input(node);
@@ -105,25 +107,27 @@ impl NodeProcessor for TriluProcessor {
                 upper = value.clone().into_i64() != 0
             }
         }
-        if let Some(diagonal_arg) = node.inputs.get(1).filter(|arg| !arg.is_optional()) {
-            if let Some(tensor_data) = diagonal_arg.value() {
-                // Extract scalar value, converting from any numeric type to i64
-                let value = match tensor_data.scalar_i64() {
-                    Ok(val) => val,
-                    Err(e) => {
-                        log::warn!(
-                            "Trilu node {}: Failed to extract diagonal value: {:?}",
-                            node.name,
-                            e
-                        );
-                        0
-                    }
-                };
-                diagonal = TriluDiagonal::Static(value);
-            } else {
-                diagonal =
-                    TriluDiagonal::Runtime(RuntimeInputRef::new(diagonal_arg.name.clone(), 1));
-            }
+        if let Some(diagonal_arg) = node.get_input(1) {
+            diagonal = match diagonal_arg.value() {
+                Some(tensor_data) => {
+                    TriluDiagonal::Static(tensor_data.scalar_i64().map_err(|e| {
+                        ProcessError::Custom(format!(
+                            "Trilu node {}: failed to read diagonal value: {e:?}",
+                            node.name
+                        ))
+                    })?)
+                }
+                // A runtime k is passed to burn's tril/triu, which take a native scalar.
+                None if diagonal_arg.ty.is_scalar() => {
+                    TriluDiagonal::Runtime(RuntimeInputRef::new(diagonal_arg.name.clone(), 1))
+                }
+                None => {
+                    return Err(ProcessError::TypeMismatch {
+                        expected: "scalar diagonal offset k".to_string(),
+                        actual: format!("{:?}", diagonal_arg.ty),
+                    });
+                }
+            };
         }
 
         let config = TriluConfig::new(upper, diagonal);
@@ -184,7 +188,7 @@ mod tests {
             config,
             TriluConfig {
                 upper: true,
-                diagonal: TriluDiagonal::Static(0),
+                diagonal: TriluDiagonal::Static(0)
             }
         );
     }
@@ -204,7 +208,7 @@ mod tests {
             config,
             TriluConfig {
                 upper: true,
-                diagonal: TriluDiagonal::Static(0),
+                diagonal: TriluDiagonal::Static(0)
             }
         );
     }
@@ -224,7 +228,7 @@ mod tests {
             config,
             TriluConfig {
                 upper: false,
-                diagonal: TriluDiagonal::Static(0),
+                diagonal: TriluDiagonal::Static(0)
             }
         );
     }
@@ -244,7 +248,7 @@ mod tests {
             config,
             TriluConfig {
                 upper: true,
-                diagonal: TriluDiagonal::Static(2),
+                diagonal: TriluDiagonal::Static(2)
             }
         );
     }
@@ -264,7 +268,7 @@ mod tests {
             config,
             TriluConfig {
                 upper: true,
-                diagonal: TriluDiagonal::Static(-3),
+                diagonal: TriluDiagonal::Static(-3)
             }
         );
     }
@@ -284,31 +288,38 @@ mod tests {
             config,
             TriluConfig {
                 upper: false,
-                diagonal: TriluDiagonal::Static(1),
+                diagonal: TriluDiagonal::Static(1)
             }
         );
     }
 
     #[test]
     fn test_trilu_config_runtime_diagonal() {
-        // A `k` input without a constant value is read at runtime
-        let node = create_test_node(Some(0), None)
-            .input_scalar_tensor_i64("k", None)
+        // A diagonal fed by a graph input is read at run time, not treated as 0.
+        let node = TestNodeBuilder::new(NodeType::Trilu, "test_trilu")
+            .input_tensor_f32("X", 2, None)
+            .input_scalar_i64("k")
+            .output_tensor_f32("Y", 2, None)
+            .attr_int("upper", 0)
             .build();
 
-        let mut node = node;
-        let processor = TriluProcessor;
-        let prefs = OutputPreferences::new();
-        let config = processor.extract_config(&node, 16).unwrap();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
+        let config = TriluProcessor.extract_config(&node, 16).unwrap();
         assert_eq!(
-            config,
-            TriluConfig {
-                upper: false,
-                diagonal: TriluDiagonal::Runtime(RuntimeInputRef::new("k".to_string(), 1))
-            }
+            config.diagonal,
+            TriluDiagonal::Runtime(RuntimeInputRef::new("k".to_string(), 1))
         );
+    }
+
+    #[test]
+    fn test_trilu_rejects_non_scalar_runtime_diagonal() {
+        let node = TestNodeBuilder::new(NodeType::Trilu, "test_trilu")
+            .input_tensor_f32("X", 2, None)
+            .input_tensor_i64("k", 1, None)
+            .output_tensor_f32("Y", 2, None)
+            .build();
+
+        let result = TriluProcessor.extract_config(&node, 16);
+        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
     }
 
     #[test]
@@ -327,7 +338,7 @@ mod tests {
             config,
             TriluConfig {
                 upper: true,
-                diagonal: TriluDiagonal::Static(0),
+                diagonal: TriluDiagonal::Static(0)
             }
         );
     }
@@ -348,7 +359,7 @@ mod tests {
             config,
             TriluConfig {
                 upper: true,
-                diagonal: TriluDiagonal::Static(0),
+                diagonal: TriluDiagonal::Static(0)
             }
         );
     }

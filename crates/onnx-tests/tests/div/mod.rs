@@ -1,11 +1,19 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(div, div_shape, div_broadcast, div_shape_tensor);
+include_models!(
+    div,
+    div_broadcast,
+    div_shape,
+    div_shape_broadcast,
+    div_shape_rank_lift,
+    div_shape_tensor
+);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Device, Tensor, TensorData};
+    use alloc::vec::Vec;
+    use burn::tensor::{DType, Device, Int, Tensor, TensorData, Tolerance};
 
     #[test]
     fn div_tensor_by_scalar_and_tensor_by_tensor() {
@@ -126,7 +134,54 @@ mod tests {
             ],
         ]);
 
-        result1.to_data().assert_eq(&expected1, true);
-        result2.to_data().assert_eq(&expected2, true);
+        assert_eq!(result1.dtype(), DType::F32);
+        result1
+            .to_data()
+            .assert_approx_eq::<f32>(&expected1, Tolerance::default());
+        assert_eq!(result2.dtype(), DType::F32);
+        result2
+            .to_data()
+            .assert_approx_eq::<f32>(&expected2, Tolerance::default());
+    }
+
+    #[test]
+    fn div_shape_broadcast() {
+        let device = Default::default();
+        let model: div_shape_broadcast::Model = div_shape_broadcast::Model::default();
+
+        let input_1d = Tensor::<1>::zeros([10], &device);
+        let input_4d = Tensor::<4>::zeros([3, 7, 24, 45], &device);
+
+        let (lhs_bc, rhs_bc) = model.forward(input_1d, input_4d);
+
+        assert_eq!(lhs_bc, [3i64, 1, 0, 0]);
+        assert_eq!(rhs_bc, [0i64, 0, 2, 4]);
+    }
+
+    #[test]
+    fn div_shape_operand_with_rank4_tensor() {
+        // dim0 of x's shape (B = 2) is a length 1 Shape, lifted to rank 4 before the op.
+        // Outputs are `x / 2` and `2 / x`.
+        let device = Default::default();
+        let model: div_shape_rank_lift::Model = div_shape_rank_lift::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/div_shape_rank_lift.bpk"),
+            &device,
+        );
+
+        let values: Vec<i64> = (1..=120).collect();
+        let x = Tensor::<4, Int>::from_data(
+            TensorData::new(values.clone(), [2, 3, 4, 5]),
+            (&device, burn::tensor::DType::I64),
+        );
+        let (tensor_shape, shape_tensor) = model.forward(x);
+
+        let expected1: Vec<i64> = values.iter().map(|&v| v / 2).collect();
+        let expected2: Vec<i64> = values.iter().map(|&v| 2 / v).collect();
+        tensor_shape
+            .to_data()
+            .assert_eq(&TensorData::new(expected1, [2, 3, 4, 5]), true);
+        shape_tensor
+            .to_data()
+            .assert_eq(&TensorData::new(expected2, [2, 3, 4, 5]), true);
     }
 }

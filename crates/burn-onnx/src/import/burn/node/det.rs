@@ -20,87 +20,18 @@ impl NodeCodegen for onnx_ir::node::det::DetNode {
             other => unreachable!("Det input type validated in onnx-ir, got {other:?}"),
         };
 
-        match input_rank {
-            2 => {
-                // 2D non-batched: compute determinant via LU decomposition with partial pivoting
-                // det(A) = sign(P) * product_of_diagonal(U), where A = P L U
-                quote! {
-                    let #output = {
-                        let (p, _l, u) =
-                            burn::tensor::linalg::lu::<2usize, 1usize>(#input);
-                        let det_u =
-                            burn::tensor::linalg::diag::<2usize, 1usize, Float>(u)
-                                .prod();
-                        let n = p.dims()[0];
-                        let perm_vec = p.argmax(1).reshape([n]);
-                        let perm_f = perm_vec.float().cast(burn::tensor::DType::F32);
-                        let perm_col = perm_f.clone().reshape([n, 1]);
-                        let perm_row = perm_f.reshape([1, n]);
-                        let inv_count = (perm_row - perm_col)
-                            .triu(1i64)
-                            .lower_elem(0.0f32)
-                            .int()
-                            .cast(burn::tensor::DType::I64)
-                            .sum();
-                        let parity = inv_count.remainder_scalar(2i64);
-                        let device = det_u.device();
-                        let dtype = det_u.dtype();
-                        let sign = Tensor::<1, Float>::from_data(
-                            [1.0f32, -1.0f32],
-                            (&device, dtype,)
-                        )
-                        .select(0, parity);
-                        det_u * sign
-                    };
-                }
+        // burn's det works on the last two axes of a batched input of rank >= 3, so a
+        // single matrix gets a leading batch axis of 1. Its [1]-shaped result is how
+        // a scalar is represented on device.
+        if input_rank == 2 {
+            quote! {
+                let #output = burn::tensor::linalg::det::<3, 2, 1>(#input.unsqueeze_dim(0));
             }
-            _ => {
-                // Batched inputs: loop over all batch dimensions using LU decomposition
-                // per-matrix. This is a fallback; a native batched det in Burn would be
-                // more efficient.
-                let batch_rank = input_rank - 2;
-                let batch_dims: Vec<TokenStream> =
-                    (0..batch_rank).map(|i| quote! { shape[#i] }).collect();
-                quote! {
-                    let #output = {
-                        let shape = #input.shape();
-                        let batch_size: usize = shape[..#batch_rank].iter().product();
-                        let m = shape[#batch_rank];
-                        let flat = #input.reshape([batch_size, m, m]);
-                        let mut dets: alloc::vec::Vec<Tensor<1, Float>> = alloc::vec::Vec::with_capacity(batch_size);
-                        for i in 0..batch_size {
-                            let matrix: Tensor<2, Float> =
-                                flat.clone().slice([i..(i + 1), 0..m, 0..m]).squeeze_dims::<2>(&[0]);
-                            let (p, _l, u) =
-                                burn::tensor::linalg::lu::<2usize, 1usize>(matrix);
-                            let det_u =
-                                burn::tensor::linalg::diag::<2usize, 1usize, Float>(u)
-                                    .prod();
-                            let n = p.dims()[0];
-                            let perm_vec = p.argmax(1).reshape([n]);
-                            let perm_f = perm_vec.float().cast(burn::tensor::DType::F32);
-                            let perm_col = perm_f.clone().reshape([n, 1]);
-                            let perm_row = perm_f.reshape([1, n]);
-                            let inv_count = (perm_row - perm_col)
-                                .triu(1i64)
-                                .lower_elem(0.0f32)
-                                .int()
-                                .cast(burn::tensor::DType::I64)
-                                .sum();
-                            let parity = inv_count.remainder_scalar(2i64);
-                            let device = det_u.device();
-                            let dtype = det_u.dtype();
-                            let sign = Tensor::<1, Float>::from_data(
-                                [1.0f32, -1.0f32],
-                                (&device, dtype,)
-                            )
-                            .select(0, parity);
-                            dets.push(det_u * sign);
-                        }
-                        let flat_out = Tensor::cat(dets, 0);
-                        flat_out.reshape([#(#batch_dims),*])
-                    };
-                }
+        } else {
+            let [rank, rank_minus_one, rank_minus_two] =
+                [input_rank, input_rank - 1, input_rank - 2].map(|r| r.to_tokens());
+            quote! {
+                let #output = burn::tensor::linalg::det::<#rank, #rank_minus_one, #rank_minus_two>(#input);
             }
         }
     }
@@ -122,27 +53,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> Tensor<1> {
-            let output = {
-                let (p, _l, u) = burn::tensor::linalg::lu::<2usize, 1usize>(input);
-                let det_u = burn::tensor::linalg::diag::<2usize, 1usize, Float>(u).prod();
-                let n = p.dims()[0];
-                let perm_vec = p.argmax(1).reshape([n]);
-                let perm_f = perm_vec.float().cast(burn::tensor::DType::F32);
-                let perm_col = perm_f.clone().reshape([n, 1]);
-                let perm_row = perm_f.reshape([1, n]);
-                let inv_count = (perm_row - perm_col)
-                    .triu(1i64)
-                    .lower_elem(0.0f32)
-                    .int()
-                    .cast(burn::tensor::DType::I64)
-                    .sum();
-                let parity = inv_count.remainder_scalar(2i64);
-                let device = det_u.device();
-                let dtype = det_u.dtype();
-                let sign = Tensor::<1, Float>::from_data([1.0f32, -1.0f32], (&device, dtype))
-                    .select(0, parity);
-                det_u * sign
-            };
+            let output = burn::tensor::linalg::det::<3, 2, 1>(input.unsqueeze_dim(0));
             output
         }
         ");
@@ -157,42 +68,22 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3>) -> Tensor<1> {
-            let output = {
-                let shape = input.shape();
-                let batch_size: usize = shape[..1usize].iter().product();
-                let m = shape[1usize];
-                let flat = input.reshape([batch_size, m, m]);
-                let mut dets: alloc::vec::Vec<Tensor<1, Float>> = alloc::vec::Vec::with_capacity(
-                    batch_size,
-                );
-                for i in 0..batch_size {
-                    let matrix: Tensor<2, Float> = flat
-                        .clone()
-                        .slice([i..(i + 1), 0..m, 0..m])
-                        .squeeze_dims::<2>(&[0]);
-                    let (p, _l, u) = burn::tensor::linalg::lu::<2usize, 1usize>(matrix);
-                    let det_u = burn::tensor::linalg::diag::<2usize, 1usize, Float>(u).prod();
-                    let n = p.dims()[0];
-                    let perm_vec = p.argmax(1).reshape([n]);
-                    let perm_f = perm_vec.float().cast(burn::tensor::DType::F32);
-                    let perm_col = perm_f.clone().reshape([n, 1]);
-                    let perm_row = perm_f.reshape([1, n]);
-                    let inv_count = (perm_row - perm_col)
-                        .triu(1i64)
-                        .lower_elem(0.0f32)
-                        .int()
-                        .cast(burn::tensor::DType::I64)
-                        .sum();
-                    let parity = inv_count.remainder_scalar(2i64);
-                    let device = det_u.device();
-                    let dtype = det_u.dtype();
-                    let sign = Tensor::<1, Float>::from_data([1.0f32, -1.0f32], (&device, dtype))
-                        .select(0, parity);
-                    dets.push(det_u * sign);
-                }
-                let flat_out = Tensor::cat(dets, 0);
-                flat_out.reshape([shape[0usize]])
-            };
+            let output = burn::tensor::linalg::det::<3, 2, 1>(input);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_det_4d_forward() {
+        let node = DetNodeBuilder::new("det1")
+            .input_tensor("input", 4, DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<4>) -> Tensor<2> {
+            let output = burn::tensor::linalg::det::<4, 3, 2>(input);
             output
         }
         ");

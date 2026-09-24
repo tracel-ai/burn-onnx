@@ -4,7 +4,7 @@
 # ///
 """
 Generate OneHotEncoder ONNX models covering every codegen arm:
-float32/float64 inputs (F64 compare path), int64/int32 inputs (I64 compare path),
+float32/float64 inputs (cast to integers, per the spec), int64/int32 inputs,
 and a 2D input to exercise the category-tensor reshape for rank > 1.
 
 Categories are non-identity (value != column index) and inputs include an
@@ -63,6 +63,19 @@ def main() -> None:
         "one_hot_encoder_f64",
         make_model("one_hot_encoder_f64", TensorProto.DOUBLE, [None], [1, 2, 4]),
         np.array([4.0, 2.0, 3.0, 1.0], dtype=np.float64),
+    )
+
+    # Categories above 2^24 are not exact in f32; 16777217 must not match
+    # 16777216.0. 5.0 is out of vocabulary.
+    emit(
+        "one_hot_encoder_f32_large_cats",
+        make_model(
+            "one_hot_encoder_f32_large_cats",
+            TensorProto.FLOAT,
+            [None],
+            [16777216, 16777217],
+        ),
+        np.array([16777216.0, 5.0], dtype=np.float32),
     )
 
     # Integer input path, non-identity categories, 7 is out of vocabulary.

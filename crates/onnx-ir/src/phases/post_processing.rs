@@ -13,7 +13,6 @@ use crate::{
     graph_state::GraphState,
     ir::{Argument, NodeType, RawNode},
     processor::get_processor_registry,
-    proto_conversion::DEFAULT_OPSET_VERSION,
 };
 
 /// Result of no-op elimination analysis
@@ -204,6 +203,7 @@ fn apply_noop_elimination(
 pub(crate) fn post_process(
     state_rc: &Rc<RefCell<GraphState>>,
     simplify: bool,
+    opset: usize,
 ) -> (Vec<RawNode>, Vec<Argument>, Vec<Argument>) {
     // Extract graph data while preserving tensor_store, constant_map, and node_output_map
     let (mut nodes, inputs, mut outputs, node_output_map) = {
@@ -262,7 +262,7 @@ pub(crate) fn post_process(
             // Constant lifting is a best-effort optimization after identity elimination.
             // Not all arguments can be lifted (e.g., already Static, Dynamic), so we log
             // errors but don't fail the pipeline.
-            if let Err(e) = processor.lift_constants(node, DEFAULT_OPSET_VERSION) {
+            if let Err(e) = processor.lift_constants(node, opset) {
                 log::debug!(
                     "Could not lift constants for node '{}' (type: {:?}): {:?}",
                     node.name,

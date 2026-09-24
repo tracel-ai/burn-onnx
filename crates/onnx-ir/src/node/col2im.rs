@@ -25,7 +25,7 @@
 use derive_new::new;
 use onnx_ir_derive::NodeBuilder;
 
-use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
+use crate::ir::{ArgType, Argument, Node, RawNode, RuntimeInputRef, TensorType};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -39,13 +39,50 @@ pub struct Col2ImNode {
     pub config: Col2ImConfig,
 }
 
+/// A Col2Im shape input: known at build time, or read from the input at run time.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Col2ImShape {
+    /// Values known at build time.
+    Static(Vec<usize>),
+    /// Values read from a runtime input holding one entry per spatial axis.
+    Runtime {
+        /// The input holding the values.
+        input: RuntimeInputRef,
+        /// Number of spatial axes, which is the input's length.
+        len: usize,
+    },
+}
+
+impl Col2ImShape {
+    /// Number of spatial axes this shape describes.
+    pub fn len(&self) -> usize {
+        match self {
+            Col2ImShape::Static(values) => values.len(),
+            Col2ImShape::Runtime { len, .. } => *len,
+        }
+    }
+
+    /// Whether the shape describes no spatial axes.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The build-time values, if known.
+    pub fn as_static(&self) -> Option<&[usize]> {
+        match self {
+            Col2ImShape::Static(values) => Some(values),
+            Col2ImShape::Runtime { .. } => None,
+        }
+    }
+}
+
 /// Configuration for Col2Im operation
 #[derive(Debug, Clone, new)]
 pub struct Col2ImConfig {
     /// Image shape (spatial dimensions of the output image)
-    pub image_shape: Vec<usize>,
+    pub image_shape: Col2ImShape,
     /// Block shape (kernel size)
-    pub block_shape: Vec<usize>,
+    pub block_shape: Col2ImShape,
     /// Dilation value along each spatial axis
     pub dilations: Vec<usize>,
     /// Padding for the beginning and ending along each spatial axis
@@ -120,25 +157,21 @@ impl NodeProcessor for Col2ImProcessor {
         // Use partial static shape inference:
         // Always attempt to compute static_shape if config is available, even if input is dynamic.
         // We know (N, C, *image_shape) structure.
-        let static_shape = if let Some(input_shape) = &tensor.static_shape {
-            // Full inference if input shape is fully known
-            let n = input_shape[0];
-            let block_product: usize = config.block_shape.iter().product();
-            let c = input_shape[1].map(|v| v / block_product);
-
-            let mut shape = vec![n, c];
-            for &dim in &config.image_shape {
-                shape.push(Some(dim));
+        let (n, c) = match &tensor.static_shape {
+            Some(input_shape) => {
+                let c = config.block_shape.as_static().and_then(|block| {
+                    let block_product: usize = block.iter().product();
+                    input_shape[1].map(|v| v / block_product)
+                });
+                (input_shape[0], c)
             }
-            Some(shape)
-        } else {
-            // Partial inference: N, C unknown, but spatial dims known from config
-            let mut shape = vec![None, None]; // N, C
-            for &dim in &config.image_shape {
-                shape.push(Some(dim));
-            }
-            Some(shape)
+            None => (None, None),
         };
+        let spatial: Vec<Option<usize>> = match config.image_shape.as_static() {
+            Some(image) => image.iter().map(|&dim| Some(dim)).collect(),
+            None => vec![None; num_spatial_dims],
+        };
+        let static_shape = Some([vec![n, c], spatial].concat());
 
         // Validate supported dimensions (only 1D and 2D supported by current codegen)
         if num_spatial_dims > 2 {
@@ -158,84 +191,30 @@ impl NodeProcessor for Col2ImProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
-        use crate::ir::TensorDataExt;
-
-        // Extract image_shape from input[1] (required, must be constant)
-        let image_shape = match node.inputs[1].value() {
-            Some(data) => data
-                .to_i64_vec()
-                .map_err(|_| {
-                    ProcessError::Custom("Col2Im: image_shape must be int64 tensor".to_string())
-                })?
-                .iter()
-                .map(|&v| v as usize)
-                .collect::<Vec<_>>(),
-            None => {
-                return Err(ProcessError::Custom(
-                    "Col2Im: image_shape (input[1]) must be a constant".to_string(),
-                ));
-            }
-        };
-
-        // Extract block_shape from input[2] (required, must be constant)
-        let block_shape = match node.inputs[2].value() {
-            Some(data) => data
-                .to_i64_vec()
-                .map_err(|_| {
-                    ProcessError::Custom("Col2Im: block_shape must be int64 tensor".to_string())
-                })?
-                .iter()
-                .map(|&v| v as usize)
-                .collect::<Vec<_>>(),
-            None => {
-                return Err(ProcessError::Custom(
-                    "Col2Im: block_shape (input[2]) must be a constant".to_string(),
-                ));
-            }
-        };
+        let image_shape = shape_input(node, 1, "image_shape")?;
+        let block_shape = shape_input(node, 2, "block_shape")?;
+        if image_shape.len() != block_shape.len() {
+            return Err(ProcessError::Custom(format!(
+                "Col2Im: image_shape has {} entries but block_shape has {}",
+                image_shape.len(),
+                block_shape.len()
+            )));
+        }
 
         let num_spatial_dims = image_shape.len();
 
         // Note: ONNX spec requires num_spatial_dims >= 2, but we support 1D as an extension.
 
-        // Extract dilations attribute (default: all 1s)
-        let dilations = node
-            .attrs
-            .get("dilations")
-            .map(|v| {
-                v.clone()
-                    .into_i64s()
-                    .iter()
-                    .map(|&d| d as usize)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_else(|| vec![1; num_spatial_dims]);
+        if num_spatial_dims == 0 {
+            return Err(ProcessError::Custom(
+                "Col2Im: image_shape and block_shape must not be empty".to_string(),
+            ));
+        }
 
-        // Extract pads attribute (default: all 0s, format is [begin, end] per dim)
-        let pads = node
-            .attrs
-            .get("pads")
-            .map(|v| {
-                v.clone()
-                    .into_i64s()
-                    .iter()
-                    .map(|&p| p as usize)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_else(|| vec![0; num_spatial_dims * 2]);
-
-        // Extract strides attribute (default: all 1s)
-        let strides = node
-            .attrs
-            .get("strides")
-            .map(|v| {
-                v.clone()
-                    .into_i64s()
-                    .iter()
-                    .map(|&s| s as usize)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_else(|| vec![1; num_spatial_dims]);
+        // pads holds the begin values, then the end values.
+        let dilations = int_list_attr(node, "dilations", num_spatial_dims, 1)?;
+        let pads = int_list_attr(node, "pads", num_spatial_dims * 2, 0)?;
+        let strides = int_list_attr(node, "strides", num_spatial_dims, 1)?;
 
         Ok(Col2ImConfig::new(
             image_shape,
@@ -258,6 +237,69 @@ impl NodeProcessor for Col2ImProcessor {
             config,
         })
     }
+}
+
+/// Read a list attribute of `len` entries. Its default is also its minimum: 1 for
+/// dilations and strides, 0 for pads.
+fn int_list_attr(
+    node: &RawNode,
+    name: &str,
+    len: usize,
+    least: i64,
+) -> Result<Vec<usize>, ProcessError> {
+    let Some(value) = node.attrs.get(name) else {
+        return Ok(vec![least as usize; len]);
+    };
+    let values = value.clone().into_i64s();
+    if values.len() != len {
+        return Err(ProcessError::InvalidAttribute {
+            name: name.to_string(),
+            reason: format!("expected {len} entries, got {}", values.len()),
+        });
+    }
+    if let Some(&v) = values.iter().find(|&&v| v < least) {
+        return Err(ProcessError::InvalidAttribute {
+            name: name.to_string(),
+            reason: format!("entries must be at least {least}, got {v}"),
+        });
+    }
+    Ok(values.iter().map(|&v| v as usize).collect())
+}
+
+/// Read a Col2Im shape input: its value when constant, otherwise a reference to it
+/// with the spatial rank taken from its known length.
+fn shape_input(node: &RawNode, index: usize, name: &str) -> Result<Col2ImShape, ProcessError> {
+    use crate::ir::TensorDataExt;
+
+    let arg = &node.inputs[index];
+    if let Some(data) = arg.value() {
+        let values = data
+            .to_i64_vec()
+            .map_err(|_| ProcessError::Custom(format!("Col2Im: {name} must be an int64 tensor")))?;
+        if let Some(&v) = values.iter().find(|&&v| v <= 0) {
+            return Err(ProcessError::Custom(format!(
+                "Col2Im: {name} entries must be positive, got {v}"
+            )));
+        }
+        return Ok(Col2ImShape::Static(
+            values.iter().map(|&v| v as usize).collect(),
+        ));
+    }
+
+    let len = match &arg.ty {
+        ArgType::Tensor(t) if t.rank != 1 || !t.dtype.is_int() => None,
+        ty => ty.first_dim_static_len(),
+    }
+    .ok_or_else(|| {
+        ProcessError::Custom(format!(
+            "Col2Im: runtime {name} must be a 1D int tensor of known length, got {:?}",
+            arg.ty
+        ))
+    })?;
+    Ok(Col2ImShape::Runtime {
+        input: RuntimeInputRef::new(arg.name.clone(), index),
+        len,
+    })
 }
 
 #[cfg(test)]
@@ -295,13 +337,46 @@ mod tests {
     }
 
     #[test]
+    fn test_runtime_shapes() {
+        let shape_input = || ArgType::Tensor(TensorType::new_known(DType::I64, vec![2]));
+        let mut node = TestNodeBuilder::new(NodeType::Col2Im, "test_col2im")
+            .input_tensor_f32("input", 3, Some(vec![1, 4, 9]))
+            .add_input("image_shape", shape_input())
+            .add_input("block_shape", shape_input())
+            .output_tensor_f32("output", 0, None)
+            .build();
+
+        let config = Col2ImProcessor.extract_config(&node, 18).unwrap();
+        assert!(matches!(
+            config.image_shape,
+            Col2ImShape::Runtime { len: 2, ref input } if input.input_index == 1
+        ));
+        assert!(matches!(
+            config.block_shape,
+            Col2ImShape::Runtime { len: 2, .. }
+        ));
+
+        Col2ImProcessor
+            .infer_types(&mut node, 18, &OutputPreferences::new())
+            .unwrap();
+        assert_eq!(
+            node.outputs[0].ty,
+            ArgType::Tensor(TensorType {
+                dtype: DType::F32,
+                rank: 4,
+                static_shape: Some(vec![Some(1), None, None, None]),
+            })
+        );
+    }
+
+    #[test]
     fn test_basic_config_extraction() {
         let node = create_test_node(vec![5, 5], vec![2, 2], None, None, None, None);
         let processor = Col2ImProcessor;
         let config = processor.extract_config(&node, 18).unwrap();
 
-        assert_eq!(config.image_shape, vec![5, 5]);
-        assert_eq!(config.block_shape, vec![2, 2]);
+        assert_eq!(config.image_shape, Col2ImShape::Static(vec![5, 5]));
+        assert_eq!(config.block_shape, Col2ImShape::Static(vec![2, 2]));
         assert_eq!(config.dilations, vec![1, 1]);
         assert_eq!(config.pads, vec![0, 0, 0, 0]);
         assert_eq!(config.strides, vec![1, 1]);
@@ -435,5 +510,64 @@ mod tests {
             }
             _ => panic!("Expected Custom ProcessError, got {:?}", result),
         }
+    }
+
+    fn config_error(node: &RawNode) -> ProcessError {
+        Col2ImProcessor.extract_config(node, 18).unwrap_err()
+    }
+
+    #[test]
+    fn test_rejects_shape_length_mismatch() {
+        let node = create_test_node(vec![5, 5], vec![2], None, None, None, None);
+        assert!(
+            matches!(config_error(&node), ProcessError::Custom(msg) if msg.contains("block_shape has 1"))
+        );
+    }
+
+    #[test]
+    fn test_rejects_non_positive_static_shape() {
+        let node = create_test_node(vec![0, 5], vec![2, 2], None, None, None, None);
+        assert!(
+            matches!(config_error(&node), ProcessError::Custom(msg) if msg.contains("must be positive"))
+        );
+        let node = create_test_node(vec![5, 5], vec![2, -1], None, None, None, None);
+        assert!(
+            matches!(config_error(&node), ProcessError::Custom(msg) if msg.contains("must be positive"))
+        );
+    }
+
+    #[test]
+    fn test_rejects_attribute_length_mismatch() {
+        let node = create_test_node(vec![5, 5], vec![2, 2], None, None, None, Some(vec![1]));
+        assert!(matches!(
+            config_error(&node),
+            ProcessError::InvalidAttribute { ref name, .. } if name == "strides"
+        ));
+        let node = create_test_node(vec![5, 5], vec![2, 2], None, None, Some(vec![0, 0]), None);
+        assert!(matches!(
+            config_error(&node),
+            ProcessError::InvalidAttribute { ref name, .. } if name == "pads"
+        ));
+    }
+
+    #[test]
+    fn test_rejects_out_of_range_attributes() {
+        let node = create_test_node(
+            vec![5, 5],
+            vec![2, 2],
+            None,
+            None,
+            Some(vec![0, -1, 0, 0]),
+            None,
+        );
+        assert!(matches!(
+            config_error(&node),
+            ProcessError::InvalidAttribute { ref name, .. } if name == "pads"
+        ));
+        let node = create_test_node(vec![5, 5], vec![2, 2], None, Some(vec![1, 0]), None, None);
+        assert!(matches!(
+            config_error(&node),
+            ProcessError::InvalidAttribute { ref name, .. } if name == "dilations"
+        ));
     }
 }

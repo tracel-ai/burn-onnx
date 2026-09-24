@@ -8,7 +8,8 @@ include_models!(
     expand_with_where_shape,
     expand_max_semantics,
     expand_dynamic_where,
-    expand_shape_as_data
+    expand_shape_as_data,
+    expand_shorter_shape
 );
 
 #[cfg(test)]
@@ -149,5 +150,27 @@ mod tests {
 
         // Data should be preserved (no actual broadcasting occurred)
         output.into_data().assert_eq(&input.into_data(), true);
+    }
+
+    #[test]
+    fn expand_shorter_shape() {
+        // A shape shorter than the input is right-aligned, so the input's leading dims
+        // are kept: Expand([2, 1], [3]) -> [2, 3]
+        let device = Default::default();
+        let model = expand_shorter_shape::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/expand_shorter_shape.bpk"),
+            &device,
+        );
+
+        let x = Tensor::<2>::from_floats([[1.0], [2.0]], &device);
+        let shape = Tensor::<1, Int>::from_data(
+            TensorData::from([3i64]),
+            (&device, burn::tensor::DType::I64),
+        );
+
+        let (static_out, runtime_out) = model.forward(x, shape);
+        let expected = TensorData::from([[1.0f32, 1.0, 1.0], [2.0, 2.0, 2.0]]);
+        static_out.into_data().assert_eq(&expected, true);
+        runtime_out.into_data().assert_eq(&expected, true);
     }
 }

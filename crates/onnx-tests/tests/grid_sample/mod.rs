@@ -55,6 +55,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        any(feature = "test-metal", feature = "test-wgpu"),
+        ignore = "Nearest grid_sample is unsupported on cubecl backends"
+    )]
     fn grid_sample_nearest() {
         // Test grid_sample with nearest neighbor interpolation
         let device = Default::default();

@@ -77,7 +77,7 @@ fn main() {
     println!("Running inference...");
     let start = Instant::now();
     let audio: Tensor<1> = model.forward(tokens, style, speed);
-    let audio_vec: Vec<f32> = audio.to_data().to_vec().expect("audio to Vec<f32>");
+    let audio_vec: Vec<f32> = audio.to_data().try_to_vec().expect("audio to Vec<f32>");
     println!("  Inference completed in {:.2?}", start.elapsed());
     println!("  Produced {} samples", audio_vec.len());
 

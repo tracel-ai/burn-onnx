@@ -24,9 +24,10 @@ impl NodeCodegen for onnx_ir::node::dft::DftNode {
         let input_rank = input_tensor.rank;
         let config = &self.config;
 
-        // Unsupported configurations (inverse, complex input) are rejected
-        // in onnx-ir's infer_types with ProcessError. These branches are unreachable.
-        if config.onesided {
+        // onnx-ir rejects onesided output for inverse or complex transforms.
+        if config.inverse || !config.is_real_input {
+            forward_cfft(config, input, output, input_rank)
+        } else if config.onesided {
             forward_rfft(config, input, output, input_rank)
         } else {
             forward_rfft_full(config, input, output, input_rank)
@@ -34,7 +35,10 @@ impl NodeCodegen for onnx_ir::node::dft::DftNode {
     }
 
     fn register_imports(&self, imports: &mut BurnImports) {
-        imports.register("burn::tensor::signal::rfft");
+        // The cfft path spells its call out in full.
+        if !self.config.inverse && self.config.is_real_input {
+            imports.register("burn::tensor::signal::rfft");
+        }
     }
 }
 
@@ -54,13 +58,12 @@ fn forward_rfft(
     // squeeze_dims takes &[isize]
     let squeeze_dim = signal_rank as isize;
 
-    let dft_length_code = dft_length_adjustment(config, axis);
+    let n = dft_length_tokens(config);
 
     quote! {
         let #output = {
             let signal = #input.squeeze_dims::<#signal_rank>(&[#squeeze_dim]);
-            #dft_length_code
-            let (re, im) = rfft(signal, #axis, None);
+            let (re, im) = rfft(signal, #axis, #n);
             // Stack re and im along new last dim: [.., K] + [.., K] -> [.., K, 2]
             Tensor::<#signal_rank>::stack::<#out_rank>(
                 [re, im].to_vec(),
@@ -88,14 +91,17 @@ fn forward_rfft_full(
     let squeeze_dim = signal_rank as isize;
     let flip_axis = axis as isize; // flip() takes &[isize]
 
-    let dft_length_code = dft_length_adjustment(config, axis);
+    let dft_length = dft_length_tokens(config);
+    let n = match config.dft_length {
+        Some(dft_length) => quote! { #dft_length },
+        None => quote! { signal.dims()[#axis] },
+    };
 
     quote! {
         let #output = {
             let signal = #input.squeeze_dims::<#signal_rank>(&[#squeeze_dim]);
-            #dft_length_code
-            let n = signal.dims()[#axis];
-            let (re_half, im_half) = rfft(signal, #axis, None);
+            let n = #n;
+            let (re_half, im_half) = rfft(signal, #axis, #dft_length);
             let half_len = re_half.dims()[#axis];
             let mirror_len = n - half_len;
 
@@ -133,27 +139,61 @@ fn forward_rfft_full(
     }
 }
 
-/// Generate code for dft_length adjustment (zero-padding or truncation)
-fn dft_length_adjustment(config: &DftConfig, axis: usize) -> TokenStream {
-    match config.dft_length {
-        Some(dft_length) => {
-            quote! {
-                let signal = {
-                    let current_len = signal.dims()[#axis];
-                    if current_len < #dft_length {
-                        let mut pad_shape = signal.dims();
-                        pad_shape[#axis] = #dft_length - current_len;
-                        let padding = Tensor::zeros(pad_shape, &signal.device());
-                        Tensor::cat([signal, padding].to_vec(), #axis)
-                    } else if current_len > #dft_length {
-                        signal.narrow(#axis, 0, #dft_length)
-                    } else {
-                        signal
-                    }
-                };
-            }
+/// Complex or inverse DFT via cfft, which takes the real and imaginary parts
+/// separately.
+///
+/// ONNX: [..., N, 1] (real) or [..., N, 2] (complex) -> [..., N, 2]. The inverse is
+/// `conj(DFT(conj(x))) / N`.
+fn forward_cfft(
+    config: &DftConfig,
+    input: TokenStream,
+    output: Ident,
+    input_rank: usize,
+) -> TokenStream {
+    let signal_rank = input_rank - 1;
+    let out_rank = input_rank;
+    let axis = config.axis;
+    let last = signal_rank as isize;
+    let n = dft_length_tokens(config);
+
+    let split = if config.is_real_input {
+        quote! {
+            let re = #input.squeeze_dims::<#signal_rank>(&[#last]);
+            let im = re.zeros_like();
         }
-        None => quote! {},
+    } else {
+        quote! {
+            let re = #input.clone().narrow(#signal_rank, 0, 1).squeeze_dims::<#signal_rank>(&[#last]);
+            let im = #input.narrow(#signal_rank, 1, 1).squeeze_dims::<#signal_rank>(&[#last]);
+        }
+    };
+
+    let transform = if config.inverse {
+        quote! {
+            let (re, im) = burn::tensor::signal::cfft(re, im.neg(), #axis, #n);
+            let len = re.dims()[#axis] as f64;
+            let (re, im) = (re.div_scalar(len), im.neg().div_scalar(len));
+        }
+    } else {
+        quote! {
+            let (re, im) = burn::tensor::signal::cfft(re, im, #axis, #n);
+        }
+    };
+
+    quote! {
+        let #output = {
+            #split
+            #transform
+            Tensor::<#signal_rank>::stack::<#out_rank>([re, im].to_vec(), #signal_rank)
+        };
+    }
+}
+
+/// The `n` argument of rfft/cfft, which zero-pads or truncates the signal to `dft_length`.
+fn dft_length_tokens(config: &DftConfig) -> TokenStream {
+    match config.dft_length {
+        Some(dft_length) => quote! { Some(#dft_length) },
+        None => quote! { None },
     }
 }
 
@@ -252,20 +292,86 @@ mod tests {
         pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
             let output = {
                 let signal = input.squeeze_dims::<2usize>(&[2isize]);
-                let signal = {
-                    let current_len = signal.dims()[1usize];
-                    if current_len < 32usize {
-                        let mut pad_shape = signal.dims();
-                        pad_shape[1usize] = 32usize - current_len;
-                        let padding = Tensor::zeros(pad_shape, &signal.device());
-                        Tensor::cat([signal, padding].to_vec(), 1usize)
-                    } else if current_len > 32usize {
-                        signal.narrow(1usize, 0, 32usize)
-                    } else {
-                        signal
-                    }
-                };
-                let (re, im) = rfft(signal, 1usize, None);
+                let (re, im) = rfft(signal, 1usize, Some(32usize));
+                Tensor::<2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
+            };
+            output
+        }
+        ");
+    }
+
+    fn complex_node(inverse: bool) -> onnx_ir::node::dft::DftNode {
+        let config = DftConfig {
+            inverse,
+            onesided: false,
+            axis: 1,
+            dft_length: None,
+            is_real_input: false,
+        };
+        DftNodeBuilder::new("dft1")
+            .input_tensor("input", 3, DType::F32)
+            .output_tensor("output", 3, DType::F32)
+            .config(config)
+            .build()
+    }
+
+    #[test]
+    fn test_dft_forward_complex() {
+        let code = codegen_forward_default(&complex_node(false));
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
+            let output = {
+                let re = input.clone().narrow(2usize, 0, 1).squeeze_dims::<2usize>(&[2isize]);
+                let im = input.narrow(2usize, 1, 1).squeeze_dims::<2usize>(&[2isize]);
+                let (re, im) = burn::tensor::signal::cfft(re, im, 1usize, None);
+                Tensor::<2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_dft_inverse_complex() {
+        let code = codegen_forward_default(&complex_node(true));
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
+            let output = {
+                let re = input.clone().narrow(2usize, 0, 1).squeeze_dims::<2usize>(&[2isize]);
+                let im = input.narrow(2usize, 1, 1).squeeze_dims::<2usize>(&[2isize]);
+                let (re, im) = burn::tensor::signal::cfft(re, im.neg(), 1usize, None);
+                let len = re.dims()[1usize] as f64;
+                let (re, im) = (re.div_scalar(len), im.neg().div_scalar(len));
+                Tensor::<2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_dft_inverse_real_with_dft_length() {
+        let config = DftConfig {
+            inverse: true,
+            onesided: false,
+            axis: 1,
+            dft_length: Some(16),
+            is_real_input: true,
+        };
+        let node = DftNodeBuilder::new("dft1")
+            .input_tensor("input", 3, DType::F32)
+            .output_tensor("output", 3, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
+            let output = {
+                let re = input.squeeze_dims::<2usize>(&[2isize]);
+                let im = re.zeros_like();
+                let (re, im) = burn::tensor::signal::cfft(re, im.neg(), 1usize, Some(16usize));
+                let len = re.dims()[1usize] as f64;
+                let (re, im) = (re.div_scalar(len), im.neg().div_scalar(len));
                 Tensor::<2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
             };
             output

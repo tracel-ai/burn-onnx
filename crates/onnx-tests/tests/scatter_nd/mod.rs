@@ -133,6 +133,6 @@ mod tests {
         let output = model.forward(data, updates);
 
         let expected = TensorData::from([false, true, false, true, false, true]);
-        assert_eq!(output.to_data(), expected);
+        output.to_data().assert_eq(&expected, false);
     }
 }

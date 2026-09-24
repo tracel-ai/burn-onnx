@@ -97,6 +97,7 @@ pub mod gathernd;
 pub mod gemm;
 pub mod global_avg_pool;
 pub mod global_lp_pool;
+pub mod global_max_pool;
 pub mod grid_sample;
 pub mod group_norm;
 pub mod gru;

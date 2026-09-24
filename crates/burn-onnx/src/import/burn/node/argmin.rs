@@ -31,14 +31,12 @@ impl NodeCodegen for onnx_ir::node::argmin::ArgMinNode {
             let axis_isize = axis_usize as isize;
             quote! {
                 {
-                    let __argmin_input = #input;
-                    let __argmin_axis_size =
-                        __argmin_input.shape()[#axis_usize] as i64;
-                    __argmin_input
+                    let axis_size = #input.shape()[#axis_usize] as i64;
+                    #input
                         .flip([#axis_isize])
                         .argmin(#axis)
                         .mul_scalar(-1i64)
-                        .add_scalar(__argmin_axis_size - 1)
+                        .add_scalar(axis_size - 1)
                 }
             }
         } else {
@@ -169,13 +167,8 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3>) -> Tensor<3, Int> {
             let output = {
-                let __argmin_input = input;
-                let __argmin_axis_size = __argmin_input.shape()[1usize] as i64;
-                __argmin_input
-                    .flip([1isize])
-                    .argmin(1)
-                    .mul_scalar(-1i64)
-                    .add_scalar(__argmin_axis_size - 1)
+                let axis_size = input.shape()[1usize] as i64;
+                input.flip([1isize]).argmin(1).mul_scalar(-1i64).add_scalar(axis_size - 1)
             }
                 .cast(burn::tensor::DType::I64);
             output

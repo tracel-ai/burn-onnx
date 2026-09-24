@@ -131,6 +131,7 @@ MIN_OPSET = {
     "MaxPool": 1,
     "GlobalAveragePool": 1,
     "GlobalLpPool": 1,
+    "LpPool": 1,
     # Normalization
     "BatchNormalization": 1,
     "InstanceNormalization": 1,
@@ -232,6 +233,7 @@ ONNX_TO_NODE_TYPE = {
     "ConvTranspose": "ConvTranspose2d",
     "AveragePool": "AveragePool2d",
     "MaxPool": "MaxPool2d",
+    "LpPool": "LpPool2d",
     "LSTM": "Lstm",
     "GRU": "Gru",
 }

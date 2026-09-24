@@ -28,50 +28,26 @@ impl NodeCodegen for onnx_ir::global_lp_pool::GlobalLpPoolNode {
             ArgType::Tensor(t) => t.rank,
             ty => return invalid(format!("input must be a tensor, got {ty:?}")),
         };
-        // Below rank 3 there are no spatial axes, and `sum_dims` over an empty slice
-        // folds over nothing and silently acts as the identity.
+        // Below rank 3 there are no spatial axes, and `lp_norm_dims` over an empty slice
+        // reduces nothing, silently applying |x| elementwise instead.
         if rank <= 2 {
             return invalid(format!("requires rank >= 3, got rank {rank}"));
         }
-        // `is_finite` also rules out NaN. p = 0 would make `inv_p` infinite and panic
-        // inside proc-macro2.
+        // `is_finite` also rules out NaN, and a non-finite literal would panic inside
+        // proc-macro2. `lp_norm_dims` reads p = 0 as the L0 count, which is not a pool.
         if !p.is_finite() || p <= 0.0 {
             return invalid(format!("p must be finite and > 0, got {p}"));
         }
 
-        let inv_p = 1.0f64 / p;
         // N and C carry through; every spatial axis reduces to size 1, giving the
-        // [N, C, 1, 1, ...] output the spec requires. burn's `linalg` norms take a
-        // single `dim`, so they don't cover this multi-axis reduction.
+        // [N, C, 1, 1, ...] output the spec requires.
         let dims = (2..rank).collect::<Vec<usize>>().to_tokens();
 
-        // Opset 1 allows a fractional p; from opset 2 on it is an integer. Integer
-        // exponents go through `powi_scalar`, which has multiply fast paths.
-        let whole = (p.fract() == 0.0).then_some(p as i64);
-
-        // |x| is redundant only for an even integer p, which raises the sign away.
-        // A fractional exponent needs it: `powf_scalar` of a negative base is NaN.
-        let x = if whole.is_some_and(|n| n % 2 == 0) {
-            quote! { #input }
-        } else {
-            quote! { #input.abs() }
-        };
-
-        // `powi_scalar`/`powf_scalar` compute in the tensor's own dtype, so a large p
-        // on an f16 input can overflow (f16 saturates at 65504); that matches ORT,
-        // which also evaluates in the input dtype.
-        let reduced = match whole {
-            Some(1) => quote! { x.sum_dims(&#dims) },
-            Some(2) => quote! { x.square().sum_dims(&#dims).sqrt() },
-            Some(n) => quote! { x.powi_scalar(#n).sum_dims(&#dims).powf_scalar(#inv_p) },
-            None => quote! { x.powf_scalar(#p).sum_dims(&#dims).powf_scalar(#inv_p) },
-        };
-
+        // `lp_norm_dims` computes in the tensor's own dtype, so a large p on an f16
+        // input can overflow (f16 saturates at 65504); that matches ORT, which also
+        // evaluates in the input dtype.
         quote! {
-            let #output = {
-                let x = #x;
-                #reduced
-            };
+            let #output = burn::tensor::linalg::lp_norm_dims(#input, #p, &#dims);
         }
     }
 }
@@ -96,10 +72,7 @@ mod tests {
     fn global_lp_pool_rank3_l1() {
         assert_snapshot!(code_for(3, 1.0), @r"
         pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
-            let output = {
-                let x = input.abs();
-                x.sum_dims(&[2])
-            };
+            let output = burn::tensor::linalg::lp_norm_dims(input, 1f64, &[2]);
             output
         }
         ");
@@ -109,10 +82,7 @@ mod tests {
     fn global_lp_pool_rank3_l2() {
         assert_snapshot!(code_for(3, 2.0), @r"
         pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
-            let output = {
-                let x = input;
-                x.square().sum_dims(&[2]).sqrt()
-            };
+            let output = burn::tensor::linalg::lp_norm_dims(input, 2f64, &[2]);
             output
         }
         ");
@@ -122,10 +92,7 @@ mod tests {
     fn global_lp_pool_rank3_l3() {
         assert_snapshot!(code_for(3, 3.0), @r"
         pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
-            let output = {
-                let x = input.abs();
-                x.powi_scalar(3i64).sum_dims(&[2]).powf_scalar(0.3333333333333333f64)
-            };
+            let output = burn::tensor::linalg::lp_norm_dims(input, 3f64, &[2]);
             output
         }
         ");
@@ -135,10 +102,7 @@ mod tests {
     fn global_lp_pool_rank5_l1() {
         assert_snapshot!(code_for(5, 1.0), @r"
         pub fn forward(&self, input: Tensor<5>) -> Tensor<5> {
-            let output = {
-                let x = input.abs();
-                x.sum_dims(&[2, 3, 4])
-            };
+            let output = burn::tensor::linalg::lp_norm_dims(input, 1f64, &[2, 3, 4]);
             output
         }
         ");
@@ -148,10 +112,7 @@ mod tests {
     fn global_lp_pool_rank5_l2() {
         assert_snapshot!(code_for(5, 2.0), @r"
         pub fn forward(&self, input: Tensor<5>) -> Tensor<5> {
-            let output = {
-                let x = input;
-                x.square().sum_dims(&[2, 3, 4]).sqrt()
-            };
+            let output = burn::tensor::linalg::lp_norm_dims(input, 2f64, &[2, 3, 4]);
             output
         }
         ");
@@ -161,10 +122,7 @@ mod tests {
     fn global_lp_pool_rank6_l8() {
         assert_snapshot!(code_for(6, 8.0), @r"
         pub fn forward(&self, input: Tensor<6>) -> Tensor<6> {
-            let output = {
-                let x = input;
-                x.powi_scalar(8i64).sum_dims(&[2, 3, 4, 5]).powf_scalar(0.125f64)
-            };
+            let output = burn::tensor::linalg::lp_norm_dims(input, 8f64, &[2, 3, 4, 5]);
             output
         }
         ");
@@ -176,10 +134,7 @@ mod tests {
     fn global_lp_pool_rank3_fractional_p() {
         assert_snapshot!(code_for(3, 2.5), @r"
         pub fn forward(&self, input: Tensor<3>) -> Tensor<3> {
-            let output = {
-                let x = input.abs();
-                x.powf_scalar(2.5f64).sum_dims(&[2]).powf_scalar(0.4f64)
-            };
+            let output = burn::tensor::linalg::lp_norm_dims(input, 2.5f64, &[2]);
             output
         }
         ");

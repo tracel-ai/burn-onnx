@@ -16,7 +16,9 @@ impl NodeCodegen for LpNormalizationNode {
         let axis = self.config.axis.to_tokens();
 
         // Relies on l1_norm/l2_norm reducing `axis` to size 1 so the final
-        // division broadcasts against x.
+        // division broadcasts against x. A zero norm means the slice is all
+        // zeros; dividing by 1 there yields 0, as the ONNX reference does,
+        // instead of 0/0 = NaN.
         let norm_expr = match self.config.p {
             1 => quote! { burn::tensor::linalg::l1_norm(x.clone(), #axis) },
             2 => quote! { burn::tensor::linalg::l2_norm(x.clone(), #axis) },
@@ -27,7 +29,8 @@ impl NodeCodegen for LpNormalizationNode {
             let #output = {
                 let x = #input;
                 let norm = #norm_expr;
-                x / norm
+                let zero = norm.clone().equal_elem(0.0);
+                x / norm.mask_fill(zero, 1.0)
             };
         }
     }
@@ -53,7 +56,8 @@ mod tests {
             let output = {
                 let x = input;
                 let norm = burn::tensor::linalg::l2_norm(x.clone(), 2);
-                x / norm
+                let zero = norm.clone().equal_elem(0.0);
+                x / norm.mask_fill(zero, 1.0)
             };
             output
         }
@@ -73,7 +77,8 @@ mod tests {
             let output = {
                 let x = input;
                 let norm = burn::tensor::linalg::l1_norm(x.clone(), 0);
-                x / norm
+                let zero = norm.clone().equal_elem(0.0);
+                x / norm.mask_fill(zero, 1.0)
             };
             output
         }
@@ -93,7 +98,8 @@ mod tests {
             let output = {
                 let x = input;
                 let norm = burn::tensor::linalg::l2_norm(x.clone(), 1);
-                x / norm
+                let zero = norm.clone().equal_elem(0.0);
+                x / norm.mask_fill(zero, 1.0)
             };
             output
         }
@@ -113,7 +119,8 @@ mod tests {
             let output = {
                 let x = input.clone();
                 let norm = burn::tensor::linalg::l2_norm(x.clone(), 2);
-                x / norm
+                let zero = norm.clone().equal_elem(0.0);
+                x / norm.mask_fill(zero, 1.0)
             };
             output
         }

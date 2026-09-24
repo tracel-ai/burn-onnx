@@ -14,15 +14,13 @@ use crate::burn::ToTokens;
 /// The K dims being indexed are `data_dims[batch_dims..batch_dims + K]`
 /// (`batch_dims = 0` for ScatterND).
 ///
-/// # Reserved locals
+/// # Emitted locals
 ///
-/// The emitted block introduces locals prefixed with `__nd_`. Callers
-/// downstream may reference `__nd_data_dims`, `__nd_idx_dims`, `__nd_k`, and
-/// `__nd_indices_norm`; the rest (`__nd_indices`, `__nd_dim_sizes`,
-/// `__nd_bcast_shape`, `__nd_dims_tensor`, `__nd_mask`, `__nd_corrected`,
-/// `__nd_i`) are internal scaffolding. The whole `__nd_*` namespace is
-/// reserved by this helper, so callers should not introduce other `__nd_*`
-/// bindings in the same block.
+/// The emitted statements are meant to be spliced into the caller's block
+/// expression. Callers downstream may reference `data_dims`, `idx_dims`,
+/// `k`, and `indices_norm`; the rest (`indices_i64`, `dim_sizes`,
+/// `bcast_shape`, `dims_tensor`, `negative`, `corrected`, `i`) are internal
+/// scaffolding that callers should not redeclare in the same block.
 ///
 /// # Required bindings at the call site
 ///
@@ -44,23 +42,23 @@ pub(crate) fn negative_index_normalize(
     let indices_rank_lit = indices_rank.to_tokens();
     let batch_dims_lit = batch_dims.to_tokens();
     quote! {
-        let __nd_data_dims = #data.dims();
-        let __nd_indices = #indices.cast(burn::tensor::DType::I64);
-        let __nd_idx_dims = __nd_indices.dims();
-        let __nd_k = __nd_idx_dims[#indices_rank_lit - 1];
-        let mut __nd_dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(__nd_k);
-        for __nd_i in 0..__nd_k {
-            __nd_dim_sizes.push(__nd_data_dims[#batch_dims_lit + __nd_i] as i64);
+        let data_dims = #data.dims();
+        let indices_i64 = #indices.cast(burn::tensor::DType::I64);
+        let idx_dims = indices_i64.dims();
+        let k = idx_dims[#indices_rank_lit - 1];
+        let mut dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(k);
+        for i in 0..k {
+            dim_sizes.push(data_dims[#batch_dims_lit + i] as i64);
         }
-        let mut __nd_bcast_shape = [1usize; #indices_rank_lit];
-        __nd_bcast_shape[#indices_rank_lit - 1] = __nd_k;
-        let __nd_dims_tensor = Tensor::<1, Int>::from_data(
-            burn::tensor::TensorData::from(__nd_dim_sizes.as_slice()),
+        let mut bcast_shape = [1usize; #indices_rank_lit];
+        bcast_shape[#indices_rank_lit - 1] = k;
+        let dims_tensor = Tensor::<1, Int>::from_data(
+            burn::tensor::TensorData::from(dim_sizes.as_slice()),
             (&self.device, burn::tensor::DType::I64),
         )
-        .reshape(__nd_bcast_shape);
-        let __nd_mask = __nd_indices.clone().lower_elem(0i64);
-        let __nd_corrected = __nd_indices.clone() + __nd_dims_tensor;
-        let __nd_indices_norm = __nd_indices.mask_where(__nd_mask, __nd_corrected);
+        .reshape(bcast_shape);
+        let negative = indices_i64.clone().lower_elem(0i64);
+        let corrected = indices_i64.clone() + dims_tensor;
+        let indices_norm = indices_i64.mask_where(negative, corrected);
     }
 }

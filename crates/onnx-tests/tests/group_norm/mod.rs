@@ -1,6 +1,6 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(group_norm);
+include_models!(group_norm, group_norm_runtime_bias);
 
 #[cfg(test)]
 mod tests {
@@ -88,6 +88,38 @@ mod tests {
                 ],
             ],
         ]);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, Tolerance::default());
+    }
+
+    #[test]
+    fn group_norm_runtime_bias() {
+        // Constant scale with a runtime bias: both stay runtime.
+        let device = Default::default();
+        let model = group_norm_runtime_bias::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/group_norm_runtime_bias.bpk"),
+            &device,
+        );
+
+        let input = Tensor::<4>::from_floats(
+            [[
+                [[0., 1.], [2., 3.]],
+                [[4., 5.], [6., 7.]],
+                [[8., 9.], [10., 11.]],
+                [[12., 13.], [14., 15.]],
+            ]],
+            &device,
+        );
+        let bias = Tensor::<1>::from_floats([1.0, -1.0, 2.0, -2.0], &device);
+
+        let output = model.forward(input, bias);
+        let expected = TensorData::from([[
+            [[0.23623812f32, 0.4544558], [0.67267346, 0.89089113]],
+            [[-0.7817823, -0.34534693], [0.09108841, 0.52752376]],
+            [[-0.2912855, 0.36336732], [1.0180204, 1.6726735]],
+            [[-1.5635647, -0.69069386], [0.18217683, 1.0550475]],
+        ]]);
         output
             .to_data()
             .assert_approx_eq::<f32>(&expected, Tolerance::default());

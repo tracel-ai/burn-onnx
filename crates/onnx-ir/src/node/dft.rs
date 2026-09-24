@@ -10,14 +10,15 @@
 //!
 //! ## Supported Configurations
 //!
-//! Only forward real-input DFT maps to Burn's signal API:
 //! - Forward real DFT with `onesided=1`: maps to `burn::tensor::signal::rfft`
 //! - Forward real DFT with `onesided=0`: rfft + conjugate symmetry reconstruction
+//! - Complex input and inverse DFT: maps to `burn::tensor::signal::cfft`, with the
+//!   inverse computed as `conj(DFT(conj(x))) / N`
 //!
-//! Not supported (will produce a codegen error):
-//! - Inverse DFT (`inverse=1`): ONNX uses complex-to-complex IDFT, but Burn only
-//!   provides `irfft` (inverse of real FFT), which is a different operation
-//! - Complex-to-complex forward DFT (complex input with trailing dim = 2)
+//! Not supported: `onesided=1` together with complex input or `inverse=1`.
+//!
+//! burn's `rfft` and `cfft` panic at run time unless the transform length (the signal
+//! length, or `dft_length` when given) is a power of two.
 //!
 //! ## Type Constraints
 //! - **T1**: tensor(bfloat16), tensor(double), tensor(float), tensor(float16)
@@ -178,29 +179,11 @@ impl NodeProcessor for DftProcessor {
             .map(|v| v.clone().into_i64() != 0)
             .unwrap_or(false);
 
-        // Reject unsupported configurations early with clear errors
-        if inverse {
+        // ONNX forbids onesided output for complex input; onesided with inverse=1 is
+        // not implemented.
+        if onesided && (inverse || !is_real_input) {
             return Err(ProcessError::Custom(
-                "DFT: inverse DFT (inverse=1) is not supported. \
-                 Burn's irfft is the inverse of rfft (onesided real FFT), \
-                 which differs from ONNX's complex-to-complex inverse DFT. \
-                 A full ifft implementation in Burn is needed to support this."
-                    .to_string(),
-            ));
-        }
-
-        if !is_real_input {
-            return Err(ProcessError::Custom(
-                "DFT: complex-to-complex DFT is not supported by Burn's current signal API. \
-                 Only real-input forward DFT (onesided or full) is supported."
-                    .to_string(),
-            ));
-        }
-
-        // Validate: complex input cannot be onesided (unreachable now, but kept for spec completeness)
-        if !is_real_input && onesided {
-            return Err(ProcessError::Custom(
-                "DFT: onesided output is not possible with complex input".to_string(),
+                "DFT: onesided output requires a real input and a forward transform".to_string(),
             ));
         }
 
@@ -446,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dft_inverse_rejected() {
+    fn test_dft_inverse_accepted() {
         let mut node = TestNodeBuilder::new(NodeType::Dft, "test_dft")
             .input_tensor_f32("input", 3, Some(vec![1, 16, 2]))
             .output_tensor_f32("output", 0, None)
@@ -454,29 +437,42 @@ mod tests {
             .build();
 
         let processor = DftProcessor;
-        let prefs = OutputPreferences::new();
-        let result = processor.infer_types(&mut node, 17, &prefs);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("inverse"));
+        processor
+            .infer_types(&mut node, 17, &OutputPreferences::new())
+            .unwrap();
+        let config = processor.extract_config(&node, 17).unwrap();
+        assert!(config.inverse);
+        assert!(!config.is_real_input);
     }
 
     #[test]
-    fn test_dft_complex_input_rejected() {
+    fn test_dft_complex_input_accepted() {
         let mut node = TestNodeBuilder::new(NodeType::Dft, "test_dft")
             .input_tensor_f32("input", 3, Some(vec![1, 16, 2]))
             .output_tensor_f32("output", 0, None)
             .build();
 
-        let processor = DftProcessor;
-        let prefs = OutputPreferences::new();
-        let result = processor.infer_types(&mut node, 17, &prefs);
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("complex-to-complex")
-        );
+        DftProcessor
+            .infer_types(&mut node, 17, &OutputPreferences::new())
+            .unwrap();
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.static_shape, Some(vec![Some(1), Some(16), Some(2)]));
+            }
+            _ => panic!("Expected Tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_dft_onesided_complex_rejected() {
+        let mut node = TestNodeBuilder::new(NodeType::Dft, "test_dft")
+            .input_tensor_f32("input", 3, Some(vec![1, 16, 2]))
+            .output_tensor_f32("output", 0, None)
+            .attr_int("onesided", 1)
+            .build();
+
+        let result = DftProcessor.infer_types(&mut node, 17, &OutputPreferences::new());
+        assert!(result.unwrap_err().to_string().contains("onesided"));
     }
 
     #[test]

@@ -6,17 +6,16 @@
 //!
 //! ## Opset Versions
 //! - **Opset 1**: Initial version with basic max pooling operation.
-//! - **Opset 8**: Added support for `storage_order` attribute.
+//! - **Opset 8**: Added optional Indices output and the `storage_order` attribute.
 //! - **Opset 10**: Added `ceil_mode` attribute to use ceiling instead of floor for output shape calculation.
-//! - **Opset 11**: Added support for dilation; updated padding semantics; added optional Indices output.
+//! - **Opset 11**: Added support for dilation; updated padding semantics.
 //! - **Opset 12**: Added support for int8, uint8 data types; clarified behavior with negative padding.
 //!
 //! **Implementation Note**: Accepts 1-2 outputs (Y required, optional Indices output).
-//! Indices output is accepted but not currently used in codegen.
+//! Indices are typed as int64 with the input's rank.
 //!
 //! ## Missing Test Coverage
 //! - TODO: No test for dilation > 1 with opset < 11 - Should reject dilation in older opsets
-//! - TODO: No test for storage_order != 0 - Non-row-major order should be validated/rejected
 //! - TODO: No test for int8/uint8 dtypes - Opset 12+ supports integer types
 //! - TODO: No test for kernel_shape validation - Missing kernel_shape attribute should be rejected
 //! - TODO: No test for negative padding values - Opset 12+ allows negative padding
@@ -29,7 +28,7 @@ use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
 use crate::{
-    ir::{Argument, Node, RawNode},
+    ir::{ArgType, Argument, DType, Node, RawNode, TensorType},
     node::padding::padding_config_1d,
 };
 
@@ -50,6 +49,10 @@ pub struct MaxPool1dConfig {
     pub ceil_mode: bool,
     /// Auto padding mode
     pub auto_pad: AutoPad,
+    /// Layout of the optional Indices output: 0 row-major (default), 1 column-major.
+    /// Both flatten a single spatial axis the same way.
+    #[new(default)]
+    pub storage_order: i64,
 }
 
 /// Node representation for MaxPool1d operation
@@ -101,18 +104,16 @@ impl NodeProcessor for MaxPool1dProcessor {
         opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        // TODO: Validate input tensor is 3D (N x C x L) - Lower or higher rank should be rejected - burn/crates/onnx-ir/src/node/max_pool1d.rs:105
-        // TODO: Validate input dtype - int8/uint8 support requires opset 12+ - burn/crates/onnx-ir/src/node/max_pool1d.rs:105
+        // TODO: Validate input tensor is 3D (N x C x L) - Lower or higher rank should be rejected
+        // TODO: Validate input dtype - int8/uint8 support requires opset 12+
 
         // Validate attributes before extracting config
-        // TODO: Validate required kernel_shape attribute is present - Missing kernel_shape should cause error - burn/crates/onnx-ir/src/node/max_pool1d.rs:117
+        // TODO: Validate required kernel_shape attribute is present - Missing kernel_shape should cause error
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
                 "kernel_shape" | "strides" | "pads" => {}
-                "storage_order" => {
-                    // TODO: Validate storage_order == 0 (row-major) - Non-zero values not supported - burn/crates/onnx-ir/src/node/max_pool1d.rs:119
-                }
+                "storage_order" => {}
                 "dilations" => {
                     // Dilation support requires opset 11+
                     let dilations = value.clone().into_i64s();
@@ -150,6 +151,16 @@ impl NodeProcessor for MaxPool1dProcessor {
         // Output type is same as input
         crate::processor::same_as_input(node);
 
+        // The optional Indices output holds int64 positions into the flattened input.
+        if let Some(indices) = node.outputs.get_mut(1) {
+            let rank = node.inputs[0].ty.rank();
+            indices.ty = ArgType::Tensor(TensorType {
+                dtype: DType::I64,
+                rank,
+                static_shape: None,
+            });
+        }
+
         Ok(())
     }
 
@@ -160,6 +171,7 @@ impl NodeProcessor for MaxPool1dProcessor {
         let mut dilation = vec![1];
         let mut ceil_mode: i64 = 0;
         let mut auto_pad = AutoPad::NotSet;
+        let mut storage_order = 0;
 
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
@@ -169,14 +181,21 @@ impl NodeProcessor for MaxPool1dProcessor {
                 "dilations" => dilation = value.clone().into_i64s(),
                 "ceil_mode" => ceil_mode = value.clone().into_i64(),
                 "auto_pad" => auto_pad = AutoPad::parse(&value.clone().into_string())?,
-                "storage_order" => {}
+                "storage_order" => storage_order = value.clone().into_i64(),
                 _ => {}
             }
         }
 
+        if !matches!(storage_order, 0 | 1) {
+            return Err(ProcessError::InvalidAttribute {
+                name: "storage_order".to_string(),
+                reason: format!("expected 0 (row major) or 1 (column major), got {storage_order}"),
+            });
+        }
+
         let padding = padding_config_1d(&pads);
 
-        let config = MaxPool1dConfig::new(
+        let mut config = MaxPool1dConfig::new(
             kernel_shape[0] as usize,
             stride[0] as usize,
             dilation[0] as usize,
@@ -184,6 +203,7 @@ impl NodeProcessor for MaxPool1dProcessor {
             ceil_mode == 1,
             auto_pad,
         );
+        config.storage_order = storage_order;
 
         Ok(config)
     }
@@ -339,6 +359,47 @@ mod tests {
         if let Err(ProcessError::Custom(msg)) = result {
             assert!(msg.contains("ceil_mode requires opset 10+"));
         }
+    }
+
+    #[test]
+    fn test_max_pool1d_indices_output_is_i64() {
+        // Declared as f32 so the test shows infer_types retypes it.
+        let mut node = TestNodeBuilder::new(NodeType::MaxPool1d, "test_indices")
+            .input_tensor_f32("data", 3, None)
+            .output_tensor_f32("output", 3, None)
+            .output_tensor_f32("indices", 3, None)
+            .attr_ints("kernel_shape", vec![2])
+            .attr_int("storage_order", 1)
+            .build();
+        let processor = MaxPool1dProcessor;
+        processor
+            .infer_types(&mut node, 12, &OutputPreferences::new())
+            .unwrap();
+        assert!(matches!(
+            node.outputs[1].ty,
+            ArgType::Tensor(TensorType {
+                dtype: DType::I64,
+                rank: 3,
+                ..
+            })
+        ));
+        let config = processor.extract_config(&node, 12).unwrap();
+        assert_eq!(config.storage_order, 1);
+    }
+
+    #[test]
+    fn test_max_pool1d_rejects_unknown_storage_order() {
+        let node = TestNodeBuilder::new(NodeType::MaxPool1d, "test_storage_order")
+            .input_tensor_f32("data", 3, None)
+            .output_tensor_f32("output", 3, None)
+            .attr_ints("kernel_shape", vec![2])
+            .attr_int("storage_order", 2)
+            .build();
+        let result = MaxPool1dProcessor.extract_config(&node, 16);
+        assert!(matches!(
+            result,
+            Err(ProcessError::InvalidAttribute { ref name, .. }) if name == "storage_order"
+        ));
     }
 
     #[test]

@@ -23,13 +23,12 @@ impl NodeCodegen for onnx_ir::node::blackman_window::BlackmanWindowNode {
             WindowSize::Runtime(runtime_ref) => {
                 let arg = &self.inputs[runtime_ref.input_index];
                 let name = arg_to_ident(arg);
-                quote! { {
-                    let __size = #name;
-                    usize::try_from(__size).unwrap_or_else(|_| panic!(
+                quote! {
+                    usize::try_from(#name).unwrap_or_else(|_| panic!(
                         "BlackmanWindow: size must be non-negative and fit in usize, got {}",
-                        __size
+                        #name
                     ))
-                } }
+                }
             }
         };
 
@@ -115,16 +114,13 @@ mod tests {
         assert_snapshot!(code, @r#"
         pub fn forward(&self, size: i64) -> Tensor<1> {
             let output = blackman_window(
-                    {
-                        let __size = size;
-                        usize::try_from(__size)
-                            .unwrap_or_else(|_| {
-                                panic!(
-                                    "BlackmanWindow: size must be non-negative and fit in usize, got {}",
-                                    __size
-                                )
-                            })
-                    },
+                    usize::try_from(size)
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "BlackmanWindow: size must be non-negative and fit in usize, got {}",
+                                size
+                            )
+                        }),
                     true,
                     &self.device,
                 )

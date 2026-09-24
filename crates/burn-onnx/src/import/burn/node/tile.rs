@@ -29,15 +29,15 @@ impl NodeCodegen for onnx_ir::tile::TileNode {
                 let repeats_expr = scope.arg(repeats_arg);
                 let to_vec_usize = match &repeats_arg.ty {
                     ArgType::Shape(_) => quote! {
-                        let __repeats: alloc::vec::Vec<usize> =
+                        let repeats: alloc::vec::Vec<usize> =
                             #repeats_expr.iter().map(|&v| v as usize).collect();
                     },
                     _ => quote! {
-                        let __repeats: alloc::vec::Vec<usize> =
+                        let repeats: alloc::vec::Vec<usize> =
                             #repeats_expr
                                 .to_data()
                                 .convert::<i64>()
-                                .into_vec::<i64>()
+                                .try_into_vec::<i64>()
                                 .unwrap()
                                 .into_iter()
                                 .map(|v| v as usize)
@@ -47,7 +47,7 @@ impl NodeCodegen for onnx_ir::tile::TileNode {
                 quote! {
                     let #output = {
                         #to_vec_usize
-                        #input.repeat(&__repeats)
+                        #input.repeat(&repeats)
                     };
                 }
             }
@@ -114,15 +114,15 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>, repeats: Tensor<1, Int>) -> Tensor<2> {
             let output = {
-                let __repeats: alloc::vec::Vec<usize> = repeats
+                let repeats: alloc::vec::Vec<usize> = repeats
                     .to_data()
                     .convert::<i64>()
-                    .into_vec::<i64>()
+                    .try_into_vec::<i64>()
                     .unwrap()
                     .into_iter()
                     .map(|v| v as usize)
                     .collect();
-                input.repeat(&__repeats)
+                input.repeat(&repeats)
             };
             output
         }
@@ -144,11 +144,11 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>, repeats: [i64; 2]) -> Tensor<2> {
             let output = {
-                let __repeats: alloc::vec::Vec<usize> = repeats
+                let repeats: alloc::vec::Vec<usize> = repeats
                     .iter()
                     .map(|&v| v as usize)
                     .collect();
-                input.repeat(&__repeats)
+                input.repeat(&repeats)
             };
             output
         }

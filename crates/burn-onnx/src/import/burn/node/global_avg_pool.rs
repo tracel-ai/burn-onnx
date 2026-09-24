@@ -10,16 +10,11 @@ impl NodeCodegen for onnx_ir::node::global_avg_pool::GlobalAveragePoolNode {
     }
 
     fn field(&self) -> Option<Field> {
-        // Determine field type based on input dimension
-        let input = self.inputs.first().unwrap();
-        let rank = match &input.ty {
-            ArgType::Tensor(t) => t.rank,
-            _ => panic!("Expected tensor input for GlobalAvgPool"),
-        };
-
+        // Ranks 3 and 4 use burn's adaptive pool modules; every other rank is handled
+        // in `forward` without a field.
         let name = Ident::new(&self.name, Span::call_site());
 
-        let (field_type, init_tokens) = match rank {
+        let (field_type, init_tokens) = match self.inputs.first().unwrap().ty.rank() {
             3 => (
                 quote! { AdaptiveAvgPool1d },
                 quote! {
@@ -34,27 +29,48 @@ impl NodeCodegen for onnx_ir::node::global_avg_pool::GlobalAveragePoolNode {
                         .init();
                 },
             ),
-            dim => panic!("Unsupported input dim ({dim}) for GlobalAvgPoolNode"),
+            _ => return None,
         };
 
         Some(Field::new(self.name.clone(), field_type, init_tokens))
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
-        let input = scope.arg(self.inputs.first().unwrap());
+        let input_arg = self.inputs.first().unwrap();
+        let input = scope.arg(input_arg);
         let output = arg_to_ident(self.outputs.first().unwrap());
-        let field = Ident::new(&self.name, Span::call_site());
+        let rank = input_arg.ty.rank();
 
-        quote! {
-            let #output = self.#field.forward(#input);
+        match rank {
+            3 | 4 => {
+                let field = Ident::new(&self.name, Span::call_site());
+                quote! {
+                    let #output = self.#field.forward(#input);
+                }
+            }
+            // burn has no N-d adaptive pool. `mean_dim` keeps each reduced axis as
+            // size 1, which gives the [N, C, 1, 1, ...] output the spec requires.
+            rank if rank >= 5 => {
+                let dims = (2..rank).collect::<Vec<usize>>().to_tokens();
+                quote! {
+                    let #output = #input.mean_dims(&#dims);
+                }
+            }
+            // onnx-ir rejects rank <= 2, so this is reachable only from a hand-built
+            // node. A named `compile_error!` keeps the failure inside the generated
+            // crate instead of crashing model generation.
+            rank => {
+                let msg = format!(
+                    "GlobalAveragePool node '{}': requires rank >= 3, got rank {rank}",
+                    self.name
+                );
+                quote! { let #output = { compile_error!(#msg); unreachable!() }; }
+            }
         }
     }
 
     fn register_imports(&self, imports: &mut BurnImports) {
-        let input = self.inputs.first().unwrap();
-        let rank = input.ty.rank();
-
-        match rank {
+        match self.inputs.first().unwrap().ty.rank() {
             3 => {
                 imports.register("burn::nn::pool::AdaptiveAvgPool1d");
                 imports.register("burn::nn::pool::AdaptiveAvgPool1dConfig");
@@ -63,7 +79,7 @@ impl NodeCodegen for onnx_ir::node::global_avg_pool::GlobalAveragePoolNode {
                 imports.register("burn::nn::pool::AdaptiveAvgPool2d");
                 imports.register("burn::nn::pool::AdaptiveAvgPool2dConfig");
             }
-            dim => panic!("Unsupported input dim ({dim}) for GlobalAvgPoolNode"),
+            _ => {}
         }
     }
 }
@@ -135,5 +151,38 @@ mod tests {
             output
         }
         ");
+    }
+
+    #[test]
+    fn test_global_avg_pool_forward_5d() {
+        let node = GlobalAveragePoolNodeBuilder::new("pool1")
+            .input_tensor("input", 5, DType::F32)
+            .output_tensor("output", 5, DType::F32)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<5>) -> Tensor<5> {
+            let output = input.mean_dims(&[2, 3, 4]);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_global_avg_pool_forward_rank_2_compile_error() {
+        let node = GlobalAveragePoolNodeBuilder::new("pool1")
+            .input_tensor("input", 2, DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r#"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
+            let output = {
+                compile_error!("GlobalAveragePool node 'pool1': requires rank >= 3, got rank 2");
+                unreachable!()
+            };
+            output
+        }
+        "#);
     }
 }

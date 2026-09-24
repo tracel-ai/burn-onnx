@@ -1,6 +1,6 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(space_to_depth);
+include_models!(space_to_depth, space_to_depth_multi, space_to_depth_int);
 
 #[cfg(test)]
 mod tests {
@@ -48,5 +48,55 @@ mod tests {
         output
             .to_data()
             .assert_approx_eq::<f32>(&expected, Tolerance::default());
+    }
+
+    #[test]
+    fn space_to_depth_multi_channel() {
+        let device = Default::default();
+        let model: space_to_depth_multi::Model = space_to_depth_multi::Model::new(&device);
+        let input = Tensor::<1, burn::tensor::Int>::arange(0..16, &device)
+            .float()
+            .reshape([1, 2, 2, 4]);
+
+        let output = model.forward(input);
+
+        output.to_data().assert_eq(
+            &TensorData::from([[
+                [[0.0f32, 2.0]],
+                [[8.0, 10.0]],
+                [[1.0, 3.0]],
+                [[9.0, 11.0]],
+                [[4.0, 6.0]],
+                [[12.0, 14.0]],
+                [[5.0, 7.0]],
+                [[13.0, 15.0]],
+            ]]),
+            true,
+        );
+    }
+
+    #[test]
+    fn space_to_depth_int() {
+        let device = Default::default();
+        let model: space_to_depth_int::Model = space_to_depth_int::Model::new(&device);
+        let input =
+            Tensor::<1, burn::tensor::Int>::arange(0..16, (&device, burn::tensor::DType::I64))
+                .reshape([1, 2, 2, 4]);
+
+        let output = model.forward(input);
+
+        output.to_data().assert_eq(
+            &TensorData::from([[
+                [[0i64, 2]],
+                [[8, 10]],
+                [[1, 3]],
+                [[9, 11]],
+                [[4, 6]],
+                [[12, 14]],
+                [[5, 7]],
+                [[13, 15]],
+            ]]),
+            true,
+        );
     }
 }

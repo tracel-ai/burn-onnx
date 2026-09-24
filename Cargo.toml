@@ -34,7 +34,7 @@ exclude = [
 edition = "2024"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-version = "0.22.0-pre.3"
+version = "0.22.0-pre.4"
 
 [workspace.lints.clippy]
 
@@ -49,10 +49,10 @@ invalid_html_tags = "deny"
 # (Cargo forbids consumers from overriding default-features when inheriting via
 # `workspace = true`); consumers that previously had defaults ON now opt in via
 # `features = ["default"]`.
-burn-import = { path = "crates/burn-import", version = "=0.22.0-pre.3", default-features = false }
-burn-onnx = { path = "crates/burn-onnx", version = "=0.22.0-pre.3", default-features = false }
-onnx-ir = { path = "crates/onnx-ir", version = "=0.22.0-pre.3", default-features = false }
-onnx-ir-derive = { path = "crates/onnx-ir-derive", version = "=0.22.0-pre.3" }
+burn-import = { path = "crates/burn-import", version = "=0.22.0-pre.4", default-features = false }
+burn-onnx = { path = "crates/burn-onnx", version = "=0.22.0-pre.4", default-features = false }
+onnx-ir = { path = "crates/onnx-ir", version = "=0.22.0-pre.4", default-features = false }
+onnx-ir-derive = { path = "crates/onnx-ir-derive", version = "=0.22.0-pre.4" }
 model-checks-common = { path = "crates/model-checks/common" }
 
 bytemuck = "1.25.0"
@@ -79,7 +79,7 @@ regex = { version = "1.12.3", default-features = false, features = [
     "perf",
     "unicode",
 ] }
-rstest = "0.26.1"
+rstest = "0.27.0"
 serde = { version = "1.0.228", default-features = false, features = [
     "derive",
     "alloc",
@@ -93,11 +93,11 @@ tempfile = "3.24.0"
 thiserror = { version = "2", default-features = false }
 toml = { version = "1.1.2", default-features = false, features = ["parse", "serde"] }
 
-burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d" }
-burn-flex = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d" }
-burn-pack = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d" }
-burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d" }
-burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "1414c8a14e5169ef5e5fc67f9b8ab01a25d6352d" }
+burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "fafc9d7a92c829a42a59d74b8ab939884df74678" }
+burn-flex = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "fafc9d7a92c829a42a59d74b8ab939884df74678" }
+burn-pack = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "fafc9d7a92c829a42a59d74b8ab939884df74678" }
+burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "fafc9d7a92c829a42a59d74b8ab939884df74678" }
+burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "fafc9d7a92c829a42a59d74b8ab939884df74678" }
 
 ### For local development. ###
 # burn = { path = "../burn/crates/burn", default-features = false }
@@ -107,11 +107,11 @@ burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = fa
 # burn-tensor = { path = "../burn/crates/burn-tensor", default-features = false }
 
 ### For the release. ###
-# burn = { version = "=0.22.0-pre.3", default-features = false }
-# burn-flex = { version = "=0.22.0-pre.3", default-features = false }
-# burn-pack = { version = "=0.22.0-pre.3", default-features = false }
-# burn-store = { version = "=0.22.0-pre.3", default-features = false }
-# burn-tensor = { version = "=0.22.0-pre.3", default-features = false }
+# burn = { version = "=0.22.0-pre.4", default-features = false }
+# burn-flex = { version = "=0.22.0-pre.4", default-features = false }
+# burn-pack = { version = "=0.22.0-pre.4", default-features = false }
+# burn-store = { version = "=0.22.0-pre.4", default-features = false }
+# burn-tensor = { version = "=0.22.0-pre.4", default-features = false }
 
 ### For xtask crate ###
 tracel-xtask = { version = "=5.3.0" }

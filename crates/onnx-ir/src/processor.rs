@@ -3,7 +3,10 @@
 //! This module defines the `NodeProcessor` trait with support for type preferences
 //! and proper error handling.
 
-use crate::ir::{Argument, Node, RawNode};
+use crate::{
+    ArgType,
+    ir::{Argument, Node, RawNode},
+};
 use std::collections::HashMap;
 
 // Re-export registry types for backward compatibility
@@ -398,6 +401,39 @@ pub fn validate_uniform_group(
     Ok(())
 }
 
+/// Reject a group that pairs an already-lifted input with one supplied at run time.
+///
+/// For operators whose codegen can read a whole group at run time, a constant next to a
+/// graph input is fine: [`lift_all_or_none`] leaves both unlifted and named. An input that
+/// arrives already `Static` cannot be un-lifted, though, so it has no runtime name to be
+/// read by. A subgraph is the way one arises: a body that captures an already-lifted outer
+/// value alongside a body input. Stricter operators use [`validate_uniform_group`].
+pub fn validate_group_not_split(node: &RawNode, indices: &[usize]) -> Result<(), ProcessError> {
+    let provided = |index: &usize| {
+        node.inputs
+            .get(*index)
+            .filter(|arg| !arg.is_optional())
+            .map(|arg| (*index, arg))
+    };
+    let lifted = indices
+        .iter()
+        .filter_map(provided)
+        .find(|(_, arg)| arg.is_static());
+    let runtime = indices
+        .iter()
+        .filter_map(provided)
+        .find(|(_, arg)| arg.is_dynamic());
+    if let (Some((build, _)), Some((run, _))) = (lifted, runtime) {
+        return Err(ProcessError::Custom(format!(
+            "Node '{}': input #{build} is a build-time value captured from an outer graph \
+             while input #{run} is supplied at run time. They are consumed as a group, so \
+             this mixture is not supported.",
+            node.name
+        )));
+    }
+    Ok(())
+}
+
 /// Lift the inputs at `indices` to static values, but only if every one of them can be.
 ///
 /// Some operators split a group of inputs across the same piece of generated code, so
@@ -659,13 +695,29 @@ pub fn compute_broadcast_rank(inputs: &[crate::ir::Argument]) -> usize {
     })
 }
 
+pub fn logical_shape(arg_type: &ArgType, static_shape: Vec<Option<usize>>) -> Vec<Option<usize>> {
+    match arg_type {
+        ArgType::Tensor(_) => static_shape,
+        ArgType::ScalarTensor(_) => vec![Some(1)],
+        ArgType::ScalarNative(_) => vec![],
+        ArgType::Shape(r) => vec![Some(*r)],
+    }
+}
+
 /// Compute broadcast static shape from multiple inputs (NumPy-style broadcasting)
 pub fn compute_broadcast_static_shape(
     inputs: &[crate::ir::Argument],
 ) -> Option<Vec<Option<usize>>> {
     let static_shapes: Vec<_> = inputs
         .iter()
-        .filter_map(|input| input.ty.static_shape().cloned())
+        .map(|input| {
+            let concrete = input
+                .ty
+                .static_shape()
+                .cloned()
+                .unwrap_or_else(|| vec![None; input.ty.rank()]);
+            logical_shape(&input.ty, concrete)
+        })
         .collect();
 
     if static_shapes.is_empty() {
@@ -691,19 +743,19 @@ pub fn compute_broadcast_static_shape(
         let offset = max_rank - shape.len();
         for (i, dim) in shape.iter().enumerate() {
             let result_idx = offset + i;
+
             match (result[result_idx], *dim) {
-                (_, None) | (None, _) => {
-                    // If either dim is symbolic, result is symbolic
-                    result[result_idx] = None;
-                }
-                (Some(cur), Some(d)) => {
-                    if cur == 1 {
-                        result[result_idx] = Some(d);
-                    } else if d != 1 && d != cur {
-                        // Incompatible broadcast
-                        return None;
-                    }
-                }
+                // 1 bc to anything
+                (Some(1), d) => result[result_idx] = d,
+                (_, Some(1)) => {}
+                // a symbolic dim resolves to the known one
+                // in a valid model it must be 1 or equal to it
+                (None, d) => result[result_idx] = d,
+                (Some(_), None) => {}
+                // both known and equal, nothing to do
+                (Some(cur), Some(d)) if cur == d => {}
+                // Incompatible broadcast
+                (Some(_), Some(_)) => return None,
             }
         }
     }
@@ -737,13 +789,21 @@ pub fn broadcast_output_type(
         .any(|input| matches!(&input.ty, ArgType::Shape(_)));
 
     if has_shape && !has_real_tensor {
-        let shape_rank = inputs
-            .iter()
-            .find_map(|input| match &input.ty {
-                ArgType::Shape(rank) => Some(*rank),
-                _ => None,
-            })
-            .expect("Shape input must exist");
+        // logical shape is [] or [Some(k)] so the bc result is a single concrete length
+        let shape_rank = compute_broadcast_static_shape(inputs)
+            .and_then(|s| s.first().copied().flatten())
+            .unwrap_or_else(|| {
+                // incompatible shapes
+                // degrade to longest instead of panicking
+                inputs
+                    .iter()
+                    .filter_map(|input| match &input.ty {
+                        ArgType::Shape(rank) => Some(*rank),
+                        _ => None,
+                    })
+                    .max()
+                    .unwrap_or(1)
+            });
 
         return ArgType::Shape(shape_rank);
     }
@@ -895,10 +955,9 @@ mod tests {
     }
 
     #[test]
-    fn test_broadcast_static_shape_rank_mismatch_returns_none() {
-        // Regression: when only one input has a static shape but its rank
-        // doesn't match the broadcast rank, we should return None instead
-        // of incorrectly propagating the shape.
+    fn test_broadcast_static_shape_rank_mismatch_right_aligns() {
+        // Regression: a rank 1 static shape must not be propagated against a rank 4 static shape
+        // it is right aligned into the bc rank, so the result is bc rank long
         let inputs = vec![
             Argument {
                 name: "a".to_string(),
@@ -922,9 +981,9 @@ mod tests {
             },
         ];
 
-        // Broadcast rank is 4, but only static shape is [2] (rank 1). Should be None.
-        let result = compute_broadcast_static_shape(&inputs);
-        assert!(result.is_none());
+        let result = compute_broadcast_static_shape(&inputs).expect("rank-aligned result");
+        assert_eq!(result.len(), compute_broadcast_rank(&inputs));
+        assert_eq!(result, vec![None, None, None, Some(2)]);
     }
 
     #[test]

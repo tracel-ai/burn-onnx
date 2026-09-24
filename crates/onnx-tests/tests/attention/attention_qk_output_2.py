@@ -2,7 +2,7 @@
 
 # /// script
 # dependencies = [
-#   "onnx==1.19.0",
+#   "onnx==1.23.0",
 #   "numpy",
 # ]
 # ///

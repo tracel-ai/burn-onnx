@@ -1,28 +1,22 @@
 //! # Einsum
 //!
-//! 2-input einsum support for patterns that lower cleanly to Burn tensor operations.
+//! Einstein summation over any number of operands.
 //!
-//! Supported examples:
-//! - `ij,jk->ik` (explicit form)
-//! - `ij,jk` (implicit form, output inferred alphabetically)
-//! - `bij,bjk->bik`
-//! - `bhwc,hkc->bhwk`
-//! - `i,j->ij`
-//! - `,ij->ij`
-//! - `ij,->ij`
-//! - `ij,kl->il` (one-sided reduction)
+//! Supported forms follow the ONNX spec:
+//! - explicit (`ij,jk->ik`) and implicit (`ij,jk`, output inferred alphabetically)
+//! - any number of inputs (`ij->ji`, `ij,jk,kl->il`)
+//! - repeated labels within one term for diagonals and traces (`ii->i`, `ii`)
+//! - ellipsis broadcasting (`...ij,...jk->...ik`), including operands whose ellipsis
+//!   widths differ, which broadcast right-aligned
+//! - scalar operands with an empty or zero-width ellipsis term (`,ij->ij`, `...,ij->ij`)
 //!
-//! - `...ij,...jk->...ik` (ellipsis broadcasting)
-//!
-//! Unsupported:
-//! - more than 2 inputs
-//! - repeated labels within one term
+//! Labels are ASCII letters, upper or lower case.
 //!
 //! ONNX spec: <https://onnx.ai/onnx/operators/onnx__Einsum.html>
 
 use onnx_ir_derive::NodeBuilder;
 
-use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
+use crate::ir::{ArgType, Argument, DType, Node, RawNode, TensorType};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -30,7 +24,7 @@ use crate::processor::{
 /// ONNX attributes for `Einsum`.
 #[derive(Debug, Clone, Default)]
 pub struct EinsumConfig {
-    /// Equation string such as `bhwc,hkc->bhwk`.
+    /// Equation string such as `bhwc,hkc->bhwk`, exactly as it appears in the model.
     pub equation: String,
 }
 
@@ -47,12 +41,12 @@ pub(crate) struct EinsumProcessor;
 
 /// Einsum operands can arrive as regular tensors or rank-0 scalar values.
 ///
-/// ONNX rank-0 values may be represented in the IR as `ScalarNative`,
-/// `ScalarTensor`, or a rank-0 `Tensor`, but einsum lowering only cares about
-/// the effective rank, dtype, and any known per-axis dimensions.
+/// ONNX rank-0 values are represented in the IR as `ScalarNative` or `ScalarTensor`,
+/// but type inference only cares about the effective rank, dtype, and any known
+/// per-axis dimensions.
 #[derive(Clone, Copy)]
 struct EinsumOperand<'a> {
-    dtype: crate::ir::DType,
+    dtype: DType,
     rank: usize,
     static_shape: Option<&'a [Option<usize>]>,
 }
@@ -85,7 +79,7 @@ impl NodeProcessor for EinsumProcessor {
         NodeSpec {
             min_opset: 12,
             max_opset: None,
-            inputs: InputSpec::Exact(2),
+            inputs: InputSpec::AtLeast(1),
             outputs: OutputSpec::Exact(1),
         }
     }
@@ -96,67 +90,49 @@ impl NodeProcessor for EinsumProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        let equation = node
-            .attrs
-            .get("equation")
-            .ok_or_else(|| ProcessError::MissingAttribute("equation".to_string()))?
-            .clone()
-            .into_string();
-
-        let lhs = EinsumOperand::from_arg(&node.inputs[0].ty)?;
-        let rhs = EinsumOperand::from_arg(&node.inputs[1].ty)?;
-
-        // Expand ellipsis to concrete labels using input ranks.
-        let equation =
-            expand_ellipsis(&equation, &[lhs.rank, rhs.rank]).map_err(ProcessError::Custom)?;
-
-        // Store the expanded equation back so extract_config sees it.
-        node.attrs.insert(
-            "equation".to_string(),
-            crate::ir::AttributeValue::String(equation.clone()),
-        );
-
+        let equation = equation_attr(node)?;
         let parsed = ParsedEinsum::parse(&equation).map_err(ProcessError::Custom)?;
 
-        if lhs.dtype != rhs.dtype {
+        let operands = node
+            .inputs
+            .iter()
+            .map(|input| EinsumOperand::from_arg(&input.ty))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let dtype = operands[0].dtype;
+        if dtype.is_bool() {
             return Err(ProcessError::TypeMismatch {
-                expected: format!("Both inputs to have dtype {:?}", lhs.dtype),
-                actual: format!(
-                    "Input A has dtype {:?}, Input B has dtype {:?}",
-                    lhs.dtype, rhs.dtype
-                ),
+                expected: "numeric inputs".to_string(),
+                actual: format!("{dtype:?}"),
+            });
+        }
+        if let Some((index, operand)) = operands
+            .iter()
+            .enumerate()
+            .find(|(_, operand)| operand.dtype != dtype)
+        {
+            return Err(ProcessError::TypeMismatch {
+                expected: format!("all inputs to have dtype {dtype:?}"),
+                actual: format!("input {index} has dtype {:?}", operand.dtype),
             });
         }
 
-        if lhs.rank != parsed.lhs.len() {
-            return Err(ProcessError::Custom(format!(
-                "Einsum input 0 has rank {} but equation '{}' expects rank {}",
-                lhs.rank,
-                equation,
-                parsed.lhs.len()
-            )));
-        }
-        if rhs.rank != parsed.rhs.len() {
-            return Err(ProcessError::Custom(format!(
-                "Einsum input 1 has rank {} but equation '{}' expects rank {}",
-                rhs.rank,
-                equation,
-                parsed.rhs.len()
-            )));
-        }
+        let ranks: Vec<usize> = operands.iter().map(|operand| operand.rank).collect();
+        let resolved = parsed
+            .resolve(&ranks)
+            .map_err(|reason| ProcessError::Custom(format!("Einsum '{equation}': {reason}")))?;
+        let static_shape = infer_output_static_shape(&equation, &resolved, &operands)?;
 
-        let static_shape = infer_output_static_shape(&equation, &parsed, lhs, rhs)?;
-
-        node.outputs[0].ty = if parsed.output.is_empty() {
+        node.outputs[0].ty = if resolved.output.is_empty() {
             if node.inputs.iter().any(|input| input.ty.is_on_device()) {
-                ArgType::ScalarTensor(lhs.dtype)
+                ArgType::ScalarTensor(dtype)
             } else {
-                ArgType::ScalarNative(lhs.dtype)
+                ArgType::ScalarNative(dtype)
             }
         } else {
             ArgType::Tensor(TensorType {
-                dtype: lhs.dtype,
-                rank: parsed.output.len(),
+                dtype,
+                rank: resolved.output.len(),
                 static_shape,
             })
         };
@@ -165,15 +141,8 @@ impl NodeProcessor for EinsumProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
-        let equation = node
-            .attrs
-            .get("equation")
-            .ok_or_else(|| ProcessError::MissingAttribute("equation".to_string()))?
-            .clone()
-            .into_string();
-
+        let equation = equation_attr(node)?;
         ParsedEinsum::parse(&equation).map_err(ProcessError::Custom)?;
-
         Ok(EinsumConfig { equation })
     }
 
@@ -191,786 +160,636 @@ impl NodeProcessor for EinsumProcessor {
     }
 }
 
-/// Parsed representation of a supported 2-input explicit einsum equation.
+fn equation_attr(node: &RawNode) -> Result<String, ProcessError> {
+    Ok(node
+        .attrs
+        .get("equation")
+        .ok_or_else(|| ProcessError::MissingAttribute("equation".to_string()))?
+        .clone()
+        .into_string())
+}
+
+/// One subscript term: its named labels, and where `...` sits among them if present.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Term {
+    labels: Vec<char>,
+    ellipsis: Option<usize>,
+}
+
+impl Term {
+    fn parse(term: &str, equation: &str) -> Result<Self, String> {
+        let mut labels = Vec::new();
+        let mut ellipsis = None;
+        let mut rest = term;
+        while let Some(c) = rest.chars().next() {
+            if c == '.' {
+                if !rest.starts_with("...") {
+                    return Err(format!(
+                        "Einsum equation '{equation}' has a '.' outside an ellipsis"
+                    ));
+                }
+                if ellipsis.is_some() {
+                    return Err(format!(
+                        "Einsum equation '{equation}' has more than one ellipsis in term '{term}'"
+                    ));
+                }
+                ellipsis = Some(labels.len());
+                rest = &rest[3..];
+            } else if c.is_ascii_alphabetic() {
+                labels.push(c);
+                rest = &rest[1..];
+            } else {
+                return Err(format!(
+                    "Einsum equation '{equation}' contains invalid character '{c}'"
+                ));
+            }
+        }
+        Ok(Self { labels, ellipsis })
+    }
+}
+
+/// An einsum equation parsed independently of operand ranks.
 #[derive(Debug, Clone)]
-pub struct ParsedEinsum {
-    /// Labels for the left input.
-    pub lhs: Vec<char>,
-    /// Labels for the right input.
-    pub rhs: Vec<char>,
-    /// Labels for the output.
-    pub output: Vec<char>,
+struct ParsedEinsum {
+    inputs: Vec<Term>,
+    /// `None` in implicit form, where the output is derived from the inputs.
+    output: Option<Term>,
+}
+
+/// One axis of a resolved term. Ellipsis axes are numbered within the broadcast
+/// ellipsis block, so operands with narrower ellipses line up on the right.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Label {
+    Ellipsis(usize),
+    Named(char),
+}
+
+/// An equation bound to operand ranks: every term spelled out axis by axis.
+#[derive(Debug)]
+struct ResolvedEinsum {
+    inputs: Vec<Vec<Label>>,
+    output: Vec<Label>,
 }
 
 impl ParsedEinsum {
-    /// Parse a 2-input einsum equation in explicit (`ij,jk->ik`) or implicit (`ij,jk`) form.
-    ///
-    /// In implicit form the output indices are the alphabetically sorted set of indices
-    /// that appear exactly once across all input terms (per the ONNX spec).
-    pub fn parse(equation: &str) -> Result<Self, String> {
+    fn parse(equation: &str) -> Result<Self, String> {
         let equation: String = equation.chars().filter(|c| !c.is_whitespace()).collect();
 
-        if equation.contains("...") {
-            return Err(format!(
-                "Einsum equation '{}' contains ellipsis which is not supported",
-                equation
-            ));
-        }
-
-        let (inputs_str, output) = if let Some((lhs_str, rhs_str)) = equation.split_once("->") {
-            (lhs_str, rhs_str.chars().collect::<Vec<char>>())
-        } else {
-            // Implicit form: output is the alphabetically sorted set of indices
-            // that appear exactly once across all input terms.
-            let all_labels: Vec<char> = equation.replace(',', "").chars().collect();
-            let mut counts = std::collections::BTreeMap::new();
-            for &c in &all_labels {
-                *counts.entry(c).or_insert(0usize) += 1;
-            }
-            let output: Vec<char> = counts
-                .into_iter()
-                .filter(|&(_, count)| count == 1)
-                .map(|(c, _)| c)
-                .collect();
-            (equation.as_str(), output)
+        let (inputs_str, output_str) = match equation.split_once("->") {
+            Some((inputs, output)) => (inputs, Some(output)),
+            None => (equation.as_str(), None),
         };
 
-        let input_parts: Vec<&str> = inputs_str.split(',').collect();
-        if input_parts.len() != 2 {
-            return Err(format!(
-                "Einsum equation '{}' must have exactly 2 inputs, got {}",
-                equation,
-                input_parts.len()
-            ));
-        }
+        let inputs = inputs_str
+            .split(',')
+            .map(|term| Term::parse(term, &equation))
+            .collect::<Result<Vec<_>, _>>()?;
+        let output = output_str
+            .map(|term| Term::parse(term, &equation))
+            .transpose()?;
 
-        let lhs: Vec<char> = input_parts[0].chars().collect();
-        let rhs: Vec<char> = input_parts[1].chars().collect();
-
-        for &c in lhs.iter().chain(rhs.iter()).chain(output.iter()) {
-            if !c.is_ascii_lowercase() {
-                return Err(format!(
-                    "Einsum equation '{}' contains invalid character '{}'; only lowercase letters allowed",
-                    equation, c
-                ));
+        if let Some(output) = &output {
+            let mut seen = std::collections::HashSet::new();
+            for &c in &output.labels {
+                if !seen.insert(c) {
+                    return Err(format!(
+                        "Einsum equation '{equation}' has repeated index '{c}' in the output"
+                    ));
+                }
+                if !inputs.iter().any(|input| input.labels.contains(&c)) {
+                    return Err(format!(
+                        "Einsum equation '{equation}': output index '{c}' not found in any input"
+                    ));
+                }
             }
         }
 
-        if has_duplicates(&lhs) {
+        Ok(Self { inputs, output })
+    }
+
+    /// Spell out every term for the given operand ranks.
+    fn resolve(&self, ranks: &[usize]) -> Result<ResolvedEinsum, String> {
+        if ranks.len() != self.inputs.len() {
             return Err(format!(
-                "Einsum equation '{}' has repeated indices in left input (trace not supported)",
-                equation
-            ));
-        }
-        if has_duplicates(&rhs) {
-            return Err(format!(
-                "Einsum equation '{}' has repeated indices in right input (trace not supported)",
-                equation
-            ));
-        }
-        if has_duplicates(&output) {
-            return Err(format!(
-                "Einsum equation '{}' has repeated indices in output",
-                equation
+                "{} input terms but {} inputs",
+                self.inputs.len(),
+                ranks.len()
             ));
         }
 
-        for &c in &output {
-            if !lhs.contains(&c) && !rhs.contains(&c) {
-                return Err(format!(
-                    "Einsum equation '{}': output index '{}' not found in any input",
-                    equation, c
-                ));
+        // Each operand's ellipsis covers the axes its named labels leave over; the
+        // broadcast ellipsis block is as wide as the widest of them.
+        let mut widths = Vec::with_capacity(ranks.len());
+        for (index, (term, &rank)) in self.inputs.iter().zip(ranks).enumerate() {
+            let named = term.labels.len();
+            let width = match term.ellipsis {
+                Some(_) if rank >= named => rank - named,
+                None if rank == named => 0,
+                _ => {
+                    return Err(format!(
+                        "input {index} has rank {rank} but its term has {named} indices"
+                    ));
+                }
+            };
+            widths.push(width);
+        }
+        let width = widths.iter().copied().max().unwrap_or(0);
+
+        let inputs: Vec<Vec<Label>> = self
+            .inputs
+            .iter()
+            .zip(&widths)
+            .map(|(term, &local)| expand_term(term, width - local, local))
+            .collect();
+
+        let output = match &self.output {
+            Some(term) => expand_term(term, 0, width),
+            // Implicit form: the ellipsis block, then every label that occurs exactly
+            // once across the inputs, in alphabetical order.
+            None => {
+                let mut counts = std::collections::BTreeMap::new();
+                for term in &self.inputs {
+                    for &c in &term.labels {
+                        *counts.entry(c).or_insert(0usize) += 1;
+                    }
+                }
+                let has_ellipsis = self.inputs.iter().any(|term| term.ellipsis.is_some());
+                (0..if has_ellipsis { width } else { 0 })
+                    .map(Label::Ellipsis)
+                    .chain(
+                        counts
+                            .into_iter()
+                            .filter(|&(_, count)| count == 1)
+                            .map(|(c, _)| Label::Named(c)),
+                    )
+                    .collect()
             }
-        }
+        };
 
-        Ok(ParsedEinsum { lhs, rhs, output })
-    }
-
-    /// Indices that appear in both inputs and in the output.
-    pub fn batch_axes(&self) -> Vec<char> {
-        self.lhs
-            .iter()
-            .filter(|c| self.rhs.contains(c) && self.output.contains(c))
-            .copied()
-            .collect()
-    }
-
-    /// Indices that appear in both inputs but not in the output.
-    pub fn contraction_axes(&self) -> Vec<char> {
-        self.lhs
-            .iter()
-            .filter(|c| self.rhs.contains(c) && !self.output.contains(c))
-            .copied()
-            .collect()
-    }
-
-    /// Indices that stay in the output from the left input only.
-    pub fn free_lhs_axes(&self) -> Vec<char> {
-        self.lhs
-            .iter()
-            .filter(|c| !self.rhs.contains(c) && self.output.contains(c))
-            .copied()
-            .collect()
-    }
-
-    /// Indices that stay in the output from the right input only.
-    pub fn free_rhs_axes(&self) -> Vec<char> {
-        self.rhs
-            .iter()
-            .filter(|c| !self.lhs.contains(c) && self.output.contains(c))
-            .copied()
-            .collect()
-    }
-
-    /// Indices that appear only in the left input and are absent from the output (summed out).
-    pub fn reduced_lhs_axes(&self) -> Vec<char> {
-        self.lhs
-            .iter()
-            .filter(|c| !self.rhs.contains(c) && !self.output.contains(c))
-            .copied()
-            .collect()
-    }
-
-    /// Indices that appear only in the right input and are absent from the output (summed out).
-    pub fn reduced_rhs_axes(&self) -> Vec<char> {
-        self.rhs
-            .iter()
-            .filter(|c| !self.lhs.contains(c) && !self.output.contains(c))
-            .copied()
-            .collect()
+        Ok(ResolvedEinsum { inputs, output })
     }
 }
 
-/// Expand ellipsis (`...`) in an einsum equation to concrete lowercase labels.
-///
-/// The number of ellipsis dimensions is inferred from the tensor ranks: if a term has `...ij`
-/// and the input has rank 5, the `...` represents 3 dimensions.
-///
-/// Returns the expanded equation with `...` replaced by unused lowercase labels.
-fn expand_ellipsis(equation: &str, input_ranks: &[usize]) -> Result<String, String> {
-    let equation: String = equation.chars().filter(|c| !c.is_whitespace()).collect();
-
-    if !equation.contains("...") {
-        return Ok(equation);
-    }
-
-    // Split into input and output parts (explicit or implicit form).
-    let (inputs_str, output_str) = if let Some((lhs, rhs)) = equation.split_once("->") {
-        (lhs.to_string(), Some(rhs.to_string()))
-    } else {
-        (equation.clone(), None)
-    };
-
-    let input_parts: Vec<&str> = inputs_str.split(',').collect();
-    if input_parts.len() != input_ranks.len() {
-        return Err(format!(
-            "Einsum equation '{}' has {} input terms but {} input tensors",
-            equation,
-            input_parts.len(),
-            input_ranks.len()
-        ));
-    }
-
-    // Determine how many dims each ellipsis represents.
-    let mut ellipsis_ndim: Option<usize> = None;
-    for (part, &rank) in input_parts.iter().zip(input_ranks) {
-        if part.contains("...") {
-            let explicit_count = part.len() - 3; // subtract "..."
-            if rank < explicit_count {
-                return Err(format!(
-                    "Einsum term '{}' has {} explicit labels but input has rank {}",
-                    part, explicit_count, rank
-                ));
-            }
-            let ndim = rank - explicit_count;
-            if let Some(prev) = ellipsis_ndim
-                && prev != ndim
-            {
-                return Err(format!(
-                    "Einsum equation '{}' has inconsistent ellipsis dimensions: {} vs {}",
-                    equation, prev, ndim
-                ));
-            }
-            ellipsis_ndim = Some(ndim);
+/// Spell out a term whose ellipsis covers broadcast axes `offset..offset + width`.
+fn expand_term(term: &Term, offset: usize, width: usize) -> Vec<Label> {
+    let named = term.labels.iter().map(|&c| Label::Named(c));
+    match term.ellipsis {
+        None => named.collect(),
+        Some(position) => {
+            let mut labels: Vec<Label> = named.collect();
+            labels.splice(
+                position..position,
+                (offset..offset + width).map(Label::Ellipsis),
+            );
+            labels
         }
     }
-
-    let ndim = match ellipsis_ndim {
-        Some(n) => n,
-        None => return Ok(equation), // no ellipsis in input terms
-    };
-
-    // Collect all explicit labels used in the equation.
-    let used_labels: std::collections::HashSet<char> = equation
-        .chars()
-        .filter(|c| c.is_ascii_lowercase())
-        .collect();
-
-    // Pick unused lowercase letters for the ellipsis dimensions.
-    let available: Vec<char> = ('a'..='z').filter(|c| !used_labels.contains(c)).collect();
-    if available.len() < ndim {
-        return Err(format!(
-            "Einsum equation '{}' uses too many labels; not enough free letters for {} ellipsis dims",
-            equation, ndim
-        ));
-    }
-    let ellipsis_labels: String = available[..ndim].iter().collect();
-
-    // For implicit form + ellipsis, convert to explicit form per the ONNX spec:
-    // "In implicit mode, the ellipsis dimensions are set to the beginning of the output."
-    // After expanding `...` to concrete labels, those labels appear in both inputs
-    // (counted twice) and would be excluded by the standard implicit-output rule.
-    // We fix this by computing the output explicitly here.
-    let output_str = match output_str {
-        Some(out) => Some(out),
-        None => {
-            // Compute implicit output: ellipsis labels + alphabetically sorted
-            // labels that appear exactly once across all expanded input terms.
-            let expanded_inputs: String = input_parts
-                .iter()
-                .map(|p| p.replace("...", &ellipsis_labels))
-                .collect::<Vec<_>>()
-                .join(",");
-            let all_labels: Vec<char> = expanded_inputs.replace(',', "").chars().collect();
-            let mut counts = std::collections::BTreeMap::new();
-            for &c in &all_labels {
-                *counts.entry(c).or_insert(0usize) += 1;
-            }
-            let singletons: String = counts
-                .into_iter()
-                .filter(|&(_, count)| count == 1)
-                .map(|(c, _)| c)
-                .collect();
-            Some(format!("{}{}", ellipsis_labels, singletons))
-        }
-    };
-
-    // Replace each `...` with the concrete labels.
-    let full_str = format!("{}->{}", inputs_str, output_str.as_deref().unwrap_or(""));
-
-    let mut result = String::new();
-    let mut chars = full_str.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '.' && chars.peek() == Some(&'.') {
-            chars.next(); // consume second '.'
-            if chars.peek() == Some(&'.') {
-                chars.next(); // consume third '.'
-                result.push_str(&ellipsis_labels);
-            } else {
-                result.push_str("..");
-            }
-        } else {
-            result.push(c);
-        }
-    }
-
-    Ok(result)
 }
 
-fn has_duplicates(chars: &[char]) -> bool {
-    let mut seen = std::collections::HashSet::new();
-    chars.iter().any(|c| !seen.insert(c))
-}
-
+/// Known sizes of every output axis, checking that known sizes of a shared label
+/// agree. A size of 1 broadcasts, so it never conflicts and is only reported when
+/// every occurrence is known to be 1.
 fn infer_output_static_shape(
     equation: &str,
-    parsed: &ParsedEinsum,
-    lhs: EinsumOperand<'_>,
-    rhs: EinsumOperand<'_>,
+    resolved: &ResolvedEinsum,
+    operands: &[EinsumOperand<'_>],
 ) -> Result<Option<Vec<Option<usize>>>, ProcessError> {
-    validate_shared_static_dims(equation, parsed, lhs, rhs)?;
-
-    if lhs.static_shape.is_none() && rhs.static_shape.is_none() {
+    if operands
+        .iter()
+        .all(|operand| operand.static_shape.is_none())
+    {
         return Ok(None);
     }
 
+    /// What the occurrences of one label say about its size.
+    #[derive(Default)]
+    struct Evidence {
+        /// The size of any occurrence known to be other than 1.
+        size: Option<usize>,
+        /// Whether some occurrence has an unknown size.
+        unknown: bool,
+    }
+
+    let mut evidence = std::collections::BTreeMap::<Label, Evidence>::new();
+    for (labels, operand) in resolved.inputs.iter().zip(operands) {
+        // A label repeated within one term takes a diagonal, so its axes must be equal
+        // exactly: a size of 1 only broadcasts against other operands.
+        let mut in_term = std::collections::BTreeMap::<Label, usize>::new();
+        for (axis, &label) in labels.iter().enumerate() {
+            let Some(dim) = operand.static_shape.and_then(|shape| shape[axis]) else {
+                continue;
+            };
+            if let Some(&first) = in_term.get(&label)
+                && first != dim
+            {
+                return Err(ProcessError::Custom(format!(
+                    "Einsum equation '{equation}' repeats {label:?} within one operand \
+                     over axes of sizes {first} and {dim}"
+                )));
+            }
+            in_term.insert(label, dim);
+        }
+
+        for (axis, &label) in labels.iter().enumerate() {
+            let entry = evidence.entry(label).or_default();
+            match operand.static_shape.and_then(|shape| shape[axis]) {
+                None => entry.unknown = true,
+                Some(1) => {}
+                Some(dim) => match entry.size {
+                    Some(known) if known != dim => {
+                        return Err(ProcessError::Custom(format!(
+                            "Einsum equation '{equation}' has mismatched static dimensions \
+                             for {label:?}: {known} and {dim}"
+                        )));
+                    }
+                    _ => entry.size = Some(dim),
+                },
+            }
+        }
+    }
+
+    // A known size other than 1 wins, since every other occurrence either matches it
+    // or broadcasts. Otherwise an unknown occurrence could still be anything.
     Ok(Some(
-        parsed
+        resolved
             .output
             .iter()
-            .map(|&label| {
-                find_static_dim(&parsed.lhs, lhs.static_shape, label)
-                    .flatten()
-                    .or_else(|| find_static_dim(&parsed.rhs, rhs.static_shape, label).flatten())
+            .map(|label| match evidence.get(label) {
+                Some(Evidence {
+                    size: Some(size), ..
+                }) => Some(*size),
+                Some(Evidence { unknown: false, .. }) => Some(1),
+                _ => None,
             })
             .collect(),
     ))
 }
 
-fn validate_shared_static_dims(
-    equation: &str,
-    parsed: &ParsedEinsum,
-    lhs: EinsumOperand<'_>,
-    rhs: EinsumOperand<'_>,
-) -> Result<(), ProcessError> {
-    for &label in parsed.lhs.iter().filter(|label| parsed.rhs.contains(label)) {
-        let lhs_dim = find_static_dim(&parsed.lhs, lhs.static_shape, label).flatten();
-        let rhs_dim = find_static_dim(&parsed.rhs, rhs.static_shape, label).flatten();
-
-        if let (Some(lhs_dim), Some(rhs_dim)) = (lhs_dim, rhs_dim)
-            && lhs_dim != rhs_dim
-        {
-            return Err(ProcessError::Custom(format!(
-                "Einsum equation '{}' has mismatched static dimensions for index '{}': lhs={}, rhs={}",
-                equation, label, lhs_dim, rhs_dim
-            )));
-        }
-    }
-
-    Ok(())
-}
-
-fn find_static_dim(
-    labels: &[char],
-    static_shape: Option<&[Option<usize>]>,
-    label: char,
-) -> Option<Option<usize>> {
-    let static_shape = static_shape?;
-    let index = labels.iter().position(|&current| current == label)?;
-    Some(static_shape[index])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{DType, NodeType};
+    use crate::ir::NodeType;
     use crate::node::test_utils::TestNodeBuilder;
 
-    fn create_test_node(equation: &str, lhs_rank: usize, rhs_rank: usize) -> RawNode {
-        create_test_node_with_shapes(equation, lhs_rank, rhs_rank, None, None)
+    fn create_test_node(equation: &str, ranks: &[usize]) -> RawNode {
+        let shapes = vec![None; ranks.len()];
+        create_test_node_with_partial_shapes(equation, ranks, shapes)
     }
 
-    fn create_test_node_with_shapes(
-        equation: &str,
-        lhs_rank: usize,
-        rhs_rank: usize,
-        lhs_shape: Option<Vec<usize>>,
-        rhs_shape: Option<Vec<usize>>,
-    ) -> RawNode {
-        TestNodeBuilder::new(NodeType::Einsum, "test_einsum")
-            .input_tensor_f32("A", lhs_rank, lhs_shape)
-            .input_tensor_f32("B", rhs_rank, rhs_shape)
-            .output_tensor_f32("C", 0, None)
-            .attr_string("equation", equation)
-            .build()
+    fn create_test_node_with_shapes(equation: &str, shapes: &[Vec<usize>]) -> RawNode {
+        let ranks: Vec<usize> = shapes.iter().map(Vec::len).collect();
+        let shapes = shapes
+            .iter()
+            .map(|shape| Some(shape.iter().copied().map(Some).collect()))
+            .collect();
+        create_test_node_with_partial_shapes(equation, &ranks, shapes)
     }
 
     fn create_test_node_with_partial_shapes(
         equation: &str,
-        lhs_rank: usize,
-        rhs_rank: usize,
-        lhs_shape: Option<Vec<Option<usize>>>,
-        rhs_shape: Option<Vec<Option<usize>>>,
+        ranks: &[usize],
+        shapes: Vec<Option<Vec<Option<usize>>>>,
     ) -> RawNode {
-        let mut node = create_test_node(equation, lhs_rank, rhs_rank);
-        node.inputs[0].ty = ArgType::Tensor(TensorType {
-            dtype: DType::F32,
-            rank: lhs_rank,
-            static_shape: lhs_shape,
-        });
-        node.inputs[1].ty = ArgType::Tensor(TensorType {
-            dtype: DType::F32,
-            rank: rhs_rank,
-            static_shape: rhs_shape,
-        });
-        node
+        let types = ranks
+            .iter()
+            .zip(shapes)
+            .map(|(&rank, static_shape)| {
+                ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank,
+                    static_shape,
+                })
+            })
+            .collect();
+        create_test_node_with_types(equation, types)
     }
 
-    fn create_test_node_with_types(equation: &str, lhs_ty: ArgType, rhs_ty: ArgType) -> RawNode {
-        TestNodeBuilder::new(NodeType::Einsum, "test_einsum")
-            .add_input("A", lhs_ty)
-            .add_input("B", rhs_ty)
-            .output_tensor_f32("C", 0, None)
+    fn create_test_node_with_types(equation: &str, types: Vec<ArgType>) -> RawNode {
+        let mut builder = TestNodeBuilder::new(NodeType::Einsum, "test_einsum");
+        for (index, ty) in types.into_iter().enumerate() {
+            builder = builder.add_input(&format!("input{index}"), ty);
+        }
+        builder
+            .output_tensor_f32("output", 0, None)
             .attr_string("equation", equation)
             .build()
     }
 
-    #[test]
-    fn test_parse_sam_pattern() {
-        let parsed = ParsedEinsum::parse("bhwc,hkc->bhwk").unwrap();
-        assert_eq!(parsed.lhs, vec!['b', 'h', 'w', 'c']);
-        assert_eq!(parsed.rhs, vec!['h', 'k', 'c']);
-        assert_eq!(parsed.output, vec!['b', 'h', 'w', 'k']);
-        assert_eq!(parsed.batch_axes(), vec!['h']);
-        assert_eq!(parsed.contraction_axes(), vec!['c']);
-        assert_eq!(parsed.free_lhs_axes(), vec!['b', 'w']);
-        assert_eq!(parsed.free_rhs_axes(), vec!['k']);
+    fn infer(node: &mut RawNode) -> Result<(), ProcessError> {
+        EinsumProcessor.infer_types(node, 16, &OutputPreferences::new())
+    }
+
+    fn output_tensor(node: &RawNode) -> &TensorType {
+        match &node.outputs[0].ty {
+            ArgType::Tensor(tensor) => tensor,
+            other => panic!("Expected tensor output, got {other:?}"),
+        }
+    }
+
+    fn resolve(equation: &str, ranks: &[usize]) -> ResolvedEinsum {
+        ParsedEinsum::parse(equation)
+            .unwrap()
+            .resolve(ranks)
+            .unwrap()
+    }
+
+    fn named(labels: &str) -> Vec<Label> {
+        labels.chars().map(Label::Named).collect()
     }
 
     #[test]
-    fn test_parse_batch_matmul() {
-        let parsed = ParsedEinsum::parse("bij,bjk->bik").unwrap();
-        assert_eq!(parsed.batch_axes(), vec!['b']);
-        assert_eq!(parsed.contraction_axes(), vec!['j']);
-        assert_eq!(parsed.free_lhs_axes(), vec!['i']);
-        assert_eq!(parsed.free_rhs_axes(), vec!['k']);
-    }
+    fn test_parse_explicit_and_implicit() {
+        let explicit = resolve("bhwc,hkc->bhwk", &[4, 3]);
+        assert_eq!(explicit.inputs, vec![named("bhwc"), named("hkc")]);
+        assert_eq!(explicit.output, named("bhwk"));
 
-    #[test]
-    fn test_parse_simple_matmul() {
-        let parsed = ParsedEinsum::parse("ij,jk->ik").unwrap();
-        assert_eq!(parsed.batch_axes(), Vec::<char>::new());
-        assert_eq!(parsed.contraction_axes(), vec!['j']);
-        assert_eq!(parsed.free_lhs_axes(), vec!['i']);
-        assert_eq!(parsed.free_rhs_axes(), vec!['k']);
-    }
-
-    #[test]
-    fn test_parse_outer_product() {
-        let parsed = ParsedEinsum::parse("i,j->ij").unwrap();
-        assert_eq!(parsed.batch_axes(), Vec::<char>::new());
-        assert_eq!(parsed.contraction_axes(), Vec::<char>::new());
-        assert_eq!(parsed.free_lhs_axes(), vec!['i']);
-        assert_eq!(parsed.free_rhs_axes(), vec!['j']);
-    }
-
-    #[test]
-    fn test_parse_implicit_form_matmul() {
-        let parsed = ParsedEinsum::parse("ij,jk").unwrap();
-        assert_eq!(parsed.lhs, vec!['i', 'j']);
-        assert_eq!(parsed.rhs, vec!['j', 'k']);
-        // j appears twice (summed out), i and k appear once -> output "ik"
-        assert_eq!(parsed.output, vec!['i', 'k']);
-        assert_eq!(parsed.contraction_axes(), vec!['j']);
-    }
-
-    #[test]
-    fn test_parse_implicit_form_no_contraction() {
-        let parsed = ParsedEinsum::parse("ij,kl").unwrap();
-        // All indices appear once -> output "ijkl" (alphabetical)
-        assert_eq!(parsed.output, vec!['i', 'j', 'k', 'l']);
-    }
-
-    #[test]
-    fn test_parse_implicit_form_all_contracted() {
-        let parsed = ParsedEinsum::parse("ij,ij").unwrap();
-        // All indices appear twice -> scalar output
-        assert_eq!(parsed.output, Vec::<char>::new());
-    }
-
-    #[test]
-    fn test_parse_rejects_ellipsis() {
-        assert!(ParsedEinsum::parse("...ij,...jk->...ik").is_err());
-    }
-
-    #[test]
-    fn test_parse_rejects_three_inputs() {
-        assert!(ParsedEinsum::parse("ij,jk,kl->il").is_err());
-    }
-
-    #[test]
-    fn test_parse_rejects_trace() {
-        assert!(ParsedEinsum::parse("ii,j->j").is_err());
-    }
-
-    #[test]
-    fn test_parse_one_sided_reduction() {
-        let parsed = ParsedEinsum::parse("ij,kl->il").unwrap();
-        assert_eq!(parsed.reduced_lhs_axes(), vec!['j']);
-        assert_eq!(parsed.reduced_rhs_axes(), vec!['k']);
-        assert_eq!(parsed.batch_axes(), Vec::<char>::new());
-        assert_eq!(parsed.contraction_axes(), Vec::<char>::new());
-        assert_eq!(parsed.free_lhs_axes(), vec!['i']);
-        assert_eq!(parsed.free_rhs_axes(), vec!['l']);
-    }
-
-    #[test]
-    fn test_parse_one_sided_reduction_lhs_only() {
-        let parsed = ParsedEinsum::parse("ijk,l->il").unwrap();
-        assert_eq!(parsed.reduced_lhs_axes(), vec!['j', 'k']);
-        assert_eq!(parsed.reduced_rhs_axes(), Vec::<char>::new());
-    }
-
-    #[test]
-    fn test_parse_rejects_invalid_chars() {
-        assert!(ParsedEinsum::parse("iJ,Jk->ik").is_err());
+        // j appears twice (summed out); i and k appear once.
+        assert_eq!(resolve("ij,jk", &[2, 2]).output, named("ik"));
+        assert_eq!(resolve("ij,kl", &[2, 2]).output, named("ijkl"));
+        assert_eq!(resolve("ij,ij", &[2, 2]).output, Vec::new());
     }
 
     #[test]
     fn test_parse_whitespace_tolerance() {
-        let parsed = ParsedEinsum::parse("ij, jk -> ik").unwrap();
-        assert_eq!(parsed.lhs, vec!['i', 'j']);
-        assert_eq!(parsed.rhs, vec!['j', 'k']);
-        assert_eq!(parsed.output, vec!['i', 'k']);
+        let resolved = resolve("ij, jk -> ik", &[2, 2]);
+        assert_eq!(resolved.inputs, vec![named("ij"), named("jk")]);
+        assert_eq!(resolved.output, named("ik"));
     }
 
     #[test]
-    fn test_infer_types_sam_pattern() {
-        let mut node = create_test_node_with_partial_shapes(
-            "bhwc,hkc->bhwk",
-            4,
-            3,
-            Some(vec![None, Some(2), None, None]),
-            Some(vec![Some(2), None, None]),
+    fn test_parse_uppercase_labels() {
+        // Uppercase sorts before lowercase in implicit output, as in numpy.
+        let resolved = resolve("bA,Ac", &[2, 2]);
+        assert_eq!(resolved.output, named("bc"));
+        assert_eq!(resolve("aB,c", &[2, 1]).output, named("Bac"));
+    }
+
+    #[test]
+    fn test_parse_any_number_of_inputs() {
+        assert_eq!(resolve("ij->ji", &[2]).output, named("ji"));
+        assert_eq!(resolve("ij,jk,kl->il", &[2, 2, 2]).output, named("il"));
+    }
+
+    #[test]
+    fn test_parse_repeated_input_labels() {
+        assert_eq!(resolve("ii->i", &[2]).output, named("i"));
+        // Implicit trace: i occurs twice, so nothing survives.
+        assert_eq!(resolve("ii", &[2]).output, Vec::new());
+    }
+
+    #[test]
+    fn test_parse_rejects_invalid_equations() {
+        assert!(ParsedEinsum::parse("i1,jk->ik").is_err());
+        assert!(ParsedEinsum::parse("ij,jk->iz").is_err());
+        assert!(ParsedEinsum::parse("ij,jk->ii").is_err());
+        assert!(ParsedEinsum::parse("i..j->ij").is_err());
+        assert!(ParsedEinsum::parse("...i...->i").is_err());
+    }
+
+    #[test]
+    fn test_resolve_rejects_rank_mismatch() {
+        let parsed = ParsedEinsum::parse("ij,jk->ik").unwrap();
+        assert!(parsed.resolve(&[2, 3]).is_err());
+        assert!(parsed.resolve(&[2]).is_err());
+        let parsed = ParsedEinsum::parse("...ij->ij").unwrap();
+        assert!(parsed.resolve(&[1]).is_err());
+        assert!(parsed.resolve(&[2]).is_ok());
+    }
+
+    #[test]
+    fn test_resolve_ellipsis() {
+        let resolved = resolve("...ij,...jk->...ik", &[4, 4]);
+        let batch = [Label::Ellipsis(0), Label::Ellipsis(1)];
+        assert_eq!(resolved.output[..2], batch);
+        assert_eq!(resolved.output[2..], named("ik")[..]);
+
+        // Zero-width ellipsis.
+        assert_eq!(resolve("...ij,...jk->...ik", &[2, 2]).output, named("ik"));
+
+        // Implicit form puts the ellipsis first.
+        let implicit = resolve("...ij,...jk", &[3, 3]);
+        assert_eq!(implicit.output[0], Label::Ellipsis(0));
+        assert_eq!(implicit.output[1..], named("ik")[..]);
+    }
+
+    #[test]
+    fn test_resolve_ellipsis_broadcasts_right_aligned() {
+        // The rank-3 operand's single ellipsis axis lines up with the last axis of the
+        // rank-4 operand's two-axis ellipsis.
+        let resolved = resolve("...ij,...jk->...ik", &[4, 3]);
+        assert_eq!(resolved.inputs[1][0], Label::Ellipsis(1));
+        assert_eq!(resolved.output.len(), 4);
+    }
+
+    #[test]
+    fn test_resolve_scalar_with_zero_width_ellipsis() {
+        let resolved = resolve("...,ij->ij", &[0, 2]);
+        assert_eq!(resolved.inputs[0], Vec::new());
+        assert_eq!(resolved.output, named("ij"));
+    }
+
+    #[test]
+    fn test_infer_types_matmul() {
+        let mut node = create_test_node("ij,jk->ik", &[2, 2]);
+        infer(&mut node).unwrap();
+        let tensor = output_tensor(&node);
+        assert_eq!(tensor.dtype, DType::F32);
+        assert_eq!(tensor.rank, 2);
+    }
+
+    #[test]
+    fn test_infer_types_single_input() {
+        let mut node = create_test_node_with_shapes("ij->i", &[vec![3, 4]]);
+        infer(&mut node).unwrap();
+        assert_eq!(output_tensor(&node).static_shape, Some(vec![Some(3)]));
+    }
+
+    #[test]
+    fn test_infer_types_three_inputs() {
+        let mut node =
+            create_test_node_with_shapes("ij,jk,kl->il", &[vec![2, 3], vec![3, 4], vec![4, 5]]);
+        infer(&mut node).unwrap();
+        assert_eq!(
+            output_tensor(&node).static_shape,
+            Some(vec![Some(2), Some(5)])
         );
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(tensor.dtype, DType::F32);
-                assert_eq!(tensor.rank, 4);
-            }
-            _ => panic!("Expected tensor output"),
-        }
     }
 
     #[test]
-    fn test_infer_types_simple_matmul() {
-        let mut node = create_test_node("ij,jk->ik", 2, 2);
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
+    fn test_infer_types_batch_diagonal() {
+        let mut node = create_test_node_with_shapes("...ii->...i", &[vec![3, 5, 5]]);
+        infer(&mut node).unwrap();
+        assert_eq!(
+            output_tensor(&node).static_shape,
+            Some(vec![Some(3), Some(5)])
+        );
+    }
 
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(tensor.dtype, DType::F32);
-                assert_eq!(tensor.rank, 2);
-            }
-            _ => panic!("Expected tensor output"),
-        }
+    #[test]
+    fn test_infer_types_trace_is_scalar() {
+        let mut node = create_test_node("ii", &[2]);
+        infer(&mut node).unwrap();
+        assert!(matches!(
+            node.outputs[0].ty,
+            ArgType::ScalarTensor(DType::F32)
+        ));
     }
 
     #[test]
     fn test_infer_types_rank_mismatch() {
-        let mut node = create_test_node("bhwc,hkc->bhwk", 3, 3);
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(result.is_err());
+        let mut node = create_test_node("bhwc,hkc->bhwk", &[3, 3]);
+        assert!(infer(&mut node).is_err());
     }
 
     #[test]
     fn test_infer_types_dtype_mismatch() {
-        let mut node = create_test_node("ij,jk->ik", 2, 2);
-        node.inputs[1].ty = ArgType::Tensor(TensorType {
-            dtype: DType::F64,
-            rank: 2,
-            static_shape: None,
-        });
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::TypeMismatch { .. })));
+        let mut node = create_test_node_with_types(
+            "ij,jk->ik",
+            vec![
+                ArgType::Tensor(TensorType::new_known(DType::F32, vec![2, 2])),
+                ArgType::Tensor(TensorType::new_known(DType::F64, vec![2, 2])),
+            ],
+        );
+        assert!(matches!(
+            infer(&mut node),
+            Err(ProcessError::TypeMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_infer_types_rejects_bool() {
+        let bool_tensor = || {
+            ArgType::Tensor(TensorType::new_known(
+                DType::Bool(crate::ir::BoolStore::Native),
+                vec![2],
+            ))
+        };
+        let mut node = create_test_node_with_types("i,i->i", vec![bool_tensor(), bool_tensor()]);
+        assert!(matches!(
+            infer(&mut node),
+            Err(ProcessError::TypeMismatch { .. })
+        ));
     }
 
     #[test]
     fn test_infer_types_rejects_mismatched_static_dimensions() {
-        let mut node =
-            create_test_node_with_shapes("ij,jk->ik", 2, 2, Some(vec![2, 3]), Some(vec![4, 5]));
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::Custom(_))));
+        let mut node = create_test_node_with_shapes("ij,jk->ik", &[vec![2, 3], vec![4, 5]]);
+        assert!(matches!(infer(&mut node), Err(ProcessError::Custom(_))));
     }
 
     #[test]
-    fn test_infer_types_accepts_dynamic_multi_contraction_axes() {
-        let mut node = create_test_node("cd,dc->", 2, 2);
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
+    fn test_infer_types_partial_static_shapes() {
+        let mut node = create_test_node_with_partial_shapes(
+            "abij,abjk->abik",
+            &[4, 4],
+            vec![
+                Some(vec![Some(2), None, Some(4), Some(5)]),
+                Some(vec![Some(2), None, Some(5), Some(7)]),
+            ],
+        );
+        infer(&mut node).unwrap();
+        assert_eq!(
+            output_tensor(&node).static_shape,
+            Some(vec![Some(2), None, Some(4), Some(7)])
+        );
+    }
 
+    #[test]
+    fn test_infer_types_uses_any_known_dim_for_shared_axis() {
+        let mut node = create_test_node_with_partial_shapes(
+            "bij,bjk->bik",
+            &[3, 3],
+            vec![
+                Some(vec![None, Some(3), Some(4)]),
+                Some(vec![Some(2), Some(4), Some(5)]),
+            ],
+        );
+        infer(&mut node).unwrap();
+        assert_eq!(
+            output_tensor(&node).static_shape,
+            Some(vec![Some(2), Some(3), Some(5)])
+        );
+    }
+
+    #[test]
+    fn test_infer_types_ellipsis_broadcast_static_shape() {
+        // The size-1 ellipsis axis of the first operand broadcasts against 3.
+        let mut node =
+            create_test_node_with_shapes("...ij,...jk->...ik", &[vec![1, 4, 5], vec![3, 5, 7]]);
+        infer(&mut node).unwrap();
+        assert_eq!(
+            output_tensor(&node).static_shape,
+            Some(vec![Some(3), Some(4), Some(7)])
+        );
+    }
+
+    #[test]
+    fn test_infer_types_rejects_diagonal_size_mismatch() {
+        // Both axes of a diagonal must match; a size of 1 does not broadcast within one
+        // operand.
+        let mut node = create_test_node_with_shapes("ii->i", &[vec![1, 3]]);
         assert!(matches!(
-            node.outputs[0].ty,
-            ArgType::ScalarTensor(DType::F32)
+            infer(&mut node),
+            Err(ProcessError::Custom(msg)) if msg.contains("repeats")
         ));
     }
 
     #[test]
-    fn test_infer_types_accepts_dynamic_multi_batch_axes() {
-        let mut node = create_test_node("abij,abjk->abik", 4, 4);
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(tensor.rank, 4);
-            }
-            _ => panic!("Expected tensor output"),
-        }
+    fn test_infer_types_repeated_label_still_broadcasts_across_operands() {
+        let mut node = create_test_node_with_shapes("ii,i->i", &[vec![3, 3], vec![1]]);
+        infer(&mut node).unwrap();
+        assert_eq!(output_tensor(&node).static_shape, Some(vec![Some(3)]));
     }
 
     #[test]
-    fn test_infer_types_accepts_dynamic_mixed_batch_and_contraction_axes() {
-        let mut node = create_test_node("bhwc,hkc->bhwk", 4, 3);
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(tensor.rank, 4);
-            }
-            _ => panic!("Expected tensor output"),
-        }
-    }
-
-    #[test]
-    fn test_infer_types_allows_one_dynamic_shared_axis_when_others_are_static() {
-        let mut node = create_test_node_with_partial_shapes(
-            "abij,abjk->abik",
-            4,
-            4,
-            Some(vec![Some(2), None, Some(4), Some(5)]),
-            Some(vec![Some(2), None, Some(5), Some(7)]),
-        );
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(
-                    tensor.static_shape,
-                    Some(vec![Some(2), None, Some(4), Some(7)])
-                );
-            }
-            _ => panic!("Expected tensor output"),
-        }
-    }
-
-    #[test]
-    fn test_infer_types_allows_static_multi_batch_axes() {
-        let mut node = create_test_node_with_shapes(
-            "abij,abjk->abik",
-            4,
-            4,
-            Some(vec![2, 3, 4, 5]),
-            Some(vec![2, 3, 5, 7]),
-        );
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(
-                    tensor.static_shape,
-                    Some(vec![Some(2), Some(3), Some(4), Some(7)])
-                );
-            }
-            _ => panic!("Expected tensor output"),
-        }
-    }
-
-    #[test]
-    fn test_infer_types_uses_rhs_known_dim_for_shared_output_axis() {
-        let mut node = create_test_node_with_partial_shapes(
-            "bij,bjk->bik",
-            3,
-            3,
-            Some(vec![None, Some(3), Some(4)]),
-            Some(vec![Some(2), Some(4), Some(5)]),
-        );
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(tensor.static_shape, Some(vec![Some(2), Some(3), Some(5)]));
-            }
-            _ => panic!("Expected tensor output"),
-        }
-    }
-
-    #[test]
-    fn test_infer_types_propagates_static_shape() {
-        let mut node = create_test_node_with_shapes(
-            "bhwc,hkc->bhwk",
-            4,
-            3,
-            Some(vec![1, 2, 3, 4]),
-            Some(vec![2, 5, 4]),
-        );
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(
-                    tensor.static_shape,
-                    Some(vec![Some(1), Some(2), Some(3), Some(5)])
-                );
-            }
-            _ => panic!("Expected tensor output"),
-        }
-    }
-
-    #[test]
-    fn test_infer_types_accepts_scalar_native_lhs_empty_term() {
+    fn test_infer_types_accepts_scalar_operands() {
         let mut node = create_test_node_with_types(
             ",ij->ij",
-            ArgType::ScalarNative(DType::F32),
-            ArgType::Tensor(TensorType::new_known(DType::F32, vec![3, 4])),
+            vec![
+                ArgType::ScalarNative(DType::F32),
+                ArgType::Tensor(TensorType::new_known(DType::F32, vec![3, 4])),
+            ],
         );
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        infer(&mut node).unwrap();
+        assert_eq!(
+            output_tensor(&node).static_shape,
+            Some(vec![Some(3), Some(4)])
+        );
 
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, Some(vec![Some(3), Some(4)]));
-            }
-            _ => panic!("Expected tensor output"),
-        }
-    }
-
-    #[test]
-    fn test_infer_types_accepts_scalar_tensor_rhs_empty_term() {
         let mut node = create_test_node_with_types(
             "ij,->ij",
-            ArgType::Tensor(TensorType::new_known(DType::F32, vec![3, 4])),
-            ArgType::ScalarTensor(DType::F32),
+            vec![
+                ArgType::Tensor(TensorType::new_known(DType::F32, vec![3, 4])),
+                ArgType::ScalarTensor(DType::F32),
+            ],
         );
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(tensor.rank, 2);
-                assert_eq!(tensor.static_shape, Some(vec![Some(3), Some(4)]));
-            }
-            _ => panic!("Expected tensor output"),
-        }
+        infer(&mut node).unwrap();
+        assert_eq!(output_tensor(&node).rank, 2);
     }
 
     #[test]
-    fn test_infer_types_scalar_scalar_output_is_scalar_native() {
+    fn test_infer_types_scalar_output_placement() {
         let mut node = create_test_node_with_types(
             ",->",
-            ArgType::ScalarNative(DType::F32),
-            ArgType::ScalarNative(DType::F32),
+            vec![
+                ArgType::ScalarNative(DType::F32),
+                ArgType::ScalarNative(DType::F32),
+            ],
         );
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
+        infer(&mut node).unwrap();
         assert!(matches!(
             node.outputs[0].ty,
             ArgType::ScalarNative(DType::F32)
         ));
-    }
 
-    #[test]
-    fn test_infer_types_scalar_tensor_output_stays_on_device() {
         let mut node = create_test_node_with_types(
             ",->",
-            ArgType::ScalarNative(DType::F32),
-            ArgType::ScalarTensor(DType::F32),
+            vec![
+                ArgType::ScalarNative(DType::F32),
+                ArgType::ScalarTensor(DType::F32),
+            ],
         );
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
+        infer(&mut node).unwrap();
         assert!(matches!(
             node.outputs[0].ty,
             ArgType::ScalarTensor(DType::F32)
@@ -978,95 +797,10 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_config() {
-        let node = create_test_node("bhwc,hkc->bhwk", 4, 3);
-        let processor = EinsumProcessor;
-        let config = processor.extract_config(&node, 16).unwrap();
-        assert_eq!(config.equation, "bhwc,hkc->bhwk");
-    }
-
-    #[test]
-    fn test_output_index_not_in_inputs() {
-        assert!(ParsedEinsum::parse("ij,jk->iz").is_err());
-    }
-
-    #[test]
-    fn test_expand_ellipsis_batch_matmul() {
-        let result = expand_ellipsis("...ij,...jk->...ik", &[4, 4]).unwrap();
-        // 4 - 2 explicit = 2 ellipsis dims, uses first 2 unused letters
-        // used letters: i, j, k; unused starting from 'a': a, b
-        assert_eq!(result, "abij,abjk->abik");
-    }
-
-    #[test]
-    fn test_expand_ellipsis_single_batch() {
-        let result = expand_ellipsis("...ij,...jk->...ik", &[3, 3]).unwrap();
-        // 3 - 2 = 1 ellipsis dim
-        assert_eq!(result, "aij,ajk->aik");
-    }
-
-    #[test]
-    fn test_expand_ellipsis_zero_dims() {
-        let result = expand_ellipsis("...ij,...jk->...ik", &[2, 2]).unwrap();
-        // 2 - 2 = 0 ellipsis dims
-        assert_eq!(result, "ij,jk->ik");
-    }
-
-    #[test]
-    fn test_expand_ellipsis_no_ellipsis_passthrough() {
-        let result = expand_ellipsis("ij,jk->ik", &[2, 2]).unwrap();
-        assert_eq!(result, "ij,jk->ik");
-    }
-
-    #[test]
-    fn test_expand_ellipsis_inconsistent_dims() {
-        let result = expand_ellipsis("...ij,...jk->...ik", &[4, 3]);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_expand_ellipsis_implicit_form() {
-        // Implicit + ellipsis: per ONNX spec, ellipsis dims go at the beginning
-        // of the output, followed by alphabetically sorted singleton labels.
-        let result = expand_ellipsis("...ij,...jk", &[4, 4]).unwrap();
-        // j appears in both inputs (contracted), i and k are singletons
-        // Output = ellipsis_labels + singletons = "ab" + "ik" = "abik"
-        assert_eq!(result, "abij,abjk->abik");
-    }
-
-    #[test]
-    fn test_expand_ellipsis_avoids_used_labels() {
-        // a, b, c already used; ellipsis needs 2 dims -> picks d, e
-        let result = expand_ellipsis("...ab,...bc->...ac", &[4, 4]).unwrap();
-        assert_eq!(result, "deab,debc->deac");
-    }
-
-    #[test]
-    fn test_infer_types_ellipsis_batch_matmul() {
-        let mut node = create_test_node_with_shapes(
-            "...ij,...jk->...ik",
-            4,
-            4,
-            Some(vec![2, 3, 4, 5]),
-            Some(vec![2, 3, 5, 7]),
-        );
-        let processor = EinsumProcessor;
-        let prefs = OutputPreferences::new();
-        processor.infer_types(&mut node, 16, &prefs).unwrap();
-
-        match &node.outputs[0].ty {
-            ArgType::Tensor(tensor) => {
-                assert_eq!(tensor.rank, 4);
-                assert_eq!(
-                    tensor.static_shape,
-                    Some(vec![Some(2), Some(3), Some(4), Some(7)])
-                );
-            }
-            _ => panic!("Expected tensor output"),
-        }
-
-        // Verify the equation was expanded in the config
-        let config = processor.extract_config(&node, 16).unwrap();
-        assert_eq!(config.equation, "abij,abjk->abik");
+    fn test_extract_config_keeps_equation_verbatim() {
+        let mut node = create_test_node("...ij,...jk->...ik", &[4, 4]);
+        infer(&mut node).unwrap();
+        let config = EinsumProcessor.extract_config(&node, 16).unwrap();
+        assert_eq!(config.equation, "...ij,...jk->...ik");
     }
 }

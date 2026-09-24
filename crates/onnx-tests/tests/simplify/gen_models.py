@@ -676,6 +676,262 @@ def constant_fold():
     )
 
 
+def expand_shape_chain():
+    """Expand target built by torch's `expand` export pattern (issue #280).
+
+    x: [2, 1], y: [2, 3]
+    tail = Slice(Shape(y), 2, MAX) -> []       (folded by constant_shape)
+    target = Concat([1, 3], tail) -> [1, 3]    (folded by constant_fold)
+    ones = ConstantOfShape(Shape(target))      -> [1, 1]
+    eq = Equal(target, Mul(ones, -1))          -> [False, False]
+    Expand(x, Where(eq, ones, target))         -> [2, 3]
+
+    `target` is inferred as a Shape before folding, and Equal/Where are typed
+    against that, so the folded constant must stay a Shape.
+    """
+    graph = helper.make_graph(
+        name="main_graph",
+        nodes=[
+            helper.make_node("Shape", ["y"], ["y_shape"]),
+            helper.make_node(
+                "Constant",
+                [],
+                ["starts"],
+                value=helper.make_tensor("starts_val", TensorProto.INT64, [1], [2]),
+            ),
+            helper.make_node(
+                "Constant",
+                [],
+                ["ends"],
+                value=helper.make_tensor(
+                    "ends_val", TensorProto.INT64, [1], [9223372036854775807]
+                ),
+            ),
+            helper.make_node("Slice", ["y_shape", "starts", "ends"], ["tail"]),
+            helper.make_node(
+                "Constant",
+                [],
+                ["head"],
+                value=helper.make_tensor("head_val", TensorProto.INT64, [2], [1, 3]),
+            ),
+            helper.make_node("Concat", ["head", "tail"], ["target"], axis=0),
+            helper.make_node("Shape", ["target"], ["target_len"]),
+            helper.make_node(
+                "ConstantOfShape",
+                ["target_len"],
+                ["ones"],
+                value=helper.make_tensor("one", TensorProto.INT64, [1], [1]),
+            ),
+            helper.make_node(
+                "Constant",
+                [],
+                ["neg1"],
+                value=helper.make_tensor("neg1_val", TensorProto.INT64, [], [-1]),
+            ),
+            helper.make_node("Mul", ["ones", "neg1"], ["neg_ones"]),
+            helper.make_node("Equal", ["target", "neg_ones"], ["eq"]),
+            helper.make_node("Where", ["eq", "ones", "target"], ["expand_shape"]),
+            helper.make_node("Expand", ["x", "expand_shape"], ["expanded"]),
+        ],
+        inputs=[
+            helper.make_value_info(
+                "x",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 1]),
+            ),
+            helper.make_value_info(
+                "y",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 3]),
+            ),
+        ],
+        outputs=[
+            helper.make_value_info(
+                "expanded",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 3]),
+            ),
+        ],
+    )
+    save(
+        helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET)]),
+        "simplify_expand_shape_chain.onnx",
+    )
+
+
+def squeeze_shape_dim():
+    """Add(x, Squeeze(Slice(Shape(y), 1, 2))) with a folded scalar dim.
+
+    y: [2, 3]
+    dim = Slice(Shape(y), 1, 2) -> [3]   (folded by constant_shape)
+    n = Squeeze(dim) -> 3                 (folded by constant_fold)
+    out = Add(x, n)
+
+    `n` is inferred as a scalar before folding, and Add is typed against
+    that, so the folded constant must stay a scalar.
+    """
+    graph = helper.make_graph(
+        name="main_graph",
+        nodes=[
+            helper.make_node("Shape", ["y"], ["y_shape"]),
+            helper.make_node(
+                "Constant",
+                [],
+                ["starts"],
+                value=helper.make_tensor("starts_val", TensorProto.INT64, [1], [1]),
+            ),
+            helper.make_node(
+                "Constant",
+                [],
+                ["ends"],
+                value=helper.make_tensor("ends_val", TensorProto.INT64, [1], [2]),
+            ),
+            helper.make_node("Slice", ["y_shape", "starts", "ends"], ["dim"]),
+            helper.make_node(
+                "Constant",
+                [],
+                ["axes"],
+                value=helper.make_tensor("axes_val", TensorProto.INT64, [1], [0]),
+            ),
+            helper.make_node("Squeeze", ["dim", "axes"], ["n"]),
+            helper.make_node("Add", ["x", "n"], ["out"]),
+        ],
+        inputs=[
+            helper.make_value_info(
+                "x",
+                helper.make_tensor_type_proto(TensorProto.INT64, shape=[2]),
+            ),
+            helper.make_value_info(
+                "y",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 3]),
+            ),
+        ],
+        outputs=[
+            helper.make_value_info(
+                "out",
+                helper.make_tensor_type_proto(TensorProto.INT64, shape=[2]),
+            ),
+        ],
+    )
+    save(
+        helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET)]),
+        "simplify_squeeze_shape_dim.onnx",
+    )
+
+
+def reshape_concat_shape():
+    """Reshape(x, Concat(Slice(Shape(x)), [-1])) -> reshape with a lifted static shape.
+
+    x: [2, 3, 4]
+    lead = Shape(x)[0:1] -> [2]                 (folded by constant_shape)
+    target = Concat(lead, [-1]) -> [2, -1]      (folded by constant_fold)
+    reshaped = Reshape(x, target) -> [2, 12]
+
+    The Concat only becomes constant during simplification, after the initial
+    constant lifting pass. The Reshape must still lift it into its static
+    config so the folded Concat constant is dropped instead of being emitted
+    as an unused binding.
+    """
+    graph = helper.make_graph(
+        name="main_graph",
+        nodes=[
+            helper.make_node("Shape", ["x"], ["shape_x"]),
+            helper.make_node(
+                "Constant",
+                [],
+                ["starts"],
+                value=helper.make_tensor("starts_val", TensorProto.INT64, [1], [0]),
+            ),
+            helper.make_node(
+                "Constant",
+                [],
+                ["ends"],
+                value=helper.make_tensor("ends_val", TensorProto.INT64, [1], [1]),
+            ),
+            helper.make_node("Slice", ["shape_x", "starts", "ends"], ["lead"]),
+            helper.make_node(
+                "Constant",
+                [],
+                ["minus_one"],
+                value=helper.make_tensor("minus_one_val", TensorProto.INT64, [1], [-1]),
+            ),
+            helper.make_node("Concat", ["lead", "minus_one"], ["target"], axis=0),
+            helper.make_node("Reshape", ["x", "target"], ["reshaped"]),
+        ],
+        inputs=[
+            helper.make_value_info(
+                "x",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 3, 4]),
+            ),
+        ],
+        outputs=[
+            helper.make_value_info(
+                "reshaped",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[2, 12]),
+            ),
+        ],
+    )
+    save(
+        helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET)]),
+        "simplify_reshape_concat_shape.onnx",
+    )
+
+
+def resize_sizes_from_shape():
+    """Resize(x, sizes=Concat(Slice(Shape(x)), [8, 8])) -> resize with static sizes.
+
+    x: [1, 3, 4, 4]
+    lead = Shape(x)[0:2] -> [1, 3]              (folded by constant_shape)
+    sizes = Concat(lead, [8, 8]) -> [1, 3, 8, 8] (folded to a Shape-typed constant)
+    resized = Resize(x, sizes) -> [1, 3, 8, 8]
+
+    Resize lifts the folded sizes constant, so its config must read the value
+    of the Shape-typed input rather than treat it as a runtime argument.
+    """
+    graph = helper.make_graph(
+        name="main_graph",
+        nodes=[
+            helper.make_node("Shape", ["x"], ["shape_x"]),
+            helper.make_node(
+                "Constant",
+                [],
+                ["starts"],
+                value=helper.make_tensor("starts_val", TensorProto.INT64, [1], [0]),
+            ),
+            helper.make_node(
+                "Constant",
+                [],
+                ["ends"],
+                value=helper.make_tensor("ends_val", TensorProto.INT64, [1], [2]),
+            ),
+            helper.make_node("Slice", ["shape_x", "starts", "ends"], ["lead"]),
+            helper.make_node(
+                "Constant",
+                [],
+                ["spatial"],
+                value=helper.make_tensor("spatial_val", TensorProto.INT64, [2], [8, 8]),
+            ),
+            helper.make_node("Concat", ["lead", "spatial"], ["sizes"], axis=0),
+            helper.make_node(
+                "Resize", ["x", "", "", "sizes"], ["resized"], mode="nearest"
+            ),
+        ],
+        inputs=[
+            helper.make_value_info(
+                "x",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[1, 3, 4, 4]),
+            ),
+        ],
+        outputs=[
+            helper.make_value_info(
+                "resized",
+                helper.make_tensor_type_proto(TensorProto.FLOAT, shape=[1, 3, 8, 8]),
+            ),
+        ],
+    )
+    save(
+        helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", OPSET)]),
+        "simplify_resize_sizes_from_shape.onnx",
+    )
+
+
 if __name__ == "__main__":
     print("Generating simplify test models:")
     shape_folding()
@@ -693,4 +949,8 @@ if __name__ == "__main__":
     sdpa_coalesce()
     sdpa_prescale_alias()
     constant_fold()
+    expand_shape_chain()
+    squeeze_shape_dim()
+    reshape_concat_shape()
+    resize_sizes_from_shape()
     print("Done.")

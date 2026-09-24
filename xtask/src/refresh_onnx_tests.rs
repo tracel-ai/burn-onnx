@@ -156,7 +156,7 @@ fn repo_vendor_dir() -> PathBuf {
 /// Count subdirectories named `test_*` inside `dir`. Used for a
 /// sanity-check summary after the rsync completes so the user can
 /// eyeball whether the vendor step landed approximately the expected
-/// number of tests (~1600 for v1.19.0).
+/// number of tests (~1760 for v1.22.0).
 fn count_test_dirs(dir: &Path) -> anyhow::Result<usize> {
     let mut count = 0;
     for entry in std::fs::read_dir(dir)? {

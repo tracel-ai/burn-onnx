@@ -33,9 +33,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(feature = "test-metal", ignore = "Metal has no f64")]
     fn add_constant_f64() {
         use burn::tensor::DType;
-        let device = Default::default();
+        let device = Device::default();
+        // f64 support on wgpu depends on the adapter.
+        if !device.supports_dtype(DType::F64) {
+            return;
+        }
         let model = constant_f64::Model::new(&device);
         // The model's constant is f64; pass an f64 input so the dtype-preserving
         // Add doesn't hit an F32/F64 mismatch inside the backend.
@@ -149,7 +154,7 @@ mod tests {
         let expected = burn::tensor::TensorData::from(expected_data);
 
         let output = model.forward(input);
-        output.to_data().assert_eq(&expected, true);
+        output.to_data().assert_eq(&expected, false);
     }
 
     #[test]

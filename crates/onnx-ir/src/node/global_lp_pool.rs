@@ -11,7 +11,8 @@
 //! - **Opset 1**: Initial version (types: float16, float, double). `p` is a FLOAT attribute.
 //! - **Opset 2**: `p` becomes an INT attribute.
 //! - **Opset 22**: Adds bfloat16 to T.
-use crate::ir::{ArgType, Argument, AttributeValue, Node, RawNode, TensorType};
+use crate::ir::{ArgType, Argument, AttributeValue, Node, RawNode};
+use crate::node::global_avg_pool::global_pool_output_type;
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
 };
@@ -91,24 +92,7 @@ impl NodeProcessor for GlobalLpPoolProcessor {
         // Validate here so malformed graphs fail before codegen.
         extract_p(node)?;
 
-        // Length comes from `rank`, so it cannot drift from the rank written below
-        // if the input's `static_shape` disagrees with its own rank.
-        let mut static_shape = vec![None; tensor_ty.rank];
-        if let Some(input_shape) = &tensor_ty.static_shape {
-            for (out, inp) in static_shape.iter_mut().zip(input_shape).take(2) {
-                *out = *inp;
-            }
-        }
-        // N and C carry through; every spatial dim collapses to 1.
-        for el in static_shape.iter_mut().skip(2) {
-            *el = Some(1usize);
-        }
-
-        node.outputs[0].ty = ArgType::Tensor(TensorType {
-            dtype: tensor_ty.dtype,
-            rank: tensor_ty.rank,
-            static_shape: Some(static_shape),
-        });
+        node.outputs[0].ty = ArgType::Tensor(global_pool_output_type(tensor_ty));
 
         Ok(())
     }
@@ -132,11 +116,11 @@ impl NodeProcessor for GlobalLpPoolProcessor {
     }
 }
 
-/// Parse `p`, which ONNX declares FLOAT in opset 1 and INT from opset 2 on, so both
-/// representations are accepted. Opset 1 permits a fractional `p`, and the Lp formula
-/// is defined for it, so it is kept as-is rather than rounded or rejected. Defaults to
-/// 2 per the ONNX spec.
-fn extract_p(node: &RawNode) -> Result<f64, ProcessError> {
+/// Parse `p` for GlobalLpPool and LpPool, which both declare it FLOAT in opset 1 and
+/// INT from opset 2 on, so both representations are accepted. Opset 1 permits a
+/// fractional `p`, and the Lp formula is defined for it, so it is kept as-is rather
+/// than rounded or rejected. Defaults to 2 per the ONNX spec.
+pub(crate) fn extract_p(node: &RawNode) -> Result<f64, ProcessError> {
     let p = match node.attrs.get("p") {
         None => 2.0,
         Some(AttributeValue::Int64(p)) => *p as f64,
@@ -162,7 +146,7 @@ fn extract_p(node: &RawNode) -> Result<f64, ProcessError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::NodeType;
+    use crate::ir::{NodeType, TensorType};
     use crate::node::test_utils::TestNodeBuilder;
 
     #[test]

@@ -15,7 +15,9 @@
 //! 7. **Common subexpression elimination** - merge duplicate nodes
 //! 8. **Dead node elimination** - remove unreferenced nodes (cascading)
 //!
-//! All passes run in a fixed-point loop until the graph stabilizes.
+//! All passes run in a fixed-point loop until the graph stabilizes. Constant lifting
+//! then re-runs once, so inputs that only became constant during simplification are
+//! lifted into their consumers' configs like any other constant.
 //!
 //! ## Design note: constant_shape never folds a bare `Shape(x)`
 //!
@@ -48,6 +50,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     graph_state::GraphState,
     ir::{Argument, RawNode},
+    processor::get_processor_registry,
 };
 
 use coalesce_attention::coalesce_attention;
@@ -72,6 +75,7 @@ pub(crate) fn simplify_graph(
     inputs: Vec<Argument>,
     mut outputs: Vec<Argument>,
     _state: &Rc<RefCell<GraphState>>,
+    opset: usize,
 ) -> (Vec<RawNode>, Vec<Argument>, Vec<Argument>) {
     for iteration in 0..MAX_ITERATIONS {
         let node_count_before = nodes.len();
@@ -118,7 +122,32 @@ pub(crate) fn simplify_graph(
         );
     }
 
+    relift_constants(&mut nodes, opset);
+
     (nodes, inputs, outputs)
+}
+
+/// Re-run constant lifting for inputs that became constant during simplification.
+///
+/// Lifting first runs in post-processing, before these passes. Folding can later turn a
+/// Dynamic input into a Constant (e.g. `Reshape(x, Concat(Slice(Shape(x)), [-1]))`), and
+/// the consumer reads the value into its config without lifting it. The consumer then
+/// still references the Constant, so finalization keeps it and codegen emits an unused
+/// binding for it.
+fn relift_constants(nodes: &mut [RawNode], opset: usize) {
+    let registry = get_processor_registry();
+    for node in nodes.iter_mut() {
+        // Best effort, as in post-processing: inputs that are already Static or still
+        // Dynamic cannot be lifted, so failures are logged rather than propagated.
+        if let Err(e) = registry.get(&node.node_type).lift_constants(node, opset) {
+            log::debug!(
+                "Could not lift constants for node '{}' (type: {:?}): {}",
+                node.name,
+                node.node_type,
+                e
+            );
+        }
+    }
 }
 
 /// Update downstream inputs that reference newly-created constant outputs.
@@ -194,5 +223,23 @@ pub(crate) mod tests {
             outputs: outputs.iter().map(|n| arg(n)).collect(),
             attrs: Default::default(),
         }
+    }
+
+    #[test]
+    fn relift_uses_model_opset() {
+        use crate::node::test_utils::TestNodeBuilder;
+
+        // DFT only takes `axis` as an input from opset 20, so it is only lifted there.
+        let dft = TestNodeBuilder::new(NodeType::Dft, "dft1")
+            .input_tensor_f32("input", 3, Some(vec![1, 16, 1]))
+            .input_tensor_i64_data("dft_length", vec![16], vec![])
+            .input_tensor_i64_data("axis", vec![1], vec![])
+            .output_tensor_f32("output", 3, None)
+            .build_with_graph_data(20);
+        assert!(dft.inputs[2].is_constant());
+
+        let mut nodes = vec![dft];
+        super::relift_constants(&mut nodes, 20);
+        assert!(nodes[0].inputs[2].is_static());
     }
 }

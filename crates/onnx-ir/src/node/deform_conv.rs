@@ -14,6 +14,7 @@ use crate::ir::{ArgType, Argument, Node, RawNode, TensorType};
 use crate::node::padding::{PaddingConfig2d, padding_config_2d};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
+    lift_all_or_none, validate_group_not_split,
 };
 
 /// Node representation for DeformConv operation
@@ -59,16 +60,11 @@ impl NodeProcessor for DeformConvProcessor {
     }
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
-        // Lift weight (input[1]) to static
-        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
-            node.inputs[1].to_static()?;
-        }
-        // Lift optional bias (input[3]) to static
-        if node.inputs.len() > 3 && !node.inputs[3].is_optional() && node.inputs[3].is_constant() {
-            node.inputs[3].to_static()?;
-        }
-
-        Ok(())
+        // Weight (input 1) and the optional bias (input 3) are lifted together or not at
+        // all: codegen picks the static path from the weight alone, so a lifted bias next
+        // to a runtime weight would be referenced by its cleared name, and a runtime bias
+        // next to a lifted weight would be dropped.
+        lift_all_or_none(node, &[1, 3])
     }
 
     fn infer_types(
@@ -77,6 +73,8 @@ impl NodeProcessor for DeformConvProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
+        validate_group_not_split(node, &[1, 3])?;
+
         // Validate input X (rank 4)
         let tensor = match &node.inputs[0].ty {
             ArgType::Tensor(tensor) => tensor,
@@ -629,5 +627,66 @@ mod tests {
             }
             _ => panic!("Expected tensor output"),
         }
+    }
+
+    #[test]
+    fn test_deform_conv_lifts_weight_without_bias() {
+        let mut node = create_test_node(
+            vec![2, 2],
+            vec![1, 1],
+            vec![0, 0, 0, 0],
+            vec![1, 1],
+            1,
+            1,
+            false,
+            false,
+        )
+        .build_with_graph_data(19);
+        DeformConvProcessor.lift_constants(&mut node, 19).unwrap();
+        assert!(node.inputs[1].is_static());
+    }
+
+    #[test]
+    fn test_deform_conv_mixed_weight_and_bias_not_lifted() {
+        // A constant weight next to a runtime bias must stay named: codegen picks the
+        // static path from the weight alone and would drop the runtime bias.
+        let mut node = create_test_node(
+            vec![2, 2],
+            vec![1, 1],
+            vec![0, 0, 0, 0],
+            vec![1, 1],
+            1,
+            1,
+            true,
+            false,
+        )
+        .build_with_graph_data(19);
+        DeformConvProcessor.lift_constants(&mut node, 19).unwrap();
+        assert!(node.inputs[1].is_constant());
+        assert_eq!(node.inputs[1].name, "weight");
+        assert!(node.inputs[3].is_dynamic());
+    }
+
+    #[test]
+    fn test_deform_conv_lifted_weight_with_runtime_bias_rejected() {
+        // A subgraph capturing an already-lifted outer weight alongside a body-input bias:
+        // the weight has no runtime name, and the module path cannot take the bias.
+        let mut node = create_test_node(
+            vec![2, 2],
+            vec![1, 1],
+            vec![0, 0, 0, 0],
+            vec![1, 1],
+            1,
+            1,
+            true,
+            false,
+        )
+        .build_with_graph_data(19);
+        node.inputs[1].to_static().unwrap();
+
+        let err = DeformConvProcessor
+            .infer_types(&mut node, 19, &OutputPreferences::new())
+            .expect_err("a lifted weight with a runtime bias must be rejected");
+        assert!(err.to_string().contains("input #1 is a build-time value"));
     }
 }

@@ -105,7 +105,7 @@ fn main() {
 
     macro_rules! v {
         ($t:expr) => {
-            $t.to_data().convert::<f32>().to_vec().unwrap()
+            $t.to_data().convert::<f32>().try_to_vec().unwrap()
         };
     }
 

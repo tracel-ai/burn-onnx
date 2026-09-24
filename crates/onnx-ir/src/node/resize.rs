@@ -17,6 +17,7 @@ use onnx_ir_derive::NodeBuilder;
 
 use crate::ir::Argument;
 
+use crate::TensorDataExt;
 use crate::ir::{ArgType, Node, RawNode, RuntimeInputRef};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
@@ -199,11 +200,14 @@ fn extract_scales_input(node: &RawNode, input_rank: usize, idx: usize) -> Option
             }
 
             match &input.ty {
-                ArgType::Tensor(_) => {
+                // A Shape input has a value too once simplification folds it to a constant,
+                // and constant lifting then clears its name, so it must not become Runtime.
+                ArgType::Tensor(_) | ArgType::Shape(_) => {
                     // Check if it's a static value (lifted constant) or constant
                     match input.value() {
                         Some(tensor_data) => {
-                            let mut scales: Vec<f32> = tensor_data.try_into_vec().unwrap();
+                            // `to_f32_vec` also accepts the i64 data of a Shape input
+                            let mut scales: Vec<f32> = tensor_data.to_f32_vec().unwrap();
                             if scales.is_empty() {
                                 return None;
                             }
@@ -222,13 +226,6 @@ fn extract_scales_input(node: &RawNode, input_rank: usize, idx: usize) -> Option
                         }
                     }
                 }
-                ArgType::Shape(_) => {
-                    // Shape input for scales - store reference instead of cloning the argument
-                    Some(ResizeScales::Runtime(RuntimeInputRef::new(
-                        input.name.clone(),
-                        idx,
-                    )))
-                }
                 _ => None,
             }
         }
@@ -246,7 +243,9 @@ fn extract_sizes_input(node: &RawNode, input_rank: usize, idx: usize) -> Option<
             }
 
             match &input.ty {
-                ArgType::Tensor(_) => {
+                // A Shape input has a value too once simplification folds it to a constant,
+                // and constant lifting then clears its name, so it must not become Runtime.
+                ArgType::Tensor(_) | ArgType::Shape(_) => {
                     // Check if it's a static value (lifted constant) or constant
                     match input.value() {
                         Some(tensor_data) => {
@@ -270,14 +269,6 @@ fn extract_sizes_input(node: &RawNode, input_rank: usize, idx: usize) -> Option<
                             )))
                         }
                     }
-                }
-                ArgType::Shape(_rank) => {
-                    // Shape input for sizes - store reference instead of cloning the argument
-                    // The Shape type represents the shape of a tensor, which is exactly what we need
-                    Some(ResizeSizes::Runtime(RuntimeInputRef::new(
-                        input.name.clone(),
-                        idx,
-                    )))
                 }
                 _ => None,
             }
@@ -633,6 +624,65 @@ mod tests {
                 assert_eq!(*sizes, vec![224, 224]); // Only the spatial sizes (H,W)
             }
             _ => panic!("Expected static sizes"),
+        }
+    }
+
+    #[test]
+    fn test_resize_config_with_runtime_shape_sizes() {
+        let node = TestNodeBuilder::new(NodeType::Resize, "test_resize")
+            .input_tensor_f32("X", 4, None)
+            .output_tensor_f32("Y", 4, None)
+            .attr_string("mode", "nearest")
+            .input_tensor_f32("", 1, None)
+            .input_tensor_f32("", 1, None)
+            .input_shape("sizes", 4)
+            .build_with_graph_data(16);
+        let config = ResizeProcessor.extract_config(&node, 16).unwrap();
+        match &config.sizes {
+            Some(ResizeSizes::Runtime(r)) => assert_eq!(r.name, "sizes"),
+            other => panic!("Expected runtime sizes, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_resize_config_with_lifted_shape_sizes() {
+        // Simplification can fold a Shape computation feeding `sizes` into a constant;
+        // once lifted its name is cleared, so the config must carry the value.
+        let mut node = TestNodeBuilder::new(NodeType::Resize, "test_resize")
+            .input_tensor_f32("X", 4, None)
+            .output_tensor_f32("Y", 4, None)
+            .attr_string("mode", "nearest")
+            .input_tensor_f32("", 1, None)
+            .input_tensor_f32("", 1, None)
+            .input_shape_with_data("sizes", vec![1, 3, 8, 8])
+            .build_with_graph_data(16);
+        let processor = ResizeProcessor;
+        processor.lift_constants(&mut node, 16).unwrap();
+        assert!(node.inputs[3].is_static());
+        let config = processor.extract_config(&node, 16).unwrap();
+        match &config.sizes {
+            Some(ResizeSizes::Static(sizes)) => assert_eq!(*sizes, vec![8, 8]),
+            other => panic!("Expected static sizes, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_resize_config_with_lifted_shape_scales() {
+        let mut node = TestNodeBuilder::new(NodeType::Resize, "test_resize")
+            .input_tensor_f32("X", 4, None)
+            .output_tensor_f32("Y", 4, None)
+            .attr_string("mode", "nearest")
+            .input_tensor_f32("", 1, None)
+            .input_shape_with_data("scales", vec![1, 1, 2, 2])
+            .input_tensor_i64("", 1, None)
+            .build_with_graph_data(16);
+        let processor = ResizeProcessor;
+        processor.lift_constants(&mut node, 16).unwrap();
+        assert!(node.inputs[2].is_static());
+        let config = processor.extract_config(&node, 16).unwrap();
+        match &config.scales {
+            Some(ResizeScales::Static(scales)) => assert_eq!(*scales, vec![2.0, 2.0]),
+            other => panic!("Expected static scales, got {other:?}"),
         }
     }
 

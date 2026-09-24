@@ -95,14 +95,14 @@ fn runtime_pads_expr(
         ArgType::Shape(_) => inline_pairs(&pads_value),
         ArgType::Tensor(_) => {
             let to_vec = crate::burn::codegen::tensor_to_i64_vec(&pads_value);
-            let pairs = inline_pairs(&quote! { __raw });
+            let pairs = inline_pairs(&quote! { raw });
             quote! {
                 {
-                    let __raw: alloc::vec::Vec<i64> = #to_vec;
+                    let raw: alloc::vec::Vec<i64> = #to_vec;
                     assert_eq!(
-                        __raw.len(), #expected_len,
+                        raw.len(), #expected_len,
                         "Pad: runtime pads length mismatch (expected {}, got {})",
-                        #expected_len, __raw.len(),
+                        #expected_len, raw.len(),
                     );
                     #pairs
                 }
@@ -137,41 +137,41 @@ fn runtime_axes_scatter(
         },
         other => panic!("Pad: runtime axes input must be a tensor or shape, got {other:?}"),
     };
-    let before_pad = pad_i64_to_usize_expr(quote! { __raw_pads[__i] }, quote! { __i });
-    let after_pad = pad_i64_to_usize_expr(quote! { __raw_pads[__n + __i] }, quote! { __n + __i });
+    let before_pad = pad_i64_to_usize_expr(quote! { raw_pads[i] }, quote! { i });
+    let after_pad = pad_i64_to_usize_expr(quote! { raw_pads[n + i] }, quote! { n + i });
     quote! {
         {
-            let __raw_pads: alloc::vec::Vec<i64> = #pads_to_vec;
-            let __raw_axes: alloc::vec::Vec<i64> = #axes_to_vec;
-            let __n = __raw_axes.len();
+            let raw_pads: alloc::vec::Vec<i64> = #pads_to_vec;
+            let raw_axes: alloc::vec::Vec<i64> = #axes_to_vec;
+            let n = raw_axes.len();
             assert_eq!(
-                __raw_pads.len(), 2 * __n,
+                raw_pads.len(), 2 * n,
                 "Pad: runtime pads length mismatch (expected 2 * axes.len() = {}, got {})",
-                2 * __n, __raw_pads.len(),
+                2 * n, raw_pads.len(),
             );
-            let mut __pads: alloc::vec::Vec<(usize, usize)> =
+            let mut pads: alloc::vec::Vec<(usize, usize)> =
                 alloc::vec![(0usize, 0usize); #input_rank];
-            let mut __seen: [bool; #input_rank] = [false; #input_rank];
-            for __i in 0..__n {
-                let __raw_axis = __raw_axes[__i];
-                let __dim_signed = if __raw_axis < 0 {
-                    __raw_axis + (#input_rank as i64)
+            let mut seen: [bool; #input_rank] = [false; #input_rank];
+            for i in 0..n {
+                let raw_axis = raw_axes[i];
+                let dim_signed = if raw_axis < 0 {
+                    raw_axis + (#input_rank as i64)
                 } else {
-                    __raw_axis
+                    raw_axis
                 };
                 assert!(
-                    __dim_signed >= 0 && (__dim_signed as usize) < #input_rank,
-                    "Pad: axis {} out of range for rank {}", __raw_axis, #input_rank,
+                    dim_signed >= 0 && (dim_signed as usize) < #input_rank,
+                    "Pad: axis {} out of range for rank {}", raw_axis, #input_rank,
                 );
-                let __dim = __dim_signed as usize;
+                let dim = dim_signed as usize;
                 assert!(
-                    !__seen[__dim],
-                    "Pad: duplicate axis {} (normalized to dim {})", __raw_axis, __dim,
+                    !seen[dim],
+                    "Pad: duplicate axis {} (normalized to dim {})", raw_axis, dim,
                 );
-                __seen[__dim] = true;
-                __pads[__dim] = (#before_pad, #after_pad);
+                seen[dim] = true;
+                pads[dim] = (#before_pad, #after_pad);
             }
-            __pads
+            pads
         }
     }
 }
@@ -438,45 +438,45 @@ mod tests {
             let output = input
                 .pad(
                     {
-                        let __raw: alloc::vec::Vec<i64> = pads
+                        let raw: alloc::vec::Vec<i64> = pads
                             .to_data()
                             .convert::<i64>()
-                            .into_vec::<i64>()
+                            .try_into_vec::<i64>()
                             .unwrap();
                         assert_eq!(
-                            __raw.len(), 4usize,
+                            raw.len(), 4usize,
                             "Pad: runtime pads length mismatch (expected {}, got {})", 4usize,
-                            __raw.len(),
+                            raw.len(),
                         );
                         [
                             (
-                                usize::try_from(__raw[0usize])
+                                usize::try_from(raw[0usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[0usize],
+                                            "Pad: negative pad value {} at index {}", raw[0usize],
                                             0usize
                                         )
                                     }),
-                                usize::try_from(__raw[2usize])
+                                usize::try_from(raw[2usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[2usize],
+                                            "Pad: negative pad value {} at index {}", raw[2usize],
                                             2usize
                                         )
                                     }),
                             ),
                             (
-                                usize::try_from(__raw[1usize])
+                                usize::try_from(raw[1usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[1usize],
+                                            "Pad: negative pad value {} at index {}", raw[1usize],
                                             1usize
                                         )
                                     }),
-                                usize::try_from(__raw[3usize])
+                                usize::try_from(raw[3usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[3usize],
+                                            "Pad: negative pad value {} at index {}", raw[3usize],
                                             3usize
                                         )
                                     }),
@@ -575,46 +575,46 @@ mod tests {
             let output = input
                 .pad(
                     {
-                        let __raw: alloc::vec::Vec<i64> = pads
+                        let raw: alloc::vec::Vec<i64> = pads
                             .to_data()
                             .convert::<i64>()
-                            .into_vec::<i64>()
+                            .try_into_vec::<i64>()
                             .unwrap();
                         assert_eq!(
-                            __raw.len(), 4usize,
+                            raw.len(), 4usize,
                             "Pad: runtime pads length mismatch (expected {}, got {})", 4usize,
-                            __raw.len(),
+                            raw.len(),
                         );
                         [
                             (
-                                usize::try_from(__raw[1usize])
+                                usize::try_from(raw[1usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[1usize],
+                                            "Pad: negative pad value {} at index {}", raw[1usize],
                                             1usize
                                         )
                                     }),
-                                usize::try_from(__raw[3usize])
+                                usize::try_from(raw[3usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[3usize],
+                                            "Pad: negative pad value {} at index {}", raw[3usize],
                                             3usize
                                         )
                                     }),
                             ),
                             (0usize, 0usize),
                             (
-                                usize::try_from(__raw[0usize])
+                                usize::try_from(raw[0usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[0usize],
+                                            "Pad: negative pad value {} at index {}", raw[0usize],
                                             0usize
                                         )
                                     }),
-                                usize::try_from(__raw[2usize])
+                                usize::try_from(raw[2usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[2usize],
+                                            "Pad: negative pad value {} at index {}", raw[2usize],
                                             2usize
                                         )
                                     }),
@@ -715,61 +715,61 @@ mod tests {
             let output = input
                 .pad(
                     {
-                        let __raw: alloc::vec::Vec<i64> = pads
+                        let raw: alloc::vec::Vec<i64> = pads
                             .to_data()
                             .convert::<i64>()
-                            .into_vec::<i64>()
+                            .try_into_vec::<i64>()
                             .unwrap();
                         assert_eq!(
-                            __raw.len(), 6usize,
+                            raw.len(), 6usize,
                             "Pad: runtime pads length mismatch (expected {}, got {})", 6usize,
-                            __raw.len(),
+                            raw.len(),
                         );
                         [
                             (
-                                usize::try_from(__raw[0usize])
+                                usize::try_from(raw[0usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[0usize],
+                                            "Pad: negative pad value {} at index {}", raw[0usize],
                                             0usize
                                         )
                                     }),
-                                usize::try_from(__raw[3usize])
+                                usize::try_from(raw[3usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[3usize],
+                                            "Pad: negative pad value {} at index {}", raw[3usize],
                                             3usize
                                         )
                                     }),
                             ),
                             (
-                                usize::try_from(__raw[1usize])
+                                usize::try_from(raw[1usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[1usize],
+                                            "Pad: negative pad value {} at index {}", raw[1usize],
                                             1usize
                                         )
                                     }),
-                                usize::try_from(__raw[4usize])
+                                usize::try_from(raw[4usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[4usize],
+                                            "Pad: negative pad value {} at index {}", raw[4usize],
                                             4usize
                                         )
                                     }),
                             ),
                             (
-                                usize::try_from(__raw[2usize])
+                                usize::try_from(raw[2usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[2usize],
+                                            "Pad: negative pad value {} at index {}", raw[2usize],
                                             2usize
                                         )
                                     }),
-                                usize::try_from(__raw[5usize])
+                                usize::try_from(raw[5usize])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw[5usize],
+                                            "Pad: negative pad value {} at index {}", raw[5usize],
                                             5usize
                                         )
                                     }),
@@ -816,60 +816,59 @@ mod tests {
             let output = input
                 .pad(
                     {
-                        let __raw_pads: alloc::vec::Vec<i64> = pads
+                        let raw_pads: alloc::vec::Vec<i64> = pads
                             .to_data()
                             .convert::<i64>()
-                            .into_vec::<i64>()
+                            .try_into_vec::<i64>()
                             .unwrap();
-                        let __raw_axes: alloc::vec::Vec<i64> = axes
+                        let raw_axes: alloc::vec::Vec<i64> = axes
                             .iter()
                             .copied()
                             .collect::<alloc::vec::Vec<i64>>();
-                        let __n = __raw_axes.len();
+                        let n = raw_axes.len();
                         assert_eq!(
-                            __raw_pads.len(), 2 * __n,
+                            raw_pads.len(), 2 * n,
                             "Pad: runtime pads length mismatch (expected 2 * axes.len() = {}, got {})",
-                            2 * __n, __raw_pads.len(),
+                            2 * n, raw_pads.len(),
                         );
-                        let mut __pads: alloc::vec::Vec<(usize, usize)> = alloc::vec![
+                        let mut pads: alloc::vec::Vec<(usize, usize)> = alloc::vec![
                             (0usize, 0usize); 4usize
                         ];
-                        let mut __seen: [bool; 4usize] = [false; 4usize];
-                        for __i in 0..__n {
-                            let __raw_axis = __raw_axes[__i];
-                            let __dim_signed = if __raw_axis < 0 {
-                                __raw_axis + (4usize as i64)
+                        let mut seen: [bool; 4usize] = [false; 4usize];
+                        for i in 0..n {
+                            let raw_axis = raw_axes[i];
+                            let dim_signed = if raw_axis < 0 {
+                                raw_axis + (4usize as i64)
                             } else {
-                                __raw_axis
+                                raw_axis
                             };
                             assert!(
-                                __dim_signed >= 0 && (__dim_signed as usize) < 4usize,
-                                "Pad: axis {} out of range for rank {}", __raw_axis, 4usize,
+                                dim_signed >= 0 && (dim_signed as usize) < 4usize,
+                                "Pad: axis {} out of range for rank {}", raw_axis, 4usize,
                             );
-                            let __dim = __dim_signed as usize;
+                            let dim = dim_signed as usize;
                             assert!(
-                                ! __seen[__dim], "Pad: duplicate axis {} (normalized to dim {})",
-                                __raw_axis, __dim,
+                                ! seen[dim], "Pad: duplicate axis {} (normalized to dim {})",
+                                raw_axis, dim,
                             );
-                            __seen[__dim] = true;
-                            __pads[__dim] = (
-                                usize::try_from(__raw_pads[__i])
+                            seen[dim] = true;
+                            pads[dim] = (
+                                usize::try_from(raw_pads[i])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw_pads[__i],
-                                            __i
+                                            "Pad: negative pad value {} at index {}", raw_pads[i], i
                                         )
                                     }),
-                                usize::try_from(__raw_pads[__n + __i])
+                                usize::try_from(raw_pads[n + i])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw_pads[__n +
-                                            __i], __n + __i
+                                            "Pad: negative pad value {} at index {}", raw_pads[n + i], n
+                                            + i
                                         )
                                     }),
                             );
                         }
-                        __pads
+                        pads
                     },
                     burn::tensor::ops::PadMode::Constant(0f32),
                 );
@@ -909,61 +908,60 @@ mod tests {
             let output = input
                 .pad(
                     {
-                        let __raw_pads: alloc::vec::Vec<i64> = pads
+                        let raw_pads: alloc::vec::Vec<i64> = pads
                             .to_data()
                             .convert::<i64>()
-                            .into_vec::<i64>()
+                            .try_into_vec::<i64>()
                             .unwrap();
-                        let __raw_axes: alloc::vec::Vec<i64> = axes
+                        let raw_axes: alloc::vec::Vec<i64> = axes
                             .to_data()
                             .convert::<i64>()
-                            .into_vec::<i64>()
+                            .try_into_vec::<i64>()
                             .unwrap();
-                        let __n = __raw_axes.len();
+                        let n = raw_axes.len();
                         assert_eq!(
-                            __raw_pads.len(), 2 * __n,
+                            raw_pads.len(), 2 * n,
                             "Pad: runtime pads length mismatch (expected 2 * axes.len() = {}, got {})",
-                            2 * __n, __raw_pads.len(),
+                            2 * n, raw_pads.len(),
                         );
-                        let mut __pads: alloc::vec::Vec<(usize, usize)> = alloc::vec![
+                        let mut pads: alloc::vec::Vec<(usize, usize)> = alloc::vec![
                             (0usize, 0usize); 4usize
                         ];
-                        let mut __seen: [bool; 4usize] = [false; 4usize];
-                        for __i in 0..__n {
-                            let __raw_axis = __raw_axes[__i];
-                            let __dim_signed = if __raw_axis < 0 {
-                                __raw_axis + (4usize as i64)
+                        let mut seen: [bool; 4usize] = [false; 4usize];
+                        for i in 0..n {
+                            let raw_axis = raw_axes[i];
+                            let dim_signed = if raw_axis < 0 {
+                                raw_axis + (4usize as i64)
                             } else {
-                                __raw_axis
+                                raw_axis
                             };
                             assert!(
-                                __dim_signed >= 0 && (__dim_signed as usize) < 4usize,
-                                "Pad: axis {} out of range for rank {}", __raw_axis, 4usize,
+                                dim_signed >= 0 && (dim_signed as usize) < 4usize,
+                                "Pad: axis {} out of range for rank {}", raw_axis, 4usize,
                             );
-                            let __dim = __dim_signed as usize;
+                            let dim = dim_signed as usize;
                             assert!(
-                                ! __seen[__dim], "Pad: duplicate axis {} (normalized to dim {})",
-                                __raw_axis, __dim,
+                                ! seen[dim], "Pad: duplicate axis {} (normalized to dim {})",
+                                raw_axis, dim,
                             );
-                            __seen[__dim] = true;
-                            __pads[__dim] = (
-                                usize::try_from(__raw_pads[__i])
+                            seen[dim] = true;
+                            pads[dim] = (
+                                usize::try_from(raw_pads[i])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw_pads[__i],
-                                            __i
+                                            "Pad: negative pad value {} at index {}", raw_pads[i], i
                                         )
                                     }),
-                                usize::try_from(__raw_pads[__n + __i])
+                                usize::try_from(raw_pads[n + i])
                                     .unwrap_or_else(|_| {
                                         panic!(
-                                            "Pad: negative pad value {} at index {}", __raw_pads[__n +
-                                            __i], __n + __i
+                                            "Pad: negative pad value {} at index {}", raw_pads[n + i], n
+                                            + i
                                         )
                                     }),
                             );
                         }
-                        __pads
+                        pads
                     },
                     burn::tensor::ops::PadMode::Constant(0f32),
                 );

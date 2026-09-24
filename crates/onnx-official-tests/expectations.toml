@@ -3,7 +3,7 @@
 # whether each test is expected to pass, fail, or be skipped, and fails
 # CI on any drift between this file and reality.
 #
-# Source:    onnx v1.19.0 node tests (https://github.com/onnx/onnx)
+# Source:    onnx v1.22.0 node tests (https://github.com/onnx/onnx)
 # Vendoring: bulk-copied via cargo xtask refresh-onnx-tests.
 #
 # Status values:
@@ -290,13 +290,10 @@ status = "pass"
 status = "pass"
 
 [test_attention_3d_attn_mask_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_3d_causal]
-status = "fail-compare"
-reason = "attention op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_attention_3d_causal_expanded]
 status = "pass"
@@ -308,13 +305,10 @@ status = "pass"
 status = "pass"
 
 [test_attention_3d_diff_heads_sizes_attn_mask_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_3d_diff_heads_sizes_causal]
-status = "fail-compare"
-reason = "attention op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_attention_3d_diff_heads_sizes_causal_expanded]
 status = "pass"
@@ -338,30 +332,22 @@ status = "pass"
 status = "pass"
 
 [test_attention_3d_diff_heads_with_past_and_present_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_3d_expanded]
 status = "pass"
 
 [test_attention_3d_gqa]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_3d_gqa_attn_mask]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_3d_gqa_attn_mask_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_3d_gqa_causal]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_3d_gqa_causal_expanded]
 status = "pass"
@@ -370,29 +356,22 @@ status = "pass"
 status = "pass"
 
 [test_attention_3d_gqa_scaled]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_3d_gqa_scaled_expanded]
 status = "pass"
 
 [test_attention_3d_gqa_softcap]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_3d_gqa_softcap_expanded]
 status = "pass"
 
 [test_attention_3d_gqa_with_past_and_present]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_3d_gqa_with_past_and_present_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_3d_scaled]
 status = "pass"
@@ -416,8 +395,7 @@ status = "pass"
 status = "pass"
 
 [test_attention_3d_with_past_and_present_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_3d_with_past_and_present_qk_matmul]
 status = "pass"
@@ -426,26 +404,22 @@ status = "pass"
 status = "pass"
 
 [test_attention_3d_with_past_and_present_qk_matmul_bias_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_3d_with_past_and_present_qk_matmul_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_3d_with_past_and_present_qk_matmul_softcap]
 status = "pass"
 
 [test_attention_3d_with_past_and_present_qk_matmul_softcap_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_3d_with_past_and_present_qk_matmul_softmax]
 status = "pass"
 
 [test_attention_3d_with_past_and_present_qk_matmul_softmax_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d]
 status = "pass"
@@ -457,33 +431,25 @@ status = "pass"
 status = "pass"
 
 [test_attention_4d_attn_mask_3d_causal]
-status = "fail-compare"
-reason = "attention op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_attn_mask_3d_causal_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_attn_mask_3d_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_attn_mask_4d]
 status = "pass"
 
 [test_attention_4d_attn_mask_4d_causal]
-status = "fail-compare"
-reason = "attention op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_attn_mask_4d_causal_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_attn_mask_4d_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_attn_mask_bool]
 status = "pass"
@@ -492,21 +458,16 @@ status = "pass"
 status = "pass"
 
 [test_attention_4d_attn_mask_bool_4d_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_attn_mask_bool_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_attn_mask_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_causal]
-status = "fail-compare"
-reason = "attention op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_causal_expanded]
 status = "pass"
@@ -526,13 +487,10 @@ status = "pass"
 status = "pass"
 
 [test_attention_4d_diff_heads_sizes_attn_mask_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_diff_heads_sizes_causal]
-status = "fail-compare"
-reason = "attention op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_diff_heads_sizes_causal_expanded]
 status = "pass"
@@ -556,22 +514,19 @@ status = "pass"
 status = "pass"
 
 [test_attention_4d_diff_heads_with_past_and_present_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_diff_heads_with_past_and_present_mask3d]
 status = "pass"
 
 [test_attention_4d_diff_heads_with_past_and_present_mask3d_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_diff_heads_with_past_and_present_mask4d]
 status = "pass"
 
 [test_attention_4d_diff_heads_with_past_and_present_mask4d_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_expanded]
 status = "pass"
@@ -583,23 +538,16 @@ status = "pass"
 status = "pass"
 
 [test_attention_4d_gqa]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_gqa_attn_mask]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_gqa_attn_mask_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_gqa_causal]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_gqa_causal_expanded]
 status = "pass"
@@ -608,38 +556,28 @@ status = "pass"
 status = "pass"
 
 [test_attention_4d_gqa_scaled]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_gqa_scaled_expanded]
 status = "pass"
 
 [test_attention_4d_gqa_softcap]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_gqa_softcap_expanded]
 status = "pass"
 
 [test_attention_4d_gqa_with_past_and_present]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_gqa_with_past_and_present_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_gqa_with_past_and_present_fp16]
-status = "fail-compare"
-reason = "burn-flex attention_naive panics on GQA: key heads (3) != query heads (9) at burn-flex/src/ops/attention.rs:658. Surfaced after #393 wired f16 comparison through the harness; not a burn-onnx codegen bug."
-tracking = "https://github.com/tracel-ai/burn/issues/4930"
+status = "pass"
 
 [test_attention_4d_gqa_with_past_and_present_fp16_expanded]
-status = "skip-codegen"
-reason = "Pad: constant_value must be a scalar tensor (rank 0), got rank 1"
+status = "pass"
 
 [test_attention_4d_scaled]
 status = "pass"
@@ -653,12 +591,23 @@ status = "pass"
 [test_attention_4d_softcap_expanded]
 status = "pass"
 
+[test_attention_4d_softcap_neginf_mask]
+status = "pass"
+
+[test_attention_4d_softcap_neginf_mask_expanded]
+status = "pass"
+
+[test_attention_4d_softcap_neginf_mask_poison]
+status = "pass"
+
+[test_attention_4d_softcap_neginf_mask_poison_expanded]
+status = "pass"
+
 [test_attention_4d_with_past_and_present]
 status = "pass"
 
 [test_attention_4d_with_past_and_present_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_with_past_and_present_qk_matmul]
 status = "pass"
@@ -670,41 +619,31 @@ status = "pass"
 status = "pass"
 
 [test_attention_4d_with_past_and_present_qk_matmul_bias_3d_mask_causal]
-status = "fail-compare"
-reason = "attention op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_with_past_and_present_qk_matmul_bias_3d_mask_causal_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_with_past_and_present_qk_matmul_bias_3d_mask_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_with_past_and_present_qk_matmul_bias_4d_mask]
 status = "pass"
 
 [test_attention_4d_with_past_and_present_qk_matmul_bias_4d_mask_causal]
-status = "fail-compare"
-reason = "attention op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_attention_4d_with_past_and_present_qk_matmul_bias_4d_mask_causal_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_with_past_and_present_qk_matmul_bias_4d_mask_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_with_past_and_present_qk_matmul_bias_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_with_past_and_present_qk_matmul_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_with_qk_matmul]
 status = "skip-codegen"
@@ -715,8 +654,7 @@ status = "skip-codegen"
 reason = "Node 'attention1' (Attention): Attention: past_key, past_value, present_key, present_value can only be used together"
 
 [test_attention_4d_with_qk_matmul_bias_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_with_qk_matmul_expanded]
 status = "pass"
@@ -726,16 +664,14 @@ status = "skip-codegen"
 reason = "Node 'attention1' (Attention): Attention: past_key, past_value, present_key, present_value can only be used together"
 
 [test_attention_4d_with_qk_matmul_softcap_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_attention_4d_with_qk_matmul_softmax]
 status = "skip-codegen"
 reason = "Node 'attention1' (Attention): Attention: past_key, past_value, present_key, present_value can only be used together"
 
 [test_attention_4d_with_qk_matmul_softmax_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1, Bool>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_averagepool_1d_default]
 status = "pass"
@@ -808,12 +744,10 @@ status = "skip-codegen"
 reason = "burn-onnx does not currently support 3D average pooling: Burn lacks a native AvgPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
 
 [test_basic_conv_with_padding]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"Conv2d: weight tensor must be present\")"
+status = "pass"
 
 [test_basic_conv_without_padding]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"Conv2d: weight tensor must be present\")"
+status = "pass"
 
 [test_basic_deform_conv_with_padding]
 status = "pass"
@@ -864,6 +798,46 @@ wontfix = true
 status = "flaky"
 reason = "Bernoulli draws random samples; the vendored reference output is a single NumPy draw that no other RNG can reproduce. The 10-element draw matches it by chance in ~0.6% of runs, which intermittently trips the fail-compare drift gate. Codegen and shape are covered by crates/onnx-tests/tests/bernoulli."
 wontfix = true
+
+[test_bitcast_2d_float32_to_int32]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - BitCast used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_bitcast_bool_to_uint8]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - BitCast used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_bitcast_float32_to_int32]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - BitCast used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_bitcast_float64_to_int64]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - BitCast used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_bitcast_int32_to_float32]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - BitCast used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_bitcast_int64_to_float64]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - BitCast used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_bitcast_int8_to_uint8]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - BitCast used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_bitcast_scalar_float32_to_int32]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - BitCast used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_bitcast_uint16_to_int16]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - BitCast used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_bitcast_uint32_to_int32]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - BitCast used by 1 node(s) Register hooks via ModelGen::register_custom_op."
 
 [test_bitshift_left_uint16]
 status = "pass"
@@ -983,9 +957,17 @@ reason = "Node 'cast1' (Cast): Invalid attribute 'to': Float8 dtype (type_id=19)
 status = "skip-codegen"
 reason = "Node 'cast1' (Cast): Invalid attribute 'to': Float8 dtype (type_id=20) is not supported. The saturate and round_mode attributes are float8-specific and are therefore also unsupported."
 
+[test_cast_FLOAT16_to_INT2]
+status = "skip-codegen"
+reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 26"
+
 [test_cast_FLOAT16_to_INT4]
 status = "skip-codegen"
 reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 22"
+
+[test_cast_FLOAT16_to_UINT2]
+status = "skip-codegen"
+reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 25"
 
 [test_cast_FLOAT16_to_UINT4]
 status = "skip-codegen"
@@ -1060,13 +1042,32 @@ reason = "Node 'cast1' (Cast): Invalid attribute 'to': Float8 dtype (type_id=19)
 status = "skip-codegen"
 reason = "Node 'cast1' (Cast): Invalid attribute 'to': Float8 dtype (type_id=20) is not supported. The saturate and round_mode attributes are float8-specific and are therefore also unsupported."
 
+[test_cast_FLOAT_to_INT2]
+status = "skip-codegen"
+reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 26"
+
 [test_cast_FLOAT_to_INT4]
 status = "skip-codegen"
 reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 22"
 
+[test_cast_FLOAT_to_UINT2]
+status = "skip-codegen"
+reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 25"
+
 [test_cast_FLOAT_to_UINT4]
 status = "skip-codegen"
 reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 21"
+
+[test_cast_INT2_to_FLOAT]
+status = "skip-compile"
+reason = "mismatched types: expected `f32`, found `Tensor<0>`"
+
+[test_cast_INT2_to_FLOAT16]
+status = "skip-compile"
+reason = "mismatched types: expected `f16`, found `f32`"
+
+[test_cast_INT2_to_INT8]
+status = "pass"
 
 [test_cast_INT4_to_FLOAT]
 status = "skip-compile"
@@ -1077,6 +1078,17 @@ status = "skip-compile"
 reason = "mismatched types: expected `f16`, found `f32`"
 
 [test_cast_INT4_to_INT8]
+status = "pass"
+
+[test_cast_UINT2_to_FLOAT]
+status = "skip-compile"
+reason = "mismatched types: expected `f32`, found `Tensor<0>`"
+
+[test_cast_UINT2_to_FLOAT16]
+status = "skip-compile"
+reason = "mismatched types: expected `f16`, found `f32`"
+
+[test_cast_UINT2_to_UINT8]
 status = "pass"
 
 [test_cast_UINT4_to_FLOAT]
@@ -1203,12 +1215,26 @@ reason = "Node 'cast1' (Cast): Invalid attribute 'to': Float8 dtype (type_id=19)
 [test_castlike_FLOAT16_to_FLOAT_expanded]
 status = "pass"
 
+[test_castlike_FLOAT16_to_INT2]
+status = "pass"
+
+[test_castlike_FLOAT16_to_INT2_expanded]
+status = "skip-codegen"
+reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 26"
+
 [test_castlike_FLOAT16_to_INT4]
 status = "pass"
 
 [test_castlike_FLOAT16_to_INT4_expanded]
 status = "skip-codegen"
 reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 22"
+
+[test_castlike_FLOAT16_to_UINT2]
+status = "pass"
+
+[test_castlike_FLOAT16_to_UINT2_expanded]
+status = "skip-codegen"
+reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 25"
 
 [test_castlike_FLOAT16_to_UINT4]
 status = "pass"
@@ -1350,6 +1376,13 @@ reason = "Node 'cast1' (Cast): Invalid attribute 'to': Float8 dtype (type_id=20)
 status = "skip-codegen"
 reason = "Node 'cast1' (Cast): Invalid attribute 'to': Float8 dtype (type_id=19) is not supported. The saturate and round_mode attributes are float8-specific and are therefore also unsupported."
 
+[test_castlike_FLOAT_to_INT2]
+status = "pass"
+
+[test_castlike_FLOAT_to_INT2_expanded]
+status = "skip-codegen"
+reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 26"
+
 [test_castlike_FLOAT_to_INT4]
 status = "pass"
 
@@ -1357,12 +1390,41 @@ status = "pass"
 status = "skip-codegen"
 reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 22"
 
+[test_castlike_FLOAT_to_UINT2]
+status = "pass"
+
+[test_castlike_FLOAT_to_UINT2_expanded]
+status = "skip-codegen"
+reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 25"
+
 [test_castlike_FLOAT_to_UINT4]
 status = "pass"
 
 [test_castlike_FLOAT_to_UINT4_expanded]
 status = "skip-codegen"
 reason = "Node 'cast1' (Cast): Invalid attribute 'to': unsupported dtype: 21"
+
+[test_castlike_INT2_to_FLOAT]
+status = "skip-compile"
+reason = "mismatched types: expected `f32`, found `Tensor<0>`"
+
+[test_castlike_INT2_to_FLOAT16]
+status = "skip-compile"
+reason = "mismatched types: expected `f16`, found `f32`"
+
+[test_castlike_INT2_to_FLOAT16_expanded]
+status = "skip-compile"
+reason = "mismatched types: expected `f16`, found `f32`"
+
+[test_castlike_INT2_to_FLOAT_expanded]
+status = "skip-compile"
+reason = "mismatched types: expected `f32`, found `Tensor<0>`"
+
+[test_castlike_INT2_to_INT8]
+status = "pass"
+
+[test_castlike_INT2_to_INT8_expanded]
+status = "pass"
 
 [test_castlike_INT4_to_FLOAT]
 status = "skip-compile"
@@ -1384,6 +1446,28 @@ reason = "mismatched types: expected `f32`, found `Tensor<0>`"
 status = "pass"
 
 [test_castlike_INT4_to_INT8_expanded]
+status = "pass"
+
+[test_castlike_UINT2_to_FLOAT]
+status = "skip-compile"
+reason = "mismatched types: expected `f32`, found `Tensor<0>`"
+
+[test_castlike_UINT2_to_FLOAT16]
+status = "skip-compile"
+reason = "mismatched types: expected `f16`, found `f32`"
+
+[test_castlike_UINT2_to_FLOAT16_expanded]
+status = "skip-compile"
+reason = "mismatched types: expected `f16`, found `f32`"
+
+[test_castlike_UINT2_to_FLOAT_expanded]
+status = "skip-compile"
+reason = "mismatched types: expected `f32`, found `Tensor<0>`"
+
+[test_castlike_UINT2_to_UINT8]
+status = "pass"
+
+[test_castlike_UINT2_to_UINT8_expanded]
 status = "pass"
 
 [test_castlike_UINT4_to_FLOAT]
@@ -1463,6 +1547,98 @@ reason = "Node 'cast1' (Cast): Invalid attribute 'to': Float8 dtype (type_id=20)
 [test_castlike_no_saturate_FLOAT_to_FLOAT8E5M2_expanded]
 status = "skip-codegen"
 reason = "Node 'cast1' (Cast): Invalid attribute 'to': Float8 dtype (type_id=19) is not supported. The saturate and round_mode attributes are float8-specific and are therefore also unsupported."
+
+[test_causal_conv_with_state_b1_c1_degenerate]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_b1_c1_degenerate_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_basic]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_basic_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_decode_step]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_decode_step_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_fp16]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_fp16_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_kernel_size_one]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_kernel_size_one_expanded]
+status = "fail-compare"
+reason = "expanded graph broadcasts a zero-size past state (kernel_size 1); burn expand rejects a 0 target dim"
+
+[test_causal_conv_with_state_short_input_no_past_state]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_short_input_no_past_state_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_silu]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_silu_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_silu_fp16]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_silu_fp16_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_silu_with_past_state]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_silu_with_past_state_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_swish_alias]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_swish_alias_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_with_bias]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_with_bias_and_past_state]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_with_bias_and_past_state_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_with_bias_expanded]
+status = "pass"
+
+[test_causal_conv_with_state_with_past_state]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CausalConvWithState used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_causal_conv_with_state_with_past_state_expanded]
+status = "pass"
 
 [test_ceil]
 status = "pass"
@@ -1591,24 +1767,20 @@ status = "pass"
 status = "pass"
 
 [test_col2im]
-status = "skip-codegen"
-reason = "Node 'col2im1' (Col2Im): Col2Im: image_shape (input[1]) must be a constant"
+status = "pass"
 
 [test_col2im_5d]
 status = "skip-codegen"
-reason = "Node 'col2im1' (Col2Im): Col2Im: image_shape (input[1]) must be a constant"
+reason = "Node 'col2im1' (Col2Im): Col2Im currently only supports 1D and 2D spatial dimensions, got 3"
 
 [test_col2im_dilations]
-status = "skip-codegen"
-reason = "Node 'col2im1' (Col2Im): Col2Im: image_shape (input[1]) must be a constant"
+status = "pass"
 
 [test_col2im_pads]
-status = "skip-codegen"
-reason = "Node 'col2im1' (Col2Im): Col2Im: image_shape (input[1]) must be a constant"
+status = "pass"
 
 [test_col2im_strides]
-status = "skip-codegen"
-reason = "Node 'col2im1' (Col2Im): Col2Im: image_shape (input[1]) must be a constant"
+status = "pass"
 
 [test_compress_0]
 status = "skip-codegen"
@@ -1687,20 +1859,16 @@ status = "skip-compile"
 reason = "mismatched types: expected `[i64; 2]`, found `Tensor<1, Int>`"
 
 [test_conv_with_autopad_same]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"Conv2d: weight tensor must be present\")"
+status = "pass"
 
 [test_conv_with_strides_and_asymmetric_padding]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"Conv2d: weight tensor must be present\")"
+status = "pass"
 
 [test_conv_with_strides_no_padding]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"Conv2d: weight tensor must be present\")"
+status = "pass"
 
 [test_conv_with_strides_padding]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"Conv2d: weight tensor must be present\")"
+status = "pass"
 
 [test_convinteger_with_padding]
 status = "skip-codegen"
@@ -1711,32 +1879,26 @@ status = "skip-codegen"
 reason = "Unsupported ONNX operation(s): ConvInteger (node 'convinteger1')"
 
 [test_convtranspose]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"ConvTranspose2d: weight tensor must be present\")"
+status = "pass"
 
 [test_convtranspose_1d]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"ConvTranspose1d: weight tensor must be present\")"
+status = "pass"
 
 [test_convtranspose_3d]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"ConvTranspose3d: weight tensor must be present\")"
+status = "pass"
 
 [test_convtranspose_autopad_same]
 status = "skip-codegen"
 reason = "Node 'convtranspose2d1' (ConvTranspose2d): Invalid attribute 'auto_pad': Unsupported 'auto_pad' value: SAME_UPPER"
 
 [test_convtranspose_dilations]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"ConvTranspose2d: weight tensor must be present\")"
+status = "pass"
 
 [test_convtranspose_group_2]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"ConvTranspose2d: weight tensor must be present\")"
+status = "pass"
 
 [test_convtranspose_group_2_image_3]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"ConvTranspose2d: weight tensor must be present\")"
+status = "pass"
 
 [test_convtranspose_kernel_shape]
 status = "skip-codegen"
@@ -1747,12 +1909,10 @@ status = "skip-codegen"
 reason = "Node 'convtranspose2d1' (ConvTranspose2d): Invalid attribute 'output_shape': Unexpected attribute for ConvTranspose2d: output_shape"
 
 [test_convtranspose_pad]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"ConvTranspose2d: weight tensor must be present\")"
+status = "pass"
 
 [test_convtranspose_pads]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"ConvTranspose2d: weight tensor must be present\")"
+status = "pass"
 
 [test_cos]
 status = "pass"
@@ -1765,6 +1925,42 @@ status = "pass"
 
 [test_cosh_example]
 status = "pass"
+
+[test_cumprod_1d]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CumProd used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_cumprod_1d_exclusive]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CumProd used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_cumprod_1d_int32_exclusive]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CumProd used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_cumprod_1d_reverse]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CumProd used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_cumprod_1d_reverse_exclusive]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CumProd used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_cumprod_2d_axis_0]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CumProd used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_cumprod_2d_axis_1]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CumProd used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_cumprod_2d_int32]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CumProd used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_cumprod_2d_negative_axis]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - CumProd used by 1 node(s) Register hooks via ModelGen::register_custom_op."
 
 [test_cumsum_1d]
 status = "pass"
@@ -1840,6 +2036,10 @@ reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected o
 status = "skip-codegen"
 reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
 
+[test_dequantizelinear_int2]
+status = "skip-codegen"
+reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
+
 [test_dequantizelinear_int4]
 status = "skip-codegen"
 reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
@@ -1848,45 +2048,62 @@ reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected o
 status = "skip-codegen"
 reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
 
+[test_dequantizelinear_uint2]
+status = "skip-codegen"
+reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
+
 [test_dequantizelinear_uint4]
 status = "skip-codegen"
 reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
 
 [test_det_2d]
-status = "fail-compare"
-reason = "det op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_det_nd]
 status = "pass"
 
 [test_dft]
-status = "fail-compare"
-reason = "Burn rfft requires power-of-2 signal dimension; test uses dim=10"
-tracking = "#161"
+status = "skip-codegen"
+reason = "Node 'dft1' (Dft): DFT: axis must be a compile-time constant"
 
 [test_dft_axis]
-status = "fail-compare"
-reason = "Burn rfft requires power-of-2 signal dimension; test uses dim=10"
-tracking = "#161"
+status = "skip-codegen"
+reason = "Node 'dft1' (Dft): DFT: axis must be a compile-time constant"
 
 [test_dft_axis_opset19]
 status = "fail-compare"
 reason = "Burn rfft requires power-of-2 signal dimension; test uses dim=10"
-tracking = "#161"
+tracking = "#549"
 
 [test_dft_inverse]
 status = "skip-codegen"
-reason = "Node 'dft1' (Dft): DFT: inverse DFT (inverse=1) is not supported. Burn's irfft is the inverse of rfft (onesided real FFT), which differs from ONNX's complex-to-complex inverse DFT. A full ifft implementation in Burn i..."
+reason = "Node 'dft1' (Dft): DFT: axis must be a compile-time constant"
 
 [test_dft_inverse_opset19]
+status = "fail-compare"
+reason = "Burn cfft requires power-of-2 signal dimension; test uses dim=10"
+tracking = "#549"
+
+[test_dft_irfft]
 status = "skip-codegen"
-reason = "Node 'dft1' (Dft): DFT: inverse DFT (inverse=1) is not supported. Burn's irfft is the inverse of rfft (onesided real FFT), which differs from ONNX's complex-to-complex inverse DFT. A full ifft implementation in Burn i..."
+reason = "Node 'dft1' (Dft): DFT: onesided output requires a real input and a forward transform"
+
+[test_dft_irfft_opset19]
+status = "skip-codegen"
+reason = "Node 'dft1' (Dft): DFT: onesided output requires a real input and a forward transform"
 
 [test_dft_opset19]
 status = "fail-compare"
 reason = "Burn rfft requires power-of-2 signal dimension; test uses dim=10"
-tracking = "#161"
+tracking = "#549"
+
+[test_dft_rfft]
+status = "skip-codegen"
+reason = "Node 'dft1' (Dft): DFT: axis must be a compile-time constant"
+
+[test_dft_rfft_opset19]
+status = "fail-compare"
+reason = "burn rfft requires a power-of-two signal length"
 
 [test_div]
 status = "pass"
@@ -1898,6 +2115,9 @@ status = "pass"
 status = "pass"
 
 [test_div_int16]
+status = "pass"
+
+[test_div_int32_trunc]
 status = "pass"
 
 [test_div_int8]
@@ -1961,8 +2181,7 @@ reason = "use of moved value: `div1_out1`: value used here after move"
 status = "pass"
 
 [test_einsum_batch_diagonal]
-status = "skip-codegen"
-reason = "Invalid input count: expected 2, got 1"
+status = "pass"
 
 [test_einsum_batch_matmul]
 status = "pass"
@@ -1971,16 +2190,13 @@ status = "pass"
 status = "pass"
 
 [test_einsum_scalar]
-status = "skip-codegen"
-reason = "Invalid input count: expected 2, got 1"
+status = "pass"
 
 [test_einsum_sum]
-status = "skip-codegen"
-reason = "Invalid input count: expected 2, got 1"
+status = "pass"
 
 [test_einsum_transpose]
-status = "skip-codegen"
-reason = "Invalid input count: expected 2, got 1"
+status = "pass"
 
 [test_elu]
 status = "pass"
@@ -2083,6 +2299,84 @@ status = "pass"
 [test_flatten_negative_axis4]
 status = "pass"
 
+[test_flexattention]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_causal_mask]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_causal_mask_expanded_ver26]
+status = "pass"
+
+[test_flexattention_diff_head_sizes]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_diff_head_sizes_expanded_ver26]
+status = "pass"
+
+[test_flexattention_double]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_double_expanded_ver26]
+status = "pass"
+
+[test_flexattention_expanded_ver26]
+status = "pass"
+
+[test_flexattention_fp16]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_fp16_expanded_ver26]
+status = "pass"
+
+[test_flexattention_gqa]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_gqa_expanded_ver26]
+status = "pass"
+
+[test_flexattention_prob_mod]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_prob_mod_expanded_ver26]
+status = "pass"
+
+[test_flexattention_relative_positional]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_relative_positional_expanded_ver26]
+status = "pass"
+
+[test_flexattention_scaled]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_scaled_expanded_ver26]
+status = "pass"
+
+[test_flexattention_score_mod]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_score_mod_expanded_ver26]
+status = "skip-codegen"
+reason = "Attention mask must be a tensor"
+
+[test_flexattention_soft_cap]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - ai.onnx.preview::FlexAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_flexattention_soft_cap_expanded_ver26]
+status = "pass"
+
 [test_floor]
 status = "pass"
 
@@ -2105,14 +2399,10 @@ status = "pass"
 status = "pass"
 
 [test_gather_elements_negative_indices]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_gather_negative_indices]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_gathernd_example_float32]
 status = "pass"
@@ -2143,9 +2433,7 @@ status = "pass"
 status = "pass"
 
 [test_gelu_tanh_2]
-status = "fail-compare"
-reason = "gelu op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_gelu_tanh_2_expanded]
 status = "skip-compile"
@@ -2191,12 +2479,10 @@ status = "pass"
 status = "pass"
 
 [test_globalmaxpool]
-status = "skip-codegen"
-reason = "Unsupported node type for inputs: GlobalMaxPool(GlobalMaxPoolNode { name: \"globalmaxpool1\", inputs: [Argument { name: \"x\", ty: Tensor(TensorType { dtype: F32, rank: 4, static_shape: Some([Some(1), Some(3), Some(5), So..."
+status = "pass"
 
 [test_globalmaxpool_precomputed]
-status = "skip-codegen"
-reason = "Unsupported node type for inputs: GlobalMaxPool(GlobalMaxPoolNode { name: \"globalmaxpool1\", inputs: [Argument { name: \"x\", ty: Tensor(TensorType { dtype: F32, rank: 4, static_shape: Some([Some(1), Some(1), Some(3), So..."
+status = "pass"
 
 [test_greater]
 status = "pass"
@@ -2304,19 +2590,13 @@ status = "pass"
 status = "pass"
 
 [test_gridsample_nearest]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_gridsample_nearest_align_corners_0_additional_1]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_gridsample_nearest_align_corners_1_additional_1]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_gridsample_reflection_padding]
 status = "pass"
@@ -2539,8 +2819,7 @@ status = "pass"
 status = "pass"
 
 [test_layer_normalization_2d_axis0]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_2d_axis0_expanded]
 status = "skip-codegen"
@@ -2551,8 +2830,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_2d_axis1]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_2d_axis1_expanded]
 status = "skip-codegen"
@@ -2563,8 +2841,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_2d_axis_negative_1]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_2d_axis_negative_1_expanded]
 status = "skip-codegen"
@@ -2575,8 +2852,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_2d_axis_negative_2]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_2d_axis_negative_2_expanded]
 status = "skip-codegen"
@@ -2587,8 +2863,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_3d_axis0_epsilon]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_3d_axis0_epsilon_expanded]
 status = "skip-codegen"
@@ -2599,8 +2874,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_3d_axis1_epsilon]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_3d_axis1_epsilon_expanded]
 status = "skip-codegen"
@@ -2611,8 +2885,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_3d_axis2_epsilon]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_3d_axis2_epsilon_expanded]
 status = "skip-codegen"
@@ -2623,8 +2896,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_3d_axis_negative_1_epsilon]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_3d_axis_negative_1_epsilon_expanded]
 status = "skip-codegen"
@@ -2635,8 +2907,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_3d_axis_negative_2_epsilon]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_3d_axis_negative_2_epsilon_expanded]
 status = "skip-codegen"
@@ -2647,8 +2918,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_3d_axis_negative_3_epsilon]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_3d_axis_negative_3_epsilon_expanded]
 status = "skip-codegen"
@@ -2659,8 +2929,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_4d_axis0]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_4d_axis0_expanded]
 status = "skip-codegen"
@@ -2671,8 +2940,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_4d_axis1]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_4d_axis1_expanded]
 status = "skip-codegen"
@@ -2683,8 +2951,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_4d_axis2]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_4d_axis2_expanded]
 status = "skip-codegen"
@@ -2695,8 +2962,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_4d_axis3]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_4d_axis3_expanded]
 status = "skip-codegen"
@@ -2707,8 +2973,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_4d_axis_negative_1]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_4d_axis_negative_1_expanded]
 status = "skip-codegen"
@@ -2719,8 +2984,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_4d_axis_negative_2]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_4d_axis_negative_2_expanded]
 status = "skip-codegen"
@@ -2731,8 +2995,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_4d_axis_negative_3]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_4d_axis_negative_3_expanded]
 status = "skip-codegen"
@@ -2743,8 +3006,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_4d_axis_negative_4]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_4d_axis_negative_4_expanded]
 status = "skip-codegen"
@@ -2755,8 +3017,7 @@ status = "skip-codegen"
 reason = "Runtime reshape with tensor shape expects tensor output"
 
 [test_layer_normalization_default_axis]
-status = "skip-codegen"
-reason = "Node 'layernormalization1' (LayerNormalization): LayerNorm: weight tensor must be present"
+status = "pass"
 
 [test_layer_normalization_default_axis_expanded]
 status = "skip-codegen"
@@ -2855,6 +3116,118 @@ status = "pass"
 
 [test_less_uint8]
 status = "pass"
+
+[test_linear_attention_decode_step]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_decode_step_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Node 'transpose7' (Transpose): Transpose: perm length 4 doesn't match input rank 1\")"
+
+[test_linear_attention_delta]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_delta_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Node 'transpose6' (Transpose): Transpose: perm length 4 doesn't match input rank 0\")"
+
+[test_linear_attention_explicit_scale]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_explicit_scale_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Node 'transpose7' (Transpose): Transpose: perm length 4 doesn't match input rank 1\")"
+
+[test_linear_attention_fp16]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_fp16_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Node 'transpose7' (Transpose): Transpose: perm length 4 doesn't match input rank 1\")"
+
+[test_linear_attention_gated]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_gated_delta]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_gated_delta_beta_scalar]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_gated_delta_beta_scalar_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Node 'transpose7' (Transpose): Transpose: perm length 4 doesn't match input rank 1\")"
+
+[test_linear_attention_gated_delta_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Node 'transpose7' (Transpose): Transpose: perm length 4 doesn't match input rank 1\")"
+
+[test_linear_attention_gated_delta_gqa]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_gated_delta_gqa_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Node 'transpose7' (Transpose): Transpose: perm length 4 doesn't match input rank 1\")"
+
+[test_linear_attention_gated_delta_mqa]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_gated_delta_mqa_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Node 'transpose7' (Transpose): Transpose: perm length 4 doesn't match input rank 1\")"
+
+[test_linear_attention_gated_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Invalid type inference: Node 'matmul1' output 'matmul1_out1' has rank-0 tensor. Rank-0 tensors should be Scalar type instead.\")"
+
+[test_linear_attention_gated_per_head_decay]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_gated_per_head_decay_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Invalid type inference: Node 'matmul1' output 'matmul1_out1' has rank-0 tensor. Rank-0 tensors should be Scalar type instead.\")"
+
+[test_linear_attention_linear]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_linear_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Invalid type inference: Node 'matmul1' output 'matmul1_out1' has rank-0 tensor. Rank-0 tensors should be Scalar type instead.\")"
+
+[test_linear_attention_linear_t1_no_past]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_linear_t1_no_past_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Invalid type inference: Node 'matmul1' output 'matmul1_out1' has rank-0 tensor. Rank-0 tensors should be Scalar type instead.\")"
+
+[test_linear_attention_no_past_explicit_zeros]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_no_past_explicit_zeros_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Node 'transpose7' (Transpose): Transpose: perm length 4 doesn't match input rank 1\")"
+
+[test_linear_attention_prefill_with_past]
+status = "skip-codegen"
+reason = "model contains 1 custom op(s) with no covering inference hook: - LinearAttention used by 1 node(s) Register hooks via ModelGen::register_custom_op."
+
+[test_linear_attention_prefill_with_past_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Scan body: Type inference failed: Node 'transpose7' (Transpose): Transpose: perm length 4 doesn't match input rank 1\")"
 
 [test_log]
 status = "pass"
@@ -2984,6 +3357,13 @@ status = "pass"
 status = "skip-codegen"
 reason = "Node 'lstm1' (Lstm): LSTM peephole connections (input P) are not yet supported"
 
+[test_matmul_1d_1d]
+status = "skip-codegen"
+reason = "Invalid type inference: Node 'matmul1' output 'matmul1_out1' has rank-0 tensor. Rank-0 tensors should be Scalar type instead."
+
+[test_matmul_1d_3d]
+status = "pass"
+
 [test_matmul_2d]
 status = "pass"
 
@@ -2991,6 +3371,12 @@ status = "pass"
 status = "pass"
 
 [test_matmul_4d]
+status = "pass"
+
+[test_matmul_4d_1d]
+status = "pass"
+
+[test_matmul_bcast]
 status = "pass"
 
 [test_matmulinteger]
@@ -3099,12 +3485,10 @@ status = "skip-codegen"
 reason = "burn-onnx does not currently support 3D max pooling: Burn lacks a native MaxPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
 
 [test_maxpool_with_argmax_2d_precomputed_pads]
-status = "skip-compile"
-reason = "cannot find value `maxpool2d1_out2` in this scope: not found in this scope"
+status = "pass"
 
 [test_maxpool_with_argmax_2d_precomputed_strides]
-status = "skip-compile"
-reason = "cannot find value `maxpool2d1_out2` in this scope: not found in this scope"
+status = "pass"
 
 [test_maxunpool_export_with_output_shape]
 status = "skip-codegen"
@@ -3180,8 +3564,7 @@ status = "pass"
 status = "pass"
 
 [test_mod_int64_fmod]
-status = "skip-compile"
-reason = "no method named `fmod` found for struct `burn::Tensor<1, burn::prelude::Int>` in the current scope: method not found in `burn::Tensor<1, burn::prelude::Int>`"
+status = "pass"
 
 [test_mod_mixed_sign_float16]
 status = "pass"
@@ -3429,6 +3812,9 @@ status = "pass"
 [test_nonmaxsuppression_identical_boxes]
 status = "pass"
 
+[test_nonmaxsuppression_iou_threshold_boundary]
+status = "pass"
+
 [test_nonmaxsuppression_limit_output_size]
 status = "pass"
 
@@ -3552,31 +3938,25 @@ status = "pass"
 status = "pass"
 
 [test_pow_types_float32_int32]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_pow_types_float32_int64]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1>`, found `Tensor<1, Int>`"
+status = "pass"
 
 [test_pow_types_float32_uint32]
-status = "skip-codegen"
-reason = "pow function requires RHS to be int or float type"
+status = "pass"
 
 [test_pow_types_float32_uint64]
-status = "skip-codegen"
-reason = "pow function requires RHS to be int or float type"
+status = "pass"
 
 [test_pow_types_int32_float32]
-status = "skip-compile"
-reason = "no method named `powf` found for struct `burn::Tensor<1, burn::prelude::Int>` in the current scope"
+status = "pass"
 
 [test_pow_types_int32_int32]
 status = "pass"
 
 [test_pow_types_int64_float32]
-status = "skip-compile"
-reason = "no method named `powf` found for struct `burn::Tensor<1, burn::prelude::Int>` in the current scope"
+status = "pass"
 
 [test_pow_types_int64_int64]
 status = "pass"
@@ -3598,12 +3978,10 @@ status = "skip-codegen"
 reason = "Unsupported ONNX operation(s): QLinearConv (node 'qlinearconv1')"
 
 [test_qlinearmatmul_2D_int8_float16]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_qlinearmatmul_2D_int8_float32]
-status = "fail-compare"
-reason = "demoted by `cargo xtask update-expectations` after test failure"
+status = "pass"
 
 [test_qlinearmatmul_2D_uint8_float16]
 status = "pass"
@@ -3658,6 +4036,10 @@ reason = "Node 'quantizelinear1' (QuantizeLinear): QuantizeLinear: output dtype 
 status = "skip-codegen"
 reason = "Node 'quantizelinear1' (QuantizeLinear): Type mismatch: expected on-device tensor for y_scale, got ScalarNative(F32)"
 
+[test_quantizelinear_int2]
+status = "skip-codegen"
+reason = "Node 'quantizelinear1' (QuantizeLinear): QuantizeLinear: output dtype F32 is not supported yet"
+
 [test_quantizelinear_int4]
 status = "skip-codegen"
 reason = "Node 'quantizelinear1' (QuantizeLinear): QuantizeLinear: output dtype F32 is not supported yet"
@@ -3666,13 +4048,32 @@ reason = "Node 'quantizelinear1' (QuantizeLinear): QuantizeLinear: output dtype 
 status = "skip-codegen"
 reason = "Node 'quantizelinear1' (QuantizeLinear): Type mismatch: expected on-device tensor for y_scale, got ScalarNative(F32)"
 
+[test_quantizelinear_uint2]
+status = "skip-codegen"
+reason = "Node 'quantizelinear1' (QuantizeLinear): QuantizeLinear: output dtype F32 is not supported yet"
+
 [test_quantizelinear_uint4]
 status = "skip-codegen"
 reason = "Node 'quantizelinear1' (QuantizeLinear): QuantizeLinear: output dtype F32 is not supported yet"
 
-[test_range_float_type_positive_delta]
+[test_range_bfloat16_type_positive_delta]
 status = "skip-compile"
-reason = "can't compare `f32` with `{integer}`: no implementation for `f32 == {integer}`"
+reason = "mismatched types: expected `bf16`, found floating-point number"
+
+[test_range_bfloat16_type_positive_delta_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Loop body: Type inference failed: Invalid type inference: Node 'identity2' output 'identity2_out1' has rank-0 tensor. Rank-0 tensors should be Scalar type instead.\")"
+
+[test_range_float16_type_positive_delta]
+status = "skip-compile"
+reason = "mismatched types: expected `f16`, found floating-point number"
+
+[test_range_float16_type_positive_delta_expanded]
+status = "skip-codegen"
+reason = "Config extraction failed: Custom(\"Failed to build Loop body: Type inference failed: Invalid type inference: Node 'identity2' output 'identity2_out1' has rank-0 tensor. Rank-0 tensors should be Scalar type instead.\")"
+
+[test_range_float_type_positive_delta]
+status = "pass"
 
 [test_range_float_type_positive_delta_expanded]
 status = "skip-codegen"
@@ -4143,7 +4544,7 @@ status = "pass"
 [test_resize_downsample_scales_cubic]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_resize_downsample_scales_cubic_A_n0p5_exclude_outside]
 status = "skip-codegen"
@@ -4152,7 +4553,7 @@ reason = "Node 'resize1' (Resize): Invalid attribute 'exclude_outside': exclude_
 [test_resize_downsample_scales_cubic_align_corners]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_resize_downsample_scales_cubic_antialias]
 status = "skip-codegen"
@@ -4161,12 +4562,12 @@ reason = "Node 'resize1' (Resize): Invalid attribute 'antialias': antialias othe
 [test_resize_downsample_scales_linear]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_resize_downsample_scales_linear_align_corners]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_resize_downsample_scales_linear_antialias]
 status = "skip-codegen"
@@ -4193,12 +4594,12 @@ reason = "Node 'resize1' (Resize): Invalid attribute 'antialias': antialias othe
 [test_resize_downsample_sizes_linear_pytorch_half_pixel]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_resize_downsample_sizes_nearest]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_resize_downsample_sizes_nearest_not_larger]
 status = "skip-codegen"
@@ -4211,7 +4612,7 @@ reason = "Node 'resize1' (Resize): Invalid attribute 'axes': custom axes attribu
 [test_resize_tf_crop_and_resize]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_resize_tf_crop_and_resize_axes_2_3]
 status = "skip-codegen"
@@ -4238,7 +4639,7 @@ status = "pass"
 [test_resize_upsample_scales_cubic_asymmetric]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_resize_upsample_scales_linear]
 status = "pass"
@@ -4278,12 +4679,12 @@ reason = "Node 'resize1' (Resize): Invalid attribute 'axes': custom axes attribu
 [test_resize_upsample_sizes_nearest_ceil_half_pixel]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_resize_upsample_sizes_nearest_floor_align_corners]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_resize_upsample_sizes_nearest_not_larger]
 status = "skip-codegen"
@@ -4296,7 +4697,7 @@ reason = "Node 'resize1' (Resize): Invalid attribute 'axes': custom axes attribu
 [test_resize_upsample_sizes_nearest_round_prefer_ceil_asymmetric]
 status = "fail-compare"
 reason = "resize op family comparison failure"
-tracking = "#311"
+tracking = "#546"
 
 [test_reversesequence_batch]
 status = "skip-codegen"
@@ -4521,12 +4922,19 @@ reason = "Config extraction failed: TypeMismatch { expected: \"Tensor for split 
 [test_round]
 status = "pass"
 
+[test_scan9_multi_state]
+status = "pass"
+
+[test_scan9_scalar]
+status = "skip-compile"
+reason = "mismatched types: expected `f32`, found `Tensor<0>`"
+
 [test_scan9_sum]
 status = "pass"
 
 [test_scan_sum]
 status = "skip-codegen"
-reason = "Ident is not allowed to be empty; use Option<Ident>"
+reason = "codegen referenced a graph value with an empty name; an optional input was read without an is_optional() guard"
 
 [test_scatter_elements_with_axis]
 status = "pass"
@@ -4543,16 +4951,17 @@ status = "pass"
 [test_scatter_elements_with_reduction_min]
 status = "pass"
 
+[test_scatter_elements_with_reduction_mul]
+status = "pass"
+
 [test_scatter_elements_without_axis]
 status = "pass"
 
 [test_scatter_with_axis]
-status = "skip-codegen"
-reason = "Unsupported node type for inputs: Scatter(ScatterNode { name: \"scatter1\", inputs: [Argument { name: \"data\", ty: Tensor(TensorType { dtype: F32, rank: 2, static_shape: Some([Some(1), Some(5)]) }), value_source: Dynamic..."
+status = "pass"
 
 [test_scatter_without_axis]
-status = "skip-codegen"
-reason = "Unsupported node type for inputs: Scatter(ScatterNode { name: \"scatter1\", inputs: [Argument { name: \"data\", ty: Tensor(TensorType { dtype: F32, rank: 2, static_shape: Some([Some(3), Some(3)]) }), value_source: Dynamic..."
+status = "pass"
 
 [test_scatternd]
 status = "pass"
@@ -4842,8 +5251,7 @@ status = "skip-codegen"
 reason = "Unsupported ONNX operation(s): NegativeLogLikelihoodLoss (node 'negativeloglikelihoodloss1')"
 
 [test_selu]
-status = "skip-codegen"
-reason = "Selu: custom alpha (2) is not supported by Burn, only the default (1.6732631921768188) is supported"
+status = "pass"
 
 [test_selu_default]
 status = "pass"
@@ -4852,8 +5260,7 @@ status = "pass"
 status = "pass"
 
 [test_selu_example]
-status = "skip-codegen"
-reason = "Selu: custom alpha (2) is not supported by Burn, only the default (1.6732631921768188) is supported"
+status = "pass"
 
 [test_selu_example_expanded_ver18]
 status = "pass"
@@ -5008,27 +5415,19 @@ status = "pass"
 status = "pass"
 
 [test_slice_end_out_of_bounds]
-status = "fail-compare"
-reason = "slice with negative indices or out-of-bounds ends: codegen default-axes path does not normalize negatives (pre-existing)"
-tracking = "#314"
+status = "pass"
 
 [test_slice_neg]
-status = "fail-compare"
-reason = "slice with negative indices or out-of-bounds ends: codegen default-axes path does not normalize negatives (pre-existing)"
-tracking = "#314"
+status = "pass"
 
 [test_slice_neg_steps]
-status = "fail-compare"
-reason = "slice with negative indices or out-of-bounds ends: codegen default-axes path does not normalize negatives (pre-existing)"
-tracking = "#314"
+status = "pass"
 
 [test_slice_negative_axes]
 status = "pass"
 
 [test_slice_start_out_of_bounds]
-status = "fail-compare"
-reason = "slice with negative indices or out-of-bounds ends: codegen default-axes path does not normalize negatives (pre-existing)"
-tracking = "#314"
+status = "pass"
 
 [test_softmax_axis_0]
 status = "pass"
@@ -5160,36 +5559,28 @@ status = "skip-codegen"
 reason = "Unsupported ONNX operation(s): SplitToSequence (node 'splittosequence1')"
 
 [test_split_variable_parts_1d_opset13]
-status = "skip-codegen"
-reason = "Runtime split sizes are not supported in burn-onnx"
+status = "pass"
 
 [test_split_variable_parts_1d_opset18]
-status = "skip-codegen"
-reason = "Runtime split sizes are not supported in burn-onnx"
+status = "pass"
 
 [test_split_variable_parts_2d_opset13]
-status = "skip-codegen"
-reason = "Runtime split sizes are not supported in burn-onnx"
+status = "pass"
 
 [test_split_variable_parts_2d_opset18]
-status = "skip-codegen"
-reason = "Runtime split sizes are not supported in burn-onnx"
+status = "pass"
 
 [test_split_variable_parts_default_axis_opset13]
-status = "skip-codegen"
-reason = "Runtime split sizes are not supported in burn-onnx"
+status = "pass"
 
 [test_split_variable_parts_default_axis_opset18]
-status = "skip-codegen"
-reason = "Runtime split sizes are not supported in burn-onnx"
+status = "pass"
 
 [test_split_zero_size_splits_opset13]
-status = "skip-codegen"
-reason = "Runtime split sizes are not supported in burn-onnx"
+status = "pass"
 
 [test_split_zero_size_splits_opset18]
-status = "skip-codegen"
-reason = "Runtime split sizes are not supported in burn-onnx"
+status = "pass"
 
 [test_sqrt]
 status = "pass"
@@ -5201,9 +5592,7 @@ status = "pass"
 status = "pass"
 
 [test_squeeze_negative_axes]
-status = "fail-compare"
-reason = "runtime squeeze axes: negative indices are normalized but burn squeeze_dims still rejects multi-axis squeeze; needs ordering fix"
-tracking = "#314"
+status = "pass"
 
 [test_stft]
 status = "skip-codegen"
@@ -5415,8 +5804,7 @@ status = "pass"
 status = "pass"
 
 [test_top_k_smallest]
-status = "skip-codegen"
-reason = "Node 'topk1' (TopK): TopK: only largest elements is supported"
+status = "pass"
 
 [test_top_k_uint64]
 status = "pass"
@@ -5595,4 +5983,3 @@ status = "pass"
 
 [test_xor_bcast4v4d]
 status = "pass"
-

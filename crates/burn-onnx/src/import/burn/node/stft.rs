@@ -53,6 +53,13 @@ impl NodeCodegen for onnx_ir::node::stft::StftNode {
         let core = if frame_length.is_power_of_two() {
             pow2_core(frame_length, frame_step, onesided, window_tokens.as_ref())
         } else {
+            log::warn!(
+                "STFT node '{}' has non-power-of-two frame_length {}; its DFT runs as an \
+                 f64 matmul for accuracy and falls back to f32 on devices without f64 \
+                 (e.g. Metal), which can lose precision in near-zero spectral bins",
+                self.name,
+                frame_length
+            );
             matrix_dft_core(frame_length, frame_step, onesided, window_tokens.as_ref())
         };
 
@@ -133,7 +140,7 @@ fn matrix_dft_core(
         let windowed: burn::tensor::Tensor<3> =
             frames.mul(window.reshape([1, 1, #frame_length]));
 
-        // Cast to f64 for the matmul. The downstream graph (e.g. kokoro's
+        // Do the matmul in f64 when the device supports it. The downstream graph (e.g. kokoro's
         // iSTFT preamble) often computes `imag/real` to recover phase,
         // which amplifies any f32 epsilon-level error in near-zero
         // spectral components into very large relative errors. Native FFT
@@ -141,10 +148,17 @@ fn matrix_dft_core(
         // to the f32 zero; an O(N) f32 matmul does not, because partial
         // sums accumulate cancellation error of order O(N * eps) * max_val.
         // f64 matmul drops that error to f64 epsilon, which round-trips
-        // through f32 cleanly for our scale.
-        let windowed_f64 = windowed.cast(burn::tensor::DType::F64);
+        // through f32 cleanly for our scale. Backends without f64 (e.g. Metal)
+        // fall back to f32 and keep the O(N * eps) cancellation error above.
+        let dft_dtype = if device.supports_dtype(burn::tensor::DType::F64) {
+            burn::tensor::DType::F64
+        } else {
+            burn::tensor::DType::F32
+        };
+        let windowed = windowed.cast(dft_dtype);
 
-        // Compute DFT twiddle factors W[k, n] = exp(-j 2pi k n / N) in f64.
+        // Compute DFT twiddle factors W[k, n] = exp(-j 2pi k n / N) on the host
+        // in f64; they are stored in dft_dtype when uploaded below.
         // Conceptually constant, but kept at forward-call time on purpose:
         //   1. Generated code stays small regardless of n_fft (baking the
         //      twiddles as literals would add 2 * n_freqs * n_fft f64
@@ -174,30 +188,32 @@ fn matrix_dft_core(
                 w_imag.push(-theta.sin());
             }
         }
-        // Pass (&device, DType::F64) so the tensor lands in f64; bare &device
-        // would resolve to the backend's default float dtype (typically f32),
-        // which would mismatch the f64 matmul below.
+        // Pass (&device, dft_dtype) so the tensor lands in the matmul dtype;
+        // bare &device would resolve to the backend's default float dtype.
         let w_real_t: burn::tensor::Tensor<2> = burn::tensor::Tensor::from_data(
             burn::tensor::TensorData::new(w_real, [n_freqs, n_fft]),
-            (&device, burn::tensor::DType::F64),
+            (&device, dft_dtype),
         ).transpose();
         let w_imag_t: burn::tensor::Tensor<2> = burn::tensor::Tensor::from_data(
             burn::tensor::TensorData::new(w_imag, [n_freqs, n_fft]),
-            (&device, burn::tensor::DType::F64),
+            (&device, dft_dtype),
         ).transpose();
 
-        // Flatten to [B*n_frames, n_fft], matmul in f64, then reshape back
-        // and cast to f32 to match the ONNX STFT output dtype.
-        let dims = windowed_f64.dims();
+        // Flatten to [B*n_frames, n_fft], matmul in dft_dtype, then reshape
+        // back and cast to f32 to match the ONNX STFT output dtype.
+        let dims = windowed.dims();
         let batch = dims[0];
         let n_frames = dims[1];
-        let flat = windowed_f64.reshape([batch * n_frames, n_fft]);
-        let re_f64 = flat.clone().matmul(w_real_t);
-        let im_f64 = flat.matmul(w_imag_t);
-        let re: burn::tensor::Tensor<3> =
-            re_f64.reshape([batch, n_frames, n_freqs]).cast(burn::tensor::DType::F32);
-        let im: burn::tensor::Tensor<3> =
-            im_f64.reshape([batch, n_frames, n_freqs]).cast(burn::tensor::DType::F32);
+        let flat = windowed.reshape([batch * n_frames, n_fft]);
+        let re: burn::tensor::Tensor<3> = flat
+            .clone()
+            .matmul(w_real_t)
+            .reshape([batch, n_frames, n_freqs])
+            .cast(burn::tensor::DType::F32);
+        let im: burn::tensor::Tensor<3> = flat
+            .matmul(w_imag_t)
+            .reshape([batch, n_frames, n_freqs])
+            .cast(burn::tensor::DType::F32);
 
         burn::tensor::Tensor::stack::<4>(alloc::vec![re, im], 3)
     }
@@ -336,7 +352,12 @@ mod tests {
                 );
                 let windowed: burn::tensor::Tensor<3> = frames
                     .mul(window.reshape([1, 1, 20usize]));
-                let windowed_f64 = windowed.cast(burn::tensor::DType::F64);
+                let dft_dtype = if device.supports_dtype(burn::tensor::DType::F64) {
+                    burn::tensor::DType::F64
+                } else {
+                    burn::tensor::DType::F32
+                };
+                let windowed = windowed.cast(dft_dtype);
                 let n_fft = 20usize;
                 let n_freqs = 11usize;
                 let mut w_real: alloc::vec::Vec<f64> = alloc::vec::Vec::with_capacity(
@@ -355,24 +376,25 @@ mod tests {
                 }
                 let w_real_t: burn::tensor::Tensor<2> = burn::tensor::Tensor::from_data(
                         burn::tensor::TensorData::new(w_real, [n_freqs, n_fft]),
-                        (&device, burn::tensor::DType::F64),
+                        (&device, dft_dtype),
                     )
                     .transpose();
                 let w_imag_t: burn::tensor::Tensor<2> = burn::tensor::Tensor::from_data(
                         burn::tensor::TensorData::new(w_imag, [n_freqs, n_fft]),
-                        (&device, burn::tensor::DType::F64),
+                        (&device, dft_dtype),
                     )
                     .transpose();
-                let dims = windowed_f64.dims();
+                let dims = windowed.dims();
                 let batch = dims[0];
                 let n_frames = dims[1];
-                let flat = windowed_f64.reshape([batch * n_frames, n_fft]);
-                let re_f64 = flat.clone().matmul(w_real_t);
-                let im_f64 = flat.matmul(w_imag_t);
-                let re: burn::tensor::Tensor<3> = re_f64
+                let flat = windowed.reshape([batch * n_frames, n_fft]);
+                let re: burn::tensor::Tensor<3> = flat
+                    .clone()
+                    .matmul(w_real_t)
                     .reshape([batch, n_frames, n_freqs])
                     .cast(burn::tensor::DType::F32);
-                let im: burn::tensor::Tensor<3> = im_f64
+                let im: burn::tensor::Tensor<3> = flat
+                    .matmul(w_imag_t)
                     .reshape([batch, n_frames, n_freqs])
                     .cast(burn::tensor::DType::F32);
                 burn::tensor::Tensor::stack::<4>(alloc::vec![re, im], 3)

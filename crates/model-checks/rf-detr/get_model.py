@@ -8,7 +8,6 @@
 #   "onnx<1.17",
 #   "onnxruntime",
 #   "numpy",
-#   "onnxsim==0.4.36",
 #   "rfdetr==1.6.2",
 # ]
 # ///
@@ -249,16 +248,6 @@ def download_and_export_model():
         for pth_file in pth_files:
             pth_file.unlink()
             print(f"  Cleaned up: {pth_file}")
-
-        # Simplify with onnxsim to fold constant subgraphs
-        print()
-        print("Step 2b: Simplifying ONNX model with onnxsim...")
-        import onnxsim
-        model_proto = onnx.load(str(model_path))
-        original_nodes = len(model_proto.graph.node)
-        model_proto, _ = onnxsim.simplify(model_proto)
-        onnx.save(model_proto, str(model_path))
-        print(f"  Nodes: {original_nodes} -> {len(model_proto.graph.node)}")
 
         print(f"  Model saved to {model_path}")
         print(f"  File size: {model_path.stat().st_size / 1024 / 1024:.1f} MB")
