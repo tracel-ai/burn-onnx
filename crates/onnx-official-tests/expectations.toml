@@ -680,9 +680,7 @@ status = "pass"
 status = "pass"
 
 [test_averagepool_2d_ceil_last_window_starts_on_pad]
-status = "fail-compare"
-reason = "averagepool op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_averagepool_2d_default]
 status = "pass"
@@ -3427,9 +3425,7 @@ status = "pass"
 status = "pass"
 
 [test_maxpool_2d_ceil_output_size_reduce_by_one]
-status = "fail-compare"
-reason = "maxpool op family comparison failure"
-tracking = "#311"
+status = "pass"
 
 [test_maxpool_2d_default]
 status = "pass"
