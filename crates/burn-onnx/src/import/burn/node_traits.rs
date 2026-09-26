@@ -270,8 +270,9 @@ fn deferred_tensor(input: &Argument, path: &str, transpose: bool) -> Option<Pack
                 ))
             })?;
             // Scalar data has shape [], but Param<Tensor<1>> expects shape [1]
-            if is_scalar && data.shape.is_empty() {
-                data.shape = Shape::from([1]);
+            if is_scalar && data.shape().is_empty() {
+                let (bytes, _, dtype) = data.into_parts();
+                data = TensorData::from_bytes(bytes, Shape::from([1]), dtype);
             }
             if transpose {
                 data = transpose_2d(&data);
@@ -283,8 +284,8 @@ fn deferred_tensor(input: &Argument, path: &str, transpose: bool) -> Option<Pack
 
 /// Transpose a 2D tensor's bytes, `[rows, cols]` to `[cols, rows]`, element by element.
 fn transpose_2d(data: &burn::tensor::TensorData) -> burn::tensor::TensorData {
-    let (rows, cols) = (data.shape[0], data.shape[1]);
-    let elem = data.dtype.size();
+    let (rows, cols) = (data.shape()[0], data.shape()[1]);
+    let elem = data.dtype().size();
     let src = data.as_bytes();
     let mut dst = vec![0u8; src.len()];
     for r in 0..rows {
@@ -294,7 +295,7 @@ fn transpose_2d(data: &burn::tensor::TensorData) -> burn::tensor::TensorData {
             dst[to..to + elem].copy_from_slice(&src[from..from + elem]);
         }
     }
-    burn::tensor::TensorData::from_bytes_vec(dst, [cols, rows], data.dtype)
+    burn::tensor::TensorData::from_bytes_vec(dst, [cols, rows], data.dtype())
 }
 
 #[cfg(test)]

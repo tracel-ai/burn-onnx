@@ -48,7 +48,7 @@ fn rank1_tensor_len(input: &Argument, ty: &TensorType) -> Option<usize> {
     input
         .value()
         .as_ref()
-        .and_then(|v| v.shape.first().copied())
+        .and_then(|v| v.shape().first().copied())
         .or_else(|| ty.static_shape_known().map(|s| s[0]))
 }
 

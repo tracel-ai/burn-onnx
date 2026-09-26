@@ -88,7 +88,7 @@ impl NodeProcessor for GroupNormProcessor {
             .extract_config(node, opset)
             .expect("Config extraction failed");
 
-        let num_features = node.inputs[1].value().map(|v| v.shape[0]).unwrap_or(0);
+        let num_features = node.inputs[1].value().map(|v| v.shape()[0]).unwrap_or(0);
 
         // TODO: Validate num_groups > 0 per ONNX spec - num_groups must be positive
         if config.num_groups > 0

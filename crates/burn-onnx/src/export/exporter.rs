@@ -458,12 +458,15 @@ fn validate_capture(
         let Some(tensor) = metadata.get(&id) else {
             continue;
         };
-        if tensor.dtype != data.dtype || tensor.shape != data.shape {
+        if tensor.dtype != data.dtype() || tensor.shape != *data.shape() {
             return Err(ExportError::InvalidValue {
                 tensor: id,
                 reason: format!(
                     "captured metadata is {:?} {:?}, initialized value is {:?} {:?}",
-                    tensor.dtype, tensor.shape, data.dtype, data.shape
+                    tensor.dtype,
+                    tensor.shape,
+                    data.dtype(),
+                    data.shape()
                 ),
             });
         }

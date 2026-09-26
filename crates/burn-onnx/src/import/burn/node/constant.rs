@@ -49,10 +49,10 @@ impl NodeCodegen for onnx_ir::node::constant::ConstantNode {
 
         let input = self.inputs.first().unwrap();
         let tensor_data = input.value().expect("Constant node must have tensor data");
-        let shape = if tensor_data.shape.is_empty() {
+        let shape = if tensor_data.shape().is_empty() {
             vec![1usize].to_tokens()
         } else {
-            tensor_data.shape.to_vec().to_tokens()
+            tensor_data.shape().to_vec().to_tokens()
         };
 
         // For ScalarTensor, embed the actual value in the initializer so Model::new()

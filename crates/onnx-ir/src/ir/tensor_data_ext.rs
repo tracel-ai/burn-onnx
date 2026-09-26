@@ -42,12 +42,12 @@ pub trait TensorDataExt {
 
 impl TensorDataExt for burn_tensor::TensorData {
     fn elem_type(&self) -> DType {
-        self.dtype
+        self.dtype()
     }
 
     fn scalar_f64(&self) -> Result<f64, burn_tensor::DataError> {
         use burn_tensor::DType;
-        match self.dtype {
+        match self.dtype() {
             DType::F16 => {
                 let val = self.as_slice::<half::f16>()?[0];
                 Ok(f32::from(val) as f64)
@@ -72,7 +72,7 @@ impl TensorDataExt for burn_tensor::TensorData {
 
     fn scalar_i64(&self) -> Result<i64, burn_tensor::DataError> {
         use burn_tensor::DType;
-        match self.dtype {
+        match self.dtype() {
             DType::I64 => Ok(self.as_slice::<i64>()?[0]),
             DType::I32 => Ok(self.as_slice::<i32>()?[0] as i64),
             DType::I16 => Ok(self.as_slice::<i16>()?[0] as i64),
@@ -90,7 +90,7 @@ impl TensorDataExt for burn_tensor::TensorData {
 
     fn to_i64_vec(&self) -> Result<Vec<i64>, burn_tensor::DataError> {
         use burn_tensor::DType;
-        match self.dtype {
+        match self.dtype() {
             DType::I64 | DType::I32 => self.try_to_vec_as::<i64>(),
             other => Err(burn_tensor::DataError::UnsupportedConversion {
                 from: other,
@@ -101,7 +101,7 @@ impl TensorDataExt for burn_tensor::TensorData {
 
     fn to_f32_vec(&self) -> Result<Vec<f32>, burn_tensor::DataError> {
         use burn_tensor::DType;
-        match self.dtype {
+        match self.dtype() {
             DType::F32
             | DType::F64
             | DType::F16
@@ -119,7 +119,7 @@ impl TensorDataExt for burn_tensor::TensorData {
 
     fn to_f64_vec(&self) -> Result<Vec<f64>, burn_tensor::DataError> {
         use burn_tensor::DType;
-        match self.dtype {
+        match self.dtype() {
             DType::F32
             | DType::F64
             | DType::F16

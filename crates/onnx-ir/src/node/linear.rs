@@ -130,7 +130,7 @@ impl NodeProcessor for LinearProcessor {
                 .value()
                 .and_then(|data| {
                     let idx = if transpose_weight { 0 } else { 1 };
-                    data.shape.get(idx).copied()
+                    data.shape().get(idx).copied()
                 })
                 .or_else(|| match &node.inputs[1].ty {
                     ArgType::Tensor(weight) => weight.static_shape.as_ref().and_then(|ws| {

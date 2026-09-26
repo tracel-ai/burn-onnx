@@ -16,7 +16,7 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
         // Extract fill value from config
         let value = if let Some(tensor_data) = &self.config.value {
             // Extract the scalar value from the tensor data
-            match tensor_data.dtype {
+            match tensor_data.dtype() {
                 onnx_ir::ir::DType::F32 => {
                     let val = tensor_data.as_slice::<f32>().unwrap()[0];
                     super::super::codegen::f32_to_tokens(val)
@@ -75,7 +75,7 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
 
                 // Check if value is boolean - special handling needed
                 let is_bool_value = if let Some(tensor_data) = &self.config.value {
-                    tensor_data.dtype.is_bool()
+                    tensor_data.dtype().is_bool()
                 } else {
                     false
                 };

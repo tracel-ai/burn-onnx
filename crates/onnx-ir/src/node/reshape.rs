@@ -518,10 +518,10 @@ impl NodeProcessor for ReshapeProcessor {
                 match node.inputs[1].value() {
                     Some(tensor_data) => {
                         // Only validate when we have actual tensor data
-                        if tensor_data.shape.len() != 1 {
+                        if tensor_data.shape().len() != 1 {
                             return Err(ProcessError::Custom(format!(
                                 "Reshape: shape tensor must be 1D, got rank {}",
-                                tensor_data.shape.len()
+                                tensor_data.shape().len()
                             )));
                         }
                         ReshapeInput::Static(read_shape_values(&tensor_data)?)

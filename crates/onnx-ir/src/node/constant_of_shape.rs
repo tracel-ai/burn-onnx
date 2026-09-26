@@ -120,7 +120,7 @@ impl NodeProcessor for ConstantOfShapeProcessor {
         // Validate that the value attribute contains exactly one element (per ONNX spec)
         if let Some(value_attr) = node.attrs.get("value") {
             let tensor = value_attr.clone().into_tensor();
-            let num_elements: usize = tensor.shape.iter().product();
+            let num_elements: usize = tensor.shape().iter().product();
             if num_elements != 1 {
                 return Err(ProcessError::Custom(format!(
                     "ConstantOfShape: 'value' attribute must contain exactly one element, got {}",

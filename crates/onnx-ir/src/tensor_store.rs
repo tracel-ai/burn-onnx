@@ -204,10 +204,10 @@ impl From<TensorData> for TensorDataRef {
     fn from(tensor_data: TensorData) -> Self {
         // Extract bytes from TensorData's internal storage
         // burn_tensor::Bytes implements Deref<[u8]>, so we can copy to bytes::Bytes
-        let raw_bytes = bytes::Bytes::copy_from_slice(&tensor_data.bytes);
+        let raw_bytes = bytes::Bytes::copy_from_slice(tensor_data.bytes());
         Self {
-            shape: tensor_data.shape.to_vec(),
-            dtype: tensor_data.dtype,
+            shape: tensor_data.shape().to_vec(),
+            dtype: tensor_data.dtype(),
             source: TensorDataSource::Embedded(raw_bytes),
         }
     }

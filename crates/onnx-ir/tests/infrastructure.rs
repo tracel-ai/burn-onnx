@@ -267,8 +267,8 @@ fn test_all_data_types_conversion() {
 
         let input_arg = &node.inputs()[0];
         if let Some(tensor_data) = input_arg.value() {
-            let dtype = tensor_data.dtype;
-            let shape = &tensor_data.shape;
+            let dtype = tensor_data.dtype();
+            let shape = &tensor_data.shape();
             let num_elems: usize = shape.iter().product();
 
             // Verify output type matches tensor data type

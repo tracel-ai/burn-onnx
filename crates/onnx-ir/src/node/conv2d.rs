@@ -182,7 +182,7 @@ impl NodeProcessor for Conv2dProcessor {
                 .and_then(|s| s.first().copied().flatten());
             let out_channels = node.inputs[1]
                 .value()
-                .and_then(|data| data.shape.first().copied())
+                .and_then(|data| data.shape().first().copied())
                 .or_else(|| {
                     weight_tensor
                         .static_shape

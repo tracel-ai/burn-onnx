@@ -42,7 +42,7 @@ pub(crate) fn export_graph_with_bindings_and_opset(
     let embedded_bytes = values
         .iter()
         .filter(|(id, _)| !runtime_set.contains(*id))
-        .map(|(_, value)| value.bytes.len() as u64)
+        .map(|(_, value)| value.bytes().len() as u64)
         .sum::<u64>();
     if embedded_bytes > MAX_EMBEDDED_PROTOBUF_BYTES {
         return Err(ExportError::Serialization(format!(
@@ -76,9 +76,9 @@ pub(crate) fn export_graph_with_bindings_and_opset(
     for (&id, data) in initializers {
         let mut initializer = TensorProto::new();
         initializer.name = tensor_name(id, initializer_names);
-        initializer.data_type = onnx_dtype_parts(id, data.dtype)?;
-        initializer.dims = data.shape.iter().map(|dim| *dim as i64).collect();
-        initializer.raw_data = bytes::Bytes::copy_from_slice(data.bytes.as_ref());
+        initializer.data_type = onnx_dtype_parts(id, data.dtype())?;
+        initializer.dims = data.shape().iter().map(|dim| *dim as i64).collect();
+        initializer.raw_data = bytes::Bytes::copy_from_slice(data.bytes().as_ref());
         proto.initializer.push(initializer);
     }
 
@@ -186,12 +186,15 @@ fn validate_bindings(
         let Some(tensor) = find_tensor(graph, id) else {
             continue;
         };
-        if tensor.dtype != data.dtype || tensor.shape != data.shape {
+        if tensor.dtype != data.dtype() || tensor.shape != *data.shape() {
             return Err(ExportError::InvalidValue {
                 tensor: id,
                 reason: format!(
                     "graph metadata is {:?} {:?}, initialized value is {:?} {:?}",
-                    tensor.dtype, tensor.shape, data.dtype, data.shape
+                    tensor.dtype,
+                    tensor.shape,
+                    data.dtype(),
+                    data.shape()
                 ),
             });
         }

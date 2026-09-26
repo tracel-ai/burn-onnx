@@ -188,7 +188,7 @@ fn eval_binary(node: &RawNode, op: BinaryOp) -> Option<(TensorData, ArgType)> {
     let rhs_data = node.inputs[1].value()?;
     let output_ty = node.outputs[0].ty.clone();
 
-    let dtype = lhs_data.dtype;
+    let dtype = lhs_data.dtype();
 
     let shape = output_shape(&output_ty);
 
@@ -297,7 +297,7 @@ fn eval_neg(node: &RawNode) -> Option<(TensorData, ArgType)> {
     let output_ty = node.outputs[0].ty.clone();
     let shape = output_shape(&output_ty);
 
-    match data.dtype {
+    match data.dtype() {
         DType::I64 => {
             let vals = data.to_i64_vec().ok()?;
             let result: Vec<i64> = vals.iter().map(|v| -v).collect();
@@ -328,7 +328,7 @@ fn eval_sqrt(node: &RawNode) -> Option<(TensorData, ArgType)> {
     let output_ty = node.outputs[0].ty.clone();
     let shape = output_shape(&output_ty);
 
-    match data.dtype {
+    match data.dtype() {
         DType::F32 => {
             let vals = data.to_f64_vec().ok()?;
             let result: Vec<f32> = vals.iter().map(|&v| v.sqrt() as f32).collect();
@@ -355,11 +355,11 @@ fn eval_cast(node: &RawNode) -> Option<(TensorData, ArgType)> {
         ArgType::Shape(_) => DType::I64,
     };
 
-    if data.dtype == target_dtype {
+    if data.dtype() == target_dtype {
         return Some((data.clone(), output_ty));
     }
 
-    match (data.dtype, target_dtype) {
+    match (data.dtype(), target_dtype) {
         // Integer -> Float
         (DType::I64 | DType::I32, DType::F32) => {
             let vals = data.to_i64_vec().ok()?;
@@ -403,7 +403,7 @@ fn eval_cast(node: &RawNode) -> Option<(TensorData, ArgType)> {
 /// splitting patterns, which always slice along the gate dimension (axis 0).
 fn eval_slice(node: &RawNode) -> Option<(TensorData, ArgType)> {
     let data = node.inputs[0].value()?;
-    if data.shape.is_empty() {
+    if data.shape().is_empty() {
         return None;
     }
 
@@ -458,7 +458,7 @@ fn eval_slice(node: &RawNode) -> Option<(TensorData, ArgType)> {
         }
     }
 
-    let dim0 = data.shape[0];
+    let dim0 = data.shape()[0];
     let start = clamp_index(starts[0], dim0);
     let end = clamp_index(ends[0], dim0);
     if start >= end {
@@ -466,25 +466,25 @@ fn eval_slice(node: &RawNode) -> Option<(TensorData, ArgType)> {
     }
 
     // For axis=0, the data is contiguous in row-major layout
-    let row_size: usize = data.shape[1..].iter().product::<usize>().max(1);
-    let elem_size = data.dtype.size();
+    let row_size: usize = data.shape()[1..].iter().product::<usize>().max(1);
+    let elem_size = data.dtype().size();
     let byte_start = start * row_size * elem_size;
     let byte_end = end * row_size * elem_size;
-    if byte_end > data.bytes.len() {
+    if byte_end > data.bytes().len() {
         return None;
     }
-    let sliced_bytes = &data.bytes[byte_start..byte_end];
+    let sliced_bytes = &data.bytes()[byte_start..byte_end];
 
-    let mut output_shape = data.shape.to_vec();
+    let mut output_shape = data.shape().to_vec();
     output_shape[0] = end - start;
 
     let output_ty = ArgType::Tensor(crate::ir::TensorType {
-        dtype: data.dtype,
-        rank: data.shape.len(),
+        dtype: data.dtype(),
+        rank: data.shape().len(),
         static_shape: Some(output_shape.iter().map(|&d| Some(d)).collect()),
     });
 
-    let result = TensorData::from_bytes_vec(sliced_bytes.to_vec(), output_shape, data.dtype);
+    let result = TensorData::from_bytes_vec(sliced_bytes.to_vec(), output_shape, data.dtype());
     Some((result, output_ty))
 }
 
@@ -520,29 +520,32 @@ fn eval_concat(node: &RawNode) -> Option<(TensorData, ArgType)> {
         return None;
     }
 
-    let dtype = all_data[0].dtype;
-    let rank = all_data[0].shape.len();
+    let dtype = all_data[0].dtype();
+    let rank = all_data[0].shape().len();
     if rank == 0 {
         return None;
     }
 
     // Validate all inputs have matching dtype, rank, and non-axis dimensions
     for d in &all_data[1..] {
-        if d.dtype != dtype || d.shape.len() != rank || d.shape[1..] != all_data[0].shape[1..] {
+        if d.dtype() != dtype
+            || d.shape().len() != rank
+            || d.shape()[1..] != all_data[0].shape()[1..]
+        {
             return None;
         }
     }
 
     // Compute output shape: sum of axis-0 sizes, rest from first input
-    let mut output_shape = all_data[0].shape.to_vec();
-    let total_axis0: usize = all_data.iter().map(|d| d.shape[0]).sum();
+    let mut output_shape = all_data[0].shape().to_vec();
+    let total_axis0: usize = all_data.iter().map(|d| d.shape()[0]).sum();
     output_shape[0] = total_axis0;
 
     // Concatenate raw bytes (axis=0 in row-major = byte append)
-    let total_bytes: usize = all_data.iter().map(|d| d.bytes.len()).sum();
+    let total_bytes: usize = all_data.iter().map(|d| d.bytes().len()).sum();
     let mut result_bytes = Vec::with_capacity(total_bytes);
     for d in &all_data {
-        result_bytes.extend_from_slice(&d.bytes);
+        result_bytes.extend_from_slice(d.bytes());
     }
 
     let output_ty = ArgType::Tensor(crate::ir::TensorType {
@@ -577,10 +580,10 @@ fn eval_reshape(node: &RawNode) -> Option<(TensorData, ArgType)> {
     let target_shape = target_shape.or_else(|| compute_reshape_target(node, &data))?;
 
     // Verify element count matches
-    let src_elems: usize = if data.shape.is_empty() {
+    let src_elems: usize = if data.shape().is_empty() {
         1
     } else {
-        data.shape.iter().product()
+        data.shape().iter().product()
     };
     let dst_elems: usize = if target_shape.is_empty() {
         1
@@ -592,12 +595,12 @@ fn eval_reshape(node: &RawNode) -> Option<(TensorData, ArgType)> {
     }
 
     let output_ty = ArgType::Tensor(crate::ir::TensorType {
-        dtype: data.dtype,
+        dtype: data.dtype(),
         rank: target_shape.len(),
         static_shape: Some(target_shape.iter().map(|&d| Some(d)).collect()),
     });
 
-    let result = TensorData::from_bytes_vec(data.bytes.to_vec(), target_shape, data.dtype);
+    let result = TensorData::from_bytes_vec(data.bytes().to_vec(), target_shape, data.dtype());
     Some((result, output_ty))
 }
 
@@ -615,9 +618,9 @@ fn compute_reshape_target(node: &RawNode, data: &TensorData) -> Option<Vec<usize
                 node.inputs.get(1)?.value()?.to_i64_vec().ok()?
             };
 
-            let output_rank = data.shape.len() + axes.len();
+            let output_rank = data.shape().len() + axes.len();
             let output_rank_i64 = output_rank as i64;
-            let mut result = data.shape.to_vec();
+            let mut result = data.shape().to_vec();
             let mut sorted_axes: Vec<usize> = axes
                 .iter()
                 .map(|&a| {
@@ -646,11 +649,12 @@ fn compute_reshape_target(node: &RawNode, data: &TensorData) -> Option<Vec<usize
                 axes_input.value()?.to_i64_vec().ok()?
             } else {
                 // Default: squeeze all dims with size 1
-                let squeezed: Vec<usize> = data.shape.iter().copied().filter(|&d| d != 1).collect();
+                let squeezed: Vec<usize> =
+                    data.shape().iter().copied().filter(|&d| d != 1).collect();
                 return Some(squeezed);
             };
 
-            let rank = data.shape.len() as i64;
+            let rank = data.shape().len() as i64;
             let mut axes_set: Vec<usize> = axes
                 .iter()
                 .map(|&a| {
@@ -663,7 +667,7 @@ fn compute_reshape_target(node: &RawNode, data: &TensorData) -> Option<Vec<usize
                 .collect();
             axes_set.sort();
             Some(
-                data.shape
+                data.shape()
                     .iter()
                     .enumerate()
                     .filter(|(i, _)| !axes_set.contains(i))
@@ -675,10 +679,10 @@ fn compute_reshape_target(node: &RawNode, data: &TensorData) -> Option<Vec<usize
             // Read target shape from the second input (opset >= 5)
             let shape_data = node.inputs.get(1)?.value()?;
             let shape_vals = shape_data.to_i64_vec().ok()?;
-            let src_elems: usize = if data.shape.is_empty() {
+            let src_elems: usize = if data.shape().is_empty() {
                 1
             } else {
-                data.shape.iter().product()
+                data.shape().iter().product()
             };
             // Resolve -1 dimension (at most one allowed)
             let mut result = Vec::with_capacity(shape_vals.len());
@@ -693,7 +697,7 @@ fn compute_reshape_target(node: &RawNode, data: &TensorData) -> Option<Vec<usize
                     result.push(0); // placeholder
                 } else if v == 0 {
                     // 0 means "copy from input" per ONNX spec
-                    let dim = *data.shape.get(i)?;
+                    let dim = *data.shape().get(i)?;
                     known_product *= dim;
                     result.push(dim);
                 } else if v > 0 {
@@ -1135,7 +1139,7 @@ mod tests {
         assert_eq!(result[0].node_type, NodeType::Constant);
 
         let data = result[0].inputs[0].value().unwrap();
-        assert_eq!(data.shape.to_vec(), vec![2, 2]);
+        assert_eq!(data.shape().to_vec(), vec![2, 2]);
         let vals = data.to_f64_vec().unwrap();
         assert_eq!(vals, vec![3.0, 4.0, 5.0, 6.0]);
     }
@@ -1223,7 +1227,7 @@ mod tests {
 
         // Verify the final unsqueeze result: [4,5,6,1,2,3] unsqueezed to [1,6,1]
         let data = folded[3].inputs[0].value().unwrap();
-        assert_eq!(data.shape.to_vec(), vec![1, 6, 1]);
+        assert_eq!(data.shape().to_vec(), vec![1, 6, 1]);
         let vals = data.to_f64_vec().unwrap();
         assert_eq!(vals, vec![4.0, 5.0, 6.0, 1.0, 2.0, 3.0]);
     }
@@ -1251,7 +1255,7 @@ mod tests {
         assert_eq!(result[0].node_type, NodeType::Constant);
 
         let data = result[0].inputs[0].value().unwrap();
-        assert_eq!(data.shape.to_vec(), vec![2, 2]);
+        assert_eq!(data.shape().to_vec(), vec![2, 2]);
         let vals = data.to_f64_vec().unwrap();
         assert_eq!(vals, vec![5.0, 6.0, 7.0, 8.0]);
     }
@@ -1276,7 +1280,7 @@ mod tests {
         assert_eq!(result[0].node_type, NodeType::Constant);
 
         let data = result[0].inputs[0].value().unwrap();
-        assert_eq!(data.shape.to_vec(), vec![2, 2]);
+        assert_eq!(data.shape().to_vec(), vec![2, 2]);
         let vals = data.to_f64_vec().unwrap();
         assert_eq!(vals, vec![3.0, 4.0, 5.0, 6.0]);
     }

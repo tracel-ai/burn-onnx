@@ -641,7 +641,7 @@ pub(crate) fn known_weight_shape(weight: &crate::ir::Argument) -> Option<Vec<usi
     weight
         .ty
         .static_shape_known()
-        .or_else(|| weight.value().map(|data| data.shape.to_vec()))
+        .or_else(|| weight.value().map(|data| data.shape().to_vec()))
 }
 
 #[cfg(test)]

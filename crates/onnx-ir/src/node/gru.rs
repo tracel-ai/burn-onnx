@@ -320,8 +320,8 @@ impl NodeProcessor for GruProcessor {
 
         let input_size = input_size.or_else(|| {
             weight_input.value().and_then(|data| {
-                if data.shape.len() == 3 {
-                    Some(data.shape[2])
+                if data.shape().len() == 3 {
+                    Some(data.shape()[2])
                 } else {
                     None
                 }

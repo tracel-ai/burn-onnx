@@ -132,7 +132,7 @@ fn resolve_read(split: &RawNode, seq: &str, reader: &RawNode) -> Option<Read> {
         None => (vec![1], true),
         Some(arg) => {
             let value = arg.value()?;
-            (value.to_i64_vec().ok()?, value.shape.is_empty())
+            (value.to_i64_vec().ok()?, value.shape().is_empty())
         }
     };
     if scalar {

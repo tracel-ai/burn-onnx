@@ -130,7 +130,7 @@ impl NodeProcessor for BatchNormProcessor {
             if shape.len() > 1 && shape[1].is_none() {
                 let channels = node.inputs[1]
                     .value()
-                    .and_then(|data| data.shape.first().copied())
+                    .and_then(|data| data.shape().first().copied())
                     .or_else(|| match &node.inputs[1].ty {
                         ArgType::Tensor(t) => t
                             .static_shape

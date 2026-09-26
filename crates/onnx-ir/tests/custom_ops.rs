@@ -101,7 +101,7 @@ fn custom_op_constant_input_value_is_readable() {
     let window = fft.inputs[1]
         .value()
         .expect("constant input value should be readable");
-    assert_eq!(window.shape.to_vec(), vec![4]);
+    assert_eq!(window.shape().to_vec(), vec![4]);
     let values = window.try_into_vec::<f32>().unwrap();
     assert_eq!(values, vec![0.25, 0.5, 0.75, 1.0]);
 }

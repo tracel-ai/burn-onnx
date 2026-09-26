@@ -205,7 +205,7 @@ impl NodeProcessor for DeformConvProcessor {
                 .and_then(|s| s.first().copied().flatten());
             let out_channels = node.inputs[1]
                 .value()
-                .and_then(|data| data.shape.first().copied())
+                .and_then(|data| data.shape().first().copied())
                 .or_else(|| {
                     weight_tensor
                         .static_shape
@@ -293,7 +293,7 @@ impl NodeProcessor for DeformConvProcessor {
         let kernel_size = if kernel_shape.is_empty() {
             let weight_shape = node.inputs[1]
                 .value()
-                .map(|v| v.shape.to_vec())
+                .map(|v| v.shape().to_vec())
                 .or_else(|| {
                     if let ArgType::Tensor(t) = &node.inputs[1].ty {
                         t.static_shape_known().map(|s| s.to_vec())

@@ -131,7 +131,7 @@ pub fn argument_from_initializer(initializer: &TensorProto) -> (Argument, Tensor
     // 1) Canonical path first.
     match TensorData::try_from(initializer.clone()) {
         Ok(td) => {
-            let arg = if td.shape.is_empty() {
+            let arg = if td.shape().is_empty() {
                 // rank-0 (scalar)
                 Argument {
                     name,
@@ -144,8 +144,8 @@ pub fn argument_from_initializer(initializer: &TensorProto) -> (Argument, Tensor
                     name,
                     ty: ArgType::Tensor(TensorType {
                         dtype: td.elem_type(),
-                        rank: td.shape.len(),
-                        static_shape: Some(td.shape.iter().map(|&d| Some(d)).collect()),
+                        rank: td.shape().len(),
+                        static_shape: Some(td.shape().iter().map(|&d| Some(d)).collect()),
                     }),
                     value_source: ValueSource::Constant, // Initializers are constants
                     value_store: None,

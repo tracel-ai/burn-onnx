@@ -638,7 +638,7 @@ fn create_test_constant(
 ) -> (RawNode, DataId) {
     use crate::ir::TensorDataExt;
     let elem_type = tensor_data.elem_type();
-    let shape = tensor_data.shape.to_vec();
+    let shape = tensor_data.shape().to_vec();
 
     let ty = crate::ir::ArgType::Tensor(crate::ir::TensorType {
         dtype: elem_type,

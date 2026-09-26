@@ -35,7 +35,7 @@ fn test_external_data_values() {
             if let Some(output) = const_node.outputs.first()
                 && let Some(data) = output.value()
             {
-                let shape = data.shape.clone();
+                let shape = data.shape().clone();
 
                 // Weight tensor should be [4, 4] with diagonal values [1, 2, 3, 4]
                 if shape == burn_tensor::Shape::new([4, 4]) {
@@ -86,7 +86,7 @@ fn test_external_data_with_offset() {
             && let Some(data) = output.value()
         {
             assert_eq!(
-                data.shape,
+                *data.shape(),
                 burn_tensor::Shape::new([2, 3]),
                 "Expected shape [2, 3]"
             );
@@ -158,7 +158,7 @@ fn test_multiple_external_files() {
             && let Some(output) = const_node.outputs.first()
             && let Some(data) = output.value()
         {
-            let shape = data.shape.clone();
+            let shape = data.shape().clone();
 
             // Weight tensor should be [4, 4] with diagonal values [1, 2, 3, 4]
             if shape == burn_tensor::Shape::new([4, 4]) {

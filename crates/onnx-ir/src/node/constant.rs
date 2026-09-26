@@ -67,13 +67,13 @@ impl NodeProcessor for ConstantProcessor {
 
         // First, determine the base type from the tensor data.
         // Scalars default to ScalarTensor (on-device) for efficient tensor arithmetic.
-        let base_type = if tensor_data.shape.is_empty() {
+        let base_type = if tensor_data.shape().is_empty() {
             ArgType::ScalarTensor(tensor_data.elem_type())
         } else {
             ArgType::Tensor(TensorType {
                 dtype: tensor_data.elem_type(),
-                rank: tensor_data.shape.len(),
-                static_shape: Some(tensor_data.shape.iter().map(|&d| Some(d)).collect()),
+                rank: tensor_data.shape().len(),
+                static_shape: Some(tensor_data.shape().iter().map(|&d| Some(d)).collect()),
             })
         };
 
@@ -140,7 +140,7 @@ mod tests {
         use crate::ir::Argument;
 
         let elem_type = tensor_data.elem_type();
-        let shape = tensor_data.shape.to_vec();
+        let shape = tensor_data.shape().to_vec();
 
         // Create GraphState and register the constant
         let mut graph_state = GraphState::new(&[], &[], &[], &[]);

@@ -142,7 +142,7 @@ impl NodeProcessor for UnsqueezeProcessor {
 
                 if let Some(tensor_data) = input_value.value().as_ref() {
                     // Validate actual tensor data shape
-                    if tensor_data.shape.len() != 1 {
+                    if tensor_data.shape().len() != 1 {
                         return Err(ProcessError::Custom(
                             "Unsqueeze: axes tensor must be 1D".to_string(),
                         ));

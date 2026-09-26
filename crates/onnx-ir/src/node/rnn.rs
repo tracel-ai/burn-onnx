@@ -305,12 +305,12 @@ impl NodeProcessor for RnnProcessor {
         // Fallback: try to get input_size from weight constant data
         let input_size = input_size.or_else(|| {
             weight_input.value().and_then(|data| {
-                if data.shape.len() == 3 {
+                if data.shape().len() == 3 {
                     log::debug!(
                         "RNN: using input_size from W constant value: {}",
-                        data.shape[2]
+                        data.shape()[2]
                     );
-                    Some(data.shape[2])
+                    Some(data.shape()[2])
                 } else {
                     None
                 }

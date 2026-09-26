@@ -109,7 +109,7 @@ fn collect_lstm_tensors(
         data_b.is_some()
     );
 
-    let dtype = data_w.dtype;
+    let dtype = data_w.dtype();
     let device = Default::default();
 
     let gate_count = GATE_LAYOUT.count();
