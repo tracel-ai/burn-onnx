@@ -192,11 +192,11 @@ fn forward_with_indices(
                 let [batch, channels, length] = #input.dims();
                 let (values, indices) = burn::tensor::module::max_pool1d_with_indices(
                     #input,
-                    #kernel,
-                    #stride,
-                    #l,
-                    #dilation,
-                    #ceil_mode,
+                    burn::tensor::ops::MaxPoolOptions::new([#kernel])
+                        .with_stride([#stride])
+                        .with_padding([#l])
+                        .with_dilation([#dilation])
+                        .with_ceil_mode(#ceil_mode),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 #sym_trim
@@ -227,11 +227,10 @@ fn forward_with_indices(
             );
             let (values, indices) = burn::tensor::module::max_pool1d_with_indices(
                 padded,
-                #kernel,
-                #stride,
-                0,
-                #dilation,
-                #ceil_mode,
+                burn::tensor::ops::MaxPoolOptions::new([#kernel])
+                    .with_stride([#stride])
+                    .with_dilation([#dilation])
+                    .with_ceil_mode(#ceil_mode),
             );
             let indices = indices.cast(burn::tensor::DType::I64);
             #trim
@@ -455,11 +454,11 @@ mod tests {
                 let [batch, channels, length] = input.dims();
                 let (values, indices) = burn::tensor::module::max_pool1d_with_indices(
                     input,
-                    2usize,
-                    2usize,
-                    1usize,
-                    1usize,
-                    false,
+                    burn::tensor::ops::MaxPoolOptions::new([2usize])
+                        .with_stride([2usize])
+                        .with_padding([1usize])
+                        .with_dilation([1usize])
+                        .with_ceil_mode(false),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 (
@@ -496,11 +495,10 @@ mod tests {
                     );
                 let (values, indices) = burn::tensor::module::max_pool1d_with_indices(
                     padded,
-                    2usize,
-                    2usize,
-                    0,
-                    1usize,
-                    false,
+                    burn::tensor::ops::MaxPoolOptions::new([2usize])
+                        .with_stride([2usize])
+                        .with_dilation([1usize])
+                        .with_ceil_mode(false),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 (
@@ -531,11 +529,11 @@ mod tests {
                 let [batch, channels, length] = input.dims();
                 let (values, indices) = burn::tensor::module::max_pool1d_with_indices(
                     input,
-                    2usize,
-                    2usize,
-                    1usize,
-                    1usize,
-                    true,
+                    burn::tensor::ops::MaxPoolOptions::new([2usize])
+                        .with_stride([2usize])
+                        .with_padding([1usize])
+                        .with_dilation([1usize])
+                        .with_ceil_mode(true),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 let (left, right) = (1usize, 1usize);
@@ -580,11 +578,10 @@ mod tests {
                     );
                 let (values, indices) = burn::tensor::module::max_pool1d_with_indices(
                     padded,
-                    2usize,
-                    2usize,
-                    0,
-                    1usize,
-                    true,
+                    burn::tensor::ops::MaxPoolOptions::new([2usize])
+                        .with_stride([2usize])
+                        .with_dilation([1usize])
+                        .with_ceil_mode(true),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 let out_len = {
@@ -648,11 +645,10 @@ mod tests {
                     );
                 let (values, indices) = burn::tensor::module::max_pool1d_with_indices(
                     padded,
-                    2usize,
-                    1usize,
-                    0,
-                    1usize,
-                    false,
+                    burn::tensor::ops::MaxPoolOptions::new([2usize])
+                        .with_stride([1usize])
+                        .with_dilation([1usize])
+                        .with_ceil_mode(false),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 (
@@ -748,11 +744,11 @@ mod tests {
                 let [batch, channels, length] = float_input.dims();
                 let (values, indices) = burn::tensor::module::max_pool1d_with_indices(
                     float_input,
-                    2usize,
-                    2usize,
-                    1usize,
-                    1usize,
-                    false,
+                    burn::tensor::ops::MaxPoolOptions::new([2usize])
+                        .with_stride([2usize])
+                        .with_padding([1usize])
+                        .with_dilation([1usize])
+                        .with_ceil_mode(false),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 (
@@ -797,11 +793,10 @@ mod tests {
                     );
                 let (values, indices) = burn::tensor::module::max_pool1d_with_indices(
                     padded,
-                    2usize,
-                    1usize,
-                    0,
-                    1usize,
-                    false,
+                    burn::tensor::ops::MaxPoolOptions::new([2usize])
+                        .with_stride([1usize])
+                        .with_dilation([1usize])
+                        .with_ceil_mode(false),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 (
@@ -858,11 +853,10 @@ mod tests {
                     );
                 let (values, indices) = burn::tensor::module::max_pool1d_with_indices(
                     padded,
-                    2usize,
-                    1usize,
-                    0,
-                    1usize,
-                    false,
+                    burn::tensor::ops::MaxPoolOptions::new([2usize])
+                        .with_stride([1usize])
+                        .with_dilation([1usize])
+                        .with_ceil_mode(false),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 (

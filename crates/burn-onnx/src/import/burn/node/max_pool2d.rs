@@ -178,11 +178,11 @@ fn forward_with_indices(
                 let [batch, channels, height, width] = #input.dims();
                 let (values, indices) = burn::tensor::module::max_pool2d_with_indices(
                     #input,
-                    #kernel,
-                    #strides,
-                    [#t, #l],
-                    #dilation,
-                    #ceil_mode,
+                    burn::tensor::ops::MaxPoolOptions::new(#kernel)
+                        .with_stride(#strides)
+                        .with_padding([#t, #l])
+                        .with_dilation(#dilation)
+                        .with_ceil_mode(#ceil_mode),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 #sym_trim
@@ -213,11 +213,10 @@ fn forward_with_indices(
             let padded_width = width + left + right;
             let (values, indices) = burn::tensor::module::max_pool2d_with_indices(
                 padded,
-                #kernel,
-                #strides,
-                [0, 0],
-                #dilation,
-                #ceil_mode,
+                burn::tensor::ops::MaxPoolOptions::new(#kernel)
+                    .with_stride(#strides)
+                    .with_dilation(#dilation)
+                    .with_ceil_mode(#ceil_mode),
             );
             let indices = indices.cast(burn::tensor::DType::I64);
             #trim
@@ -477,11 +476,11 @@ mod tests {
                 let [batch, channels, height, width] = input.dims();
                 let (values, indices) = burn::tensor::module::max_pool2d_with_indices(
                     input,
-                    [2, 2],
-                    [2, 2],
-                    [1usize, 1usize],
-                    [1, 1],
-                    false,
+                    burn::tensor::ops::MaxPoolOptions::new([2, 2])
+                        .with_stride([2, 2])
+                        .with_padding([1usize, 1usize])
+                        .with_dilation([1, 1])
+                        .with_ceil_mode(false),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 (
@@ -512,11 +511,11 @@ mod tests {
                 let [batch, channels, height, width] = input.dims();
                 let (values, indices) = burn::tensor::module::max_pool2d_with_indices(
                     input,
-                    [2, 2],
-                    [2, 2],
-                    [1usize, 1usize],
-                    [1, 1],
-                    false,
+                    burn::tensor::ops::MaxPoolOptions::new([2, 2])
+                        .with_stride([2, 2])
+                        .with_padding([1usize, 1usize])
+                        .with_dilation([1, 1])
+                        .with_ceil_mode(false),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 (
@@ -572,11 +571,10 @@ mod tests {
                 let padded_width = width + left + right;
                 let (values, indices) = burn::tensor::module::max_pool2d_with_indices(
                     padded,
-                    [2, 2],
-                    [1, 1],
-                    [0, 0],
-                    [1, 1],
-                    false,
+                    burn::tensor::ops::MaxPoolOptions::new([2, 2])
+                        .with_stride([1, 1])
+                        .with_dilation([1, 1])
+                        .with_ceil_mode(false),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 let row = indices.clone().div_scalar(padded_width as i64).sub_scalar(top as i64);
@@ -619,11 +617,11 @@ mod tests {
                 let [batch, channels, height, width] = input.dims();
                 let (values, indices) = burn::tensor::module::max_pool2d_with_indices(
                     input,
-                    [2, 2],
-                    [2, 2],
-                    [1usize, 1usize],
-                    [1, 1],
-                    true,
+                    burn::tensor::ops::MaxPoolOptions::new([2, 2])
+                        .with_stride([2, 2])
+                        .with_padding([1usize, 1usize])
+                        .with_dilation([1, 1])
+                        .with_ceil_mode(true),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 let (top, bottom, left, right) = (1usize, 1usize, 1usize, 1usize);
@@ -678,11 +676,10 @@ mod tests {
                 let padded_width = width + left + right;
                 let (values, indices) = burn::tensor::module::max_pool2d_with_indices(
                     padded,
-                    [2, 2],
-                    [2, 2],
-                    [0, 0],
-                    [1, 1],
-                    true,
+                    burn::tensor::ops::MaxPoolOptions::new([2, 2])
+                        .with_stride([2, 2])
+                        .with_dilation([1, 1])
+                        .with_ceil_mode(true),
                 );
                 let indices = indices.cast(burn::tensor::DType::I64);
                 let out_len = |
