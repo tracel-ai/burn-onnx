@@ -37,6 +37,9 @@ readme = "README.md"
 version = "0.22.0-pre.4"
 
 [workspace.lints.clippy]
+# Clippy 1.99 reports the `field: field` initializers that `#[derive(new)]` (derive-new
+# 0.7.0) expands to, pointing at the struct's own field declarations.
+redundant_field_names = "allow"
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
