@@ -2,6 +2,7 @@ use crate::include_models;
 include_models!(
     lstm,
     lstm_bidirectional,
+    lstm_input_forget,
     lstm_reverse,
     lstm_with_initial_state,
     lstm_runtime_weights
@@ -10,7 +11,7 @@ include_models!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Device, Shape, Tensor, TensorData};
+    use burn::tensor::{Device, Shape, Tensor, TensorData, Tolerance};
     use float_cmp::ApproxEq;
 
     #[test]
@@ -396,6 +397,63 @@ mod tests {
             "Y_h sum mismatch: expected {}, got {}",
             expected_y_h_sum,
             y_h_sum
+        );
+    }
+
+    /// `input_forget=1` couples the gates (`f = 1 - i`), so Burn builds the LSTM without a
+    /// forget gate and the `.bpk` must not carry one. The weights are initializers, so the
+    /// model loads through `from_file` with exactly the tensors the module declares.
+    #[test]
+    fn lstm_input_forget() {
+        use burn_store::{BurnpackStore, ModuleStore};
+
+        let bpk = concat!(env!("OUT_DIR"), "/model/lstm_input_forget.bpk");
+        // Loading ignores unused tensors, so check the file itself for the dropped gate
+        let keys = BurnpackStore::from_file(bpk).keys().unwrap();
+        assert_eq!(keys.len(), 12, "3 gates x 2 Linear x (weight, bias): {keys:?}");
+        assert!(
+            keys.iter().all(|key| !key.contains("forget_gate")),
+            "coupled LSTM wrote forget_gate tensors: {keys:?}"
+        );
+
+        let device = Default::default();
+        let model = lstm_input_forget::Model::from_file(bpk, &device);
+
+        let (y, y_h, y_c) = model.forward(ramp([3, 1, 2], 0.3, -0.6));
+
+        // Expected from a numpy coupled-gate LSTM, checked against onnxruntime
+        // (onnx.reference ignores input_forget)
+        let tolerance = Tolerance::<f32>::absolute(1e-5);
+        y.to_data().assert_approx_eq(
+            &TensorData::new(
+                alloc::vec![
+                    -0.033_891_59f32,
+                    -0.039_104_55,
+                    -0.043_991_68,
+                    0.006_946_157,
+                    0.015_936_9,
+                    0.026_152_356,
+                    0.050_642_934,
+                    0.078_458_8,
+                    0.109_841_16,
+                ],
+                [3, 1, 1, 3],
+            ),
+            tolerance,
+        );
+        y_h.to_data().assert_approx_eq(
+            &TensorData::new(
+                alloc::vec![0.050_642_934f32, 0.078_458_8, 0.109_841_16],
+                [1, 1, 3],
+            ),
+            tolerance,
+        );
+        y_c.to_data().assert_approx_eq(
+            &TensorData::new(
+                alloc::vec![0.123_023_406f32, 0.179_252_7, 0.237_362_19],
+                [1, 1, 3],
+            ),
+            tolerance,
         );
     }
 }

@@ -39,6 +39,7 @@ pub(crate) enum BiasLayout {
 pub(crate) struct GateLayout {
     gates: &'static [(&'static str, usize)],
     bias: BiasLayout,
+    optional_gate: Option<&'static str>,
 }
 
 impl GateLayout {
@@ -71,12 +72,33 @@ impl GateLayout {
             }
             i += 1;
         }
-        Self { gates, bias }
+        Self {
+            gates,
+            bias,
+            optional_gate: None,
+        }
+    }
+
+    /// Mark the gate Burn declares as `Option<GateController>`.
+    ///
+    /// LSTM's `forget_gate` is `None` when `input_forget` couples it to the input gate.
+    /// The runtime path then reaches it through `if let Some(..)`, which also skips its
+    /// weights when the module was built without it.
+    pub const fn with_optional_gate(self, name: &'static str) -> Self {
+        Self {
+            optional_gate: Some(name),
+            ..self
+        }
     }
 
     /// Burn's per-gate field names paired with the ONNX gate index each holds.
     pub fn gates(&self) -> &'static [(&'static str, usize)] {
         self.gates
+    }
+
+    /// The gate Burn may leave out, if any.
+    pub fn optional_gate(&self) -> Option<&'static str> {
+        self.optional_gate
     }
 
     /// How `B` splits across the two `Linear` modules of a gate.
@@ -257,46 +279,61 @@ fn load_runtime_weights(
         });
 
         let mut gates = quote! {};
-        for (gate, onnx_gate) in layout.gates().iter().copied() {
-            let gate = Ident::new(gate, Span::call_site());
+        for (gate_name, onnx_gate) in layout.gates().iter().copied() {
+            let field = Ident::new(gate_name, Span::call_site());
+            let optional = layout.optional_gate() == Some(gate_name);
+            let gate = if optional {
+                quote! { gate }
+            } else {
+                quote! { #gate_owner.#field }
+            };
+            let mut assigns = quote! {};
             let start = (onnx_gate * hidden_size).to_tokens();
             let end = ((onnx_gate + 1) * hidden_size).to_tokens();
 
             // ONNX stores a gate as [hidden_size, in], Burn's row-major `Linear`
             // wants [in, hidden_size].
-            gates.extend(quote! {
-                #gate_owner.#gate.input_transform.weight = burn::module::Param::from_tensor(
+            assigns.extend(quote! {
+                #gate.input_transform.weight = burn::module::Param::from_tensor(
                     w_dir.clone().slice_dim(0, #start..#end).transpose(),
                 );
-                #gate_owner.#gate.hidden_transform.weight = burn::module::Param::from_tensor(
+                #gate.hidden_transform.weight = burn::module::Param::from_tensor(
                     r_dir.clone().slice_dim(0, #start..#end).transpose(),
                 );
             });
 
-            if !has_bias {
-                continue;
+            if has_bias {
+                let rb_start = ((gate_count + onnx_gate) * hidden_size).to_tokens();
+                let rb_end = ((gate_count + onnx_gate + 1) * hidden_size).to_tokens();
+
+                assigns.extend(match layout.bias() {
+                    BiasLayout::Split => quote! {
+                        #gate.input_transform.bias = Some(burn::module::Param::from_tensor(
+                            b_dir.clone().slice_dim(0, #start..#end),
+                        ));
+                        #gate.hidden_transform.bias = Some(burn::module::Param::from_tensor(
+                            b_dir.clone().slice_dim(0, #rb_start..#rb_end),
+                        ));
+                    },
+                    BiasLayout::Merged => quote! {
+                        #gate.input_transform.bias = Some(burn::module::Param::from_tensor(
+                            b_dir.clone().slice_dim(0, #start..#end)
+                                + b_dir.clone().slice_dim(0, #rb_start..#rb_end),
+                        ));
+                        #gate.hidden_transform.bias =
+                            Some(burn::module::Param::from_tensor(b_zero.clone()));
+                    },
+                });
             }
 
-            let rb_start = ((gate_count + onnx_gate) * hidden_size).to_tokens();
-            let rb_end = ((gate_count + onnx_gate + 1) * hidden_size).to_tokens();
-
-            gates.extend(match layout.bias() {
-                BiasLayout::Split => quote! {
-                    #gate_owner.#gate.input_transform.bias = Some(burn::module::Param::from_tensor(
-                        b_dir.clone().slice_dim(0, #start..#end),
-                    ));
-                    #gate_owner.#gate.hidden_transform.bias = Some(burn::module::Param::from_tensor(
-                        b_dir.clone().slice_dim(0, #rb_start..#rb_end),
-                    ));
-                },
-                BiasLayout::Merged => quote! {
-                    #gate_owner.#gate.input_transform.bias = Some(burn::module::Param::from_tensor(
-                        b_dir.clone().slice_dim(0, #start..#end)
-                            + b_dir.clone().slice_dim(0, #rb_start..#rb_end),
-                    ));
-                    #gate_owner.#gate.hidden_transform.bias =
-                        Some(burn::module::Param::from_tensor(b_zero.clone()));
-                },
+            gates.extend(if optional {
+                quote! {
+                    if let Some(gate) = #gate_owner.#field.as_mut() {
+                        #assigns
+                    }
+                }
+            } else {
+                assigns
             });
         }
 

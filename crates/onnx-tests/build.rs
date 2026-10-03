@@ -387,6 +387,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/lrn/lrn_default_size3.onnx")
         .input("tests/lstm/lstm.onnx")
         .input("tests/lstm/lstm_bidirectional.onnx")
+        .input("tests/lstm/lstm_input_forget.onnx")
         .input("tests/lstm/lstm_reverse.onnx")
         .input("tests/lstm/lstm_runtime_weights.onnx")
         .input("tests/lstm/lstm_with_initial_state.onnx")

@@ -164,6 +164,11 @@ fn collect_lstm_tensors(
         });
 
         for (gate_name, onnx_gate_idx) in GATE_LAYOUT.gates().iter().copied() {
+            // A coupled LSTM is built without its forget gate, so it has no params to fill.
+            if config.input_forget && GATE_LAYOUT.optional_gate() == Some(gate_name) {
+                continue;
+            }
+
             let start = onnx_gate_idx * hidden_size;
             let end = start + hidden_size;
 
@@ -277,7 +282,8 @@ const GATE_LAYOUT: GateLayout = GateLayout::new(
         ("cell_gate", 3),
     ],
     BiasLayout::Merged,
-);
+)
+.with_optional_gate("forget_gate");
 
 /// The module's type, and the expression that builds it on `device`.
 ///
@@ -808,31 +814,29 @@ mod tests {
                         .input_gate
                         .hidden_transform
                         .bias = Some(burn::module::Param::from_tensor(b_zero.clone()));
-                    lstm1
-                        .forget_gate
-                        .input_transform
-                        .weight = burn::module::Param::from_tensor(
-                        w_dir.clone().slice_dim(0, 16..24).transpose(),
-                    );
-                    lstm1
-                        .forget_gate
-                        .hidden_transform
-                        .weight = burn::module::Param::from_tensor(
-                        r_dir.clone().slice_dim(0, 16..24).transpose(),
-                    );
-                    lstm1
-                        .forget_gate
-                        .input_transform
-                        .bias = Some(
-                        burn::module::Param::from_tensor(
-                            b_dir.clone().slice_dim(0, 16..24)
-                                + b_dir.clone().slice_dim(0, 48..56),
-                        ),
-                    );
-                    lstm1
-                        .forget_gate
-                        .hidden_transform
-                        .bias = Some(burn::module::Param::from_tensor(b_zero.clone()));
+                    if let Some(gate) = lstm1.forget_gate.as_mut() {
+                        gate
+                            .input_transform
+                            .weight = burn::module::Param::from_tensor(
+                            w_dir.clone().slice_dim(0, 16..24).transpose(),
+                        );
+                        gate
+                            .hidden_transform
+                            .weight = burn::module::Param::from_tensor(
+                            r_dir.clone().slice_dim(0, 16..24).transpose(),
+                        );
+                        gate
+                            .input_transform
+                            .bias = Some(
+                            burn::module::Param::from_tensor(
+                                b_dir.clone().slice_dim(0, 16..24)
+                                    + b_dir.clone().slice_dim(0, 48..56),
+                            ),
+                        );
+                        gate
+                            .hidden_transform
+                            .bias = Some(burn::module::Param::from_tensor(b_zero.clone()));
+                    }
                     lstm1
                         .output_gate
                         .input_transform
