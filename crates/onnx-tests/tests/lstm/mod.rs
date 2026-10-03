@@ -410,7 +410,11 @@ mod tests {
         let bpk = concat!(env!("OUT_DIR"), "/model/lstm_input_forget.bpk");
         // Loading ignores unused tensors, so check the file itself for the dropped gate
         let keys = BurnpackStore::from_file(bpk).keys().unwrap();
-        assert_eq!(keys.len(), 12, "3 gates x 2 Linear x (weight, bias): {keys:?}");
+        assert_eq!(
+            keys.len(),
+            12,
+            "3 gates x 2 Linear x (weight, bias): {keys:?}"
+        );
         assert!(
             keys.iter().all(|key| !key.contains("forget_gate")),
             "coupled LSTM wrote forget_gate tensors: {keys:?}"
