@@ -18,8 +18,21 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use web_time::Instant;
 
+// cubecl registers static constructors (via `inventory`). Without an explicit call from an
+// export, wasm-ld re-runs every constructor at the start of *each* exported function, which
+// dominates inference time. Running them once here turns that off.
+#[cfg(target_family = "wasm")]
+unsafe extern "C" {
+    fn __wasm_call_ctors();
+}
+
 #[wasm_bindgen(start)]
 pub fn start() {
+    #[cfg(target_family = "wasm")]
+    // SAFETY: called once, from the wasm-bindgen start function, before any other export.
+    unsafe {
+        __wasm_call_ctors();
+    }
     // Initialize the logger so that the logs are printed to the console
     console_error_panic_hook::set_once();
     wasm_logger::init(wasm_logger::Config::default());
