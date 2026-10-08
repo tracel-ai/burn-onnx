@@ -9,6 +9,8 @@
 #   "onnxruntime",
 #   "numpy",
 #   "rfdetr==1.6.2",
+#   # 5.19 queries torch.accelerator at import, which raises on torch 2.6 without a GPU
+#   "transformers<5.19",
 # ]
 # ///
 
