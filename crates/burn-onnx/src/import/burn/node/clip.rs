@@ -67,14 +67,16 @@ fn clip_bound_expr(
             let arg = &inputs[r.input_index];
             let cast_ty = bound_cast.tokens();
             match &arg.ty {
+                // No outer parentheses: the bound is always a method argument,
+                // where they would trigger `unused_parens` in the generated code.
                 ArgType::ScalarNative(_) => {
                     let ident = arg_to_ident(arg);
-                    Some(quote! { (#ident as #cast_ty) })
+                    Some(quote! { #ident as #cast_ty })
                 }
                 ArgType::ScalarTensor(dtype) => {
                     let tensor = scope.arg(arg);
                     let native = on_device_to_native(quote! { #tensor }, dtype);
-                    Some(quote! { (#native as #cast_ty) })
+                    Some(quote! { #native as #cast_ty })
                 }
                 other => panic!(
                     "Clip min/max must be a scalar (ScalarNative or ScalarTensor), got {other:?}"
@@ -220,7 +222,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>, min_val: Tensor<1>) -> Tensor<2> {
-            let output = input.clamp_min(((min_val).into_scalar::<f32>() as f64));
+            let output = input.clamp_min((min_val).into_scalar::<f32>() as f64);
             output
         }
         ");
@@ -255,8 +257,8 @@ mod tests {
         ) -> Tensor<2> {
             let output = input
                 .clamp(
-                    ((min_val).into_scalar::<f32>() as f64),
-                    ((max_val).into_scalar::<f32>() as f64),
+                    (min_val).into_scalar::<f32>() as f64,
+                    (max_val).into_scalar::<f32>() as f64,
                 );
             output
         }
@@ -285,7 +287,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2, Int>, min_val: Tensor<1, Int>) -> Tensor<2, Int> {
-            let output = input.clamp_min(((min_val).into_scalar::<i64>() as i64));
+            let output = input.clamp_min((min_val).into_scalar::<i64>() as i64);
             output
         }
         ");
@@ -313,7 +315,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2, Int>, min_val: Tensor<1, Int>) -> Tensor<2, Int> {
-            let output = input.clamp_min(((min_val).into_scalar::<u64>() as u64));
+            let output = input.clamp_min((min_val).into_scalar::<u64>() as u64);
             output
         }
         ");
@@ -337,7 +339,64 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>, min_val: f32) -> Tensor<2> {
-            let output = input.clamp_min((min_val as f64));
+            let output = input.clamp_min(min_val as f64);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_clip_runtime_both_scalar_natives_int() {
+        let config = ClipConfig {
+            min: Some(ClipInput::Runtime(onnx_ir::ir::RuntimeInputRef::new(
+                "min_val".to_string(),
+                1,
+            ))),
+            max: Some(ClipInput::Runtime(onnx_ir::ir::RuntimeInputRef::new(
+                "max_val".to_string(),
+                2,
+            ))),
+        };
+        let node = ClipNodeBuilder::new("clip1")
+            .input_tensor("input", 2, DType::I64)
+            .input_scalar("min_val", DType::I64)
+            .input_scalar("max_val", DType::I64)
+            .output_tensor("output", 2, DType::I64)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            input: Tensor<2, Int>,
+            min_val: i64,
+            max_val: i64,
+        ) -> Tensor<2, Int> {
+            let output = input.clamp(min_val as i64, max_val as i64);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_clip_runtime_max_scalar_native() {
+        let config = ClipConfig {
+            min: None,
+            max: Some(ClipInput::Runtime(onnx_ir::ir::RuntimeInputRef::new(
+                "max_val".to_string(),
+                1,
+            ))),
+        };
+        let node = ClipNodeBuilder::new("clip1")
+            .input_tensor("input", 2, DType::F32)
+            .input_scalar("max_val", DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>, max_val: f32) -> Tensor<2> {
+            let output = input.clamp_max(max_val as f64);
             output
         }
         ");

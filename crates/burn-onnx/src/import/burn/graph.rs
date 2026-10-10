@@ -1666,11 +1666,11 @@ mod tests {
         let code = format_tokens(graph.codegen());
 
         assert!(
-            code.contains("input.clamp((min0 as f64), (max0 as f64))"),
+            code.contains("input.clamp(min0 as f64, max0 as f64)"),
             "first clip should clamp with its own bounds:\n{code}"
         );
         assert!(
-            code.contains("t0.clamp((min1 as f64), (max1 as f64))"),
+            code.contains("t0.clamp(min1 as f64, max1 as f64)"),
             "second clip should clamp with its own bounds:\n{code}"
         );
     }
