@@ -17,7 +17,13 @@ mod tests {
     #[test]
     fn clip_int_static_min_runtime_max() {
         let device = Default::default();
-        let model = clip_int_static_min_runtime_max::Model::default();
+        let model = clip_int_static_min_runtime_max::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model/clip_int_static_min_runtime_max.bpk"
+            ),
+            &device,
+        );
         let input = Tensor::<1, burn::tensor::Int>::from_data(
             TensorData::from([0i64, 3, 9]),
             (&device, burn::tensor::DType::I64),

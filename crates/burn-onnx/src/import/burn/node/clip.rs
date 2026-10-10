@@ -401,4 +401,48 @@ mod tests {
         }
         ");
     }
+
+    #[test]
+    fn test_clip_int_static_min_runtime_max() {
+        let config = ClipConfig {
+            min: Some(ClipInput::Static(1.0)),
+            max: Some(ClipInput::Runtime(onnx_ir::ir::RuntimeInputRef::new(
+                "max_val".to_string(),
+                1,
+            ))),
+        };
+        let node = ClipNodeBuilder::new("clip1")
+            .input_tensor("input", 2, DType::I64)
+            .input_scalar("max_val", DType::I64)
+            .output_tensor("output", 2, DType::I64)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2, Int>, max_val: i64) -> Tensor<2, Int> {
+            let output = input.clamp(1i64, max_val as i64);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_clip_uint_static_bounds() {
+        let config = ClipConfig {
+            min: Some(ClipInput::Static(0.0)),
+            max: Some(ClipInput::Static(200.0)),
+        };
+        let node = ClipNodeBuilder::new("clip1")
+            .input_tensor("input", 2, DType::U8)
+            .output_tensor("output", 2, DType::U8)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2, Int> {
+            let output = input.clamp(0u64, 200u64);
+            output
+        }
+        ");
+    }
 }
