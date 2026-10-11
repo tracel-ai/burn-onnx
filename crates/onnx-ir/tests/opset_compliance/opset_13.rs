@@ -115,12 +115,16 @@ fn clip(graph: &OnnxGraph) {
         ClipConfig {
             min: Some(
                 Static(
-                    0.0,
+                    Float(
+                        0.0,
+                    ),
                 ),
             ),
             max: Some(
                 Static(
-                    6.0,
+                    Float(
+                        6.0,
+                    ),
                 ),
             ),
         }

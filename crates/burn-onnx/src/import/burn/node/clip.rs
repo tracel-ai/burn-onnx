@@ -1,6 +1,7 @@
 use super::prelude::*;
 
-/// Which native scalar type a runtime Clip bound should be cast to.
+/// Which native scalar type a Clip bound is emitted as: the type of a static
+/// literal, or the cast target of a runtime bound.
 /// Picked once from the input tensor's dtype so the bound stays in a
 /// type that can represent every value the input can hold:
 ///
@@ -34,25 +35,25 @@ impl ClipBoundCast {
         }
     }
 
-    fn literal(self, v: f64) -> TokenStream {
+    fn literal(self, v: burn::tensor::Scalar) -> TokenStream {
         match self {
             Self::I64 => {
-                let v = v as i64;
+                let v = v.elem::<i64>();
                 quote! { #v }
             }
             Self::U64 => {
-                let v = v as u64;
+                let v = v.elem::<u64>();
                 quote! { #v }
             }
-            Self::F64 => quote! { #v },
+            Self::F64 => super::super::codegen::f64_to_tokens(v.elem::<f64>()),
         }
     }
 }
 
 /// Token stream for a single Clip `min`/`max` bound. Static bounds are
 /// inlined as `bound_cast`-typed literals; runtime bounds are extracted from
-/// the input (native scalar or `ScalarTensor`) and `as`-cast to `bound_cast`
-/// — see `ClipBoundCast` for why the cast width is chosen up front from the
+/// the input (native scalar or `ScalarTensor`) and `as`-cast to `bound_cast`.
+/// See `ClipBoundCast` for why the cast width is chosen up front from the
 /// data tensor's dtype.
 fn clip_bound_expr(
     bound: &Option<onnx_ir::node::clip::ClipInput>,
@@ -98,7 +99,7 @@ impl NodeCodegen for onnx_ir::clip::ClipNode {
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
         let output = arg_to_ident(self.outputs.first().unwrap());
 
-        // The input dtype determines whether runtime bounds should be
+        // The input dtype determines whether bounds should be
         // carried as i64, u64, or f64. Picking the widest type that can
         // hold every value in the input's dtype avoids silently wrapping
         // large bounds through a narrower intermediate.
@@ -130,15 +131,15 @@ impl NodeCodegen for onnx_ir::clip::ClipNode {
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::*;
-    use burn::tensor::DType;
+    use burn::tensor::{DType, Scalar};
     use insta::assert_snapshot;
     use onnx_ir::clip::{ClipConfig, ClipNode, ClipNodeBuilder};
     use onnx_ir::node::clip::ClipInput;
 
     fn create_clip_node(name: &str, min: Option<f64>, max: Option<f64>) -> ClipNode {
         let config = ClipConfig {
-            min: min.map(ClipInput::Static),
-            max: max.map(ClipInput::Static),
+            min: min.map(|v| ClipInput::Static(Scalar::Float(v))),
+            max: max.map(|v| ClipInput::Static(Scalar::Float(v))),
         };
 
         ClipNodeBuilder::new(name)
@@ -405,7 +406,7 @@ mod tests {
     #[test]
     fn test_clip_int_static_min_runtime_max() {
         let config = ClipConfig {
-            min: Some(ClipInput::Static(1.0)),
+            min: Some(ClipInput::Static(Scalar::Int(1))),
             max: Some(ClipInput::Runtime(onnx_ir::ir::RuntimeInputRef::new(
                 "max_val".to_string(),
                 1,
@@ -429,8 +430,8 @@ mod tests {
     #[test]
     fn test_clip_uint_static_bounds() {
         let config = ClipConfig {
-            min: Some(ClipInput::Static(0.0)),
-            max: Some(ClipInput::Static(200.0)),
+            min: Some(ClipInput::Static(Scalar::UInt(0))),
+            max: Some(ClipInput::Static(Scalar::UInt(200))),
         };
         let node = ClipNodeBuilder::new("clip1")
             .input_tensor("input", 2, DType::U8)
@@ -441,6 +442,40 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2, Int> {
             let output = input.clamp(0u64, 200u64);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_clip_int64_static_bound_exact() {
+        // 2^53 + 1 has no exact f64 representation; the literal must not be rounded.
+        let config = ClipConfig {
+            min: None,
+            max: Some(ClipInput::Static(Scalar::Int(9_007_199_254_740_993))),
+        };
+        let node = ClipNodeBuilder::new("clip1")
+            .input_tensor("input", 2, DType::I64)
+            .output_tensor("output", 2, DType::I64)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2, Int>) -> Tensor<2, Int> {
+            let output = input.clamp_max(9007199254740993i64);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_clip_infinite_static_bound() {
+        // Non-finite floats have no Rust literal form.
+        let node = create_clip_node("clip1", Some(f64::NEG_INFINITY), None);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
+            let output = input.clamp_min(f64::NEG_INFINITY);
             output
         }
         ");

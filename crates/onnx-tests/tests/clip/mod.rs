@@ -1,6 +1,10 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(clip, clip_int_static_min_runtime_max);
+include_models!(
+    clip,
+    clip_int_static_min_runtime_max,
+    clip_static_typed_bounds
+);
 
 // Runtime bounds go through a separate codegen path. Deny `unused_parens` so a
 // regression in the generated bound casts fails to compile instead of warning.
@@ -32,6 +36,32 @@ mod tests {
         output
             .to_data()
             .assert_eq(&TensorData::from([1i64, 3, 5]), true);
+    }
+
+    #[test]
+    fn clip_static_typed_bounds() {
+        // Expected values from clip_static_typed_bounds.py (onnx ReferenceEvaluator).
+        let device = Default::default();
+        let model = clip_static_typed_bounds::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/clip_static_typed_bounds.bpk"),
+            &device,
+        );
+        let big = (1i64 << 53) + 1;
+        let x_u = Tensor::<1, burn::tensor::Int>::from_data(
+            TensorData::from([0u32, 5, 10]),
+            (&device, burn::tensor::DType::U32),
+        );
+        let x_i = Tensor::<1, burn::tensor::Int>::from_data(
+            TensorData::from([0i64, big, big + 2]),
+            (&device, burn::tensor::DType::I64),
+        );
+
+        let (y_u, y_i) = model.forward(x_u, x_i);
+
+        y_u.to_data()
+            .assert_eq(&TensorData::from([2u32, 5, 7]), true);
+        y_i.to_data()
+            .assert_eq(&TensorData::from([0i64, big, big]), true);
     }
 
     #[test]
