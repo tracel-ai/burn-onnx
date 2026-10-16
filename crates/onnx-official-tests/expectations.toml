@@ -2071,9 +2071,7 @@ status = "skip-codegen"
 reason = "Node 'dft1' (Dft): DFT: axis must be a compile-time constant"
 
 [test_dft_inverse_opset19]
-status = "fail-compare"
-reason = "Burn cfft requires power-of-2 signal dimension; test uses dim=10"
-tracking = "#549"
+status = "pass"
 
 [test_dft_irfft]
 status = "skip-codegen"
