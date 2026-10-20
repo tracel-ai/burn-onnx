@@ -1,5 +1,5 @@
 use crate::include_models;
-include_models!(affine_grid_2d, affine_grid_3d);
+include_models!(affine_grid_2d, affine_grid_3d, affine_grid_f64);
 
 #[cfg(test)]
 mod tests {
@@ -60,17 +60,105 @@ mod tests {
             .assert_approx_eq::<f32>(&expected, Tolerance::absolute(1e-5));
     }
 
-    #[test]
-    #[should_panic(expected = "AffineGrid: size must be non-negative")]
-    fn affine_grid_2d_rejects_negative_size() {
-        let device = Default::default();
-        let model = affine_grid_2d::Model::from_file(
+    fn model_2d(device: &burn::tensor::Device) -> affine_grid_2d::Model {
+        affine_grid_2d::Model::from_file(
             concat!(env!("OUT_DIR"), "/model/affine_grid_2d.bpk"),
-            &device,
-        );
+            device,
+        )
+    }
+
+    #[test]
+    #[should_panic(expected = "AffineGrid: spatial sizes must be positive, got 0")]
+    fn affine_grid_2d_rejects_zero_spatial_size() {
+        // ONNX Runtime rejects it too ("size[2] (H=0) must be positive")
+        let device = Default::default();
+        let size = Tensor::<1, Int>::from_ints([2, 1, 0, 4], &device);
+
+        let _ = model_2d(&device).forward(theta_2d(&device), size);
+    }
+
+    #[test]
+    #[should_panic(expected = "AffineGrid: spatial sizes must be positive, got -3")]
+    fn affine_grid_2d_rejects_negative_spatial_size() {
+        let device = Default::default();
         let size = Tensor::<1, Int>::from_ints([2, 1, -3, 4], &device);
 
-        let _ = model.forward(theta_2d(&device), size);
+        let _ = model_2d(&device).forward(theta_2d(&device), size);
+    }
+
+    #[test]
+    fn affine_grid_2d_ignores_channels() {
+        // C is not used: ONNX Runtime accepts any value, here a negative one
+        let device = Default::default();
+        let size = Tensor::<1, Int>::from_ints([2, -1, 3, 4], &device);
+
+        let (grid, _) = model_2d(&device).forward(theta_2d(&device), size);
+
+        grid.to_data()
+            .assert_approx_eq::<f32>(&TensorData::from(GRID), Tolerance::absolute(1e-5));
+    }
+
+    #[test]
+    fn affine_grid_2d_empty_batch() {
+        // N = 0 gives an empty grid, as in ONNX Runtime
+        let device = Default::default();
+        let theta = Tensor::<3>::zeros([0, 2, 3], &device);
+        let size = Tensor::<1, Int>::from_ints([0, 1, 3, 4], &device);
+
+        let (grid, grid_align_corners) = model_2d(&device).forward(theta, size);
+
+        assert_eq!(grid.dims(), [0, 3, 4, 2]);
+        assert_eq!(grid_align_corners.dims(), [0, 3, 4, 2]);
+    }
+
+    #[test]
+    fn affine_grid_f64_keeps_theta_dtype() {
+        // Expected values from affine_grid_f64.py (ONNX Runtime, which returns float64)
+        let device = Default::default();
+        let model = affine_grid_f64::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/affine_grid_f64.bpk"),
+            &device,
+        );
+        let theta = Tensor::<3>::from_data(
+            TensorData::from([
+                [[1.0f64, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                [[0.5, -0.25, 0.1], [0.3, 0.8, -0.2]],
+            ]),
+            (&device, burn::tensor::DType::F64),
+        );
+        let size = Tensor::<1, Int>::from_ints([2, 1, 2, 3], &device);
+
+        let grid = model.forward(theta, size);
+
+        assert_eq!(grid.dtype(), burn::tensor::DType::F64);
+        let expected = TensorData::from([
+            [
+                [
+                    [-0.6666666666666666f64, -0.5],
+                    [0.0, -0.5],
+                    [0.6666666666666666, -0.5],
+                ],
+                [
+                    [-0.6666666666666666, 0.5],
+                    [0.0, 0.5],
+                    [0.6666666666666666, 0.5],
+                ],
+            ],
+            [
+                [
+                    [-0.10833333333333331, -0.8],
+                    [0.225, -0.6],
+                    [0.5583333333333333, -0.4],
+                ],
+                [
+                    [-0.3583333333333333, 0.0],
+                    [-0.025, 0.2],
+                    [0.30833333333333335, 0.4],
+                ],
+            ],
+        ]);
+        grid.to_data()
+            .assert_approx_eq::<f64>(&expected, Tolerance::absolute(1e-12));
     }
 
     #[test]

@@ -19,8 +19,8 @@ const OP_NAME: &str = "AffineGrid";
 /// The target size `(N, C, H, W)` (2D) or `(N, C, D, H, W)` (3D) of the grid.
 #[derive(Debug, Clone)]
 pub enum AffineGridSize {
-    /// Size known at compile time.
-    Static(Vec<usize>),
+    /// Size known at compile time, as the ONNX values.
+    Static(Vec<i64>),
     /// Size determined at runtime from a graph input.
     Runtime(RuntimeInputRef),
 }
@@ -53,23 +53,33 @@ pub struct AffineGridNode {
 pub(crate) struct AffineGridProcessor;
 
 /// The static values of the `size` input, when it is a constant.
-fn static_size(node: &RawNode) -> Result<Option<Vec<usize>>, ProcessError> {
+fn static_size(node: &RawNode) -> Result<Option<Vec<i64>>, ProcessError> {
     let Some(data) = node.inputs[1].value() else {
         return Ok(None);
     };
-    let values: Vec<i64> = data
-        .try_into_vec()
-        .map_err(|e| ProcessError::Custom(format!("{OP_NAME}: cannot read size: {e:?}")))?;
-    values
-        .iter()
-        .map(|&value| usize::try_from(value))
-        .collect::<Result<Vec<usize>, _>>()
+    data.try_into_vec()
         .map(Some)
-        .map_err(|_| {
+        .map_err(|e| ProcessError::Custom(format!("{OP_NAME}: cannot read size: {e:?}")))
+}
+
+/// The output batch and spatial sizes of a constant `size`, checked like ONNX Runtime:
+/// N must be non-negative and every spatial size positive; C is not used.
+fn checked_size(size: &[i64]) -> Result<(usize, Vec<usize>), ProcessError> {
+    let batch = usize::try_from(size[0]).map_err(|_| {
+        ProcessError::Custom(format!(
+            "{OP_NAME}: N must be non-negative, got size {size:?}"
+        ))
+    })?;
+    let spatial = size[2..]
+        .iter()
+        .map(|&dim| usize::try_from(dim).ok().filter(|&dim| dim > 0))
+        .collect::<Option<Vec<usize>>>()
+        .ok_or_else(|| {
             ProcessError::Custom(format!(
-                "{OP_NAME}: size must be non-negative, got {values:?}"
+                "{OP_NAME}: spatial sizes must be positive, got size {size:?}"
             ))
-        })
+        })?;
+    Ok((batch, spatial))
 }
 
 /// Number of values in `size` (4 for 2D, 5 for 3D), from its value, its type or the
@@ -193,16 +203,16 @@ impl NodeProcessor for AffineGridProcessor {
             .and_then(|shape| shape.first().copied().flatten());
         let static_shape = match static_size(node)? {
             Some(size) => {
+                let (size_batch, spatial_sizes) = checked_size(&size)?;
                 if let Some(batch) = batch
-                    && batch != size[0]
+                    && batch != size_batch
                 {
                     return Err(ProcessError::Custom(format!(
-                        "{OP_NAME}: theta has batch {batch} but size has N = {}",
-                        size[0]
+                        "{OP_NAME}: theta has batch {batch} but size has N = {size_batch}"
                     )));
                 }
-                let mut shape: Vec<Option<usize>> = vec![Some(size[0])];
-                shape.extend(size[2..].iter().map(|&dim| Some(dim)));
+                let mut shape: Vec<Option<usize>> = vec![Some(size_batch)];
+                shape.extend(spatial_sizes.into_iter().map(Some));
                 shape.push(Some(spatial));
                 shape
             }
@@ -404,12 +414,31 @@ mod tests {
     }
 
     #[test]
-    fn negative_constant_size_is_rejected() {
-        let mut node = static_node(vec![1, 2, 3], vec![1, 1, -2, 4]);
+    fn constant_size_is_checked_like_onnx_runtime() {
+        // A zero or negative spatial size is rejected
+        for size in [vec![1, 1, 0, 4], vec![1, 1, -2, 4]] {
+            let mut node = static_node(vec![1, 2, 3], size);
+            let err = infer(&mut node).unwrap_err();
+            assert!(
+                matches!(&err, ProcessError::Custom(msg) if msg.contains("spatial sizes must be positive")),
+                "{err}"
+            );
+        }
+
+        // A negative N is rejected
+        let mut node = static_node(vec![1, 2, 3], vec![-1, 1, 2, 4]);
         let err = infer(&mut node).unwrap_err();
         assert!(
-            matches!(&err, ProcessError::Custom(msg) if msg.contains("size must be non-negative")),
+            matches!(&err, ProcessError::Custom(msg) if msg.contains("N must be non-negative")),
             "{err}"
+        );
+
+        // C is not used, so any value is accepted, as in ONNX Runtime
+        let mut node = static_node(vec![1, 2, 3], vec![1, -1, 2, 4]);
+        infer(&mut node).unwrap();
+        assert_eq!(
+            output_type(&node).static_shape,
+            Some(vec![Some(1), Some(2), Some(4), Some(2)])
         );
     }
 

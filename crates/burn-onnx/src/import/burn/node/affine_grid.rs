@@ -20,15 +20,25 @@ impl NodeCodegen for onnx_ir::node::affine_grid::AffineGridNode {
         let len = output_arg.ty.rank();
         let spatial = len - 2;
 
+        // Spatial sizes, outermost first: [height, width] or [depth, height, width]
+        let names: Vec<Ident> = ["depth", "height", "width"][3 - spatial..]
+            .iter()
+            .map(|name| format_ident!("{name}"))
+            .collect();
+
         // The graph values (theta and a runtime size) are read before any temporary is
-        // declared, so no temporary can shadow them.
-        let len_lit = Literal::usize_unsuffixed(len);
+        // declared, so no temporary can shadow them. The batch and spatial sizes are checked
+        // like ONNX Runtime: N non-negative, spatial sizes positive, C unused.
+        let spatial_lit = Literal::usize_unsuffixed(spatial);
         let read_inputs = match &self.config.size {
             AffineGridSize::Static(size) => {
-                let size = size.iter().map(|&dim| Literal::usize_unsuffixed(dim));
+                // Checked in onnx-ir
+                let batch = Literal::i64_unsuffixed(size[0]);
+                let sizes = size[2..].iter().map(|&dim| Literal::i64_unsuffixed(dim));
                 quote! {
                     let theta = #theta;
-                    let size: [usize; #len_lit] = [#(#size),*];
+                    let batch: usize = #batch;
+                    let [#(#names),*]: [usize; #spatial_lit] = [#(#sizes),*];
                 }
             }
             AffineGridSize::Runtime(runtime_ref) => {
@@ -49,9 +59,12 @@ impl NodeCodegen for onnx_ir::node::affine_grid::AffineGridNode {
                 };
                 quote! {
                     #read_size
-                    let size: [usize; #len_lit] = core::array::from_fn(|i| {
-                        assert!(size[i] >= 0, "AffineGrid: size must be non-negative, got {}", size[i]);
-                        size[i] as usize
+                    assert!(size[0] >= 0, "AffineGrid: N must be non-negative, got {}", size[0]);
+                    let batch = size[0] as usize;
+                    let [#(#names),*]: [usize; #spatial_lit] = core::array::from_fn(|i| {
+                        let len = size[i + 2];
+                        assert!(len > 0, "AffineGrid: spatial sizes must be positive, got {}", len);
+                        len as usize
                     });
                 }
             }
@@ -67,11 +80,6 @@ impl NodeCodegen for onnx_ir::node::affine_grid::AffineGridNode {
             quote! { (2.0 / len as f64, 1.0 / len as f64 - 1.0) }
         };
 
-        // Spatial sizes, outermost first: [height, width] or [depth, height, width]
-        let names: Vec<Ident> = ["depth", "height", "width"][3 - spatial..]
-            .iter()
-            .map(|name| format_ident!("{name}"))
-            .collect();
         // The grid holds (x, y[, z]), innermost axis first: each coordinate varies along
         // its own axis and is broadcast over the others
         let coordinates = (0..spatial).rev().map(|axis| {
@@ -94,12 +102,10 @@ impl NodeCodegen for onnx_ir::node::affine_grid::AffineGridNode {
             .reduce(|acc, name| quote! { #acc * #name })
             .unwrap();
         let homogeneous = Literal::usize_unsuffixed(spatial + 1);
-        let spatial_lit = Literal::usize_unsuffixed(spatial);
 
         quote! {
             let #output = {
                 #read_inputs
-                let [batch, _, #(#names),*] = size;
                 assert_eq!(
                     theta.dims()[0], batch,
                     "AffineGrid: theta has batch {} but size has N = {}", theta.dims()[0], batch
@@ -122,10 +128,15 @@ impl NodeCodegen for onnx_ir::node::affine_grid::AffineGridNode {
                     ]),
                     #spatial_lit,
                 );
-                let base = stacked
-                    .reshape([1, points, #homogeneous])
-                    .expand([batch, points, #homogeneous]);
-                base.matmul(theta.swap_dims(1, 2))
+                // One 2D matmul for the whole batch, without broadcasting it (an empty batch
+                // can't be expanded): points [P, s + 1] @ theta as [s + 1, N * s]
+                let base: Tensor<2> = stacked.reshape([points, #homogeneous]);
+                let theta = theta
+                    .permute([2, 0, 1])
+                    .reshape([#homogeneous, batch * #spatial_lit]);
+                base.matmul(theta)
+                    .reshape([points, batch, #spatial_lit])
+                    .permute([1, 0, 2])
                     .reshape([batch, #(#names,)* #spatial_lit])
             };
         }
@@ -165,8 +176,8 @@ mod tests {
         pub fn forward(&self, theta: Tensor<3>) -> Tensor<4> {
             let grid = {
                 let theta = theta;
-                let size: [usize; 4] = [2, 1, 3, 4];
-                let [batch, _, height, width] = size;
+                let batch: usize = 2;
+                let [height, width]: [usize; 2] = [3, 4];
                 assert_eq!(
                     theta.dims() [0], batch,
                     "AffineGrid: theta has batch {} but size has N = {}", theta.dims() [0], batch
@@ -190,8 +201,12 @@ mod tests {
                     ]),
                     2,
                 );
-                let base = stacked.reshape([1, points, 3]).expand([batch, points, 3]);
-                base.matmul(theta.swap_dims(1, 2)).reshape([batch, height, width, 2])
+                let base: Tensor<2> = stacked.reshape([points, 3]);
+                let theta = theta.permute([2, 0, 1]).reshape([3, batch * 2]);
+                base.matmul(theta)
+                    .reshape([points, batch, 2])
+                    .permute([1, 0, 2])
+                    .reshape([batch, height, width, 2])
             };
             grid
         }
@@ -216,13 +231,13 @@ mod tests {
             let grid = {
                 let (theta, size_data) = (theta, size.to_data().convert::<i64>());
                 let size = size_data.as_slice::<i64>().unwrap();
-                let size: [usize; 4] = core::array::from_fn(|i| {
-                    assert!(
-                        size[i] >= 0, "AffineGrid: size must be non-negative, got {}", size[i]
-                    );
-                    size[i] as usize
+                assert!(size[0] >= 0, "AffineGrid: N must be non-negative, got {}", size[0]);
+                let batch = size[0] as usize;
+                let [height, width]: [usize; 2] = core::array::from_fn(|i| {
+                    let len = size[i + 2];
+                    assert!(len > 0, "AffineGrid: spatial sizes must be positive, got {}", len);
+                    len as usize
                 });
-                let [batch, _, height, width] = size;
                 assert_eq!(
                     theta.dims() [0], batch,
                     "AffineGrid: theta has batch {} but size has N = {}", theta.dims() [0], batch
@@ -249,8 +264,12 @@ mod tests {
                     ]),
                     2,
                 );
-                let base = stacked.reshape([1, points, 3]).expand([batch, points, 3]);
-                base.matmul(theta.swap_dims(1, 2)).reshape([batch, height, width, 2])
+                let base: Tensor<2> = stacked.reshape([points, 3]);
+                let theta = theta.permute([2, 0, 1]).reshape([3, batch * 2]);
+                base.matmul(theta)
+                    .reshape([points, batch, 2])
+                    .permute([1, 0, 2])
+                    .reshape([batch, height, width, 2])
             };
             grid
         }
@@ -274,13 +293,13 @@ mod tests {
         pub fn forward(&self, theta: Tensor<3>, size: [i64; 5]) -> Tensor<5> {
             let grid = {
                 let (theta, size) = (theta, size);
-                let size: [usize; 5] = core::array::from_fn(|i| {
-                    assert!(
-                        size[i] >= 0, "AffineGrid: size must be non-negative, got {}", size[i]
-                    );
-                    size[i] as usize
+                assert!(size[0] >= 0, "AffineGrid: N must be non-negative, got {}", size[0]);
+                let batch = size[0] as usize;
+                let [depth, height, width]: [usize; 3] = core::array::from_fn(|i| {
+                    let len = size[i + 2];
+                    assert!(len > 0, "AffineGrid: spatial sizes must be positive, got {}", len);
+                    len as usize
                 });
-                let [batch, _, depth, height, width] = size;
                 assert_eq!(
                     theta.dims() [0], batch,
                     "AffineGrid: theta has batch {} but size has N = {}", theta.dims() [0], batch
@@ -307,8 +326,12 @@ mod tests {
                     ]),
                     3,
                 );
-                let base = stacked.reshape([1, points, 4]).expand([batch, points, 4]);
-                base.matmul(theta.swap_dims(1, 2)).reshape([batch, depth, height, width, 3])
+                let base: Tensor<2> = stacked.reshape([points, 4]);
+                let theta = theta.permute([2, 0, 1]).reshape([4, batch * 3]);
+                base.matmul(theta)
+                    .reshape([points, batch, 3])
+                    .permute([1, 0, 2])
+                    .reshape([batch, depth, height, width, 3])
             };
             grid
         }
