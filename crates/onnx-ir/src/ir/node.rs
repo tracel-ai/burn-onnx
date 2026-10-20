@@ -412,7 +412,6 @@ define_node_enum! {
     CumSum => cumsum::CumSumNode,
 
     // UNSUPPORTED / PLACEHOLDER OPERATIONS (not yet implemented in burn-onnx)
-    AffineGrid => unsupported::AffineGridNode,
     AveragePool => unsupported::AveragePoolNode,
     BlackmanWindow => blackman_window::BlackmanWindowNode,
     CenterCropPad => unsupported::CenterCropPadNode,
@@ -428,6 +427,7 @@ define_node_enum! {
     Det => det::DetNode,
     DynamicQuantizeLinear => unsupported::DynamicQuantizeLinearNode,
     Einsum => einsum::EinsumNode,
+    AffineGrid => affine_grid::AffineGridNode,
     GridSample => grid_sample::GridSampleNode,
     Gru => gru::GruNode,
     HammingWindow => hamming_window::HammingWindowNode,

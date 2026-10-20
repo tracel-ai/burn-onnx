@@ -12,12 +12,36 @@ fn graph() -> OnnxGraph {
 }
 
 #[rstest]
+fn affine_grid(graph: &OnnxGraph) {
+    let node = find_node(graph, "affinegrid");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    AffineGrid "affinegrid1"
+      Inputs:
+        affinegrid_theta: F32[2, 2, 3]
+      Outputs:
+        affinegrid1_out1: F32[2, 3, 4, 2]
+      Config:
+        AffineGridConfig {
+            align_corners: false,
+            size: Static(
+                [
+                    2,
+                    1,
+                    3,
+                    4,
+                ],
+            ),
+        }
+    "#);
+}
+
+#[rstest]
 fn constant_of_shape(graph: &OnnxGraph) {
     let node = find_node(graph, "constantofshape");
     insta::assert_snapshot!(format!("{node}"), @r#"
     ConstantOfShape "constantofshape1"
       Inputs:
-        _: Shape(2) [static(0)]
+        _: Shape(2) [static(1)]
       Outputs:
         constantofshape1_out1: F32[?, ?]
       Config:
@@ -142,7 +166,7 @@ fn reduce_max(graph: &OnnxGraph) {
     ReduceMax "reducemax1"
       Inputs:
         reducemax_input: F32[2, 3, 4]
-        _: I64[1] [static(1)]
+        _: I64[1] [static(2)]
       Outputs:
         reducemax1_out1: F32[2, 1, 4]
       Config:
@@ -165,7 +189,7 @@ fn reduce_min(graph: &OnnxGraph) {
     ReduceMin "reducemin1"
       Inputs:
         reducemin_input: F32[2, 3, 4]
-        _: I64[1] [static(2)]
+        _: I64[1] [static(3)]
       Outputs:
         reducemin1_out1: F32[2, 1, 4]
       Config:

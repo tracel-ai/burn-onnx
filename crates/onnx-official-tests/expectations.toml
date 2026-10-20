@@ -76,12 +76,10 @@ status = "pass"
 status = "pass"
 
 [test_affine_grid_2d]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): AffineGrid (node 'affinegrid1')"
+status = "pass"
 
 [test_affine_grid_2d_align_corners]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): AffineGrid (node 'affinegrid1')"
+status = "pass"
 
 [test_affine_grid_2d_align_corners_expanded]
 status = "skip-codegen"
@@ -92,12 +90,10 @@ status = "skip-codegen"
 reason = "Config extraction failed: Custom(\"Failed to build then_branch: Type inference failed: Node 'squeeze1' (Squeeze): Squeeze: Cannot infer output rank when axes is None and input tensor static shape is unknown\")"
 
 [test_affine_grid_3d]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): AffineGrid (node 'affinegrid1')"
+status = "pass"
 
 [test_affine_grid_3d_align_corners]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): AffineGrid (node 'affinegrid1')"
+status = "pass"
 
 [test_affine_grid_3d_align_corners_expanded]
 status = "skip-codegen"

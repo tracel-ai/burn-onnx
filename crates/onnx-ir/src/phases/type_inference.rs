@@ -374,8 +374,8 @@ mod tests {
         let mut nodes = vec![
             RawNode {
                 custom_identity: None,
-                node_type: NodeType::AffineGrid,
-                name: "affine1".to_string(),
+                node_type: NodeType::ImageDecoder,
+                name: "decoder1".to_string(),
                 inputs: vec![],
                 outputs: vec![],
                 attrs: Default::default(),
@@ -397,7 +397,7 @@ mod tests {
         match &err {
             ProcessError::UnsupportedOps(ops) => {
                 assert_eq!(ops.len(), 2);
-                assert!(ops[0].contains("AffineGrid"));
+                assert!(ops[0].contains("ImageDecoder"));
                 assert!(ops[1].contains("CenterCropPad"));
             }
             other => panic!("Expected UnsupportedOps, got: {other:?}"),
@@ -406,7 +406,7 @@ mod tests {
         // Verify Display output is clean (no "Custom(...)" wrapper)
         let msg = format!("{err}");
         assert!(msg.starts_with("Unsupported ONNX operation(s):"));
-        assert!(msg.contains("AffineGrid"));
+        assert!(msg.contains("ImageDecoder"));
         assert!(msg.contains("CenterCropPad"));
     }
 }

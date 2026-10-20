@@ -182,6 +182,7 @@ MIN_OPSET = {
     "Range": 11,
     "Resize": 10,
     "Upsample": 1,
+    "AffineGrid": 20,
     "GridSample": 16,
     # Random
     "RandomNormal": 1,

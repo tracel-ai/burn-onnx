@@ -18,6 +18,7 @@ pub(crate) mod abs;
 pub(crate) mod acos;
 pub(crate) mod acosh;
 pub(crate) mod add;
+pub(crate) mod affine_grid;
 pub(crate) mod argmax;
 pub(crate) mod argmin;
 pub(crate) mod asin;

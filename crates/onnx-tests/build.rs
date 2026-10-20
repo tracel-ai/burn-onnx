@@ -48,6 +48,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/abs/abs_shape.onnx")
         .input("tests/acos/acos.onnx")
         .input("tests/acosh/acosh.onnx")
+        .input("tests/affine_grid/affine_grid_2d.onnx")
+        .input("tests/affine_grid/affine_grid_3d.onnx")
         .input("tests/add/add.onnx")
         .input("tests/add/add_argmax_with_shape.onnx")
         .input("tests/add/add_broadcast.onnx")

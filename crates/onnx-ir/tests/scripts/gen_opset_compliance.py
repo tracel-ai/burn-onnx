@@ -219,6 +219,7 @@ SUPPORTED_OPS = {
     "Range": "range_op",
     "Resize": "resize",
     "Upsample": "upsample",
+    "AffineGrid": "affine_grid",
     "GridSample": "grid_sample",
     # Random
     "RandomNormal": "random_normal",
@@ -941,6 +942,14 @@ def make_upsample(op_name: str, opset: int):
         node = helper.make_node(op_name, [_p(op_name, "input")], [_p(op_name, "output")], name=_p(op_name, "node"), mode="nearest", height_scale=2.0, width_scale=2.0)
         return [node], [inp], [out], []
 
+def make_affine_grid(op_name: str, opset: int):
+    theta = helper.make_tensor_value_info(_p(op_name, "theta"), TensorProto.FLOAT, [2, 2, 3])
+    out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.FLOAT, None)
+    size = numpy_helper.from_array(np.array([2, 1, 3, 4], dtype=np.int64), name=_p(op_name, "size"))
+    node = helper.make_node(op_name, [_p(op_name, "theta"), _p(op_name, "size")], [_p(op_name, "output")], name=_p(op_name, "node"))
+    return [node], [theta], [out], [size]
+
+
 def make_grid_sample(op_name: str, opset: int):
     inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [1, 1, 3, 3])
     grid = helper.make_tensor_value_info(_p(op_name, "grid"), TensorProto.FLOAT, [1, 2, 2, 2])
@@ -1495,6 +1504,7 @@ GENERATORS = {
     "range_op": make_range_op,
     "resize": make_resize,
     "upsample": make_upsample,
+    "affine_grid": make_affine_grid,
     "grid_sample": make_grid_sample,
     "random_normal": make_random_normal,
     "random_uniform": make_random_uniform,

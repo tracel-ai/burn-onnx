@@ -41,7 +41,6 @@ macro_rules! define_placeholder_node {
 }
 
 define_placeholder_node! {
-    AffineGridNode,
     AveragePoolNode,
     CenterCropPadNode,
     ConcatFromSequenceNode,

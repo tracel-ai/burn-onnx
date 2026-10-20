@@ -17,7 +17,7 @@
 17:BlackmanWindow,DFT,HammingWindow,HannWindow,LayerNormalization,MelWeightMatrix,STFT|
 18:BitwiseAnd,BitwiseNot,BitwiseOr,BitwiseXor,Col2Im,GroupNormalization,LpPool,LpPool1d,Mish,Pad,ReduceL1,ReduceL2,ReduceLogSum,ReduceLogSumExp,ReduceMax,ReduceMean,ReduceMin,ReduceProd,ReduceSumSquare,Resize,ScatterElements,ScatterND,Split|
 19:AveragePool,AveragePool1d,AveragePool3d,Cast,CastLike,Constant,DeformConv,DequantizeLinear,Equal,Identity,If,Loop,Pad,QuantizeLinear,Reshape,Resize,Scan,Shape,Size|
-20:ConstantOfShape,DFT,Gelu,GridSample,IsInf,IsNaN,ReduceMax,ReduceMin|
+20:AffineGrid,ConstantOfShape,DFT,Gelu,GridSample,IsInf,IsNaN,ReduceMax,ReduceMin|
 21:Cast,CastLike,Constant,ConstantOfShape,DequantizeLinear,Flatten,GroupNormalization,Identity,If,Loop,Pad,QLinearMatMul,QuantizeLinear,Reshape,Scan,Shape,Size,Squeeze,Transpose,Unsqueeze|
 22:Acos,Acosh,Asin,Asinh,Atan,Atanh,AveragePool,AveragePool1d,AveragePool3d,Bernoulli,Conv,Conv1d,Conv3d,ConvTranspose,ConvTranspose1d,ConvTranspose3d,Cos,Cosh,DeformConv,Det,Dropout,Elu,EyeLike,GRU,GlobalAveragePool,GlobalLpPool,GlobalMaxPool,GridSample,HardSigmoid,HardSwish,InstanceNormalization,LSTM,LpNormalization,LpPool,LpPool1d,MaxPool,MaxPool1d,MaxPool3d,Mish,RNN,RandomNormal,RandomNormalLike,RandomUniform,RandomUniformLike,Round,Selu,Sin,Sinh,Softplus,Softsign,Tan,ThresholdedRelu|
 23:Attention,Cast,CastLike,Constant,ConstantOfShape,DequantizeLinear,Flatten,Identity,If,Loop,Pad,QuantizeLinear,Reshape,Scan,Shape,Size,Squeeze,Transpose,Unsqueeze|

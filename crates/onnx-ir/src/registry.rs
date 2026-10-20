@@ -649,6 +649,10 @@ impl ProcessorRegistry {
             Box::new(crate::node::hamming_window::HammingWindowProcessor),
         );
         registry.register(
+            NodeType::AffineGrid,
+            Box::new(crate::node::affine_grid::AffineGridProcessor),
+        );
+        registry.register(
             NodeType::HannWindow,
             Box::new(crate::node::hann_window::HannWindowProcessor),
         );

@@ -15,6 +15,7 @@ pub mod abs;
 pub mod acos;
 pub mod acosh;
 pub mod add;
+pub mod affine_grid;
 pub mod and;
 pub mod argmax;
 pub mod argmin;
