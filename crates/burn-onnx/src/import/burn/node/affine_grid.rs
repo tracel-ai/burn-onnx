@@ -112,13 +112,21 @@ impl NodeCodegen for onnx_ir::node::affine_grid::AffineGridNode {
                 );
                 let device = theta.device();
                 let dtype = theta.dtype();
+                // Positions are computed in f32 (f64 for f64 theta) and cast afterwards: a
+                // half-precision index overflows past 65504 and is inexact past 2048
+                let working_dtype = if dtype == burn::tensor::DType::F64 {
+                    burn::tensor::DType::F64
+                } else {
+                    burn::tensor::DType::F32
+                };
                 let coordinates = |len: usize| {
                     let (step, start) = #spacing;
                     Tensor::<1, Int>::arange(0..len as i64, (&device, burn::tensor::DType::I64))
                         .float()
-                        .cast(dtype)
+                        .cast(working_dtype)
                         .mul_scalar(step)
                         .add_scalar(start)
+                        .cast(dtype)
                 };
                 let points = #points;
                 let stacked: Tensor<#homogeneous> = Tensor::stack(
@@ -184,13 +192,19 @@ mod tests {
                 );
                 let device = theta.device();
                 let dtype = theta.dtype();
+                let working_dtype = if dtype == burn::tensor::DType::F64 {
+                    burn::tensor::DType::F64
+                } else {
+                    burn::tensor::DType::F32
+                };
                 let coordinates = |len: usize| {
                     let (step, start) = (2.0 / len as f64, 1.0 / len as f64 - 1.0);
                     Tensor::<1, Int>::arange(0..len as i64, (&device, burn::tensor::DType::I64))
                         .float()
-                        .cast(dtype)
+                        .cast(working_dtype)
                         .mul_scalar(step)
                         .add_scalar(start)
+                        .cast(dtype)
                 };
                 let points = height * width;
                 let stacked: Tensor<3> = Tensor::stack(
@@ -244,6 +258,11 @@ mod tests {
                 );
                 let device = theta.device();
                 let dtype = theta.dtype();
+                let working_dtype = if dtype == burn::tensor::DType::F64 {
+                    burn::tensor::DType::F64
+                } else {
+                    burn::tensor::DType::F32
+                };
                 let coordinates = |len: usize| {
                     let (step, start) = (
                         if len > 1 { 2.0 / (len - 1) as f64 } else { 0.0 },
@@ -251,9 +270,10 @@ mod tests {
                     );
                     Tensor::<1, Int>::arange(0..len as i64, (&device, burn::tensor::DType::I64))
                         .float()
-                        .cast(dtype)
+                        .cast(working_dtype)
                         .mul_scalar(step)
                         .add_scalar(start)
+                        .cast(dtype)
                 };
                 let points = height * width;
                 let stacked: Tensor<3> = Tensor::stack(
@@ -306,13 +326,19 @@ mod tests {
                 );
                 let device = theta.device();
                 let dtype = theta.dtype();
+                let working_dtype = if dtype == burn::tensor::DType::F64 {
+                    burn::tensor::DType::F64
+                } else {
+                    burn::tensor::DType::F32
+                };
                 let coordinates = |len: usize| {
                     let (step, start) = (2.0 / len as f64, 1.0 / len as f64 - 1.0);
                     Tensor::<1, Int>::arange(0..len as i64, (&device, burn::tensor::DType::I64))
                         .float()
-                        .cast(dtype)
+                        .cast(working_dtype)
                         .mul_scalar(step)
                         .add_scalar(start)
+                        .cast(dtype)
                 };
                 let points = depth * height * width;
                 let stacked: Tensor<4> = Tensor::stack(

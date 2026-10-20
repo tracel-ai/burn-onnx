@@ -1,5 +1,10 @@
 use crate::include_models;
-include_models!(affine_grid_2d, affine_grid_3d, affine_grid_f64);
+include_models!(
+    affine_grid_2d,
+    affine_grid_3d,
+    affine_grid_f64,
+    affine_grid_f16
+);
 
 #[cfg(test)]
 mod tests {
@@ -112,9 +117,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(feature = "test-metal", ignore = "Metal has no f64")]
     fn affine_grid_f64_keeps_theta_dtype() {
         // Expected values from affine_grid_f64.py (ONNX Runtime, which returns float64)
-        let device = Default::default();
+        let device = burn::tensor::Device::default();
+        // f64 support on wgpu depends on the adapter.
+        if !device.supports_dtype(burn::tensor::DType::F64) {
+            return;
+        }
         let model = affine_grid_f64::Model::from_file(
             concat!(env!("OUT_DIR"), "/model/affine_grid_f64.bpk"),
             &device,
@@ -172,6 +182,41 @@ mod tests {
         let size = Tensor::<1, Int>::from_ints([3, 1, 3, 4], &device);
 
         let _ = model.forward(theta_2d(&device), size);
+    }
+
+    #[test]
+    fn affine_grid_f16_large_width() {
+        // A half-precision index overflows past 65504 (and is inexact past 2048), so the
+        // positions are computed in f32 before the cast to f16. ONNX Runtime fails on a
+        // float16 AffineGrid, so the expected values come from the formula: for an identity
+        // theta, x = (2 * i + 1) / W - 1 and y = 0, within f16 rounding.
+        let device = burn::tensor::Device::default();
+        if !device.supports_dtype(burn::tensor::DType::F16) {
+            return;
+        }
+        let model = affine_grid_f16::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/affine_grid_f16.bpk"),
+            &device,
+        );
+        let theta = Tensor::<3>::from_floats([[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]], &device)
+            .cast(burn::tensor::DType::F16);
+        let width = 65536;
+        let size = Tensor::<1, Int>::from_ints([1, 1, 1, width], &device);
+
+        let grid = model.forward(theta, size);
+
+        assert_eq!(grid.dtype(), burn::tensor::DType::F16);
+        assert_eq!(grid.dims(), [1, 1, width as usize, 2]);
+        let values = grid.to_data().convert::<f32>().try_to_vec::<f32>().unwrap();
+        for (i, point) in values.chunks(2).enumerate() {
+            let x = (2 * i + 1) as f64 / width as f64 - 1.0;
+            assert!(
+                point[0].is_finite() && (point[0] as f64 - x).abs() <= 1e-3,
+                "x at {i}: {} instead of {x}",
+                point[0]
+            );
+            assert_eq!(point[1], 0.0, "y at {i}");
+        }
     }
 
     #[test]
