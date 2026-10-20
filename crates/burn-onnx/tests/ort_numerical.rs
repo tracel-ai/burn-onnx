@@ -1,6 +1,6 @@
 #![cfg(feature = "export")]
 
-use std::cell::RefCell;
+use std::{cell::RefCell, sync::OnceLock};
 
 use burn::backend::DType;
 use burn::module::{Module, Param};
@@ -16,7 +16,7 @@ use burn::tensor::{
 };
 use burn_onnx::export::{AxisSpec, ExportError, InputSpec, OnnxExporter};
 use onnx_ir::ModelProto;
-use ort::{session::Session, value::Tensor as OrtTensor};
+use ort::{environment::Environment, session::Session, value::Tensor as OrtTensor};
 use protobuf::Message;
 
 mod models;
@@ -24,6 +24,11 @@ use models::resnet::ResNet18;
 
 const RTOL: f32 = 1.0e-4;
 const ATOL: f32 = 1.0e-5;
+
+fn ort_environment() -> &'static Environment {
+    static ENVIRONMENT: OnceLock<Environment> = OnceLock::new();
+    ENVIRONMENT.get_or_init(|| ort::init().build().unwrap())
+}
 
 #[derive(Module, Debug)]
 struct AddModule {
@@ -496,7 +501,7 @@ impl Mlp {
 }
 
 fn run_ort(model: &[u8], shape: impl Into<Vec<i64>>, input: Vec<f32>) -> TensorData {
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model)
         .unwrap();
@@ -542,7 +547,7 @@ fn parameter_output_matches_burn() {
         .export(&module, input, ReturnWeight::forward)
         .unwrap();
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model.as_bytes())
         .unwrap();
@@ -1020,7 +1025,7 @@ fn stepped_slice_matches_burn() {
         .export(&SteppedSlice, input, SteppedSlice::forward)
         .unwrap();
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model.as_bytes())
         .unwrap();
@@ -1123,7 +1128,7 @@ fn scatter_reductions_match_burn() {
         .export(&module, input, ScatterColumns::forward)
         .unwrap();
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model.as_bytes())
         .unwrap();
@@ -1174,7 +1179,7 @@ fn dynamic_bool_zeros_and_ones_match_burn() {
     assert!(proto.graph.node.iter().all(|node| node.op_type != "Cast"));
 
     let runtime_values = vec![0.0f32; 21];
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model.as_bytes())
         .unwrap();
@@ -1210,7 +1215,7 @@ fn native_constant_of_shape_dtypes_do_not_add_casts() {
         ["ConstantOfShape", "ConstantOfShape"]
     );
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model.as_bytes())
         .unwrap();
@@ -1243,7 +1248,7 @@ fn int32_constant_of_shape_is_native_and_matches_burn() {
         ["ConstantOfShape", "ConstantOfShape"]
     );
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model.as_bytes())
         .unwrap();
@@ -1320,7 +1325,7 @@ fn dim_reductions_match_burn() {
         ["ReduceSum", "TopK", "TopK"]
     );
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model.as_bytes())
         .unwrap();
@@ -1378,7 +1383,7 @@ fn arg_reductions_lower_directly_and_match_burn() {
         ["ArgMax", "ArgMin"]
     );
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model.as_bytes())
         .unwrap();
@@ -1695,7 +1700,7 @@ fn cat_matches_burn() {
         .export(&CatChannels, inputs, CatChannels::forward)
         .unwrap();
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model.as_bytes())
         .unwrap();
@@ -1833,7 +1838,7 @@ fn dynamic_cat_handles_colliding_capture_shapes() {
     let second_values = second.clone().into_data().try_to_vec::<f32>().unwrap();
     let expected = CatWidths.forward((first, second)).into_data();
 
-    let mut session = Session::builder()
+    let mut session = Session::builder(ort_environment())
         .unwrap()
         .commit_from_memory(model.as_bytes())
         .unwrap();
