@@ -300,6 +300,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/gather_elements/gather_elements_axis0.onnx")
         .input("tests/gather_elements/gather_elements_negative_axis.onnx")
         .input("tests/gathernd/gathernd.onnx")
+        .input("tests/gathernd/gathernd_bool.onnx")
         .input("tests/gathernd/gathernd_3d.onnx")
         .input("tests/gathernd/gathernd_batch1.onnx")
         .input("tests/gathernd/gathernd_neg_idx.onnx")
@@ -730,6 +731,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/scatter_elements/scatter_elements_max.onnx")
         .input("tests/scatter_elements/scatter_elements_min.onnx")
         .input("tests/scatter_elements/scatter_elements_bool.onnx")
+        .input("tests/scatter_elements/scatter_elements_bool_reductions.onnx")
         .input("tests/scatter_elements/scatter_elements_3d.onnx")
         .input("tests/scatter_elements/scatter_elements_1d.onnx")
         .input("tests/scatter_elements/scatter_elements_int.onnx")
@@ -743,6 +745,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/scatter_nd/scatter_nd_max.onnx")
         .input("tests/scatter_nd/scatter_nd_min.onnx")
         .input("tests/scatter_nd/scatter_nd_bool.onnx")
+        .input("tests/scatter_nd/scatter_nd_bool_reductions.onnx")
         .input("tests/scatter_nd/scatter_nd_neg_idx.onnx")
         // Scan operator tests
         .input("tests/scan/scan_cumsum.onnx")

@@ -1,5 +1,4 @@
 use super::prelude::*;
-use crate::burn::TensorKind;
 
 impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
     fn inputs(&self) -> &[Argument] {
@@ -19,8 +18,8 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
         let data = scope.arg(data_arg);
         let indices = scope.arg(indices_arg);
 
-        let (data_tensor, indices_tensor) = match (&data_arg.ty, &indices_arg.ty) {
-            (ArgType::Tensor(d), ArgType::Tensor(i)) => (d, i),
+        let indices_tensor = match (&data_arg.ty, &indices_arg.ty) {
+            (ArgType::Tensor(_), ArgType::Tensor(i)) => i,
             _ => {
                 let msg = format!(
                     "GatherND node '{}': data and indices inputs must be tensors",
@@ -29,7 +28,6 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
                 return quote! { let #output = { compile_error!(#msg); unreachable!() }; };
             }
         };
-        let data_kind = TensorKind::from(data_tensor.dtype);
         let indices_rank = indices_tensor.rank;
 
         let batch_dims = self.config.batch_dims;
@@ -73,20 +71,7 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
             }
         };
 
-        // Native gather_nd panics for bool data; round-trip through i64.
-        let is_bool = matches!(data_kind, TensorKind::Bool);
-        let gather_call = |indices_var: TokenStream| -> TokenStream {
-            if is_bool {
-                quote! {
-                    #data.int()
-                        .cast(burn::tensor::DType::I64)
-                        .gather_nd(#indices_var)
-                        .bool()
-                }
-            } else {
-                quote! { #data.gather_nd(#indices_var) }
-            }
-        };
+        let gather = quote! { #data.gather_nd(aug_indices) };
 
         if output_arg.ty.is_scalar() {
             // Native gather_nd with output rank 0 would produce a rank-0 tensor,
@@ -100,8 +85,6 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
                 _ => unreachable!("is_scalar guard"),
             };
 
-            let gather = gather_call(quote! { aug_indices });
-
             quote! {
                 let #output = {
                     #normalize
@@ -114,7 +97,6 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
                 };
             }
         } else {
-            let gather = gather_call(quote! { aug_indices });
             quote! {
                 let #output = {
                     #normalize
@@ -129,9 +111,56 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::*;
-    use burn::tensor::DType;
+    use burn::tensor::{BoolStore, DType};
     use insta::assert_snapshot;
     use onnx_ir::gathernd::{GatherNDConfig, GatherNDNodeBuilder};
+
+    #[test]
+    fn test_gathernd_bool() {
+        // Bool data is gathered directly
+        let config = GatherNDConfig::new(0);
+        let node = GatherNDNodeBuilder::new("gathernd1")
+            .input_tensor("data", 2, DType::Bool(BoolStore::Native))
+            .input_tensor("indices", 2, DType::I64)
+            .output_tensor("output", 1, DType::Bool(BoolStore::Native))
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            data: Tensor<2, Bool>,
+            indices: Tensor<2, Int>,
+        ) -> Tensor<1, Bool> {
+            let output = {
+                let data_dims = data.dims();
+                let indices_i64 = indices.cast(burn::tensor::DType::I64);
+                let idx_dims = indices_i64.dims();
+                let k = idx_dims[2 - 1];
+                let mut dim_sizes: alloc::vec::Vec<i64> = alloc::vec::Vec::with_capacity(k);
+                for i in 0..k {
+                    dim_sizes.push(data_dims[0 + i] as i64);
+                }
+                let mut bcast_shape = [1usize; 2];
+                bcast_shape[2 - 1] = k;
+                let dims_tensor = Tensor::<
+                    1,
+                    Int,
+                >::from_data(
+                        burn::tensor::TensorData::from(dim_sizes.as_slice()),
+                        (&self.device, burn::tensor::DType::I64),
+                    )
+                    .reshape(bcast_shape);
+                let negative = indices_i64.clone().lower_elem(0i64);
+                let corrected = indices_i64.clone() + dims_tensor;
+                let indices_norm = indices_i64.mask_where(negative, corrected);
+                let aug_indices = indices_norm;
+                data.gather_nd(aug_indices)
+            };
+            output
+        }
+        ");
+    }
 
     #[test]
     fn test_gathernd_batch0_2d_data_2d_indices() {

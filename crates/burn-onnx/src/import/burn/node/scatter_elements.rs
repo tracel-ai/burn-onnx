@@ -1,5 +1,4 @@
 use super::prelude::*;
-use crate::burn::TensorKind;
 use onnx_ir::scatter_elements::ScatterElementsReduction;
 
 impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
@@ -18,8 +17,8 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
         let updates = scope.arg(&self.inputs[2]);
         let output = arg_to_ident(self.outputs.first().unwrap());
 
-        let (data_kind, rank) = match &self.inputs[0].ty {
-            ArgType::Tensor(t) => (TensorKind::from(t.dtype), t.rank),
+        let rank = match &self.inputs[0].ty {
+            ArgType::Tensor(t) => t.rank,
             ArgType::Shape(rank) => {
                 return forward_shape(self, data, indices, updates, output, *rank);
             }
@@ -33,16 +32,8 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
         };
         let rank_lit = rank.to_tokens();
 
-        if matches!(data_kind, TensorKind::Bool)
-            && !matches!(self.config.reduction, ScatterElementsReduction::None)
-        {
-            let msg = format!(
-                "ScatterElements node '{}': {:?} reduction is not supported for bool tensors",
-                self.name, self.config.reduction
-            );
-            return quote! { let #output = { compile_error!(#msg); unreachable!() }; };
-        }
-
+        // On bool tensors burn's Add and Max are a logical or and Mul and Min a logical and,
+        // as in NumPy (and so in the ONNX reference).
         let update_op = match &self.config.reduction {
             ScatterElementsReduction::None => quote! { burn::tensor::IndexingUpdateOp::Assign },
             ScatterElementsReduction::Add => quote! { burn::tensor::IndexingUpdateOp::Add },
@@ -59,22 +50,8 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
         //
         // The graph values are read once up front: every later read is of a local, so
         // no temporary below can shadow a graph value that shares its name.
-        //
-        // `scatter` has no Assign for bool tensors (only Add, as a logical or), and
-        // `scatter_nd` none at all, so bool data round-trips through i64.
-        let is_bool = matches!(data_kind, TensorKind::Bool);
-        let to_int = is_bool.then(|| {
-            quote! {
-                let (data, updates) = (
-                    data.int().cast(burn::tensor::DType::I64),
-                    updates.int().cast(burn::tensor::DType::I64),
-                );
-            }
-        });
-        let to_bool = is_bool.then(|| quote! { .bool() });
         let prologue = quote! {
             let (data, indices, updates) = (#data, #indices, #updates);
-            #to_int
             let axis_size = data.dims()[#axis] as i64;
             let indices = indices
                 .cast(burn::tensor::DType::I64)
@@ -93,7 +70,7 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
                 let #output = {
                     #prologue
                     #native
-                }#to_bool;
+                };
             };
         }
 
@@ -147,7 +124,7 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
                     #coordinates
                     data.scatter_nd(coordinates, updates.reshape([n]), #update_op)
                 }
-            }#to_bool;
+            };
         }
     }
 }
@@ -623,15 +600,10 @@ mod tests {
         ) -> Tensor<1, Bool> {
             let output = {
                 let (data, indices, updates) = (data, indices, updates);
-                let (data, updates) = (
-                    data.int().cast(burn::tensor::DType::I64),
-                    updates.int().cast(burn::tensor::DType::I64),
-                );
                 let axis_size = data.dims()[0] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
                 data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Assign)
-            }
-                .bool();
+            };
             output
         }
         ");
@@ -657,10 +629,6 @@ mod tests {
         ) -> Tensor<2, Bool> {
             let output = {
                 let (data, indices, updates) = (data, indices, updates);
-                let (data, updates) = (
-                    data.int().cast(burn::tensor::DType::I64),
-                    updates.int().cast(burn::tensor::DType::I64),
-                );
                 let axis_size = data.dims()[1] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
                 let idx_dims = indices.dims();
@@ -702,15 +670,14 @@ mod tests {
                         burn::tensor::IndexingUpdateOp::Assign,
                     )
                 }
-            }
-                .bool();
+            };
             output
         }
         ");
     }
 
     #[test]
-    fn test_scatter_elements_bool_add_emits_compile_error() {
+    fn test_scatter_elements_bool_add() {
         let config = ScatterElementsConfig::new(0, ScatterElementsReduction::Add);
         let node = ScatterElementsNodeBuilder::new("scatter1")
             .input_tensor("data", 1, DType::Bool(BoolStore::Native))
@@ -720,7 +687,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r#"
+        assert_snapshot!(code, @r"
         pub fn forward(
             &self,
             data: Tensor<1, Bool>,
@@ -728,14 +695,14 @@ mod tests {
             updates: Tensor<1, Bool>,
         ) -> Tensor<1, Bool> {
             let output = {
-                compile_error!(
-                    "ScatterElements node 'scatter1': Add reduction is not supported for bool tensors"
-                );
-                unreachable!()
+                let (data, indices, updates) = (data, indices, updates);
+                let axis_size = data.dims()[0] as i64;
+                let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
+                data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Add)
             };
             output
         }
-        "#);
+        ");
     }
 
     #[test]
