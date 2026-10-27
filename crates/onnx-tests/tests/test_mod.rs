@@ -128,6 +128,7 @@ pub mod one_hot;
 pub mod one_hot_encoder;
 pub mod or;
 pub mod pad;
+pub mod pool3d;
 pub mod pow;
 pub mod prelu;
 pub mod qlinear_matmul;

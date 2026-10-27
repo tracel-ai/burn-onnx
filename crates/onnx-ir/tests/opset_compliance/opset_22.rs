@@ -801,6 +801,7 @@ fn max_pool3d(graph: &OnnxGraph) {
             ],
             ceil_mode: false,
             auto_pad: NotSet,
+            storage_order: 0,
         }
     "#);
 }

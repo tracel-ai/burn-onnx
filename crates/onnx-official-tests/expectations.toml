@@ -682,9 +682,8 @@ status = "pass"
 status = "pass"
 
 [test_averagepool_2d_dilations]
-status = "fail-compare"
-reason = "averagepool op family comparison failure"
-tracking = "#311"
+status = "skip-codegen"
+reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
 
 [test_averagepool_2d_pads]
 status = "pass"
@@ -714,28 +713,27 @@ status = "pass"
 status = "pass"
 
 [test_averagepool_3d_default]
-status = "skip-codegen"
-reason = "burn-onnx does not currently support 3D average pooling: Burn lacks a native AvgPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
+status = "pass"
 
 [test_averagepool_3d_dilations_large_count_include_pad_is_0_ceil_mode_is_False]
 status = "skip-codegen"
-reason = "burn-onnx does not currently support 3D average pooling: Burn lacks a native AvgPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
+reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
 
 [test_averagepool_3d_dilations_large_count_include_pad_is_0_ceil_mode_is_True]
 status = "skip-codegen"
-reason = "burn-onnx does not currently support 3D average pooling: Burn lacks a native AvgPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
+reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
 
 [test_averagepool_3d_dilations_large_count_include_pad_is_1_ceil_mode_is_False]
 status = "skip-codegen"
-reason = "burn-onnx does not currently support 3D average pooling: Burn lacks a native AvgPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
+reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
 
 [test_averagepool_3d_dilations_large_count_include_pad_is_1_ceil_mode_is_True]
 status = "skip-codegen"
-reason = "burn-onnx does not currently support 3D average pooling: Burn lacks a native AvgPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
+reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
 
 [test_averagepool_3d_dilations_small]
 status = "skip-codegen"
-reason = "burn-onnx does not currently support 3D average pooling: Burn lacks a native AvgPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
+reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
 
 [test_basic_conv_with_padding]
 status = "pass"
@@ -3440,20 +3438,16 @@ status = "skip-compile"
 reason = "mismatched types: expected `Tensor<4>`, found `Tensor<4, Int>`"
 
 [test_maxpool_3d_default]
-status = "skip-codegen"
-reason = "burn-onnx does not currently support 3D max pooling: Burn lacks a native MaxPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
+status = "pass"
 
 [test_maxpool_3d_dilations]
-status = "skip-codegen"
-reason = "burn-onnx does not currently support 3D max pooling: Burn lacks a native MaxPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
+status = "pass"
 
 [test_maxpool_3d_dilations_use_ref_impl]
-status = "skip-codegen"
-reason = "burn-onnx does not currently support 3D max pooling: Burn lacks a native MaxPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
+status = "pass"
 
 [test_maxpool_3d_dilations_use_ref_impl_large]
-status = "skip-codegen"
-reason = "burn-onnx does not currently support 3D max pooling: Burn lacks a native MaxPool3d primitive. Tracking issue: https://github.com/tracel-ai/burn-onnx/issues/343"
+status = "pass"
 
 [test_maxpool_with_argmax_2d_precomputed_pads]
 status = "pass"

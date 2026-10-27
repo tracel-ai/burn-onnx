@@ -101,6 +101,13 @@ impl NodeProcessor for AvgPool1dProcessor {
                             opset
                         )));
                     }
+                    // burn's avg_pool takes no dilation (tracel-ai/burn#6148): reject it
+                    // instead of pooling a dense window
+                    if dilations.iter().any(|&d| d != 1) {
+                        return Err(ProcessError::Custom(format!(
+                            "AveragePool: dilations other than 1 are not supported yet, got {dilations:?} (tracel-ai/burn#6148)"
+                        )));
+                    }
                 }
                 "auto_pad" => {
                     AutoPad::parse(&value.clone().into_string()?)?;
@@ -265,13 +272,18 @@ mod tests {
     }
 
     #[test]
-    fn test_avg_pool1d_config_with_dilation() {
+    fn test_avg_pool1d_dilation_is_recorded_but_rejected() {
         let node = create_test_node(vec![4], vec![1], vec![0, 0], 0, 0, Some(vec![2]));
         let mut node = node;
         let processor = AvgPool1dProcessor;
         let prefs = OutputPreferences::new();
         let config = processor.extract_config(&node, 19).unwrap();
-        processor.infer_types(&mut node, 19, &prefs).unwrap();
+        // The config mirrors ONNX, but burn can't pool with dilation yet
+        let err = processor.infer_types(&mut node, 19, &prefs).unwrap_err();
+        assert!(
+            matches!(&err, ProcessError::Custom(msg) if msg.contains("dilations other than 1 are not supported yet")),
+            "{err}"
+        );
 
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 1);

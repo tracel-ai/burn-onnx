@@ -503,6 +503,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/pad/pad_runtime_pads.onnx")
         .input("tests/pad/pad_runtime_pads_axes.onnx")
         .input("tests/pad/pad_runtime_pads_shape.onnx")
+        .input("tests/pool3d/avgpool3d.onnx")
+        .input("tests/pool3d/maxpool3d.onnx")
         .input("tests/pow/pow.onnx")
         .input("tests/pow/pow_mixed.onnx")
         .input("tests/pow/pow_broadcast.onnx")
