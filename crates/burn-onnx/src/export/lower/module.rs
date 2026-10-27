@@ -5,7 +5,10 @@
 //! pooling operations.
 
 use burn::backend::DType;
-use burn::backend::ir::{InterpolateModeIr, ModuleOperationIr, OperationIr, TensorIr};
+use burn::backend::ir::{
+    CoordinateTransformModeIr, InterpolateModeIr, ModuleOperationIr, NearestRoundingModeIr,
+    OperationIr, TensorIr,
+};
 
 use crate::export::ExportError;
 
@@ -96,36 +99,50 @@ pub(super) fn lower(
             Ok(true)
         }
         ModuleOperationIr::Interpolate(interpolate) => {
-            let (mode, coordinate_mode, nearest_mode) = match interpolate.options.mode {
-                InterpolateModeIr::Nearest => ("nearest", "asymmetric", Some("floor")),
-                InterpolateModeIr::NearestExact => {
-                    ("nearest", "half_pixel", Some("round_prefer_ceil"))
-                }
-                InterpolateModeIr::Bilinear => (
-                    "linear",
-                    if interpolate.options.align_corners {
-                        "align_corners"
-                    } else {
-                        "half_pixel"
-                    },
-                    None,
-                ),
-                InterpolateModeIr::Bicubic => (
-                    "cubic",
-                    if interpolate.options.align_corners {
-                        "align_corners"
-                    } else {
-                        "half_pixel"
-                    },
-                    None,
-                ),
+            let options = &interpolate.options;
+            let unsupported = |kind: &str| ExportError::UnsupportedOperation {
+                operation: index,
+                kind: kind.into(),
+            };
+            let mode = match options.mode {
+                InterpolateModeIr::Nearest | InterpolateModeIr::NearestExact => "nearest",
+                InterpolateModeIr::Bilinear => "linear",
+                InterpolateModeIr::Bicubic => "cubic",
                 InterpolateModeIr::Lanczos3 => {
-                    return Err(ExportError::UnsupportedOperation {
-                        operation: index,
-                        kind: "Lanczos3 interpolation has no ONNX Resize mode".into(),
-                    });
+                    return Err(unsupported(
+                        "Lanczos3 interpolation has no ONNX Resize mode",
+                    ));
                 }
             };
+            // The operation carries the ONNX Resize settings themselves, so they are written as
+            // given. `Nearest` and `NearestExact` default to the pairs this export used to assume
+            // (`asymmetric` with `floor`, `half_pixel` with `round_prefer_ceil`).
+            let coordinate_mode = match options.coordinate_transform {
+                CoordinateTransformModeIr::HalfPixel => "half_pixel",
+                CoordinateTransformModeIr::AlignCorners => "align_corners",
+                CoordinateTransformModeIr::Asymmetric => "asymmetric",
+                CoordinateTransformModeIr::PytorchHalfPixel => "pytorch_half_pixel",
+                CoordinateTransformModeIr::HalfPixelSymmetric => {
+                    return Err(unsupported(
+                        "the half_pixel_symmetric coordinate transform needs opset 19",
+                    ));
+                }
+                CoordinateTransformModeIr::TfCropAndResize { .. } => {
+                    return Err(unsupported(
+                        "the tf_crop_and_resize coordinate transform needs an roi input",
+                    ));
+                }
+            };
+            let nearest_mode = matches!(
+                options.mode,
+                InterpolateModeIr::Nearest | InterpolateModeIr::NearestExact
+            )
+            .then_some(match options.nearest_mode {
+                NearestRoundingModeIr::RoundPreferFloor => "round_prefer_floor",
+                NearestRoundingModeIr::RoundPreferCeil => "round_prefer_ceil",
+                NearestRoundingModeIr::Floor => "floor",
+                NearestRoundingModeIr::Ceil => "ceil",
+            });
             let sizes = format!("node_{index}_sizes");
             context.i64_initializer(
                 sizes.clone(),
@@ -145,8 +162,12 @@ pub(super) fn lower(
             if let Some(nearest_mode) = nearest_mode {
                 context.string_attribute("nearest_mode", nearest_mode);
             }
-            if matches!(interpolate.options.mode, InterpolateModeIr::Bicubic) {
-                context.float_attribute("cubic_coeff_a", -0.75);
+            if matches!(options.mode, InterpolateModeIr::Bicubic) {
+                context.float_attribute("cubic_coeff_a", options.cubic_options.a);
+                context.int_attribute(
+                    "exclude_outside",
+                    i64::from(options.cubic_options.exclude_outside),
+                );
             }
             Ok(true)
         }

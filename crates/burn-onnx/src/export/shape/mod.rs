@@ -841,10 +841,10 @@ fn tensor(graph: &GraphIr, id: TensorId) -> Option<&TensorIr> {
 mod tests {
     use super::*;
     use burn::backend::ir::{
-        CreationOpIr, FullOpIr, InterpolateModeIr, InterpolateOpIr, InterpolateOptionsIr, ScalarIr,
-        ShapeOpIr, SwapDimsOpIr, TensorIr,
+        CreationOpIr, FullOpIr, InterpolateOpIr, ScalarIr, ShapeOpIr, SwapDimsOpIr, TensorIr,
     };
     use burn::backend::{DType, Shape};
+    use burn::tensor::ops::{InterpolateMode, InterpolateOptions};
 
     fn tensor(id: u64, shape: &[usize]) -> TensorIr {
         TensorIr::uninit(
@@ -1021,10 +1021,7 @@ mod tests {
             InterpolateOpIr {
                 x: tensor(1, &[1, 1, 4, 4]),
                 output_size: [8, 8],
-                options: InterpolateOptionsIr {
-                    mode: InterpolateModeIr::Nearest,
-                    align_corners: false,
-                },
+                options: InterpolateOptions::new(InterpolateMode::Nearest).into(),
                 out: tensor(2, &[1, 1, 8, 8]),
             },
         ))]);
@@ -1032,10 +1029,7 @@ mod tests {
             InterpolateOpIr {
                 x: tensor(11, &[1, 1, 5, 5]),
                 output_size: [10, 10],
-                options: InterpolateOptionsIr {
-                    mode: InterpolateModeIr::Nearest,
-                    align_corners: false,
-                },
+                options: InterpolateOptions::new(InterpolateMode::Nearest).into(),
                 out: tensor(12, &[1, 1, 10, 10]),
             },
         ))]);
