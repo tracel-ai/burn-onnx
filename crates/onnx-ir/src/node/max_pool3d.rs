@@ -15,7 +15,7 @@ use onnx_ir_derive::NodeBuilder;
 
 use crate::ir::Argument;
 
-use crate::ir::{Node, RawNode};
+use crate::ir::{ArgType, DType, Node, RawNode, TensorType};
 use crate::node::padding::{AutoPad, PaddingConfig3d, padding_config_3d};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError,
@@ -119,6 +119,15 @@ impl NodeProcessor for MaxPool3dProcessor {
 
         crate::node::padding::pool_output_type(node)?;
 
+        // The optional Indices output holds int64 positions into the flattened input.
+        if let Some(indices) = node.outputs.get_mut(1) {
+            indices.ty = ArgType::Tensor(TensorType {
+                dtype: DType::I64,
+                rank: 5,
+                static_shape: None,
+            });
+        }
+
         Ok(())
     }
 
@@ -220,6 +229,28 @@ mod tests {
             builder = builder.attr_string("auto_pad", auto_pad);
         }
         builder.build()
+    }
+
+    #[test]
+    fn test_max_pool3d_indices_output_is_i64() {
+        // Declared as f32 so the test shows infer_types retypes it.
+        let mut node = TestNodeBuilder::new(NodeType::MaxPool3d, "test_indices")
+            .input_tensor_f32("data", 5, None)
+            .output_tensor_f32("output", 5, None)
+            .output_tensor_f32("indices", 5, None)
+            .attr_ints("kernel_shape", vec![2, 2, 2])
+            .build();
+        MaxPool3dProcessor
+            .infer_types(&mut node, 12, &OutputPreferences::new())
+            .unwrap();
+        assert!(matches!(
+            node.outputs[1].ty,
+            ArgType::Tensor(TensorType {
+                dtype: DType::I64,
+                rank: 5,
+                ..
+            })
+        ));
     }
 
     #[test]

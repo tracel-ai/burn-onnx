@@ -54,8 +54,11 @@ impl NodeCodegen for onnx_ir::max_pool1d::MaxPool1dNode {
         }
 
         let field = Ident::new(&self.name, Span::call_site());
-        let pooled = match as_float(self, &input) {
-            Some(float_input) => restore_dtype(self, quote! { self.#field.forward(#float_input) }),
+        let pooled = match as_float(&self.inputs[0], &input) {
+            Some(float_input) => restore_dtype(
+                &self.inputs[0],
+                quote! { self.#field.forward(#float_input) },
+            ),
             None => quote! { self.#field.forward(#input) },
         };
         let config = &self.config;
@@ -92,8 +95,8 @@ fn wants_indices(node: &onnx_ir::max_pool1d::MaxPool1dNode) -> bool {
 /// burn pools float tensors only. An integer input (int8/uint8 since opset 12) is
 /// pooled as f32, which holds it exactly; returns that conversion, or `None` for a
 /// float input.
-fn as_float(node: &onnx_ir::max_pool1d::MaxPool1dNode, input: &TokenStream) -> Option<TokenStream> {
-    let dtype = node.inputs[0].ty.elem_type();
+pub(super) fn as_float(input_arg: &Argument, input: &TokenStream) -> Option<TokenStream> {
+    let dtype = input_arg.ty.elem_type();
     if dtype.is_float() {
         None
     } else if dtype.is_uint() {
@@ -106,8 +109,8 @@ fn as_float(node: &onnx_ir::max_pool1d::MaxPool1dNode, input: &TokenStream) -> O
 }
 
 /// Casts pooled f32 `values` back to the integer input's dtype (see [`as_float`]).
-fn restore_dtype(node: &onnx_ir::max_pool1d::MaxPool1dNode, values: TokenStream) -> TokenStream {
-    let dtype = node.inputs[0].ty.elem_type().to_tokens();
+pub(super) fn restore_dtype(input_arg: &Argument, values: TokenStream) -> TokenStream {
+    let dtype = input_arg.ty.elem_type().to_tokens();
     quote! { #values.int().cast(#dtype) }
 }
 
@@ -127,11 +130,11 @@ fn forward_with_indices(
     let indices_out = arg_to_ident(&node.outputs[1]);
 
     // An integer input is converted once up front and read from `float_input`.
-    let (convert, input, values) = match as_float(node, &input) {
+    let (convert, input, values) = match as_float(&node.inputs[0], &input) {
         Some(float_input) => (
             quote! { let float_input = #float_input; },
             quote! { float_input },
-            restore_dtype(node, quote! { values }),
+            restore_dtype(&node.inputs[0], quote! { values }),
         ),
         None => (quote! {}, input, quote! { values }),
     };

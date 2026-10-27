@@ -1,10 +1,10 @@
 use crate::include_models;
-include_models!(maxpool3d, avgpool3d);
+include_models!(maxpool3d, maxpool3d_int, avgpool3d);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Tensor, TensorData, Tolerance};
+    use burn::tensor::{DType, Int, Tensor, TensorData, Tolerance};
 
     fn input(values: &[f32]) -> Tensor<5> {
         Tensor::from_data(
@@ -71,6 +71,45 @@ mod tests {
             tolerance,
         );
     }
+
+    #[test]
+    fn maxpool3d_int() {
+        // Expected values from maxpool3d_int.py (ONNX Runtime, identical to a brute-force
+        // reference): int8 and uint8 inputs are pooled in their own dtype, and the uint8
+        // pool's Indices output is an intermediate value without precomputed type metadata.
+        let device = Default::default();
+        let model = maxpool3d_int::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/maxpool3d_int.bpk"),
+            &device,
+        );
+        let x_i8 = Tensor::<5, Int>::from_data(
+            TensorData::new(INT_I8_INPUT.to_vec(), INT_INPUT_SHAPE),
+            (&device, DType::I8),
+        );
+        let x_u8 = Tensor::<5, Int>::from_data(
+            TensorData::new(INT_U8_INPUT.to_vec(), INT_INPUT_SHAPE),
+            (&device, DType::U8),
+        );
+
+        let (y_i8, y_u8, y_u8_neg_indices) = model.forward(x_i8, x_u8);
+
+        assert_eq!(y_i8.dtype(), DType::I8);
+        assert_eq!(y_u8.dtype(), DType::U8);
+        y_i8.to_data()
+            .assert_eq(&TensorData::new(INT_Y_I8.to_vec(), INT_INPUT_SHAPE), true);
+        y_u8.to_data().assert_eq(
+            &TensorData::new(INT_Y_U8.to_vec(), INT_U8_OUTPUT_SHAPE),
+            true,
+        );
+        y_u8_neg_indices.to_data().assert_eq(
+            &TensorData::new(INT_U8_NEG_INDICES.to_vec(), INT_U8_OUTPUT_SHAPE),
+            true,
+        );
+    }
+
+    const INT_INPUT_SHAPE: [usize; 5] = [1, 2, 3, 4, 4];
+
+    const INT_U8_OUTPUT_SHAPE: [usize; 5] = [1, 2, 2, 1, 2];
 
     const MAXPOOL_Y_SHAPE: [usize; 5] = [1, 2, 3, 2, 3];
 
@@ -183,5 +222,42 @@ mod tests {
         -0.119256, 0.010737, 0.68531, 0.219211, -0.440607, -0.368983, -0.00555, 0.119578,
         -0.342953, 0.089499, 0.529315, 0.396261, -0.215712, -0.323205, 0.081973, 0.104752,
         0.280687, -0.040826, -0.081837, -0.153109,
+    ];
+
+    #[rustfmt::skip]
+    const INT_I8_INPUT: [i8; 96] = [
+        -106, 70, 39, -16, -18, 91, -106, 50, -77, -104, 6, 121, 60, 66, 55, 73, 3, -96, 86, -13, 0,
+        -34, -82, 109, 72, 36, -25, 82, 11, -15, -13, -70, -105, 13, 99, -112, 91, 83, -58, 33, -86,
+        66, 51, -38, -111, 120, -14, 100, 45, 71, 66, -79, -35, -9, -1, -117, 11, -89, 62, 46, 108,
+        62, -35, 119, -23, -45, 103, -34, -109, -8, 75, -80, -10, -95, 47, -7, -44, -70, 16, 43,
+        112, -17, -87, 85, 33, 51, -104, -49, 68, 85, -17, 78, 87, -29, 101, -55,
+    ];
+
+    #[rustfmt::skip]
+    const INT_U8_INPUT: [u8; 96] = [
+        228, 255, 17, 212, 171, 12, 199, 179, 60, 98, 227, 89, 27, 161, 48, 103, 38, 204, 49, 81,
+        124, 133, 224, 184, 21, 1, 235, 24, 121, 231, 248, 246, 205, 172, 114, 197, 90, 84, 182, 5,
+        177, 187, 22, 223, 107, 137, 88, 74, 92, 175, 218, 174, 243, 64, 201, 110, 207, 186, 76,
+        247, 108, 7, 77, 150, 122, 57, 111, 252, 39, 96, 134, 33, 102, 183, 123, 229, 215, 6, 221,
+        25, 166, 112, 44, 158, 145, 70, 239, 192, 37, 15, 170, 146, 168, 41, 194, 95,
+    ];
+
+    #[rustfmt::skip]
+    const INT_Y_I8: [i8; 96] = [
+        91, 91, 50, 50, 91, 91, 121, 121, 66, 66, 121, 121, 66, 66, 73, 73, 91, 91, 109, 109, 91,
+        91, 121, 121, 72, 66, 121, 121, 66, 66, 73, 73, 91, 99, 109, 109, 91, 83, 109, 109, 120,
+        120, 100, 100, 120, 120, 100, 100, 71, 71, 66, -79, 11, 62, 62, 46, 108, 62, 119, 119, 108,
+        62, 119, 119, 71, 103, 103, -34, 11, 75, 75, 46, 108, 62, 119, 119, 108, 62, 119, 119, 112,
+        103, 103, 85, 85, 85, 78, 78, 87, 101, 101, 78, 87, 101, 101, 43,
+    ];
+
+    #[rustfmt::skip]
+    const INT_Y_U8: [u8; 8] = [
+        255, 235, 205, 235, 243, 252, 183, 252,
+    ];
+
+    #[rustfmt::skip]
+    const INT_U8_NEG_INDICES: [i64; 8] = [
+        -1, -26, -32, -26, -52, -67, -73, -67,
     ];
 }
