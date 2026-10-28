@@ -95,6 +95,16 @@ impl<'a> LoweringContext<'a> {
         self.proto.initializer.push(tensor);
     }
 
+    /// Append a `FLOAT` initializer containing a one-dimensional value list.
+    pub(super) fn f32_initializer(&mut self, name: impl Into<String>, values: &[f32]) {
+        let mut tensor = TensorProto::new();
+        tensor.name = name.into();
+        tensor.data_type = 1;
+        tensor.dims = vec![values.len() as i64];
+        tensor.float_data.extend_from_slice(values);
+        self.proto.initializer.push(tensor);
+    }
+
     /// Materialize a resolved shape expression as an ONNX shape tensor.
     pub(super) fn shape_input(
         &mut self,
