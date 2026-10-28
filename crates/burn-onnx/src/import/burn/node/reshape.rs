@@ -274,11 +274,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
 }
 
 fn reshape_args(config: &onnx_ir::reshape::ReshapeConfig, shape: TokenStream) -> TokenStream {
-    let may_contain_zero = match &config.shape {
-        onnx_ir::reshape::ReshapeInput::Static(dims) => dims.contains(&0),
-        onnx_ir::reshape::ReshapeInput::Runtime(_) => true,
-    };
-    if config.allowzero.unwrap_or(0) == 0 && may_contain_zero {
+    if config.allowzero.unwrap_or(0) == 0 {
         quote! { burn::tensor::ZeroDimPlaceholders(#shape) }
     } else {
         shape
@@ -308,7 +304,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, data: Tensor<3>) -> Tensor<2> {
-            let reshaped = data.reshape([2, -1]);
+            let reshaped = data.reshape(burn::tensor::ZeroDimPlaceholders([2, -1]));
             reshaped
         }
         ");
@@ -744,7 +740,7 @@ mod tests {
                     burn::tensor::TensorData::from([value as i64]),
                     (&self.device, burn::tensor::DType::I64),
                 )
-                .reshape([-1]);
+                .reshape(burn::tensor::ZeroDimPlaceholders([-1]));
             tensor_out
         }
         ");
@@ -770,7 +766,7 @@ mod tests {
                     burn::tensor::TensorData::from([val as f64]),
                     (&self.device, burn::tensor::DType::F32),
                 )
-                .reshape([1]);
+                .reshape(burn::tensor::ZeroDimPlaceholders([1]));
             out
         }
         ");
