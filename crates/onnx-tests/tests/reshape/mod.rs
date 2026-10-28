@@ -1,6 +1,8 @@
 use crate::include_models;
 include_models!(
     reshape,
+    reshape_zero_placeholders,
+    reshape_literal_zeros,
     reshape_with_1d_tensor,
     reshape_with_shape,
     reshape_to_scalar,
@@ -16,6 +18,48 @@ include_models!(
 mod tests {
     use super::*;
     use burn::tensor::{Device, Tensor, TensorData};
+
+    #[test]
+    fn reshape_zero_placeholders() {
+        let device = Default::default();
+        let model = reshape_zero_placeholders::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/reshape_zero_placeholders.bpk"),
+            &device,
+        );
+        let input = Tensor::<3>::from_data(
+            TensorData::from([[[1f32, -2., 4.]], [[7., 0.5, -3.]]]),
+            (&device, burn::tensor::DType::F32),
+        );
+        let target = Tensor::from_data(
+            TensorData::from([0i64, -1]),
+            (&device, burn::tensor::DType::I64),
+        );
+        let shape_source = Tensor::<2>::zeros([0, 3], (&device, burn::tensor::DType::F32));
+        let (static_out, tensor_out, shape_out) = model.forward(input, target, shape_source);
+        let expected = TensorData::from([[1f32, -2., 4.], [7., 0.5, -3.]]);
+        static_out.into_data().assert_eq(&expected, true);
+        tensor_out.into_data().assert_eq(&expected, true);
+        shape_out.into_data().assert_eq(&expected, true);
+    }
+
+    #[test]
+    fn reshape_literal_zeros() {
+        let device = Default::default();
+        let model = reshape_literal_zeros::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/reshape_literal_zeros.bpk"),
+            &device,
+        );
+        let input = Tensor::<2>::zeros([0, 3], (&device, burn::tensor::DType::F32));
+        let target = Tensor::from_data(
+            TensorData::from([3i64, 0]),
+            (&device, burn::tensor::DType::I64),
+        );
+        let shape_source = Tensor::<2>::zeros([3, 0], (&device, burn::tensor::DType::F32));
+        let (static_out, tensor_out, shape_out) = model.forward(input, target, shape_source);
+        assert_eq!(static_out.dims(), [3, 0]);
+        assert_eq!(tensor_out.dims(), [3, 0]);
+        assert_eq!(shape_out.dims(), [3, 0]);
+    }
 
     #[test]
     fn reshape() {

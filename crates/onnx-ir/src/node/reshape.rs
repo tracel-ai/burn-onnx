@@ -12,10 +12,6 @@
 //!     When allowzero=1, sets the dimension to zero explicitly
 //!   - Empty shape: Converts tensor to a scalar
 //!
-//! **NOTE**: The `allowzero` attribute (opset 14+) IS now validated in infer_types (lines 346-363).
-//! When allowzero=1, the implementation correctly checks that shape cannot contain both 0 and -1.
-//! However, the actual reshape logic respecting allowzero=1 behavior needs verification in codegen.
-//!
 //! ## Opset Versions
 //! - **Opset 1-4**: Used 'shape' attribute.
 //! - **Opset 5**: Changed shape from attribute to input, enabling dynamic reshaping.
@@ -37,9 +33,13 @@ use crate::processor::{
 };
 
 /// Configuration for the Reshape operation.
-#[derive(Debug, Clone, new)]
+#[derive(Debug, Clone, Default, new)]
 pub struct ReshapeConfig {
+    /// Target dimensions, including ONNX's zero and inferred-dimension markers.
     pub shape: ReshapeInput,
+    /// Whether zero dimensions are literal (`1`) or copied (`0`, the ONNX default).
+    #[new(default)]
+    pub allowzero: Option<i64>,
 }
 
 /// Represents either a static value or a runtime argument for reshape shape.
@@ -317,12 +317,6 @@ impl NodeProcessor for ReshapeProcessor {
         _opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        // TODO: Missing test coverage for allowzero=1 behavior
-        // While allowzero attribute is validated (lines 346-363), there's no test that verifies
-        // the actual reshape behavior when allowzero=1 and shape contains 0.
-        // According to spec: with allowzero=1, a 0 in shape means "set dimension to 0",
-        // not "copy from input". Add test: reshape_allowzero_explicit_zero
-
         // TODO: Missing test coverage for invalid shape values
         // Shape can contain negative values other than -1 (e.g., -2, -3). These should be rejected.
         // Add test: reshape_invalid_negative_value
@@ -498,12 +492,18 @@ impl NodeProcessor for ReshapeProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+        let allowzero = node
+            .attrs
+            .get("allowzero")
+            .map(|value| value.clone().into_i64())
+            .transpose()?;
         // Check for shape attribute (opset 1-4)
         if node.inputs.len() < 2 {
             if let Some(attr) = node.attrs.get("shape") {
                 let shape = attr.clone().into_i64s()?;
                 return Ok(ReshapeConfig {
                     shape: ReshapeInput::Static(shape),
+                    allowzero,
                 });
             }
             return Err(ProcessError::Custom(
@@ -562,7 +562,7 @@ impl NodeProcessor for ReshapeProcessor {
             }
         };
 
-        let config = ReshapeConfig { shape };
+        let config = ReshapeConfig { shape, allowzero };
         Ok(config)
     }
 
@@ -618,6 +618,7 @@ mod tests {
 
         let processor = ReshapeProcessor;
         let config = processor.extract_config(&node, 16).unwrap();
+        assert_eq!(config.allowzero, None);
         match &config.shape {
             ReshapeInput::Static(shape) => assert_eq!(shape, &vec![2, 3]),
             _ => panic!("Expected static shape"),
@@ -625,17 +626,23 @@ mod tests {
     }
 
     #[test]
-    fn test_reshape_config_allowzero_supported() {
-        let _node = create_test_node(1, vec![2, 3]).process(ReshapeProcessor, 16);
-        // Test passes if no panic occurs during processing
+    fn test_reshape_static_shape_with_literal_zero() {
+        let node = create_test_node(1, vec![3, 0]).process(ReshapeProcessor, 16);
+        let ArgType::Tensor(output) = &node.outputs[0].ty else {
+            panic!("Expected tensor output");
+        };
+        assert_eq!(output.static_shape, Some(vec![Some(3), Some(0)]));
     }
 
     #[test]
     fn test_reshape_config_runtime() {
-        let node = create_runtime_reshape_node().process(ReshapeProcessor, 16);
+        let node = create_runtime_reshape_node()
+            .attr_int("allowzero", 1)
+            .process(ReshapeProcessor, 16);
 
         let processor = ReshapeProcessor;
         let config = processor.extract_config(&node, 16).unwrap();
+        assert_eq!(config.allowzero, Some(1));
         match &config.shape {
             ReshapeInput::Runtime(runtime_ref) => assert_eq!(runtime_ref.name, "shape"),
             _ => panic!("Expected runtime shape"),

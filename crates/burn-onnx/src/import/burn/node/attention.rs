@@ -304,6 +304,7 @@ fn forward_burn_attention(
             scale: #scale_tokens,
             softcap: #softcap_tokens,
             is_causal: #native_causal,
+            ..Default::default()
         }
     };
 
@@ -556,6 +557,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 (output,)
@@ -615,6 +617,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 let output = output
@@ -696,6 +699,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 (output,)
@@ -766,6 +770,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 let output = {
@@ -831,6 +836,7 @@ mod tests {
                         scale: None,
                         softcap: Some(50f64),
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 (output,)
@@ -892,6 +898,7 @@ mod tests {
                         scale: Some(0.125f64),
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 (output,)
@@ -962,6 +969,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 let output = {
@@ -1036,6 +1044,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 let output = {
@@ -1120,6 +1129,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 let output = {
@@ -1204,6 +1214,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 let output = {
@@ -1540,6 +1551,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 let output = {
@@ -1641,6 +1653,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 let output = {
@@ -1694,6 +1707,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: true,
+                        ..Default::default()
                     },
                 );
                 (output,)
@@ -1760,6 +1774,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 let output = {
@@ -1825,6 +1840,7 @@ mod tests {
                         scale: None,
                         softcap: None,
                         is_causal: false,
+                        ..Default::default()
                     },
                 );
                 let output = {

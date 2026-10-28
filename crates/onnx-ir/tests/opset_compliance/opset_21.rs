@@ -637,6 +637,7 @@ fn reshape(graph: &OnnxGraph) {
                     4,
                 ],
             ),
+            allowzero: None,
         }
     "#);
 }

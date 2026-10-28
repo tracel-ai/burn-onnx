@@ -466,7 +466,8 @@ mod tests {
                     .concat()
                     .try_into()
                     .unwrap();
-                let reshape1_out1 = input.reshape(concat1_out1);
+                let reshape1_out1 = input
+                    .reshape(burn::tensor::ZeroDimPlaceholders(concat1_out1));
                 reshape1_out1
             }
         }
@@ -730,6 +731,7 @@ mod tests {
                             scale: Some(0.5f64),
                             softcap: None,
                             is_causal: false,
+                            ..Default::default()
                         },
                     );
                     (matmul2_out1,)
@@ -765,6 +767,7 @@ mod tests {
                             scale: Some(1f64),
                             softcap: None,
                             is_causal: false,
+                            ..Default::default()
                         },
                     );
                     (matmul2_out1,)

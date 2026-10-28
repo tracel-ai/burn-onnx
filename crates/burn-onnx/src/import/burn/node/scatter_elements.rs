@@ -108,8 +108,7 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
             let coordinates = Tensor::cat(columns, 1);
         };
 
-        // An empty index tensor is a legal ONNX no-op, but `scatter_nd` rejects empty
-        // indices and `reshape([0, ..])` would read the 0 as "keep the source dim".
+        // An empty index tensor is a legal ONNX no-op, but `scatter_nd` rejects empty indices.
         quote! {
             let #output = {
                 #prologue

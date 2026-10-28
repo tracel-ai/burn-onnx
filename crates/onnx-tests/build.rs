@@ -551,6 +551,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/reduce/reduce_sum_square.onnx")
         .input("tests/relu/relu.onnx")
         .input("tests/reshape/reshape.onnx")
+        .input("tests/reshape/reshape_zero_placeholders.onnx")
+        .input("tests/reshape/reshape_literal_zeros.onnx")
         .input("tests/reshape/reshape_3d_to_scalar.onnx")
         .input("tests/reshape/reshape_scalar_to_scalar.onnx")
         .input("tests/reshape/reshape_shape_partial.onnx")
