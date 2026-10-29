@@ -6,8 +6,7 @@
 
 use burn::backend::DType;
 use burn::backend::ir::{
-    CoordinateTransformModeIr, InterpolateModeIr, ModuleOperationIr, NearestRoundingModeIr,
-    OperationIr, TensorIr,
+    CoordinateTransformModeIr, InterpolateModeIr, ModuleOperationIr, OperationIr, TensorIr,
 };
 
 use crate::export::ExportError;
@@ -99,80 +98,57 @@ pub(super) fn lower(
             Ok(true)
         }
         ModuleOperationIr::Interpolate(interpolate) => {
-            let mode = match interpolate.options.mode {
-                InterpolateModeIr::Nearest | InterpolateModeIr::NearestExact => "nearest",
-                InterpolateModeIr::Bilinear => "linear",
-                InterpolateModeIr::Bicubic => "cubic",
-                InterpolateModeIr::Lanczos3 => {
+            let coordinate_mode = |transform| match transform {
+                CoordinateTransformModeIr::HalfPixel => "half_pixel",
+                CoordinateTransformModeIr::AlignCorners => "align_corners",
+            };
+            let (mode, coordinate_mode, nearest_mode) = match interpolate.options.mode {
+                InterpolateModeIr::Nearest => ("nearest", "asymmetric", Some("floor")),
+                InterpolateModeIr::NearestExact => {
+                    ("nearest", "half_pixel", Some("round_prefer_ceil"))
+                }
+                InterpolateModeIr::Bilinear {
+                    coordinate_transform,
+                } => ("linear", coordinate_mode(coordinate_transform), None),
+                InterpolateModeIr::Bicubic {
+                    coordinate_transform,
+                    ..
+                } => ("cubic", coordinate_mode(coordinate_transform), None),
+                InterpolateModeIr::Lanczos3 { .. } => {
                     return Err(ExportError::UnsupportedOperation {
                         operation: index,
                         kind: "Lanczos3 interpolation has no ONNX Resize mode".into(),
                     });
                 }
             };
-            let coordinate_mode = match interpolate.options.coordinate_transform {
-                CoordinateTransformModeIr::HalfPixel => "half_pixel",
-                CoordinateTransformModeIr::AlignCorners => "align_corners",
-                CoordinateTransformModeIr::Asymmetric => "asymmetric",
-                CoordinateTransformModeIr::PytorchHalfPixel => "pytorch_half_pixel",
-                CoordinateTransformModeIr::HalfPixelSymmetric => "half_pixel_symmetric",
-                CoordinateTransformModeIr::TfCropAndResize { .. } => "tf_crop_and_resize",
+            let (scales, sizes) = if let Some(scales) = interpolate.options.scale_factor {
+                let name = format!("node_{index}_scales");
+                context.f32_initializer(name.clone(), &scales);
+                (name, String::new())
+            } else {
+                let name = format!("node_{index}_sizes");
+                context.i64_initializer(
+                    name.clone(),
+                    &interpolate.output_size.map(|dimension| dimension as i64),
+                );
+                (String::new(), name)
             };
-            let nearest_mode = match interpolate.options.nearest_mode {
-                NearestRoundingModeIr::RoundPreferFloor => "round_prefer_floor",
-                NearestRoundingModeIr::RoundPreferCeil => "round_prefer_ceil",
-                NearestRoundingModeIr::Floor => "floor",
-                NearestRoundingModeIr::Ceil => "ceil",
-            };
-            let roi = match interpolate.options.coordinate_transform {
-                CoordinateTransformModeIr::TfCropAndResize {
-                    roi,
-                    extrapolation_value,
-                } => {
-                    let name = format!("node_{index}_roi");
-                    context.f32_initializer(
-                        name.clone(),
-                        &[roi[0][0], roi[1][0], roi[0][1], roi[1][1]],
-                    );
-                    Some((name, extrapolation_value))
-                }
-                _ => None,
-            };
-            let sizes = format!("node_{index}_sizes");
-            context.i64_initializer(
-                sizes.clone(),
-                &interpolate.output_size.map(|dimension| dimension as i64),
-            );
             let input = context.tensor_name(interpolate.x.id);
             let output = context.tensor_name(interpolate.out.id);
-            let roi_input = roi
-                .as_ref()
-                .map(|(name, _)| name.clone())
-                .unwrap_or_default();
             context.node(
                 format!("node_{index}"),
                 "Resize",
-                vec![input, roi_input, String::new(), sizes],
+                vec![input, String::new(), scales, sizes],
                 vec![output],
             );
             context.ints_attribute("axes", [2, 3]);
             context.string_attribute("mode", mode);
             context.string_attribute("coordinate_transformation_mode", coordinate_mode);
-            if matches!(
-                interpolate.options.mode,
-                InterpolateModeIr::Nearest | InterpolateModeIr::NearestExact
-            ) {
+            if let Some(nearest_mode) = nearest_mode {
                 context.string_attribute("nearest_mode", nearest_mode);
             }
-            if let Some((_, extrapolation_value)) = roi {
-                context.float_attribute("extrapolation_value", extrapolation_value);
-            }
-            if matches!(interpolate.options.mode, InterpolateModeIr::Bicubic) {
-                context.float_attribute("cubic_coeff_a", interpolate.options.cubic_options.a);
-                context.int_attribute(
-                    "exclude_outside",
-                    interpolate.options.cubic_options.exclude_outside as i64,
-                );
+            if let InterpolateModeIr::Bicubic { a, .. } = interpolate.options.mode {
+                context.float_attribute("cubic_coeff_a", a);
             }
             Ok(true)
         }

@@ -38,7 +38,7 @@ def main() -> None:
             "",
         ],  # scales_input is a runtime tensor
         outputs=["output"],
-        mode="nearest",  # Use nearest for simplicity
+        mode="nearest", coordinate_transformation_mode="asymmetric", nearest_mode="floor",  # Use nearest for simplicity
     )
 
     graph_def = helper.make_graph(

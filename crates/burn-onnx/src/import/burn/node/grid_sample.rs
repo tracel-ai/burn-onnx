@@ -15,16 +15,20 @@ impl NodeCodegen for GridSampleNode {
         let grid = scope.arg(&self.inputs[1]);
         let output = arg_to_ident(&self.outputs[0]);
 
-        // Map ONNX mode to Burn's InterpolateMode
+        // Map ONNX mode to Burn's GridSampleMode
         let mode = match self.config.mode {
             GridSampleMode::Bilinear => {
-                quote! { burn::tensor::ops::InterpolateMode::Bilinear }
+                quote! { burn::tensor::ops::GridSampleMode::Bilinear }
             }
             GridSampleMode::Nearest => {
-                quote! { burn::tensor::ops::InterpolateMode::Nearest }
+                quote! { burn::tensor::ops::GridSampleMode::Nearest }
             }
             GridSampleMode::Bicubic => {
-                quote! { burn::tensor::ops::InterpolateMode::Bicubic }
+                let message = format!(
+                    "GridSample node '{}': cubic interpolation is not supported by Burn; use linear or nearest",
+                    self.name
+                );
+                return quote! { let #output = compile_error!(#message); };
             }
         };
 
@@ -92,7 +96,7 @@ mod tests {
                 .grid_sample_2d(
                     grid,
                     burn::tensor::ops::GridSampleOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bilinear,
+                            burn::tensor::ops::GridSampleMode::Bilinear,
                         )
                         .with_padding_mode(burn::tensor::ops::GridSamplePaddingMode::Zeros)
                         .with_align_corners(false),
@@ -116,7 +120,7 @@ mod tests {
                 .grid_sample_2d(
                     grid,
                     burn::tensor::ops::GridSampleOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bilinear,
+                            burn::tensor::ops::GridSampleMode::Bilinear,
                         )
                         .with_padding_mode(burn::tensor::ops::GridSamplePaddingMode::Border)
                         .with_align_corners(true),
@@ -137,7 +141,7 @@ mod tests {
                 .grid_sample_2d(
                     grid,
                     burn::tensor::ops::GridSampleOptions::new(
-                            burn::tensor::ops::InterpolateMode::Nearest,
+                            burn::tensor::ops::GridSampleMode::Nearest,
                         )
                         .with_padding_mode(burn::tensor::ops::GridSamplePaddingMode::Zeros)
                         .with_align_corners(false),
@@ -152,20 +156,14 @@ mod tests {
         let node =
             create_grid_sample_node(GridSampleMode::Bicubic, GridSamplePaddingMode::Zeros, false);
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @r#"
         pub fn forward(&self, input: Tensor<4>, grid: Tensor<4>) -> Tensor<4> {
-            let output = input
-                .grid_sample_2d(
-                    grid,
-                    burn::tensor::ops::GridSampleOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bicubic,
-                        )
-                        .with_padding_mode(burn::tensor::ops::GridSamplePaddingMode::Zeros)
-                        .with_align_corners(false),
-                );
+            let output = compile_error!(
+                "GridSample node 'grid_sample1': cubic interpolation is not supported by Burn; use linear or nearest"
+            );
             output
         }
-        ");
+        "#);
     }
 
     #[test]
@@ -182,7 +180,7 @@ mod tests {
                 .grid_sample_2d(
                     grid,
                     burn::tensor::ops::GridSampleOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bilinear,
+                            burn::tensor::ops::GridSampleMode::Bilinear,
                         )
                         .with_padding_mode(burn::tensor::ops::GridSamplePaddingMode::Reflection)
                         .with_align_corners(false),

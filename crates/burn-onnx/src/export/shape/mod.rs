@@ -841,9 +841,8 @@ fn tensor(graph: &GraphIr, id: TensorId) -> Option<&TensorIr> {
 mod tests {
     use super::*;
     use burn::backend::ir::{
-        CoordinateTransformModeIr, CreationOpIr, CubicOptionsIr, FullOpIr, InterpolateModeIr,
-        InterpolateOpIr, InterpolateOptionsIr, NearestRoundingModeIr, ScalarIr, ShapeOpIr,
-        SwapDimsOpIr, TensorIr,
+        CreationOpIr, FullOpIr, InterpolateModeIr, InterpolateOpIr, InterpolateOptionsIr, ScalarIr,
+        ShapeOpIr, SwapDimsOpIr, TensorIr,
     };
     use burn::backend::{DType, Shape};
 
@@ -1024,12 +1023,6 @@ mod tests {
                 output_size: [8, 8],
                 options: InterpolateOptionsIr {
                     mode: InterpolateModeIr::Nearest,
-                    coordinate_transform: CoordinateTransformModeIr::Asymmetric,
-                    nearest_mode: NearestRoundingModeIr::Floor,
-                    cubic_options: CubicOptionsIr {
-                        a: -0.75,
-                        exclude_outside: false,
-                    },
                     output_size: None,
                     scale_factor: None,
                 },
@@ -1042,12 +1035,6 @@ mod tests {
                 output_size: [10, 10],
                 options: InterpolateOptionsIr {
                     mode: InterpolateModeIr::Nearest,
-                    coordinate_transform: CoordinateTransformModeIr::Asymmetric,
-                    nearest_mode: NearestRoundingModeIr::Floor,
-                    cubic_options: CubicOptionsIr {
-                        a: -0.75,
-                        exclude_outside: false,
-                    },
                     output_size: None,
                     scale_factor: None,
                 },

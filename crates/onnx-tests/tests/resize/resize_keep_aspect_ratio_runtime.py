@@ -29,7 +29,7 @@ def main():
 
     node = helper.make_node(
         "Resize", ["x", "", "", "sizes"], ["y"],
-        mode="nearest", keep_aspect_ratio_policy="not_smaller",
+        mode="nearest", coordinate_transformation_mode="asymmetric", nearest_mode="floor", keep_aspect_ratio_policy="not_smaller",
     )
     graph = helper.make_graph([node], "resize_keep_aspect_ratio_runtime_graph", [x, sizes], [y])
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 18)])
