@@ -14,7 +14,6 @@ crates/
 ├── onnx-ir/         # ONNX Intermediate Representation parser
 ├── onnx-ir-derive/  # Derive macros for onnx-ir
 ├── onnx-tests/      # End-to-end integration tests
-├── burn-import/     # Legacy crate (deprecated, re-exports burn-onnx)
 └── model-checks/    # Real-world model validation (excluded from workspace)
 
 onnx-spec/ops/       # Per-operator markdown specs (reference material)
