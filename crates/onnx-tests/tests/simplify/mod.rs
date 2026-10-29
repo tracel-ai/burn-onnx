@@ -615,7 +615,7 @@ mod tests {
         // must still lift it so no unused `concat1_out1` binding is emitted.
         insta::assert_snapshot!(extract_forward(s), @r"
         pub fn forward(&self, x: Tensor<3>) -> Tensor<2> {
-                let reshape1_out1 = x.reshape([2, -1]);
+                let reshape1_out1 = x.reshape(burn::tensor::ZeroDimPlaceholders([2, -1]));
                 reshape1_out1
             }
         }

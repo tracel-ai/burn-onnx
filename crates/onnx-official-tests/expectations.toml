@@ -4475,9 +4475,7 @@ status = "pass"
 status = "pass"
 
 [test_reshape_allowzero_reordered]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "pass"
 
 [test_reshape_extended_dims]
 status = "pass"
