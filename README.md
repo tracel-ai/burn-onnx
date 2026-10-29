@@ -243,7 +243,6 @@ covers each phase in detail.
 | [`burn-onnx`](https://crates.io/crates/burn-onnx)         | Code generator, `onnx2burn` CLI, and ONNX exporter          |
 | [`onnx-ir`](https://crates.io/crates/onnx-ir)             | Framework-independent ONNX parser and intermediate representation |
 | [`onnx-ir-derive`](https://crates.io/crates/onnx-ir-derive) | Derive macros used by `onnx-ir`                           |
-| [`burn-import`](https://crates.io/crates/burn-import)     | Deprecated; re-exports `burn-onnx` for older projects       |
 
 ## Examples
 
