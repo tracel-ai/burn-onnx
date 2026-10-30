@@ -24,7 +24,7 @@ def main():
     y = helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 1, None, None])
 
     node = helper.make_node(
-        "Resize", ["x", "", "scales"], ["y"], mode="nearest", axes=[3, 2]
+        "Resize", ["x", "", "scales"], ["y"], mode="nearest", coordinate_transformation_mode="asymmetric", nearest_mode="floor", axes=[3, 2]
     )
     graph = helper.make_graph([node], "resize_axes_runtime_graph", [x, scales], [y])
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 18)])

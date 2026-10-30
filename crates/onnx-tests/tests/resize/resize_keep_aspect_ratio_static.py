@@ -29,7 +29,7 @@ def main():
     nodes = [
         helper.make_node(
             "Resize", ["x", "", "", "sizes"], [output],
-            mode="nearest", axes=[2, 3], keep_aspect_ratio_policy=policy,
+            mode="nearest", coordinate_transformation_mode="asymmetric", nearest_mode="floor", axes=[2, 3], keep_aspect_ratio_policy=policy,
         )
         for output, policy in [("y_not_larger", "not_larger"), ("y_not_smaller", "not_smaller")]
     ]

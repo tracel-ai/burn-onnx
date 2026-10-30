@@ -343,7 +343,7 @@ fn resize(graph: &OnnxGraph) {
             sizes: None,
             coordinate_transformation_mode: Asymmetric,
             cubic_coeff_a: -0.75,
-            nearest_mode: RoundPreferFloor,
+            nearest_mode: Floor,
             exclude_outside: 0,
             extrapolation_value: 0.0,
             antialias: 0,

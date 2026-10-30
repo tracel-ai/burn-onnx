@@ -24,7 +24,7 @@ def main():
     sizes = numpy_helper.from_array(np.array([6], dtype=np.int64), name="sizes")
 
     node = helper.make_node(
-        "Resize", ["x", "", "", "sizes"], ["y"], mode="nearest", axes=[3]
+        "Resize", ["x", "", "", "sizes"], ["y"], mode="nearest", coordinate_transformation_mode="asymmetric", nearest_mode="floor", axes=[3]
     )
     graph = helper.make_graph([node], "resize_axes_static_graph", [x], [y], [sizes])
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 18)])

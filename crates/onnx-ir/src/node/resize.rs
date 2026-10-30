@@ -58,6 +58,8 @@ pub enum CoordinateTransformMode {
     /// Half-pixel coordinate transformation (default for opset 11+)
     #[default]
     HalfPixel,
+    /// Half-pixel coordinates recentered for a fractional requested output size
+    HalfPixelSymmetric,
     /// Align corners coordinate transformation
     AlignCorners,
     /// Asymmetric coordinate transformation (default for opset <11)
@@ -76,6 +78,7 @@ impl FromStr for CoordinateTransformMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "half_pixel" => Ok(Self::HalfPixel),
+            "half_pixel_symmetric" => Ok(Self::HalfPixelSymmetric),
             "align_corners" => Ok(Self::AlignCorners),
             "asymmetric" => Ok(Self::Asymmetric),
             "pytorch_half_pixel" => Ok(Self::PytorchHalfPixel),
@@ -608,7 +611,11 @@ impl NodeProcessor for ResizeProcessor {
             CoordinateTransformMode::HalfPixel
         };
         let mut cubic_coeff_a = -0.75f32;
-        let mut nearest_mode = NearestMode::RoundPreferFloor;
+        let mut nearest_mode = if opset < 11 {
+            NearestMode::Floor
+        } else {
+            NearestMode::RoundPreferFloor
+        };
         let mut exclude_outside = 0i32;
         let mut extrapolation_value = 0.0f32;
         let mut antialias = 0i32;
@@ -970,6 +977,16 @@ mod tests {
     }
 
     #[test]
+    fn half_pixel_symmetric_is_preserved() {
+        assert_eq!(
+            "half_pixel_symmetric"
+                .parse::<CoordinateTransformMode>()
+                .unwrap(),
+            CoordinateTransformMode::HalfPixelSymmetric,
+        );
+    }
+
+    #[test]
     fn test_resize_invalid_coordinate_transformation_mode() {
         let mut node = create_test_node("nearest", Some(vec![1.0, 1.0, 2.0, 2.0]), None, None)
             .build_with_graph_data(16);
@@ -1022,6 +1039,7 @@ mod tests {
             .build_with_graph_data(10);
         let processor = ResizeProcessor;
         let config = processor.extract_config(&node, 10).unwrap();
+        assert_eq!(config.nearest_mode, NearestMode::Floor);
         assert_eq!(
             config.coordinate_transformation_mode,
             CoordinateTransformMode::Asymmetric

@@ -1,5 +1,6 @@
 use crate::include_models;
 include_models!(
+    resize_options,
     resize_1d_linear_scale,
     resize_1d_nearest_scale,
     resize_2d_bicubic_scale,
@@ -25,6 +26,33 @@ mod tests {
     use alloc::vec::Vec;
     use burn::tensor::{Device, Tensor, TensorData};
     use float_cmp::ApproxEq;
+
+    #[test]
+    fn resize_preserves_options() {
+        let device = Default::default();
+        let model = resize_options::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/resize_options.bpk"),
+            &device,
+        );
+        let input = Tensor::<4>::from_floats([[[[10.0, 20.0, 30.0, 40.0]]]], &device);
+        let scales = Tensor::<1>::from_floats([1.0, 1.0, 1.0, 0.6], &device);
+        let (static_nearest, runtime_nearest, exact, static_cubic, runtime_cubic) =
+            model.forward(input, scales);
+        let expected = TensorData::from([[[[10.0f32, 20.0]]]]);
+        static_nearest.to_data().assert_eq(&expected, true);
+        runtime_nearest.to_data().assert_eq(&expected, true);
+        exact
+            .to_data()
+            .assert_eq(&TensorData::from([[[[20.0f32, 40.0]]]]), true);
+        // ReferenceEvaluator results from resize_options.py.
+        let expected_cubic = TensorData::from([[[[12.592592f32, 30.0]]]]);
+        static_cubic
+            .to_data()
+            .assert_approx_eq::<f32>(&expected_cubic, burn::tensor::Tolerance::default());
+        runtime_cubic
+            .to_data()
+            .assert_approx_eq::<f32>(&expected_cubic, burn::tensor::Tolerance::default());
+    }
 
     #[test]
     fn resize_with_sizes() {

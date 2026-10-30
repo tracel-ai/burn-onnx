@@ -580,6 +580,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/resize/resize_keep_aspect_ratio_static.onnx")
         .input("tests/resize/resize_with_scales_tensor.onnx")
         .input("tests/resize/resize_with_shape.onnx")
+        .input("tests/resize/resize_options.onnx")
         .input("tests/resize/resize_with_sizes.onnx")
         .input("tests/resize/resize_with_sizes_tensor.onnx")
         .input("tests/rnn/rnn.onnx")

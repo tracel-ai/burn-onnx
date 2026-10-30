@@ -2534,19 +2534,16 @@ status = "pass"
 status = "pass"
 
 [test_gridsample_bicubic]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "skip-compile"
+reason = "Burn GridSample supports only linear and nearest interpolation"
 
 [test_gridsample_bicubic_align_corners_0_additional_1]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "skip-compile"
+reason = "Burn GridSample supports only linear and nearest interpolation"
 
 [test_gridsample_bicubic_align_corners_1_additional_1]
-status = "fail-compare"
-reason = "comparison against reference tensor fails (classified by M2 first-run sweep; root cause not yet triaged)"
-tracking = "#311"
+status = "skip-compile"
+reason = "Burn GridSample supports only linear and nearest interpolation"
 
 [test_gridsample_bilinear]
 status = "pass"
@@ -4505,13 +4502,11 @@ status = "pass"
 status = "pass"
 
 [test_resize_downsample_scales_cubic]
-status = "fail-compare"
-reason = "resize op family comparison failure"
-tracking = "#546"
+status = "pass"
 
 [test_resize_downsample_scales_cubic_A_n0p5_exclude_outside]
-status = "skip-codegen"
-reason = "Node 'resize1' (Resize): Invalid attribute 'exclude_outside': exclude_outside other than 0 is not supported"
+status = "skip-compile"
+reason = "Burn Resize does not support exclude_outside=1"
 
 [test_resize_downsample_scales_cubic_align_corners]
 status = "fail-compare"
@@ -4519,13 +4514,11 @@ reason = "resize op family comparison failure"
 tracking = "#546"
 
 [test_resize_downsample_scales_cubic_antialias]
-status = "skip-codegen"
-reason = "Node 'resize1' (Resize): Invalid attribute 'antialias': antialias other than 0 is not supported"
+status = "skip-compile"
+reason = "Burn Resize does not support antialias=1"
 
 [test_resize_downsample_scales_linear]
-status = "fail-compare"
-reason = "resize op family comparison failure"
-tracking = "#546"
+status = "pass"
 
 [test_resize_downsample_scales_linear_align_corners]
 status = "fail-compare"
@@ -4533,78 +4526,73 @@ reason = "resize op family comparison failure"
 tracking = "#546"
 
 [test_resize_downsample_scales_linear_antialias]
-status = "skip-codegen"
-reason = "Node 'resize1' (Resize): Invalid attribute 'antialias': antialias other than 0 is not supported"
+status = "skip-compile"
+reason = "Burn Resize does not support antialias=1"
 
 [test_resize_downsample_scales_linear_half_pixel_symmetric]
-status = "skip-codegen"
-reason = "Node 'resize1' (Resize): Invalid attribute 'coordinate_transformation_mode': Unsupported coordinate transformation mode: half_pixel_symmetric"
+status = "skip-compile"
+reason = "Burn Resize does not support half_pixel_symmetric coordinates"
 
 [test_resize_downsample_scales_nearest]
-status = "pass"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_downsample_sizes_cubic]
 status = "pass"
 
 [test_resize_downsample_sizes_cubic_antialias]
-status = "skip-codegen"
-reason = "Node 'resize1' (Resize): Invalid attribute 'antialias': antialias other than 0 is not supported"
+status = "skip-compile"
+reason = "Burn Resize does not support antialias=1"
 
 [test_resize_downsample_sizes_linear_antialias]
-status = "skip-codegen"
-reason = "Node 'resize1' (Resize): Invalid attribute 'antialias': antialias other than 0 is not supported"
+status = "skip-compile"
+reason = "Burn Resize does not support antialias=1"
 
 [test_resize_downsample_sizes_linear_pytorch_half_pixel]
-status = "fail-compare"
-reason = "resize op family comparison failure"
-tracking = "#546"
+status = "skip-compile"
+reason = "Burn Resize does not support pytorch_half_pixel coordinates"
 
 [test_resize_downsample_sizes_nearest]
-status = "fail-compare"
-reason = "resize op family comparison failure"
-tracking = "#546"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_downsample_sizes_nearest_not_larger]
-status = "pass"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_downsample_sizes_nearest_not_smaller]
-status = "fail-compare"
-reason = "resize op family comparison failure"
-tracking = "#546"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_tf_crop_and_resize]
-status = "fail-compare"
-reason = "resize op family comparison failure"
-tracking = "#546"
+status = "skip-compile"
+reason = "Burn Resize does not support tf_crop_and_resize coordinates"
 
 [test_resize_tf_crop_and_resize_axes_2_3]
-status = "fail-compare"
-reason = "tf_crop_and_resize coordinate mode and roi are not expressible with burn interpolate"
-tracking = "#546"
+status = "skip-compile"
+reason = "Burn Resize does not support tf_crop_and_resize coordinates"
 
 [test_resize_tf_crop_and_resize_axes_3_2]
-status = "fail-compare"
-reason = "tf_crop_and_resize coordinate mode and roi are not expressible with burn interpolate"
-tracking = "#546"
+status = "skip-compile"
+reason = "Burn Resize does not support tf_crop_and_resize coordinates"
 
 [test_resize_tf_crop_and_resize_extrapolation_value]
-status = "skip-codegen"
-reason = "Node 'resize1' (Resize): Invalid attribute 'extrapolation_value': extrapolation_value other than 0.0 is not supported"
+status = "skip-compile"
+reason = "Burn Resize does not support tf_crop_and_resize coordinates"
 
 [test_resize_upsample_scales_cubic]
 status = "pass"
 
 [test_resize_upsample_scales_cubic_A_n0p5_exclude_outside]
-status = "skip-codegen"
-reason = "Node 'resize1' (Resize): Invalid attribute 'exclude_outside': exclude_outside other than 0 is not supported"
+status = "skip-compile"
+reason = "Burn Resize does not support exclude_outside=1"
 
 [test_resize_upsample_scales_cubic_align_corners]
 status = "pass"
 
 [test_resize_upsample_scales_cubic_asymmetric]
-status = "fail-compare"
-reason = "resize op family comparison failure"
-tracking = "#546"
+status = "skip-compile"
+reason = "Burn Resize does not support asymmetric coordinates for cubic interpolation"
 
 [test_resize_upsample_scales_linear]
 status = "pass"
@@ -4613,50 +4601,55 @@ status = "pass"
 status = "pass"
 
 [test_resize_upsample_scales_linear_half_pixel_symmetric]
-status = "skip-codegen"
-reason = "Node 'resize1' (Resize): Invalid attribute 'coordinate_transformation_mode': Unsupported coordinate transformation mode: half_pixel_symmetric"
+status = "skip-compile"
+reason = "Burn Resize does not support half_pixel_symmetric coordinates"
 
 [test_resize_upsample_scales_nearest]
-status = "pass"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_upsample_scales_nearest_axes_2_3]
-status = "pass"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_upsample_scales_nearest_axes_3_2]
-status = "pass"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_upsample_sizes_cubic]
 status = "pass"
 
 [test_resize_upsample_sizes_nearest]
-status = "pass"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_upsample_sizes_nearest_axes_2_3]
-status = "pass"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_upsample_sizes_nearest_axes_3_2]
-status = "pass"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_upsample_sizes_nearest_ceil_half_pixel]
-status = "fail-compare"
-reason = "resize op family comparison failure"
-tracking = "#546"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_upsample_sizes_nearest_floor_align_corners]
-status = "fail-compare"
-reason = "resize op family comparison failure"
-tracking = "#546"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_upsample_sizes_nearest_not_larger]
-status = "pass"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_upsample_sizes_nearest_not_smaller]
-status = "pass"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_resize_upsample_sizes_nearest_round_prefer_ceil_asymmetric]
-status = "fail-compare"
-reason = "resize op family comparison failure"
-tracking = "#546"
+status = "skip-compile"
+reason = "Burn Resize supports only asymmetric/floor and half_pixel/round_prefer_ceil nearest presets; this ONNX combination is unsupported"
 
 [test_reversesequence_batch]
 status = "skip-codegen"
