@@ -12,14 +12,6 @@ Every supported operator handles all ONNX opset versions it exists in (1 through
 as `com.microsoft`, can still be imported by registering a custom op hook; see
 [Custom Operators](README.md#custom-operators).
 
-Resize supports linear/cubic interpolation with `half_pixel` or `align_corners` coordinates
-and the configured `cubic_coeff_a`. Nearest interpolation supports `asymmetric` + `floor`
-(`Nearest`) and `half_pixel` + `round_prefer_ceil` (`NearestExact`). Other coordinate/rounding
-combinations, `exclude_outside=1`, and linear/cubic antialiasing emit a compile-time error
-naming the unsupported setting. In particular, ONNX's default nearest combination
-(`half_pixel` + `round_prefer_floor`) is unsupported. GridSample supports linear and nearest;
-cubic emits a compile-time error. Backend restrictions still apply to supported Burn options.
-
 | ONNX OP                          | Import Support | Burn Support |
 |----------------------------------|:--------------:|:------------:|
 | [Abs][1]                         | ✅             | ✅           |
