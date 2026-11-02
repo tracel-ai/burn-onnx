@@ -40,8 +40,7 @@ pub use quote;
 
 /// Codegen context passed to a custom op's forward implementation.
 ///
-/// Wraps the internal scope tracking behind the one operation a hook needs:
-/// resolving an input argument to a token stream.
+/// Resolves input arguments and the execution device for emitted operations.
 pub struct CodegenContext<'a, 'b> {
     inner: &'a mut crate::burn::ScopeAtPosition<'b>,
 }
@@ -62,6 +61,15 @@ impl<'a, 'b> CodegenContext<'a, 'b> {
     /// when you need the name as a string.
     pub fn arg(&mut self, arg: &Argument) -> proc_macro2::TokenStream {
         self.inner.arg(arg)
+    }
+
+    /// Emit an expression borrowing the device for forward allocations.
+    ///
+    /// The model owns this device and updates it during `Module::to_device` and
+    /// `Module::fork`. Splice these tokens into emitted code rather than accessing
+    /// the generated model's private device representation.
+    pub fn device(&self) -> proc_macro2::TokenStream {
+        self.inner.device()
     }
 }
 

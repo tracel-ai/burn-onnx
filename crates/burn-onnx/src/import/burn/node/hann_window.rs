@@ -31,7 +31,7 @@ impl NodeCodegen for onnx_ir::node::hann_window::HannWindowNode {
         };
 
         quote! {
-            let #output = hann_window(#size_expr, #periodic, &self.device)
+            let #output = hann_window(#size_expr, #periodic, &self.device.0)
                 .cast(#output_dtype);
         }
     }
@@ -62,7 +62,8 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1> {
-            let output = hann_window(10usize, true, &self.device).cast(burn::tensor::DType::F32);
+            let output = hann_window(10usize, true, &self.device.0)
+                .cast(burn::tensor::DType::F32);
             output
         }
         ");
@@ -82,7 +83,8 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1> {
-            let output = hann_window(8usize, false, &self.device).cast(burn::tensor::DType::F64);
+            let output = hann_window(8usize, false, &self.device.0)
+                .cast(burn::tensor::DType::F64);
             output
         }
         ");
@@ -115,7 +117,7 @@ mod tests {
                         size as usize
                     },
                     true,
-                    &self.device,
+                    &self.device.0,
                 )
                 .cast(burn::tensor::DType::F32);
             output

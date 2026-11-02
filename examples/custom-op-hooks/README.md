@@ -64,7 +64,7 @@ pub fn forward(&self, x: Tensor<2>) -> Tensor<2> {
     let custom2_out1 = ops::channel_scale(
         sigmoid1_out1,
         &[1f32, 0.5f32, 2f32],                          // inlined at build time
-        &self.device,
+        &self.device.0,
     );
     custom2_out1
 }

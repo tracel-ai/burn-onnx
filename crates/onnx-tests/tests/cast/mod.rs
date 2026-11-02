@@ -1,6 +1,12 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(cast, cast_shape, cast_shape_to_float, cast_shape_to_bool);
+include_models!(
+    cast,
+    cast_shape,
+    cast_shape_to_float,
+    cast_shape_to_bool,
+    cast_partitioned_device
+);
 
 #[cfg(test)]
 mod tests {
@@ -105,6 +111,66 @@ mod tests {
         output
             .to_data()
             .assert_approx_eq::<f32>(&expected.to_data(), Tolerance::default());
+    }
+
+    #[cfg(all(feature = "test-flex", feature = "test-cpu"))]
+    #[test]
+    fn shape_allocation_follows_module_to_device() {
+        use burn::module::Module;
+
+        let device = Device::flex();
+        let model = cast_shape_to_float::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/cast_shape_to_float.bpk"),
+            &Device::cpu(),
+        )
+        .to_device(&device);
+
+        let output = model.forward(
+            // Only the shape is read: its device must not control allocation.
+            Tensor::<3>::ones([2, 3, 4], &Device::cpu()),
+            Tensor::<1>::from_floats([2.0], &device),
+        );
+
+        assert_eq!(output.device(), device);
+        output
+            .to_data()
+            .assert_eq(&TensorData::from([4.0f32, 6.0, 8.0]), true);
+    }
+
+    #[cfg(all(feature = "test-flex", feature = "test-cpu"))]
+    #[test]
+    fn shape_allocation_follows_nested_partitioned_module_fork() {
+        use burn::module::Module;
+
+        #[derive(Module, Debug)]
+        struct Nested {
+            model: cast_partitioned_device::Model,
+            #[module(skip)]
+            construction_device: Device,
+        }
+
+        let device = Device::flex();
+        let nested = Nested {
+            model: cast_partitioned_device::Model::from_file(
+                concat!(env!("OUT_DIR"), "/model/cast_partitioned_device.bpk"),
+                &Device::cpu(),
+            ),
+            construction_device: Device::cpu(),
+        }
+        .fork(&device);
+
+        assert_eq!(nested.construction_device, Device::cpu());
+        assert_eq!(nested.devices().as_slice(), &[device.clone()]);
+        assert_eq!(nested.num_params(), 2);
+        // Only metadata flows through the first partitions.
+        let output = nested
+            .model
+            .forward(Tensor::<2>::ones([2, 4], &Device::cpu()));
+        assert_eq!(output.device(), device);
+        output.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([2.0 * core::f32::consts::SQRT_2, 6.0]),
+            Tolerance::default(),
+        );
     }
 
     #[test]

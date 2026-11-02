@@ -920,10 +920,8 @@ Set `BURN_CACHE_DIR` to override the base cache path (useful for CI).
 5. Add `src/main.rs` to load the model, run inference, and compare against reference outputs
 6. Register the model in `xtask/src/model_check.rs` in the `MODELS` array
 
-In `src/main.rs`, use `Model::from_file(bpk_path, &device)` to load the model on the correct
-device. Do NOT use `Model::default().to_device(&device)` because the generated code stores the
-device as `#[module(skip)]` which `to_device()` does not update, causing device mismatch errors
-on GPU backends:
+In `src/main.rs`, use `Model::from_file(bpk_path, &device)` to load the model on the desired
+device:
 
 ```rust
 model_checks_common::backend_type!();
@@ -1011,8 +1009,10 @@ fn main() {
 ```
 
 The runtime function (`ops::fft_real` above) lives in your crate and
-takes/returns Burn tensors. The generated `forward` runs inside the model
-struct, so emitted code may also reference `&self.device`.
+takes/returns Burn tensors. For allocations inside a custom op or override, use
+`let device = ctx.device();` and splice `#device` into the emitted code. This borrows
+the model's allocation device, which follows module transfers. Avoid accessing the
+generated model's private device representation directly.
 
 #### How emitted paths resolve
 

@@ -43,7 +43,7 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
                     quote! {
                         let #output: Tensor<1 #kind> = Tensor::from_data(
                             burn::tensor::TensorData::from([#(#scalar_inputs),*]),
-                            (&self.device, #dtype_tokens)
+                            (&self.device.0, #dtype_tokens)
                         );
                     }
                 } else {
@@ -62,7 +62,7 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
                             inits.push(quote! {
                                 let #temp_name: Tensor<1, Int> = Tensor::from_data(
                                     burn::tensor::TensorData::new(#shape_name.to_vec(), [#rank_lit]),
-                                    (&self.device, burn::tensor::DType::I64)
+                                    (&self.device.0, burn::tensor::DType::I64)
                                 );
                             });
                             input_exprs.push(quote! { #temp_name });
@@ -91,7 +91,7 @@ impl NodeCodegen for onnx_ir::concat::ConcatNode {
                             let init = quote! {
                                 let #temp_name: Tensor<1 #kind> = Tensor::from_data(
                                     burn::tensor::TensorData::from([#value]),
-                                    (&self.device, #dtype_tokens)
+                                    (&self.device.0, #dtype_tokens)
                                 );
                             };
                             inits.push(init);
@@ -274,7 +274,7 @@ mod tests {
         pub fn forward(&self, s0: i64, s1: i64) -> Tensor<1, Int> {
             let output: Tensor<1, Int> = Tensor::from_data(
                 burn::tensor::TensorData::from([s0, s1]),
-                (&self.device, burn::tensor::DType::I64),
+                (&self.device.0, burn::tensor::DType::I64),
             );
             output
         }
@@ -296,7 +296,7 @@ mod tests {
             let output = {
                 let scalar_as_tensor_0: Tensor<1> = Tensor::from_data(
                     burn::tensor::TensorData::from([s0]),
-                    (&self.device, burn::tensor::DType::F32),
+                    (&self.device.0, burn::tensor::DType::F32),
                 );
                 burn::tensor::Tensor::cat([scalar_as_tensor_0, t0].into(), 0)
             };
@@ -322,7 +322,7 @@ mod tests {
             let output = {
                 let shape_as_tensor_0: Tensor<1, Int> = Tensor::from_data(
                     burn::tensor::TensorData::new(head.to_vec(), [1]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (&self.device.0, burn::tensor::DType::I64),
                 );
                 burn::tensor::Tensor::cat([shape_as_tensor_0, tail].into(), 0)
             };
@@ -350,11 +350,11 @@ mod tests {
             let output = {
                 let shape_as_tensor_0: Tensor<1, Int> = Tensor::from_data(
                     burn::tensor::TensorData::new(head.to_vec(), [2]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (&self.device.0, burn::tensor::DType::I64),
                 );
                 let scalar_as_tensor_1: Tensor<1, Int> = Tensor::from_data(
                     burn::tensor::TensorData::from([mid as i64]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (&self.device.0, burn::tensor::DType::I64),
                 );
                 burn::tensor::Tensor::cat(
                     [shape_as_tensor_0, scalar_as_tensor_1, tail].into(),
@@ -464,7 +464,7 @@ mod tests {
             let output = {
                 let shape_as_tensor_0: Tensor<1, Int> = Tensor::from_data(
                     burn::tensor::TensorData::new(head.to_vec(), [2]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (&self.device.0, burn::tensor::DType::I64),
                 );
                 burn::tensor::Tensor::cat(
                     [shape_as_tensor_0, tail.cast(burn::tensor::DType::I64)].into(),

@@ -43,7 +43,7 @@ pub(crate) fn shape_operand_tensor(shape: TokenStream, other_ty: &ArgType) -> To
     let tensor = quote! {
         Tensor::<1, burn::tensor::Int>::from_data(
             burn::tensor::TensorData::from(&#shape as &[i64]),
-            (&self.device, #dtype)
+            (&self.device.0, #dtype)
         )
     };
     leading_broadcast(tensor, 1, other_ty.rank())

@@ -140,7 +140,7 @@ impl NodeCodegen for onnx_ir::node::range::RangeNode {
                 // All static: precompute n at codegen time
                 let n_lit = Literal::i64_suffixed(n);
                 quote! {
-                    let #output = Tensor::arange(0..#n_lit, &self.device)
+                    let #output = Tensor::arange(0..#n_lit, &self.device.0)
                         #to_output
                         .mul_scalar(#d_lit)
                         .add_scalar(#s_lit);
@@ -169,7 +169,7 @@ impl NodeCodegen for onnx_ir::node::range::RangeNode {
                         assert!(#delta != #zero);
                         let n = (#diff / #delta as f64)
                             .ceil().max(0.0) as i64;
-                        Tensor::arange(0..n, &self.device)
+                        Tensor::arange(0..n, &self.device.0)
                             #to_output
                             .mul_scalar(#delta)
                             .add_scalar(#start)
@@ -202,7 +202,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1, Int> {
-            let output = Tensor::arange(0..5i64, &self.device)
+            let output = Tensor::arange(0..5i64, &self.device.0)
                 .cast(burn::tensor::DType::I64)
                 .mul_scalar(2i64)
                 .add_scalar(0i64);
@@ -225,7 +225,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1, Int> {
-            let output = Tensor::arange(0..5i64, &self.device)
+            let output = Tensor::arange(0..5i64, &self.device.0)
                 .cast(burn::tensor::DType::I64)
                 .mul_scalar(-2i64)
                 .add_scalar(10i64);
@@ -264,7 +264,7 @@ mod tests {
                 assert!(delta != 0);
                 let n = (((limit as i128 - start as i128) as f64) / delta as f64).ceil().max(0.0)
                     as i64;
-                Tensor::arange(0..n, &self.device)
+                Tensor::arange(0..n, &self.device.0)
                     .cast(burn::tensor::DType::I64)
                     .mul_scalar(delta)
                     .add_scalar(start)
@@ -304,7 +304,7 @@ mod tests {
                 assert!(delta != 0);
                 let n = (((limit as i128 - start as i128) as f64) / delta as f64).ceil().max(0.0)
                     as i64;
-                Tensor::arange(0..n, &self.device)
+                Tensor::arange(0..n, &self.device.0)
                     .cast(burn::tensor::DType::I64)
                     .mul_scalar(delta)
                     .add_scalar(start)
@@ -329,7 +329,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1, Int> {
-            let output = Tensor::arange(0..0i64, &self.device)
+            let output = Tensor::arange(0..0i64, &self.device.0)
                 .cast(burn::tensor::DType::I64)
                 .mul_scalar(2i64)
                 .add_scalar(10i64);
@@ -352,7 +352,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1> {
-            let output = Tensor::arange(0..7i64, &self.device)
+            let output = Tensor::arange(0..7i64, &self.device.0)
                 .cast(burn::tensor::FloatDType::F32)
                 .mul_scalar(0.5f32)
                 .add_scalar(1.5f32);
@@ -375,7 +375,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1> {
-            let output = Tensor::arange(0..10i64, &self.device)
+            let output = Tensor::arange(0..10i64, &self.device.0)
                 .cast(burn::tensor::FloatDType::F64)
                 .mul_scalar(0.1f64)
                 .add_scalar(0f64);
@@ -408,7 +408,7 @@ mod tests {
                 let delta = 0.25f32;
                 assert!(delta != 0.0);
                 let n = (((limit - start) as f64) / delta as f64).ceil().max(0.0) as i64;
-                Tensor::arange(0..n, &self.device)
+                Tensor::arange(0..n, &self.device.0)
                     .cast(burn::tensor::FloatDType::F32)
                     .mul_scalar(delta)
                     .add_scalar(start)
@@ -442,7 +442,7 @@ mod tests {
                 let delta = 1f32;
                 assert!(delta != 0.0);
                 let n = (((limit - start) as f64) / delta as f64).ceil().max(0.0) as i64;
-                Tensor::arange(0..n, &self.device)
+                Tensor::arange(0..n, &self.device.0)
                     .cast(burn::tensor::FloatDType::F32)
                     .mul_scalar(delta)
                     .add_scalar(start)
@@ -477,7 +477,7 @@ mod tests {
                 assert!(delta != 0);
                 let n = (((limit as i128 - start as i128) as f64) / delta as f64).ceil().max(0.0)
                     as i64;
-                Tensor::arange(0..n, &self.device)
+                Tensor::arange(0..n, &self.device.0)
                     .cast(burn::tensor::DType::I32)
                     .mul_scalar(delta)
                     .add_scalar(start)
@@ -503,7 +503,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1, Int> {
-            let output = Tensor::arange(0..2i64, &self.device)
+            let output = Tensor::arange(0..2i64, &self.device.0)
                 .cast(burn::tensor::DType::I64)
                 .mul_scalar(1i64)
                 .add_scalar(1152921504606846976i64);
@@ -556,7 +556,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1, Int> {
-            let output = Tensor::arange(0..3i64, &self.device)
+            let output = Tensor::arange(0..3i64, &self.device.0)
                 .cast(burn::tensor::DType::I16)
                 .mul_scalar(2i16)
                 .add_scalar(-3i16);

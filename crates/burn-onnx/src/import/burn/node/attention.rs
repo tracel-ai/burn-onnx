@@ -189,11 +189,11 @@ fn causal_mask(past_kv: bool) -> TokenStream {
     quote! {{
         let [batch, heads, q_len, _] = q.dims();
         let k_len = k.dims()[2];
-        let rows = Tensor::<1, Int>::arange(0..q_len as i64, (&self.device, burn::tensor::DType::I64))
+        let rows = Tensor::<1, Int>::arange(0..q_len as i64, (&self.device.0, burn::tensor::DType::I64))
             .reshape([q_len, 1])
             #offset
             .expand([q_len, k_len]);
-        let cols = Tensor::<1, Int>::arange(0..k_len as i64, (&self.device, burn::tensor::DType::I64))
+        let cols = Tensor::<1, Int>::arange(0..k_len as i64, (&self.device.0, burn::tensor::DType::I64))
             .reshape([1, k_len])
             .expand([q_len, k_len]);
         cols.greater(rows)
@@ -424,7 +424,7 @@ fn forward_custom(
         body.extend(quote! {
             let score_bias = {
                 let shape = [q.dims()[0], q.dims()[1], q.dims()[2], k.dims()[2]];
-                let score_bias = Tensor::<4>::zeros(shape, (&self.device, q.dtype()));
+                let score_bias = Tensor::<4>::zeros(shape, (&self.device.0, q.dtype()));
                 #user
                 #causal
                 score_bias
@@ -678,13 +678,13 @@ mod tests {
                     let rows = Tensor::<
                         1,
                         Int,
-                    >::arange(0..q_len as i64, (&self.device, burn::tensor::DType::I64))
+                    >::arange(0..q_len as i64, (&self.device.0, burn::tensor::DType::I64))
                         .reshape([q_len, 1])
                         .expand([q_len, k_len]);
                     let cols = Tensor::<
                         1,
                         Int,
-                    >::arange(0..k_len as i64, (&self.device, burn::tensor::DType::I64))
+                    >::arange(0..k_len as i64, (&self.device.0, burn::tensor::DType::I64))
                         .reshape([1, k_len])
                         .expand([q_len, k_len]);
                     cols.greater(rows).unsqueeze::<4>().expand([batch, heads, q_len, k_len])
@@ -1291,7 +1291,7 @@ mod tests {
                 let scale = (1.0 / (q.dims()[3] as f64).sqrt()).sqrt();
                 let score_bias = {
                     let shape = [q.dims()[0], q.dims()[1], q.dims()[2], k.dims()[2]];
-                    let score_bias = Tensor::<4>::zeros(shape, (&self.device, q.dtype()));
+                    let score_bias = Tensor::<4>::zeros(shape, (&self.device.0, q.dtype()));
                     let score_bias = score_bias + mask.expand(shape);
                     score_bias
                 };
@@ -1378,7 +1378,7 @@ mod tests {
                 let scale = (1.0 / (q.dims()[3] as f64).sqrt()).sqrt();
                 let score_bias = {
                     let shape = [q.dims()[0], q.dims()[1], q.dims()[2], k.dims()[2]];
-                    let score_bias = Tensor::<4>::zeros(shape, (&self.device, q.dtype()));
+                    let score_bias = Tensor::<4>::zeros(shape, (&self.device.0, q.dtype()));
                     let score_bias = score_bias + bias.expand(shape);
                     score_bias
                 };
@@ -1466,7 +1466,7 @@ mod tests {
                 let scale = (1.0 / (q.dims()[3] as f64).sqrt()).sqrt();
                 let score_bias = {
                     let shape = [q.dims()[0], q.dims()[1], q.dims()[2], k.dims()[2]];
-                    let score_bias = Tensor::<4>::zeros(shape, (&self.device, q.dtype()));
+                    let score_bias = Tensor::<4>::zeros(shape, (&self.device.0, q.dtype()));
                     let score_bias = score_bias + bias.expand(shape);
                     score_bias
                 };
@@ -1622,13 +1622,13 @@ mod tests {
                     let rows = Tensor::<
                         1,
                         Int,
-                    >::arange(0..q_len as i64, (&self.device, burn::tensor::DType::I64))
+                    >::arange(0..q_len as i64, (&self.device.0, burn::tensor::DType::I64))
                         .reshape([q_len, 1])
                         .expand([q_len, k_len]);
                     let cols = Tensor::<
                         1,
                         Int,
-                    >::arange(0..k_len as i64, (&self.device, burn::tensor::DType::I64))
+                    >::arange(0..k_len as i64, (&self.device.0, burn::tensor::DType::I64))
                         .reshape([1, k_len])
                         .expand([q_len, k_len]);
                     cols.greater(rows).unsqueeze::<4>().expand([batch, heads, q_len, k_len])
@@ -1747,13 +1747,13 @@ mod tests {
                     let rows = Tensor::<
                         1,
                         Int,
-                    >::arange(0..q_len as i64, (&self.device, burn::tensor::DType::I64))
+                    >::arange(0..q_len as i64, (&self.device.0, burn::tensor::DType::I64))
                         .reshape([q_len, 1])
                         .expand([q_len, k_len]);
                     let cols = Tensor::<
                         1,
                         Int,
-                    >::arange(0..k_len as i64, (&self.device, burn::tensor::DType::I64))
+                    >::arange(0..k_len as i64, (&self.device.0, burn::tensor::DType::I64))
                         .reshape([1, k_len])
                         .expand([q_len, k_len]);
                     cols.greater(rows).unsqueeze::<4>().expand([batch, heads, q_len, k_len])
@@ -1817,13 +1817,13 @@ mod tests {
                     let rows = Tensor::<
                         1,
                         Int,
-                    >::arange(0..q_len as i64, (&self.device, burn::tensor::DType::I64))
+                    >::arange(0..q_len as i64, (&self.device.0, burn::tensor::DType::I64))
                         .reshape([q_len, 1])
                         .expand([q_len, k_len]);
                     let cols = Tensor::<
                         1,
                         Int,
-                    >::arange(0..k_len as i64, (&self.device, burn::tensor::DType::I64))
+                    >::arange(0..k_len as i64, (&self.device.0, burn::tensor::DType::I64))
                         .reshape([1, k_len])
                         .expand([q_len, k_len]);
                     cols.greater(rows).unsqueeze::<4>().expand([batch, heads, q_len, k_len])
@@ -1896,7 +1896,7 @@ mod tests {
                 let scale = (1.0 / (q.dims()[3] as f64).sqrt()).sqrt();
                 let score_bias = {
                     let shape = [q.dims()[0], q.dims()[1], q.dims()[2], k.dims()[2]];
-                    let score_bias = Tensor::<4>::zeros(shape, (&self.device, q.dtype()));
+                    let score_bias = Tensor::<4>::zeros(shape, (&self.device.0, q.dtype()));
                     let score_bias = score_bias + bias.unsqueeze::<4>().expand(shape);
                     let score_bias = score_bias
                         .mask_fill(
@@ -1908,7 +1908,7 @@ mod tests {
                                     Int,
                                 >::arange(
                                         0..q_len as i64,
-                                        (&self.device, burn::tensor::DType::I64),
+                                        (&self.device.0, burn::tensor::DType::I64),
                                     )
                                     .reshape([q_len, 1])
                                     .add_scalar(past_len as i64)
@@ -1918,7 +1918,7 @@ mod tests {
                                     Int,
                                 >::arange(
                                         0..k_len as i64,
-                                        (&self.device, burn::tensor::DType::I64),
+                                        (&self.device.0, burn::tensor::DType::I64),
                                     )
                                     .reshape([1, k_len])
                                     .expand([q_len, k_len]);

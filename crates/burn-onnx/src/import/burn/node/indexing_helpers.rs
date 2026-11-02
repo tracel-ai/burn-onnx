@@ -54,7 +54,7 @@ pub(crate) fn negative_index_normalize(
         bcast_shape[#indices_rank_lit - 1] = k;
         let dims_tensor = Tensor::<1, Int>::from_data(
             burn::tensor::TensorData::from(dim_sizes.as_slice()),
-            (&self.device, burn::tensor::DType::I64),
+            (&self.device.0, burn::tensor::DType::I64),
         )
         .reshape(bcast_shape);
         let negative = indices_i64.clone().lower_elem(0i64);

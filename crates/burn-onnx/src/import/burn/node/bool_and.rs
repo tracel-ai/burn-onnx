@@ -30,13 +30,13 @@ impl NodeCodegen for onnx_ir::node::and::AndNode {
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 let rank = rhs_ty.rank();
                 quote! {
-                    if #lhs { #rhs } else { Tensor::<#rank, Int>::zeros(#rhs.shape(), &self.device).bool() }
+                    if #lhs { #rhs } else { Tensor::<#rank, Int>::zeros(#rhs.shape(), &self.device.0).bool() }
                 }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                 let rank = lhs_ty.rank();
                 quote! {
-                    if #rhs { #lhs } else { Tensor::<#rank, Int>::zeros(#lhs.shape(), &self.device).bool() }
+                    if #rhs { #lhs } else { Tensor::<#rank, Int>::zeros(#lhs.shape(), &self.device.0).bool() }
                 }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
@@ -61,7 +61,7 @@ impl NodeCodegen for onnx_ir::node::and::AndNode {
                 quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#lhs as &[i64]),
-                        (&self.device, burn::tensor::DType::I64),
+                        (&self.device.0, burn::tensor::DType::I64),
                     )
                     .not_equal_elem(0i64)
                     .bool_and(#rhs)
@@ -72,7 +72,7 @@ impl NodeCodegen for onnx_ir::node::and::AndNode {
                     #lhs.bool_and(
                         Tensor::<1, burn::tensor::Int>::from_data(
                             burn::tensor::TensorData::from(&#rhs as &[i64]),
-                            (&self.device, burn::tensor::DType::I64),
+                            (&self.device.0, burn::tensor::DType::I64),
                         )
                         .not_equal_elem(0i64)
                     )
@@ -110,7 +110,7 @@ mod tests {
             let output = if lhs {
                 rhs
             } else {
-                Tensor::<4usize, Int>::zeros(rhs.shape(), &self.device).bool()
+                Tensor::<4usize, Int>::zeros(rhs.shape(), &self.device.0).bool()
             };
             output
         }
@@ -130,7 +130,7 @@ mod tests {
             let output = if rhs {
                 lhs
             } else {
-                Tensor::<4usize, Int>::zeros(lhs.shape(), &self.device).bool()
+                Tensor::<4usize, Int>::zeros(lhs.shape(), &self.device.0).bool()
             };
             output
         }
@@ -168,7 +168,7 @@ mod tests {
                 burn::tensor::Int,
             >::from_data(
                     burn::tensor::TensorData::from(&lhs as &[i64]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (&self.device.0, burn::tensor::DType::I64),
                 )
                 .not_equal_elem(0i64)
                 .bool_and(rhs);
@@ -194,7 +194,7 @@ mod tests {
                         burn::tensor::Int,
                     >::from_data(
                             burn::tensor::TensorData::from(&rhs as &[i64]),
-                            (&self.device, burn::tensor::DType::I64),
+                            (&self.device.0, burn::tensor::DType::I64),
                         )
                         .not_equal_elem(0i64),
                 );

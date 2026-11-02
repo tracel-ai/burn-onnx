@@ -63,6 +63,9 @@ cargo test --features test-wgpu
 
 # Specific test
 cargo test --test test_mod softmax::test_softmax
+
+# Device migration regressions (CubeCL CPU to Flex; no GPU required)
+cargo test --features test-cpu --test test_mod allocation_follows
 ```
 
 ## Resources
