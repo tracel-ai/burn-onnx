@@ -910,7 +910,8 @@ def resize_sizes_from_shape():
             ),
             helper.make_node("Concat", ["lead", "spatial"], ["sizes"], axis=0),
             helper.make_node(
-                "Resize", ["x", "", "", "sizes"], ["resized"], mode="nearest"
+                "Resize", ["x", "", "", "sizes"], ["resized"], mode="nearest",
+                coordinate_transformation_mode="asymmetric", nearest_mode="floor"
             ),
         ],
         inputs=[

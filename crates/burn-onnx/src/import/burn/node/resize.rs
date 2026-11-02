@@ -10,7 +10,7 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
     }
 
     fn field(&self) -> Option<Field> {
-        use onnx_ir::node::resize::{ResizeMode, ResizeScales, ResizeSizes};
+        use onnx_ir::node::resize::{ResizeScales, ResizeSizes};
 
         // Only create a field for static resize (no runtime inputs)
         let has_runtime_scales = matches!(&self.config.scales, Some(ResizeScales::Runtime(_)));
@@ -36,13 +36,7 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
         };
 
         let name = syn::Ident::new(&self.name, proc_macro2::Span::call_site());
-        let mode = match self.config.mode {
-            ResizeMode::Nearest => quote! { burn::nn::interpolate::InterpolateMode::Nearest },
-            ResizeMode::Linear => quote! { burn::nn::interpolate::InterpolateMode::Linear },
-            ResizeMode::Cubic => quote! { burn::nn::interpolate::InterpolateMode::Cubic },
-        };
-        let align_corners = self.config.coordinate_transformation_mode
-            == onnx_ir::node::resize::CoordinateTransformMode::AlignCorners;
+        let mode = interpolate_mode(&self.config).ok()?;
 
         if input_rank == 3 {
             let size = match &self.config.sizes {
@@ -69,7 +63,6 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                         .with_output_size(#size)
                         .with_scale_factor(#scale_factor)
                         .with_mode(#mode)
-                        .with_align_corners(#align_corners)
                         .init();
                 },
             ))
@@ -100,7 +93,6 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                         .with_output_size(#size)
                         .with_scale_factor(#scale_factor)
                         .with_mode(#mode)
-                        .with_align_corners(#align_corners)
                         .init();
                 },
             ))
@@ -110,11 +102,19 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
-        use onnx_ir::node::resize::{KeepAspectRatioPolicy, ResizeMode, ResizeScales, ResizeSizes};
+        use onnx_ir::node::resize::{KeepAspectRatioPolicy, ResizeScales, ResizeSizes};
 
         let input_arg = self.inputs.first().unwrap();
         let input = scope.arg(input_arg);
         let output = arg_to_ident(self.outputs.first().unwrap());
+
+        let mode = match interpolate_mode(&self.config) {
+            Ok(mode) => mode,
+            Err(reason) => {
+                let message = format!("Resize node '{}': {reason}", self.name);
+                return quote! { let #output = compile_error!(#message); };
+            }
+        };
 
         // Check if this is static (has field) or runtime resize
         let has_runtime = matches!(&self.config.scales, Some(ResizeScales::Runtime(_)))
@@ -131,14 +131,6 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
         } else {
             // Runtime resize - use tensor operations directly
             //
-            let mode = match self.config.mode {
-                ResizeMode::Nearest => quote! { burn::tensor::ops::InterpolateMode::Nearest },
-                ResizeMode::Linear => quote! { burn::tensor::ops::InterpolateMode::Bilinear },
-                ResizeMode::Cubic => quote! { burn::tensor::ops::InterpolateMode::Bicubic },
-            };
-            let align_corners = self.config.coordinate_transformation_mode
-                == onnx_ir::node::resize::CoordinateTransformMode::AlignCorners;
-
             // Position of each spatial axis (2 = height, 3 = width) in the runtime values.
             // With the `axes` attribute the values only cover the listed axes, in that
             // order; an unlisted axis is left unchanged.
@@ -153,16 +145,15 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
             } else {
                 quote! {}
             };
-            // Target size of a spatial axis, read from `values` (sizes or scales)
-            let target = |pos: Option<usize>, dim: usize, values: TokenStream, is_scale: bool| {
-                let pos = pos.map(proc_macro2::Literal::usize_unsuffixed);
+            // Target size of a spatial axis, read from sizes.
+            let target = |pos: Option<usize>, dim: usize, values: TokenStream| {
                 let dim = proc_macro2::Literal::usize_unsuffixed(dim);
-                match (pos, is_scale) {
-                    (Some(pos), false) => quote! { #values[#pos] as usize },
-                    (Some(pos), true) => quote! {
-                        ((input_dims[#dim] as f64) * (#values[#pos] as f64)) as usize
-                    },
-                    (None, _) => quote! { input_dims[#dim] },
+                match pos {
+                    Some(pos) => {
+                        let pos = proc_macro2::Literal::usize_unsuffixed(pos);
+                        quote! { #values[#pos] as usize }
+                    }
+                    None => quote! { input_dims[#dim] },
                 }
             };
 
@@ -244,9 +235,8 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                             };
                             burn::tensor::module::interpolate(
                                 #input,
-                                burn::tensor::ops::InterpolateOptions::new(#mode)
+                                burn::tensor::ops::InterpolateOptions::new((#mode).into())
                                     .with_output_size([target_height, target_width])
-                                    .with_align_corners(#align_corners)
                             )
                         };
                     };
@@ -255,8 +245,8 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                 match &sizes_arg.ty {
                     ArgType::Shape(_) => {
                         let sizes_name = arg_to_ident(sizes_arg);
-                        let target_height = target(height_pos, 2, quote! { #sizes_name }, false);
-                        let target_width = target(width_pos, 3, quote! { #sizes_name }, false);
+                        let target_height = target(height_pos, 2, quote! { #sizes_name });
+                        let target_width = target(width_pos, 3, quote! { #sizes_name });
                         quote! {
                             let #output = {
                                 #sizes_input_dims
@@ -264,17 +254,16 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                                 let target_width = #target_width;
                                 burn::tensor::module::interpolate(
                                     #input,
-                                    burn::tensor::ops::InterpolateOptions::new(#mode)
+                                    burn::tensor::ops::InterpolateOptions::new((#mode).into())
                                         .with_output_size([target_height, target_width])
-                                        .with_align_corners(#align_corners)
                                 )
                             };
                         }
                     }
                     ArgType::Tensor(_) => {
                         let sizes_name = scope.arg(sizes_arg);
-                        let target_height = target(height_pos, 2, quote! { sizes_array }, false);
-                        let target_width = target(width_pos, 3, quote! { sizes_array }, false);
+                        let target_height = target(height_pos, 2, quote! { sizes_array });
+                        let target_width = target(width_pos, 3, quote! { sizes_array });
                         quote! {
                             let #output = {
                                 #sizes_input_dims
@@ -284,9 +273,8 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                                 let target_width = #target_width;
                                 burn::tensor::module::interpolate(
                                     #input,
-                                    burn::tensor::ops::InterpolateOptions::new(#mode)
+                                    burn::tensor::ops::InterpolateOptions::new((#mode).into())
                                         .with_output_size([target_height, target_width])
-                                        .with_align_corners(#align_corners)
                                 )
                             };
                         }
@@ -294,54 +282,101 @@ impl NodeCodegen for onnx_ir::node::resize::ResizeNode {
                     _ => panic!("Runtime resize sizes must be Shape or Tensor"),
                 }
             } else if let Some(ResizeScales::Runtime(scales_ref)) = &self.config.scales {
-                // Runtime scales input - compute output size from input dimensions * scales
+                // Preserve the supplied scales: resolving sizes and recomputing the ratio
+                // changes sampling positions when the scaled size is fractional.
                 let scales_arg = &self.inputs[scales_ref.input_index];
+                let scale = |pos: Option<usize>, values: TokenStream| match pos {
+                    Some(pos) => {
+                        let pos = proc_macro2::Literal::usize_unsuffixed(pos);
+                        quote! { #values[#pos] as f32 }
+                    }
+                    None => quote! { 1.0f32 },
+                };
 
                 match &scales_arg.ty {
                     ArgType::Shape(_) => {
                         let scales_name = arg_to_ident(scales_arg);
-                        // Compute target dimensions: input_dim * scale
-                        let target_height = target(height_pos, 2, quote! { #scales_name }, true);
-                        let target_width = target(width_pos, 3, quote! { #scales_name }, true);
+                        let height = scale(height_pos, quote! { #scales_name });
+                        let width = scale(width_pos, quote! { #scales_name });
                         quote! {
-                            let #output = {
-                                let input_dims = #input.dims();
-                                let target_height = #target_height;
-                                let target_width = #target_width;
-                                burn::tensor::module::interpolate(
-                                    #input,
-                                    burn::tensor::ops::InterpolateOptions::new(#mode)
-                                        .with_output_size([target_height, target_width])
-                                        .with_align_corners(#align_corners)
-                                )
-                            };
+                            let #output = burn::tensor::module::interpolate(
+                                #input,
+                                burn::tensor::ops::InterpolateOptions::new((#mode).into())
+                                    .with_scale_factor([#height, #width])
+                            );
                         }
                     }
                     ArgType::Tensor(_) => {
                         let scales_name = scope.arg(scales_arg);
-                        // Compute target dimensions: input_dim * scale
-                        let target_height = target(height_pos, 2, quote! { scales_array }, true);
-                        let target_width = target(width_pos, 3, quote! { scales_array }, true);
+                        let height = scale(height_pos, quote! { scales_array });
+                        let width = scale(width_pos, quote! { scales_array });
                         quote! {
-                            let #output = {
-                                let input_dims = #input.dims();
-                                let scales_data = #scales_name.to_data().convert::<f32>();
-                                let scales_array = scales_data.as_slice::<f32>().unwrap();
-                                let target_height = #target_height;
-                                let target_width = #target_width;
-                                burn::tensor::module::interpolate(
-                                    #input,
-                                    burn::tensor::ops::InterpolateOptions::new(#mode)
-                                        .with_output_size([target_height, target_width])
-                                        .with_align_corners(#align_corners)
-                                )
-                            };
+                            let #output = burn::tensor::module::interpolate(
+                                #input,
+                                {
+                                    let scales_data = #scales_name.to_data().convert::<f32>();
+                                    let scales_array = scales_data.as_slice::<f32>().unwrap();
+                                    burn::tensor::ops::InterpolateOptions::new((#mode).into())
+                                        .with_scale_factor([#height, #width])
+                                }
+                            );
                         }
                     }
                     _ => panic!("Runtime resize scales must be Shape or Tensor"),
                 }
             } else {
                 panic!("Runtime resize requires either sizes or scales input")
+            }
+        }
+    }
+}
+
+// Both module fields and runtime calls use the same ONNX-to-Burn translation.
+fn interpolate_mode(config: &onnx_ir::node::resize::ResizeConfig) -> Result<TokenStream, String> {
+    use onnx_ir::node::resize::{CoordinateTransformMode, NearestMode, ResizeMode};
+
+    if config.exclude_outside != 0 {
+        return Err("exclude_outside=1 is not supported by Burn interpolation".into());
+    }
+    if config.antialias != 0 && config.mode != ResizeMode::Nearest {
+        return Err("antialias=1 is not supported by Burn interpolation".into());
+    }
+    match config.mode {
+        ResizeMode::Nearest => match (&config.coordinate_transformation_mode, &config.nearest_mode)
+        {
+            (CoordinateTransformMode::Asymmetric, NearestMode::Floor) => {
+                Ok(quote! { burn::nn::interpolate::InterpolateMode::Nearest })
+            }
+            (CoordinateTransformMode::HalfPixel, NearestMode::RoundPreferCeil) => {
+                Ok(quote! { burn::nn::interpolate::InterpolateMode::NearestExact })
+            }
+            (transform, rounding) => Err(format!(
+                "nearest interpolation with {transform:?} coordinates and {rounding:?} rounding is not supported; Burn supports Asymmetric/Floor and HalfPixel/RoundPreferCeil"
+            )),
+        },
+        ResizeMode::Linear | ResizeMode::Cubic => {
+            let coordinate_transform = match config.coordinate_transformation_mode {
+                CoordinateTransformMode::HalfPixel => {
+                    quote! { burn::tensor::ops::CoordinateTransformMode::HalfPixel }
+                }
+                CoordinateTransformMode::AlignCorners => {
+                    quote! { burn::tensor::ops::CoordinateTransformMode::AlignCorners }
+                }
+                ref transform => {
+                    return Err(format!(
+                        "{transform:?} coordinates are not supported by Burn linear/cubic interpolation"
+                    ));
+                }
+            };
+            if config.mode == ResizeMode::Linear {
+                Ok(quote! {
+                    burn::nn::interpolate::InterpolateMode::Linear { coordinate_transform: #coordinate_transform }
+                })
+            } else {
+                let a = config.cubic_coeff_a.to_tokens();
+                Ok(quote! {
+                    burn::nn::interpolate::InterpolateMode::Cubic { coordinate_transform: #coordinate_transform, a: #a }
+                })
             }
         }
     }
@@ -357,12 +392,215 @@ mod tests {
         ResizeNodeBuilder, ResizeScales, ResizeSizes,
     };
 
+    #[test]
+    fn nearest_exact_static_field() {
+        let node = ResizeNodeBuilder::new("resize")
+            .input_tensor("x", 4, DType::F32)
+            .output_tensor("y", 4, DType::F32)
+            .config(ResizeConfig {
+                sizes: Some(ResizeSizes::Static(vec![2, 2])),
+                nearest_mode: onnx_ir::node::resize::NearestMode::RoundPreferCeil,
+                ..Default::default()
+            })
+            .build();
+        assert_snapshot!(codegen_field_init(&node), @r"
+        let resize = burn::nn::interpolate::Interpolate2dConfig::new()
+            .with_output_size(Some([2, 2]))
+            .with_scale_factor(None)
+            .with_mode(burn::nn::interpolate::InterpolateMode::NearestExact)
+            .init();
+        ");
+    }
+
+    #[test]
+    fn cubic_static_field_preserves_coefficient_and_alignment() {
+        let node = ResizeNodeBuilder::new("resize")
+            .input_tensor("x", 4, DType::F32)
+            .output_tensor("y", 4, DType::F32)
+            .config(ResizeConfig {
+                mode: ResizeMode::Cubic,
+                scales: Some(ResizeScales::Static(vec![1.5, 2.5])),
+                coordinate_transformation_mode: CoordinateTransformMode::AlignCorners,
+                cubic_coeff_a: -0.5,
+                ..Default::default()
+            })
+            .build();
+        assert_snapshot!(codegen_field_init(&node), @r"
+        let resize = burn::nn::interpolate::Interpolate2dConfig::new()
+            .with_output_size(None)
+            .with_scale_factor(Some([1.5, 2.5]))
+            .with_mode(burn::nn::interpolate::InterpolateMode::Cubic {
+                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::AlignCorners,
+                a: -0.5,
+            })
+            .init();
+        ");
+    }
+
+    #[test]
+    fn linear_1d_static_field() {
+        let node = ResizeNodeBuilder::new("resize")
+            .input_tensor("x", 3, DType::F32)
+            .output_tensor("y", 3, DType::F32)
+            .config(ResizeConfig {
+                mode: ResizeMode::Linear,
+                sizes: Some(ResizeSizes::Static(vec![5])),
+                ..Default::default()
+            })
+            .build();
+        assert_snapshot!(codegen_field_init(&node), @r"
+        let resize = burn::nn::interpolate::Interpolate1dConfig::new()
+            .with_output_size(Some(5))
+            .with_scale_factor(None)
+            .with_mode(burn::nn::interpolate::InterpolateMode::Linear {
+                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+            })
+            .init();
+        ");
+    }
+
+    #[test]
+    fn nearest_exact_runtime() {
+        let node = ResizeNodeBuilder::new("resize")
+            .input_tensor("x", 4, DType::F32)
+            .input_shape("sizes", 4)
+            .output_tensor("y", 4, DType::F32)
+            .config(ResizeConfig {
+                sizes: Some(ResizeSizes::Runtime(RuntimeInputRef::new(
+                    "sizes".into(),
+                    1,
+                ))),
+                nearest_mode: onnx_ir::node::resize::NearestMode::RoundPreferCeil,
+                ..Default::default()
+            })
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, x: Tensor<4>, sizes: [i64; 4]) -> Tensor<4> {
+            let y = {
+                let target_height = sizes[2] as usize;
+                let target_width = sizes[3] as usize;
+                burn::tensor::module::interpolate(
+                    x,
+                    burn::tensor::ops::InterpolateOptions::new(
+                            (burn::nn::interpolate::InterpolateMode::NearestExact).into(),
+                        )
+                        .with_output_size([target_height, target_width]),
+                )
+            };
+            y
+        }
+        ");
+    }
+
+    #[test]
+    fn runtime_scales_preserve_unlisted_axis() {
+        let node = ResizeNodeBuilder::new("resize")
+            .input_tensor("x", 4, DType::F32)
+            .input_tensor("scales", 1, DType::F32)
+            .output_tensor("y", 4, DType::F32)
+            .config(ResizeConfig {
+                mode: ResizeMode::Linear,
+                scales: Some(ResizeScales::Runtime(RuntimeInputRef::new(
+                    "scales".into(),
+                    1,
+                ))),
+                axes: Some(vec![3]),
+                ..Default::default()
+            })
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, x: Tensor<4>, scales: Tensor<1>) -> Tensor<4> {
+            let y = burn::tensor::module::interpolate(
+                x,
+                {
+                    let scales_data = scales.to_data().convert::<f32>();
+                    let scales_array = scales_data.as_slice::<f32>().unwrap();
+                    burn::tensor::ops::InterpolateOptions::new(
+                            (burn::nn::interpolate::InterpolateMode::Linear {
+                                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+                            })
+                                .into(),
+                        )
+                        .with_scale_factor([1.0f32, scales_array[0] as f32])
+                },
+            );
+            y
+        }
+        ");
+    }
+
+    #[test]
+    fn unsupported_nearest_emits_compile_error() {
+        let node = ResizeNodeBuilder::new("resize")
+            .input_tensor("x", 4, DType::F32)
+            .output_tensor("y", 4, DType::F32)
+            .config(ResizeConfig {
+                sizes: Some(ResizeSizes::Static(vec![2, 2])),
+                ..Default::default()
+            })
+            .build();
+        assert!(codegen_field_init(&node).is_empty());
+        assert_snapshot!(codegen_forward_default(&node), @r#"
+        pub fn forward(&self, x: Tensor<4>) -> Tensor<4> {
+            let y = compile_error!(
+                "Resize node 'resize': nearest interpolation with HalfPixel coordinates and RoundPreferFloor rounding is not supported; Burn supports Asymmetric/Floor and HalfPixel/RoundPreferCeil"
+            );
+            y
+        }
+        "#);
+    }
+
+    #[test]
+    fn unsupported_resize_settings_are_rejected() {
+        use super::interpolate_mode;
+        for transform in [
+            CoordinateTransformMode::Asymmetric,
+            CoordinateTransformMode::PytorchHalfPixel,
+            CoordinateTransformMode::HalfPixelSymmetric,
+            CoordinateTransformMode::TfCropAndResize,
+            CoordinateTransformMode::TfHalfPixelForNn,
+        ] {
+            let config = ResizeConfig {
+                mode: ResizeMode::Linear,
+                coordinate_transformation_mode: transform,
+                ..Default::default()
+            };
+            assert!(
+                interpolate_mode(&config)
+                    .unwrap_err()
+                    .contains("coordinates")
+            );
+        }
+        for (attribute, config) in [
+            (
+                "exclude_outside",
+                ResizeConfig {
+                    mode: ResizeMode::Cubic,
+                    exclude_outside: 1,
+                    ..Default::default()
+                },
+            ),
+            (
+                "antialias",
+                ResizeConfig {
+                    mode: ResizeMode::Linear,
+                    antialias: 1,
+                    ..Default::default()
+                },
+            ),
+        ] {
+            assert!(interpolate_mode(&config).unwrap_err().contains(attribute));
+        }
+    }
+
     // ==================== Static Resize - Rank 3 (1D) Tests ====================
 
     #[test]
     fn test_resize_1d_static_sizes_nearest() {
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             scales: None,
             sizes: Some(ResizeSizes::Static(vec![64])),
             ..Default::default()
@@ -431,6 +669,8 @@ mod tests {
     fn test_resize_2d_static_sizes_nearest() {
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             scales: None,
             sizes: Some(ResizeSizes::Static(vec![224, 224])),
             ..Default::default()
@@ -497,6 +737,8 @@ mod tests {
     fn test_resize_2d_static_scales_nearest() {
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             scales: Some(ResizeScales::Static(vec![2.0, 2.0])),
             sizes: None,
             ..Default::default()
@@ -565,6 +807,8 @@ mod tests {
     fn test_resize_runtime_shape_nearest() {
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             scales: None,
             sizes: Some(ResizeSizes::Runtime(RuntimeInputRef {
                 name: "target_size".to_string(),
@@ -587,10 +831,9 @@ mod tests {
                 burn::tensor::module::interpolate(
                     input,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Nearest,
+                            (burn::nn::interpolate::InterpolateMode::Nearest).into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             output
@@ -624,10 +867,12 @@ mod tests {
                 burn::tensor::module::interpolate(
                     img,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bilinear,
+                            (burn::nn::interpolate::InterpolateMode::Linear {
+                                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+                            })
+                                .into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             resized_img
@@ -661,10 +906,13 @@ mod tests {
                 burn::tensor::module::interpolate(
                     source,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bicubic,
+                            (burn::nn::interpolate::InterpolateMode::Cubic {
+                                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+                                a: -0.75,
+                            })
+                                .into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             dest
@@ -701,10 +949,12 @@ mod tests {
                 burn::tensor::module::interpolate(
                     input,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bilinear,
+                            (burn::nn::interpolate::InterpolateMode::Linear {
+                                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::AlignCorners,
+                            })
+                                .into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(true),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             output
@@ -718,6 +968,8 @@ mod tests {
     fn test_resize_runtime_tensor_nearest() {
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             scales: None,
             sizes: Some(ResizeSizes::Runtime(RuntimeInputRef {
                 name: "size_tensor".to_string(),
@@ -742,10 +994,9 @@ mod tests {
                 burn::tensor::module::interpolate(
                     x,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Nearest,
+                            (burn::nn::interpolate::InterpolateMode::Nearest).into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             y
@@ -781,10 +1032,12 @@ mod tests {
                 burn::tensor::module::interpolate(
                     frame,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bilinear,
+                            (burn::nn::interpolate::InterpolateMode::Linear {
+                                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+                            })
+                                .into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             resampled_frame
@@ -820,10 +1073,13 @@ mod tests {
                 burn::tensor::module::interpolate(
                     input_data,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bicubic,
+                            (burn::nn::interpolate::InterpolateMode::Cubic {
+                                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+                                a: -0.75,
+                            })
+                                .into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             output_data
@@ -837,6 +1093,8 @@ mod tests {
     fn test_resize_runtime_scales_shape_nearest() {
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             scales: Some(ResizeScales::Runtime(RuntimeInputRef {
                 name: "scale_factors".to_string(),
                 input_index: 1,
@@ -853,20 +1111,13 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<4>, scale_factors: [i64; 4]) -> Tensor<4> {
-            let output = {
-                let input_dims = input.dims();
-                let target_height = ((input_dims[2] as f64) * (scale_factors[2] as f64))
-                    as usize;
-                let target_width = ((input_dims[3] as f64) * (scale_factors[3] as f64)) as usize;
-                burn::tensor::module::interpolate(
-                    input,
-                    burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Nearest,
-                        )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
-                )
-            };
+            let output = burn::tensor::module::interpolate(
+                input,
+                burn::tensor::ops::InterpolateOptions::new(
+                        (burn::nn::interpolate::InterpolateMode::Nearest).into(),
+                    )
+                    .with_scale_factor([scale_factors[2] as f32, scale_factors[3] as f32]),
+            );
             output
         }
         ");
@@ -892,19 +1143,16 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, image: Tensor<4>, scale_vals: [i64; 4]) -> Tensor<4> {
-            let scaled_image = {
-                let input_dims = image.dims();
-                let target_height = ((input_dims[2] as f64) * (scale_vals[2] as f64)) as usize;
-                let target_width = ((input_dims[3] as f64) * (scale_vals[3] as f64)) as usize;
-                burn::tensor::module::interpolate(
-                    image,
-                    burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bilinear,
-                        )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
-                )
-            };
+            let scaled_image = burn::tensor::module::interpolate(
+                image,
+                burn::tensor::ops::InterpolateOptions::new(
+                        (burn::nn::interpolate::InterpolateMode::Linear {
+                            coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+                        })
+                            .into(),
+                    )
+                    .with_scale_factor([scale_vals[2] as f32, scale_vals[3] as f32]),
+            );
             scaled_image
         }
         ");
@@ -930,19 +1178,17 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, features: Tensor<4>, cubic_scales: [i64; 4]) -> Tensor<4> {
-            let upscaled = {
-                let input_dims = features.dims();
-                let target_height = ((input_dims[2] as f64) * (cubic_scales[2] as f64)) as usize;
-                let target_width = ((input_dims[3] as f64) * (cubic_scales[3] as f64)) as usize;
-                burn::tensor::module::interpolate(
-                    features,
-                    burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bicubic,
-                        )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
-                )
-            };
+            let upscaled = burn::tensor::module::interpolate(
+                features,
+                burn::tensor::ops::InterpolateOptions::new(
+                        (burn::nn::interpolate::InterpolateMode::Cubic {
+                            coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+                            a: -0.75,
+                        })
+                            .into(),
+                    )
+                    .with_scale_factor([cubic_scales[2] as f32, cubic_scales[3] as f32]),
+            );
             upscaled
         }
         ");
@@ -955,6 +1201,8 @@ mod tests {
         // axes=[3, 2]: scales_tensor holds [width scale, height scale]
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             scales: Some(ResizeScales::Runtime(RuntimeInputRef {
                 name: "scales_tensor".to_string(),
                 input_index: 1,
@@ -969,23 +1217,19 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
+        assert_snapshot!(code, @r"
         pub fn forward(&self, x: Tensor<4>, scales_tensor: Tensor<1>) -> Tensor<4> {
-            let y = {
-                let input_dims = x.dims();
-                let scales_data = scales_tensor.to_data().convert::<f32>();
-                let scales_array = scales_data.as_slice::<f32>().unwrap();
-                let target_height = ((input_dims[2] as f64) * (scales_array[1] as f64)) as usize;
-                let target_width = ((input_dims[3] as f64) * (scales_array[0] as f64)) as usize;
-                burn::tensor::module::interpolate(
-                    x,
+            let y = burn::tensor::module::interpolate(
+                x,
+                {
+                    let scales_data = scales_tensor.to_data().convert::<f32>();
+                    let scales_array = scales_data.as_slice::<f32>().unwrap();
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Nearest,
+                            (burn::nn::interpolate::InterpolateMode::Nearest).into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
-                )
-            };
+                        .with_scale_factor([scales_array[1] as f32, scales_array[0] as f32])
+                },
+            );
             y
         }
         ");
@@ -996,6 +1240,8 @@ mod tests {
         // axes=[3]: only the width is resized, the height keeps its input size
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             sizes: Some(ResizeSizes::Runtime(RuntimeInputRef {
                 name: "sizes_tensor".to_string(),
                 input_index: 1,
@@ -1010,7 +1256,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
+        assert_snapshot!(code, @r"
         pub fn forward(&self, x: Tensor<4>, sizes_tensor: Tensor<1, Int>) -> Tensor<4> {
             let y = {
                 let input_dims = x.dims();
@@ -1021,10 +1267,9 @@ mod tests {
                 burn::tensor::module::interpolate(
                     x,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Nearest,
+                            (burn::nn::interpolate::InterpolateMode::Nearest).into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             y
@@ -1037,6 +1282,8 @@ mod tests {
         // axes=[2, 3]: one scale, the min of sizes[i] / input_dims[axes[i]]
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             sizes: Some(ResizeSizes::Runtime(RuntimeInputRef {
                 name: "sizes_tensor".to_string(),
                 input_index: 1,
@@ -1076,10 +1323,9 @@ mod tests {
                 burn::tensor::module::interpolate(
                     x,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Nearest,
+                            (burn::nn::interpolate::InterpolateMode::Nearest).into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             y
@@ -1092,6 +1338,8 @@ mod tests {
         // Without axes all four axes are listed, so batch and channel must stay unchanged
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             sizes: Some(ResizeSizes::Runtime(RuntimeInputRef {
                 name: "sizes".to_string(),
                 input_index: 1,
@@ -1136,10 +1384,9 @@ mod tests {
                 burn::tensor::module::interpolate(
                     x,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Nearest,
+                            (burn::nn::interpolate::InterpolateMode::Nearest).into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             y
@@ -1152,6 +1399,8 @@ mod tests {
         // axes=[3]: the scale comes from the width alone and the unlisted height is kept
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             sizes: Some(ResizeSizes::Runtime(RuntimeInputRef {
                 name: "sizes_tensor".to_string(),
                 input_index: 1,
@@ -1188,10 +1437,9 @@ mod tests {
                 burn::tensor::module::interpolate(
                     x,
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Nearest,
+                            (burn::nn::interpolate::InterpolateMode::Nearest).into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
+                        .with_output_size([target_height, target_width]),
                 )
             };
             y
@@ -1208,6 +1456,8 @@ mod tests {
     ) -> onnx_ir::node::resize::ResizeNode {
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             sizes: Some(ResizeSizes::Runtime(RuntimeInputRef {
                 name: sizes.to_string(),
                 input_index: 1,
@@ -1262,6 +1512,8 @@ mod tests {
     fn test_resize_runtime_scales_tensor_nearest() {
         let config = ResizeConfig {
             mode: ResizeMode::Nearest,
+            coordinate_transformation_mode: CoordinateTransformMode::Asymmetric,
+            nearest_mode: onnx_ir::node::resize::NearestMode::Floor,
             scales: Some(ResizeScales::Runtime(RuntimeInputRef {
                 name: "scales_tensor".to_string(),
                 input_index: 1,
@@ -1278,21 +1530,17 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, x: Tensor<4>, scales_tensor: Tensor<1>) -> Tensor<4> {
-            let y = {
-                let input_dims = x.dims();
-                let scales_data = scales_tensor.to_data().convert::<f32>();
-                let scales_array = scales_data.as_slice::<f32>().unwrap();
-                let target_height = ((input_dims[2] as f64) * (scales_array[2] as f64)) as usize;
-                let target_width = ((input_dims[3] as f64) * (scales_array[3] as f64)) as usize;
-                burn::tensor::module::interpolate(
-                    x,
+            let y = burn::tensor::module::interpolate(
+                x,
+                {
+                    let scales_data = scales_tensor.to_data().convert::<f32>();
+                    let scales_array = scales_data.as_slice::<f32>().unwrap();
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Nearest,
+                            (burn::nn::interpolate::InterpolateMode::Nearest).into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
-                )
-            };
+                        .with_scale_factor([scales_array[2] as f32, scales_array[3] as f32])
+                },
+            );
             y
         }
         ");
@@ -1318,21 +1566,20 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, frame: Tensor<4>, scale_input: Tensor<1>) -> Tensor<4> {
-            let resized_frame = {
-                let input_dims = frame.dims();
-                let scales_data = scale_input.to_data().convert::<f32>();
-                let scales_array = scales_data.as_slice::<f32>().unwrap();
-                let target_height = ((input_dims[2] as f64) * (scales_array[2] as f64)) as usize;
-                let target_width = ((input_dims[3] as f64) * (scales_array[3] as f64)) as usize;
-                burn::tensor::module::interpolate(
-                    frame,
+            let resized_frame = burn::tensor::module::interpolate(
+                frame,
+                {
+                    let scales_data = scale_input.to_data().convert::<f32>();
+                    let scales_array = scales_data.as_slice::<f32>().unwrap();
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bilinear,
+                            (burn::nn::interpolate::InterpolateMode::Linear {
+                                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+                            })
+                                .into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
-                )
-            };
+                        .with_scale_factor([scales_array[2] as f32, scales_array[3] as f32])
+                },
+            );
             resized_frame
         }
         ");
@@ -1358,21 +1605,21 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, data: Tensor<4>, cubic_scale_tensor: Tensor<1>) -> Tensor<4> {
-            let result = {
-                let input_dims = data.dims();
-                let scales_data = cubic_scale_tensor.to_data().convert::<f32>();
-                let scales_array = scales_data.as_slice::<f32>().unwrap();
-                let target_height = ((input_dims[2] as f64) * (scales_array[2] as f64)) as usize;
-                let target_width = ((input_dims[3] as f64) * (scales_array[3] as f64)) as usize;
-                burn::tensor::module::interpolate(
-                    data,
+            let result = burn::tensor::module::interpolate(
+                data,
+                {
+                    let scales_data = cubic_scale_tensor.to_data().convert::<f32>();
+                    let scales_array = scales_data.as_slice::<f32>().unwrap();
                     burn::tensor::ops::InterpolateOptions::new(
-                            burn::tensor::ops::InterpolateMode::Bicubic,
+                            (burn::nn::interpolate::InterpolateMode::Cubic {
+                                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+                                a: -0.75,
+                            })
+                                .into(),
                         )
-                        .with_output_size([target_height, target_width])
-                        .with_align_corners(false),
-                )
-            };
+                        .with_scale_factor([scales_array[2] as f32, scales_array[3] as f32])
+                },
+            );
             result
         }
         ");

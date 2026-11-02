@@ -29,7 +29,7 @@ def main():
     y_runtime = helper.make_tensor_value_info("y_runtime", TensorProto.FLOAT, [1, 1, 15, 29])
     constant_sizes = numpy_helper.from_array(np.array([15, 29], dtype=np.int64), name="constant_sizes")
 
-    attrs = dict(mode="nearest", axes=[2, 3], keep_aspect_ratio_policy="not_larger")
+    attrs = dict(mode="nearest", coordinate_transformation_mode="asymmetric", nearest_mode="floor", axes=[2, 3], keep_aspect_ratio_policy="not_larger")
     nodes = [
         helper.make_node("Resize", ["x", "", "", "constant_sizes"], ["y_static"], **attrs),
         helper.make_node("Resize", ["x", "", "", "sizes"], ["y_runtime"], **attrs),

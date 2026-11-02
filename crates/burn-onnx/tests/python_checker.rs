@@ -46,9 +46,10 @@ impl Resize {
     fn forward(&self, input: Tensor<4>) -> Tensor<4> {
         interpolate(
             input,
-            InterpolateOptions::new(InterpolateMode::Bilinear)
-                .with_output_size([5, 7])
-                .with_align_corners(false),
+            InterpolateOptions::new(InterpolateMode::Bilinear {
+                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+            })
+            .with_output_size([5, 7]),
         )
     }
 }

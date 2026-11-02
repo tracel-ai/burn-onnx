@@ -58,6 +58,8 @@ pub enum CoordinateTransformMode {
     /// Half-pixel coordinate transformation (default for opset 11+)
     #[default]
     HalfPixel,
+    /// Half-pixel coordinates recentered for a fractional requested output size
+    HalfPixelSymmetric,
     /// Align corners coordinate transformation
     AlignCorners,
     /// Asymmetric coordinate transformation (default for opset <11)
@@ -76,6 +78,7 @@ impl FromStr for CoordinateTransformMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "half_pixel" => Ok(Self::HalfPixel),
+            "half_pixel_symmetric" => Ok(Self::HalfPixelSymmetric),
             "align_corners" => Ok(Self::AlignCorners),
             "asymmetric" => Ok(Self::Asymmetric),
             "pytorch_half_pixel" => Ok(Self::PytorchHalfPixel),
@@ -506,52 +509,6 @@ impl NodeProcessor for ResizeProcessor {
         opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        for (key, value) in node.attrs.iter() {
-            match key.as_str() {
-                "antialias" if value.clone().into_i32()? != 0 => {
-                    return Err(ProcessError::InvalidAttribute {
-                        name: "antialias".to_string(),
-                        reason: "antialias other than 0 is not supported".to_string(),
-                    });
-                }
-                "axes" | "coordinate_transformation_mode" | "cubic_coeff_a" => {
-                    // Parsed in extract_config
-                }
-                "exclude_outside" if value.clone().into_i32()? != 0 => {
-                    return Err(ProcessError::InvalidAttribute {
-                        name: "exclude_outside".to_string(),
-                        reason: "exclude_outside other than 0 is not supported".to_string(),
-                    });
-                }
-                "extrapolation_value" if value.clone().into_f32()? != 0.0 => {
-                    return Err(ProcessError::InvalidAttribute {
-                        name: "extrapolation_value".to_string(),
-                        reason: "extrapolation_value other than 0.0 is not supported".to_string(),
-                    });
-                }
-                "mode" | "nearest_mode" => {
-                    // Parsed in extract_config
-                }
-                _ => {}
-            }
-        }
-
-        // Opset 10: inputs are [X, scales] (no roi input)
-        // Opset 11+: inputs are [X, roi, scales, sizes]
-        if opset >= 11 {
-            let has_roi = node
-                .inputs
-                .get(1)
-                .and_then(|input| input.value())
-                .is_some_and(|roi| roi.num_elements() > 0);
-
-            if has_roi {
-                return Err(ProcessError::Custom(
-                    "Resize: roi input is not supported".to_string(),
-                ));
-            }
-        }
-
         let config = self.extract_config(node, opset)?;
 
         // Exactly one of scales or sizes must be provided
@@ -608,7 +565,11 @@ impl NodeProcessor for ResizeProcessor {
             CoordinateTransformMode::HalfPixel
         };
         let mut cubic_coeff_a = -0.75f32;
-        let mut nearest_mode = NearestMode::RoundPreferFloor;
+        let mut nearest_mode = if opset < 11 {
+            NearestMode::Floor
+        } else {
+            NearestMode::RoundPreferFloor
+        };
         let mut exclude_outside = 0i32;
         let mut extrapolation_value = 0.0f32;
         let mut antialias = 0i32;
@@ -930,6 +891,21 @@ mod tests {
     }
 
     #[test]
+    fn test_resize_config_with_filter_options() {
+        let mut node = create_test_node("cubic", Some(vec![1.0, 1.0, 0.5, 0.5]), None, None)
+            .attr_int("antialias", 1)
+            .attr_int("exclude_outside", 1)
+            .build_with_graph_data(18);
+        let processor = ResizeProcessor;
+        let config = processor.extract_config(&node, 18).unwrap();
+        processor
+            .infer_types(&mut node, 18, &OutputPreferences::new())
+            .unwrap();
+        assert_eq!(config.antialias, 1);
+        assert_eq!(config.exclude_outside, 1);
+    }
+
+    #[test]
     fn test_resize_config_with_roi() {
         let node = create_test_node(
             "nearest",
@@ -937,13 +913,19 @@ mod tests {
             None,
             Some(vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]), // ROI values
         )
+        .attr_string("coordinate_transformation_mode", "tf_crop_and_resize")
+        .attr_float("extrapolation_value", 2.0)
         .build_with_graph_data(16);
         let mut node = node;
         let processor = ResizeProcessor;
         let prefs = OutputPreferences::new();
-        let _config = processor.extract_config(&node, 16).unwrap();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::Custom(_))));
+        let config = processor.extract_config(&node, 16).unwrap();
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
+        assert_eq!(
+            config.coordinate_transformation_mode,
+            CoordinateTransformMode::TfCropAndResize
+        );
+        assert_eq!(config.extrapolation_value, 2.0);
     }
 
     #[test]
@@ -967,6 +949,16 @@ mod tests {
         let _prefs = OutputPreferences::new();
         let result = processor.extract_config(&node, 16);
         assert!(matches!(result, Err(ProcessError::MissingAttribute(_))));
+    }
+
+    #[test]
+    fn half_pixel_symmetric_is_preserved() {
+        assert_eq!(
+            "half_pixel_symmetric"
+                .parse::<CoordinateTransformMode>()
+                .unwrap(),
+            CoordinateTransformMode::HalfPixelSymmetric,
+        );
     }
 
     #[test]
@@ -1022,6 +1014,7 @@ mod tests {
             .build_with_graph_data(10);
         let processor = ResizeProcessor;
         let config = processor.extract_config(&node, 10).unwrap();
+        assert_eq!(config.nearest_mode, NearestMode::Floor);
         assert_eq!(
             config.coordinate_transformation_mode,
             CoordinateTransformMode::Asymmetric

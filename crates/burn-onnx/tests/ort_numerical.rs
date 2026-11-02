@@ -350,9 +350,10 @@ impl BilinearResize {
     fn forward(&self, input: Tensor<4>) -> Tensor<4> {
         interpolate(
             input,
-            InterpolateOptions::new(InterpolateMode::Bilinear)
-                .with_output_size([5, 7])
-                .with_align_corners(false),
+            InterpolateOptions::new(InterpolateMode::Bilinear {
+                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::HalfPixel,
+            })
+            .with_output_size([5, 7]),
         )
     }
 }
@@ -1488,6 +1489,62 @@ fn nearest_exact_downsample_uses_burn_rounding() {
 
     let actual = run_ort(model.as_bytes(), [1, 1, 4, 4], input_values);
     actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+}
+
+#[derive(Module, Debug)]
+struct ScaledResize;
+
+impl ScaledResize {
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        interpolate(
+            input,
+            InterpolateOptions::new(InterpolateMode::Nearest).with_scale_factor([1.0, 0.6]),
+        )
+    }
+}
+
+#[test]
+fn interpolate_preserves_fractional_scales() {
+    let device = Device::default();
+    let input = Tensor::<4>::from_floats([[[[10.0, 20.0, 30.0, 40.0]]]], &device);
+    let expected = ScaledResize.forward(input.clone()).into_data();
+    let model = OnnxExporter::new()
+        .export(&ScaledResize, input, ScaledResize::forward)
+        .unwrap();
+    let actual = run_ort(model.as_bytes(), [1, 1, 1, 4], vec![10.0, 20.0, 30.0, 40.0]);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::default());
+}
+
+#[derive(Module, Debug)]
+struct CubicResize;
+
+impl CubicResize {
+    fn forward(&self, input: Tensor<4>) -> Tensor<4> {
+        interpolate(
+            input,
+            InterpolateOptions::new(InterpolateMode::Bicubic {
+                coordinate_transform: burn::tensor::ops::CoordinateTransformMode::AlignCorners,
+                a: -0.5,
+            })
+            .with_output_size([3, 7]),
+        )
+    }
+}
+
+#[test]
+fn interpolate_exports_cubic_coefficient_and_alignment() {
+    let device = Device::default();
+    let values = vec![0.0, 2.0, 9.0, 4.0, 3.0, 7.0, 1.0, 8.0];
+    let input = Tensor::<4>::from_data(
+        TensorData::new(values.clone(), [1, 1, 2, 4]),
+        (&device, DType::F32),
+    );
+    let expected = CubicResize.forward(input.clone()).into_data();
+    let model = OnnxExporter::new()
+        .export(&CubicResize, input, CubicResize::forward)
+        .unwrap();
+    let actual = run_ort(model.as_bytes(), [1, 1, 2, 4], values);
+    actual.assert_approx_eq::<f32>(&expected, Tolerance::rel_abs(RTOL, ATOL));
 }
 
 #[test]
