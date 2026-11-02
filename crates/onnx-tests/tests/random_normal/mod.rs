@@ -15,6 +15,47 @@ mod tests {
         assert_eq!(expected_shape, output.shape());
     }
 
+    #[cfg(all(feature = "test-flex", feature = "test-autodiff"))]
+    #[test]
+    fn allocation_device_follows_training_mode() {
+        use burn::{module::Module, tensor::Device};
+
+        let device = Device::flex().autodiff().gradient_checkpointing();
+        let model = random_normal::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/random_normal.bpk"),
+            &device,
+        );
+
+        let training = model.clone().train().forward();
+        assert!(training.is_autodiff());
+        assert_eq!(
+            training.gradient_checkpointing_strategy(),
+            device.gradient_checkpointing_strategy(),
+        );
+
+        let valid = model.valid();
+        assert!(!valid.forward().is_autodiff());
+        assert!(model.forward().is_autodiff());
+
+        // Moving to an autodiff-enabled destination must not re-enable training.
+        for moved in [valid.clone().to_device(&device), valid.fork(&device)] {
+            assert!(!moved.forward().is_autodiff());
+            let training = moved.train().forward();
+            assert!(training.is_autodiff());
+            // Validation discards checkpointing; train uses the default strategy.
+            assert_eq!(
+                training.gradient_checkpointing_strategy(),
+                Device::flex().autodiff().gradient_checkpointing_strategy(),
+            );
+        }
+
+        let plain = random_normal::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/random_normal.bpk"),
+            &Device::flex(),
+        );
+        assert!(plain.train().forward().is_autodiff());
+    }
+
     #[cfg(all(feature = "test-flex", feature = "test-cpu"))]
     #[test]
     fn tensorless_allocation_follows_module_moves() {

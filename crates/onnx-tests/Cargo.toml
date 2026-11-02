@@ -9,6 +9,7 @@ default = ["test-flex"]
 test-wgpu = ["burn/wgpu", "burn/fusion", "burn/std"]
 test-flex = ["burn/flex"]
 test-cpu = ["burn/cpu", "burn/std"]
+test-autodiff = ["burn/autodiff"]
 test-metal = ["burn/metal", "burn/fusion", "burn/std"]
 
 [dev-dependencies]

@@ -1006,6 +1006,7 @@ name = "burn-linalg"
 version = "0.23.0-pre.1"
 source = "git+https://github.com/tracel-ai/burn?rev=93e5b6a13c84b7fcd2e6d60ebc53bb69d4dab1a0#93e5b6a13c84b7fcd2e6d60ebc53bb69d4dab1a0"
 dependencies = [
+ "burn-autodiff",
  "burn-core",
  "burn-cubecl",
  "burn-fusion",

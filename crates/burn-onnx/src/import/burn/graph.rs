@@ -2111,10 +2111,19 @@ mod tests {
                 self
             }
             fn valid(&self) -> Self {
-                self.clone()
+                Self(self.0.clone().without_autodiff())
             }
             fn train(self) -> Self {
-                self
+                #[allow(dead_code)]
+                trait AutodiffFallback {
+                    fn autodiff(self) -> Self;
+                }
+                impl AutodiffFallback for Device {
+                    fn autodiff(self) -> Self {
+                        panic!("Training generated models requires Burn's `autodiff` feature")
+                    }
+                }
+                Self(self.0.autodiff())
             }
         }
         impl burn::module::ModuleDisplayDefault for AllocationDevice {

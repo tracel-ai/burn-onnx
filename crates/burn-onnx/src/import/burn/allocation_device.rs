@@ -32,7 +32,7 @@ pub(super) fn codegen() -> TokenStream {
                 self.to_device(device)
             }
 
-            // Allocation state has no parameters to visit, persist, or train.
+            // Allocation state has no parameters to visit or persist.
             fn visit<V: burn::module::ModuleVisitor>(&self, _visitor: &mut V) {}
 
             fn map<M: burn::module::ModuleMapper>(self, _mapper: &mut M) -> Self {
@@ -44,11 +44,23 @@ pub(super) fn codegen() -> TokenStream {
             }
 
             fn valid(&self) -> Self {
-                self.clone()
+                Self(self.0.clone().without_autodiff())
             }
 
             fn train(self) -> Self {
-                self
+                // Device::autodiff is feature-gated in Burn. Its inherent method takes
+                // precedence when available; otherwise fail only when train is called.
+                // Remove this fallback when Burn exposes Device::autodiff unconditionally.
+                #[allow(dead_code)]
+                trait AutodiffFallback {
+                    fn autodiff(self) -> Self;
+                }
+                impl AutodiffFallback for Device {
+                    fn autodiff(self) -> Self {
+                        panic!("Training generated models requires Burn's `autodiff` feature")
+                    }
+                }
+                Self(self.0.autodiff())
             }
         }
 

@@ -66,6 +66,9 @@ cargo test --test test_mod softmax::test_softmax
 
 # Device migration regressions (CubeCL CPU to Flex; no GPU required)
 cargo test --features test-cpu --test test_mod allocation_follows
+
+# Allocation device training and validation
+cargo test --features test-autodiff --test test_mod allocation_device_follows_training_mode
 ```
 
 ## Resources
