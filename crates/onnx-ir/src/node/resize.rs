@@ -891,6 +891,21 @@ mod tests {
     }
 
     #[test]
+    fn test_resize_config_with_filter_options() {
+        let mut node = create_test_node("cubic", Some(vec![1.0, 1.0, 0.5, 0.5]), None, None)
+            .attr_int("antialias", 1)
+            .attr_int("exclude_outside", 1)
+            .build_with_graph_data(18);
+        let processor = ResizeProcessor;
+        let config = processor.extract_config(&node, 18).unwrap();
+        processor
+            .infer_types(&mut node, 18, &OutputPreferences::new())
+            .unwrap();
+        assert_eq!(config.antialias, 1);
+        assert_eq!(config.exclude_outside, 1);
+    }
+
+    #[test]
     fn test_resize_config_with_roi() {
         let node = create_test_node(
             "nearest",
@@ -898,12 +913,19 @@ mod tests {
             None,
             Some(vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]), // ROI values
         )
+        .attr_string("coordinate_transformation_mode", "tf_crop_and_resize")
+        .attr_float("extrapolation_value", 2.0)
         .build_with_graph_data(16);
         let mut node = node;
         let processor = ResizeProcessor;
         let prefs = OutputPreferences::new();
-        let _config = processor.extract_config(&node, 16).unwrap();
+        let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
+        assert_eq!(
+            config.coordinate_transformation_mode,
+            CoordinateTransformMode::TfCropAndResize
+        );
+        assert_eq!(config.extrapolation_value, 2.0);
     }
 
     #[test]
