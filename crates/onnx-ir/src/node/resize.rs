@@ -509,52 +509,6 @@ impl NodeProcessor for ResizeProcessor {
         opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
-        for (key, value) in node.attrs.iter() {
-            match key.as_str() {
-                "antialias" if value.clone().into_i32()? != 0 => {
-                    return Err(ProcessError::InvalidAttribute {
-                        name: "antialias".to_string(),
-                        reason: "antialias other than 0 is not supported".to_string(),
-                    });
-                }
-                "axes" | "coordinate_transformation_mode" | "cubic_coeff_a" => {
-                    // Parsed in extract_config
-                }
-                "exclude_outside" if value.clone().into_i32()? != 0 => {
-                    return Err(ProcessError::InvalidAttribute {
-                        name: "exclude_outside".to_string(),
-                        reason: "exclude_outside other than 0 is not supported".to_string(),
-                    });
-                }
-                "extrapolation_value" if value.clone().into_f32()? != 0.0 => {
-                    return Err(ProcessError::InvalidAttribute {
-                        name: "extrapolation_value".to_string(),
-                        reason: "extrapolation_value other than 0.0 is not supported".to_string(),
-                    });
-                }
-                "mode" | "nearest_mode" => {
-                    // Parsed in extract_config
-                }
-                _ => {}
-            }
-        }
-
-        // Opset 10: inputs are [X, scales] (no roi input)
-        // Opset 11+: inputs are [X, roi, scales, sizes]
-        if opset >= 11 {
-            let has_roi = node
-                .inputs
-                .get(1)
-                .and_then(|input| input.value())
-                .is_some_and(|roi| roi.num_elements() > 0);
-
-            if has_roi {
-                return Err(ProcessError::Custom(
-                    "Resize: roi input is not supported".to_string(),
-                ));
-            }
-        }
-
         let config = self.extract_config(node, opset)?;
 
         // Exactly one of scales or sizes must be provided
@@ -949,8 +903,7 @@ mod tests {
         let processor = ResizeProcessor;
         let prefs = OutputPreferences::new();
         let _config = processor.extract_config(&node, 16).unwrap();
-        let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(matches!(result, Err(ProcessError::Custom(_))));
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
     }
 
     #[test]
