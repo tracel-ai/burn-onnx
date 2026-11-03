@@ -69,7 +69,7 @@ impl<'a, 'b> CodegenContext<'a, 'b> {
     /// `Module::fork`. Splice these tokens into emitted code rather than accessing
     /// the generated model's private device representation.
     pub fn device(&self) -> proc_macro2::TokenStream {
-        self.inner.device()
+        quote::quote! { self.device() }
     }
 }
 

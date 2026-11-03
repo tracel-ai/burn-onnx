@@ -1,11 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-/// Expression borrowing the allocation device inside a generated method.
-pub(crate) fn device_ref() -> TokenStream {
-    quote! { self.device() }
-}
-
 /// Accessor emitted on every generated struct that holds an `AllocationDevice`.
 pub(super) fn accessor() -> TokenStream {
     quote! {

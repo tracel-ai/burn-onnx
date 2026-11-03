@@ -124,11 +124,6 @@ pub struct ScopeAtPosition<'a> {
 }
 
 impl<'a> ScopeAtPosition<'a> {
-    /// Borrow the model-owned device used for runtime allocations.
-    pub fn device(&self) -> TokenStream {
-        super::allocation_device::device_ref()
-    }
-
     /// Get argument as tokens, automatically handling Tensor/Scalar/Shape types
     ///
     /// This method provides automatic type-conditional handling:

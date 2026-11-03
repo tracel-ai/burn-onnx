@@ -951,7 +951,6 @@ impl BurnGraph {
 
     /// Generate ScalarNative -> ScalarTensor input conversion code for graph boundary.
     fn codegen_boundary_input_conversions(&self) -> TokenStream {
-        let device = allocation_device::device_ref();
         let mut tokens = quote! {};
         for arg in &self.graph_input_args {
             if let Some(dtype) = self.boundary_input_conversions.get(&arg.name) {
@@ -961,21 +960,21 @@ impl BurnGraph {
                     tokens.extend(quote! {
                         let #name = Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (#device, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         );
                     });
                 } else if dtype.is_int() || dtype.is_uint() {
                     tokens.extend(quote! {
                         let #name = Tensor::<1, Int>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (#device, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         );
                     });
                 } else if dtype.is_bool() {
                     tokens.extend(quote! {
                         let #name = Tensor::<1, Bool>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (#device, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         );
                     });
                 } else {

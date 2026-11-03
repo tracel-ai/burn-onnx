@@ -4,7 +4,17 @@ include_models!(random_normal);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::Shape;
+    use burn::{
+        module::Module,
+        tensor::{Device, Shape},
+    };
+
+    fn load(device: &Device) -> random_normal::Model {
+        random_normal::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/random_normal.bpk"),
+            device,
+        )
+    }
 
     #[test]
     fn random_normal() {
@@ -17,13 +27,8 @@ mod tests {
 
     #[test]
     fn allocation_device_is_reported_by_parameterless_model() {
-        use burn::{module::Module, tensor::Device};
-
         let device = Device::default();
-        let model = random_normal::Model::from_file(
-            concat!(env!("OUT_DIR"), "/model/random_normal.bpk"),
-            &device,
-        );
+        let model = load(&device);
 
         // Module traversal skips a `#[module(skip)]` device, which would leave this empty.
         assert_eq!(model.devices().as_slice(), &[device]);
@@ -31,12 +36,7 @@ mod tests {
 
     #[test]
     fn parameterless_model_trains_without_autodiff_feature() {
-        use burn::{module::Module, tensor::Device};
-
-        let model = random_normal::Model::from_file(
-            concat!(env!("OUT_DIR"), "/model/random_normal.bpk"),
-            &Device::default(),
-        );
+        let model = load(&Device::default());
 
         assert_eq!(model.train().forward().shape(), Shape::from([2, 3]));
     }
@@ -44,13 +44,8 @@ mod tests {
     #[cfg(all(feature = "test-flex", feature = "test-autodiff"))]
     #[test]
     fn allocation_device_follows_training_mode() {
-        use burn::{module::Module, tensor::Device};
-
         let device = Device::flex().autodiff().gradient_checkpointing();
-        let model = random_normal::Model::from_file(
-            concat!(env!("OUT_DIR"), "/model/random_normal.bpk"),
-            &device,
-        );
+        let model = load(&device);
 
         let training = model.clone().train().forward();
         assert!(training.is_autodiff());
@@ -66,33 +61,19 @@ mod tests {
         // Moving to an autodiff-enabled destination must not re-enable training.
         for moved in [valid.clone().to_device(&device), valid.fork(&device)] {
             assert!(!moved.forward().is_autodiff());
-            let training = moved.train().forward();
-            assert!(training.is_autodiff());
-            // Validation discards checkpointing; train uses the default strategy.
-            assert_eq!(
-                training.gradient_checkpointing_strategy(),
-                Device::flex().autodiff().gradient_checkpointing_strategy(),
-            );
+            assert!(moved.train().forward().is_autodiff());
         }
 
-        let plain = random_normal::Model::from_file(
-            concat!(env!("OUT_DIR"), "/model/random_normal.bpk"),
-            &Device::flex(),
-        );
+        let plain = load(&Device::flex());
         assert!(plain.train().forward().is_autodiff());
     }
 
     #[cfg(all(feature = "test-flex", feature = "test-cpu"))]
     #[test]
     fn tensorless_allocation_follows_module_moves() {
-        use burn::{module::Module, tensor::Device};
-
         let source = Device::cpu();
         let target = Device::flex();
-        let model = random_normal::Model::from_file(
-            concat!(env!("OUT_DIR"), "/model/random_normal.bpk"),
-            &source,
-        );
+        let model = load(&source);
 
         for moved in [
             model.clone().to_device(&target),

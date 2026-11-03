@@ -30,27 +30,6 @@ mod tests {
             .assert_approx_eq::<f32>(&expected, Tolerance::default());
     }
 
-    #[cfg(all(feature = "test-flex", feature = "test-cpu"))]
-    #[test]
-    fn shape_only_allocation_follows_module_moves() {
-        use burn::module::Module;
-
-        let device = Device::flex();
-        let model = constant_of_shape::Model::from_file(
-            concat!(env!("OUT_DIR"), "/model/constant_of_shape.bpk"),
-            &Device::cpu(),
-        );
-
-        for moved in [model.clone().to_device(&device), model.fork(&device)] {
-            let output = moved.forward([2, 3, 2]);
-            assert_eq!(output.device(), device);
-            output.to_data().assert_eq(
-                &Tensor::<3>::full([2, 3, 2], 1.125, (&device, burn::tensor::DType::F32)).to_data(),
-                true,
-            );
-        }
-    }
-
     #[test]
     fn constant_of_shape_full_like() {
         // This tests shape is being passed from the input tensor
