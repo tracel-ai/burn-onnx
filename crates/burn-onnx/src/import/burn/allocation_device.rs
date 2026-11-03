@@ -56,15 +56,17 @@ pub(super) fn codegen() -> TokenStream {
 
             fn train(self) -> Self {
                 // Device::autodiff is feature-gated in Burn. Its inherent method takes
-                // precedence when available; otherwise fail only when train is called.
-                // Remove this fallback when Burn exposes Device::autodiff unconditionally.
+                // precedence when available. Without it, the device is left unchanged:
+                // only tensor-bearing modules require autodiff to train, and parameters
+                // report that themselves. Remove this fallback when Burn exposes
+                // Device::autodiff unconditionally.
                 #[allow(dead_code)]
                 trait AutodiffFallback {
                     fn autodiff(self) -> Self;
                 }
                 impl AutodiffFallback for Device {
                     fn autodiff(self) -> Self {
-                        panic!("Training generated models requires Burn's `autodiff` feature")
+                        self
                     }
                 }
                 Self(self.0.autodiff())

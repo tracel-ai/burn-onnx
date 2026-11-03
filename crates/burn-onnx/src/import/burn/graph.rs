@@ -2123,7 +2123,7 @@ mod tests {
                 }
                 impl AutodiffFallback for Device {
                     fn autodiff(self) -> Self {
-                        panic!("Training generated models requires Burn's `autodiff` feature")
+                        self
                     }
                 }
                 Self(self.0.autodiff())
@@ -2223,6 +2223,19 @@ mod tests {
         // No duplicate struct definitions
         let submodule1_count = code.matches("pub struct Submodule1").count();
         assert_eq!(submodule1_count, 1, "Submodule1 defined more than once");
+
+        // Every module struct holds a movable allocation device and its accessor,
+        // and the shared wrapper type is defined once.
+        assert!(!code.contains("#[module(skip)]"));
+        assert_eq!(
+            code.matches("device: AllocationDevice,").count(),
+            module_derive_count
+        );
+        assert_eq!(
+            code.matches("fn device(&self) -> &Device").count(),
+            module_derive_count
+        );
+        assert_eq!(code.matches("struct AllocationDevice").count(), 1);
     }
 
     /// Create a temporary .bpk file for tests that need `with_burnpack`.

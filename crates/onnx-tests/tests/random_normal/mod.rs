@@ -15,6 +15,32 @@ mod tests {
         assert_eq!(expected_shape, output.shape());
     }
 
+    #[test]
+    fn allocation_device_is_reported_by_parameterless_model() {
+        use burn::{module::Module, tensor::Device};
+
+        let device = Device::default();
+        let model = random_normal::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/random_normal.bpk"),
+            &device,
+        );
+
+        // Module traversal skips a `#[module(skip)]` device, which would leave this empty.
+        assert_eq!(model.devices().as_slice(), &[device]);
+    }
+
+    #[test]
+    fn parameterless_model_trains_without_autodiff_feature() {
+        use burn::{module::Module, tensor::Device};
+
+        let model = random_normal::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/random_normal.bpk"),
+            &Device::default(),
+        );
+
+        assert_eq!(model.train().forward().shape(), Shape::from([2, 3]));
+    }
+
     #[cfg(all(feature = "test-flex", feature = "test-autodiff"))]
     #[test]
     fn allocation_device_follows_training_mode() {
