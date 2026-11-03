@@ -84,7 +84,7 @@ impl NodeCodegen for onnx_ir::node::max_pool3d::MaxPool3dNode {
                 let indices = indices.cast(burn::tensor::DType::I64);
                 let volumes = Tensor::<1, Int>::arange(
                     0..(batch * channels) as i64,
-                    (&self.device.0, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 )
                 .mul_scalar((depth * height * width) as i64)
                 .reshape([batch, channels, 1, 1, 1]);
@@ -181,7 +181,7 @@ mod tests {
                     Int,
                 >::arange(
                         0..(batch * channels) as i64,
-                        (&self.device.0, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .mul_scalar((depth * height * width) as i64)
                     .reshape([batch, channels, 1, 1, 1]);
@@ -218,7 +218,7 @@ mod tests {
                     Int,
                 >::arange(
                         0..(batch * channels) as i64,
-                        (&self.device.0, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .mul_scalar((depth * height * width) as i64)
                     .reshape([batch, channels, 1, 1, 1]);
@@ -292,7 +292,7 @@ mod tests {
                     Int,
                 >::arange(
                         0..(batch * channels) as i64,
-                        (&self.device.0, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .mul_scalar((depth * height * width) as i64)
                     .reshape([batch, channels, 1, 1, 1]);

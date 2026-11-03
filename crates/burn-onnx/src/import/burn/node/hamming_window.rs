@@ -31,7 +31,7 @@ impl NodeCodegen for onnx_ir::node::hamming_window::HammingWindowNode {
         };
 
         quote! {
-            let #output = hamming_window(#size_expr, #periodic, &self.device.0)
+            let #output = hamming_window(#size_expr, #periodic, self.device())
                 .cast(#output_dtype);
         }
     }
@@ -64,7 +64,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1> {
-            let output = hamming_window(10usize, true, &self.device.0)
+            let output = hamming_window(10usize, true, self.device())
                 .cast(burn::tensor::DType::F32);
             output
         }
@@ -85,7 +85,7 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self) -> Tensor<1> {
-            let output = hamming_window(8usize, false, &self.device.0)
+            let output = hamming_window(8usize, false, self.device())
                 .cast(burn::tensor::DType::F64);
             output
         }
@@ -119,7 +119,7 @@ mod tests {
                         size as usize
                     },
                     true,
-                    &self.device.0,
+                    self.device(),
                 )
                 .cast(burn::tensor::DType::F32);
             output

@@ -125,7 +125,7 @@ impl NodeCodegen for onnx_ir::cast_like::CastLikeNode {
                                 let float_array: [f64; #rank] = shape_array.map(|x| x as f64);
                                 Tensor::<1>::from_data(
                                     TensorData::from(float_array),
-                                    (&self.device.0, #dtype_tokens)
+                                    (self.device(), #dtype_tokens)
                                 )
                             };
                         }
@@ -138,7 +138,7 @@ impl NodeCodegen for onnx_ir::cast_like::CastLikeNode {
                                 let bool_array: [bool; #rank] = shape_array.map(|x| x != 0);
                                 Tensor::<1, Bool>::from_data(
                                     TensorData::from(bool_array),
-                                    (&self.device.0, #dtype_tokens)
+                                    (self.device(), #dtype_tokens)
                                 )
                             };
                         }
@@ -337,7 +337,7 @@ mod tests {
                     1,
                 >::from_data(
                     TensorData::from(float_array),
-                    (&self.device.0, burn::tensor::DType::F32),
+                    (self.device(), burn::tensor::DType::F32),
                 )
             };
             output
@@ -364,7 +364,7 @@ mod tests {
                     Bool,
                 >::from_data(
                     TensorData::from(bool_array),
-                    (&self.device.0, burn::tensor::DType::Bool(burn::tensor::BoolStore::Native)),
+                    (self.device(), burn::tensor::DType::Bool(burn::tensor::BoolStore::Native)),
                 )
             };
             output

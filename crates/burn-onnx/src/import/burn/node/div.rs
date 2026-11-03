@@ -457,7 +457,7 @@ mod tests {
                 burn::tensor::Int,
             >::from_data(
                     burn::tensor::TensorData::from(&lhs as &[i64]),
-                    (&self.device.0, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 )
                 .div(rhs);
             output
@@ -481,7 +481,7 @@ mod tests {
                         burn::tensor::Int,
                     >::from_data(
                         burn::tensor::TensorData::from(&rhs as &[i64]),
-                        (&self.device.0, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     ),
                 );
             output
@@ -503,7 +503,7 @@ mod tests {
                 burn::tensor::Int,
             >::from_data(
                 burn::tensor::TensorData::from(&lhs as &[i64]),
-                (&self.device.0, burn::tensor::DType::I64),
+                (self.device(), burn::tensor::DType::I64),
             ))
                 .unsqueeze_dims(&[0isize, 1isize])
                 .div(rhs);
@@ -528,7 +528,7 @@ mod tests {
                         burn::tensor::Int,
                     >::from_data(
                         burn::tensor::TensorData::from(&rhs as &[i64]),
-                        (&self.device.0, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     ))
                         .unsqueeze_dims(&[0isize, 1isize]),
                 );

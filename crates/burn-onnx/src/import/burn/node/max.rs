@@ -90,7 +90,7 @@ impl NodeCodegen for onnx_ir::node::max::MaxNode {
                 let rhs_tensor = quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#rhs as &[i64]),
-                        (&self.device.0, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     #cast
                 };
@@ -112,7 +112,7 @@ impl NodeCodegen for onnx_ir::node::max::MaxNode {
                 let lhs_tensor = quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#lhs as &[i64]),
-                        (&self.device.0, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     #cast
                 };
@@ -443,7 +443,7 @@ mod tests {
                 burn::tensor::Int,
             >::from_data(
                     burn::tensor::TensorData::from(&lhs as &[i64]),
-                    (&self.device.0, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 )
                 .cast(burn::tensor::DType::I32))
                 .unsqueeze_dims(&[0isize, 1isize])
@@ -467,7 +467,7 @@ mod tests {
                 burn::tensor::Int,
             >::from_data(
                 burn::tensor::TensorData::from(&lhs as &[i64]),
-                (&self.device.0, burn::tensor::DType::I64),
+                (self.device(), burn::tensor::DType::I64),
             ))
                 .unsqueeze_dims(&[0isize, 1isize])
                 .max_pair(rhs);
@@ -490,7 +490,7 @@ mod tests {
                 burn::tensor::Int,
             >::from_data(
                     burn::tensor::TensorData::from(&rhs as &[i64]),
-                    (&self.device.0, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 )
                 .cast(burn::tensor::DType::I32))
                 .unsqueeze_dims(&[0isize, 1isize])
@@ -514,7 +514,7 @@ mod tests {
                 burn::tensor::Int,
             >::from_data(
                 burn::tensor::TensorData::from(&rhs as &[i64]),
-                (&self.device.0, burn::tensor::DType::I64),
+                (self.device(), burn::tensor::DType::I64),
             ))
                 .unsqueeze_dims(&[0isize, 1isize])
                 .max_pair(lhs);

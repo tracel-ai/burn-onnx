@@ -96,7 +96,7 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                                             let mask = #input.clone().is_nan();
                                             let imputed_values = Tensor::<1>::from_data(
                                                 burn::tensor::TensorData::from([#((#imputed_values_vec) as f64),*]),
-                                                (&self.device.0, #dtype_tokens),
+                                                (self.device(), #dtype_tokens),
                                             )
                                             .reshape([#(#reshape_dims),*])
                                             .expand(#input.dims());
@@ -110,7 +110,7 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                                             let mask = #input.clone().equal_elem(#replaced_value);
                                             let imputed_values = Tensor::<1>::from_data(
                                                 burn::tensor::TensorData::from([#((#imputed_values_vec) as f64),*]),
-                                                (&self.device.0, #dtype_tokens),
+                                                (self.device(), #dtype_tokens),
                                             )
                                             .reshape([#(#reshape_dims),*])
                                             .expand(#input.dims());
@@ -151,7 +151,7 @@ impl NodeCodegen for onnx_ir::imputer::ImputerNode {
                                         let mask = #input.clone().equal_elem(#replaced_int);
                                         let imputed_values = Tensor::<1, burn::tensor::Int>::from_data(
                                             burn::tensor::TensorData::from([#(#imputed_values_vec),*]),
-                                            (&self.device.0, #dtype_tokens),
+                                            (self.device(), #dtype_tokens),
                                         )
                                         .reshape([#(#reshape_dims),*])
                                         .expand(#input.dims());
@@ -258,7 +258,7 @@ mod tests {
                             (1f32) as f64,
                             (2f32) as f64,
                         ]),
-                        (&self.device.0, burn::tensor::DType::F32),
+                        (self.device(), burn::tensor::DType::F32),
                     )
                     .reshape([1usize, 3usize])
                     .expand(input.dims());

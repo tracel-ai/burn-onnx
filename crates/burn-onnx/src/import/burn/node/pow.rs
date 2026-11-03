@@ -107,14 +107,14 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                     quote! {
                         Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#lhs as f64]),
-                            (&self.device.0, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         ).unsqueeze_dims(&[#(#dims),*])
                     }
                 } else {
                     quote! {
                         Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#lhs as f64]),
-                            (&self.device.0, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         )
                     }
                 };
@@ -130,14 +130,14 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
                     quote! {
                         Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#lhs as f64]),
-                            (&self.device.0, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         ).unsqueeze_dims(&[#(#dims),*])
                     }
                 } else {
                     quote! {
                         Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#lhs as f64]),
-                            (&self.device.0, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         )
                     }
                 };
@@ -455,7 +455,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([base as f64]),
-                    (&self.device.0, burn::tensor::DType::F32),
+                    (self.device(), burn::tensor::DType::F32),
                 )
                 .unsqueeze_dims(&[0isize])
                 .powf(exponent);
@@ -477,7 +477,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([base as f64]),
-                    (&self.device.0, burn::tensor::DType::F32),
+                    (self.device(), burn::tensor::DType::F32),
                 )
                 .unsqueeze_dims(&[0isize])
                 .powi(exponent.float().cast(burn::tensor::DType::F32));
@@ -499,7 +499,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([base as f64]),
-                    (&self.device.0, burn::tensor::DType::F32),
+                    (self.device(), burn::tensor::DType::F32),
                 )
                 .powf(exponent);
             output

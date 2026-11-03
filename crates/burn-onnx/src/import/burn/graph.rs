@@ -32,7 +32,7 @@ pub struct BurnGraph {
     /// Graph I/O args that were converted from ScalarTensor to ScalarNative at the
     /// boundary. Maps arg name -> DType. Used to insert conversion code:
     /// - Outputs: `.into_scalar::<T>()` before the return
-    /// - Inputs: `Tensor::from_data([name as T], &self.device.0)` after the params
+    /// - Inputs: `Tensor::from_data([name as T], self.device())` after the params
     boundary_output_conversions: HashMap<String, onnx_ir::ir::DType>,
     boundary_input_conversions: HashMap<String, onnx_ir::ir::DType>,
     /// User codegen hooks for custom (non-built-in) ops
@@ -334,6 +334,7 @@ impl BurnGraph {
 
         let codegen_imports = self.imports.codegen();
         let allocation_device = allocation_device::codegen();
+        let device_accessor = allocation_device::accessor();
         let maybe_top_file_comment = match &self.top_comment {
             Some(comment) => {
                 let c = comment.clone();
@@ -462,6 +463,8 @@ impl BurnGraph {
                         }
                     }
 
+                    #device_accessor
+
                     #[allow(clippy::let_and_return, clippy::approx_constant)]
                     #maybe_args_doc
                     pub fn forward(&self, #input_params) -> #output_type {
@@ -570,6 +573,8 @@ impl BurnGraph {
                         device: AllocationDevice(device.clone()),
                     }
                 }
+
+                #device_accessor
 
                 #maybe_blank
 
@@ -800,6 +805,7 @@ impl BurnGraph {
 
         // Collect field names for struct initialization
         let field_names: Vec<_> = all_fields.iter().map(|(name, _, _)| name.clone()).collect();
+        let device_accessor = allocation_device::accessor();
 
         quote! {
             #[allow(unused_variables)]
@@ -811,6 +817,8 @@ impl BurnGraph {
                     device: AllocationDevice(device.clone()),
                 }
             }
+
+            #device_accessor
         }
     }
 
@@ -943,6 +951,7 @@ impl BurnGraph {
 
     /// Generate ScalarNative -> ScalarTensor input conversion code for graph boundary.
     fn codegen_boundary_input_conversions(&self) -> TokenStream {
+        let device = allocation_device::device_ref();
         let mut tokens = quote! {};
         for arg in &self.graph_input_args {
             if let Some(dtype) = self.boundary_input_conversions.get(&arg.name) {
@@ -952,21 +961,21 @@ impl BurnGraph {
                     tokens.extend(quote! {
                         let #name = Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (&self.device.0, #dtype_tokens)
+                            (#device, #dtype_tokens)
                         );
                     });
                 } else if dtype.is_int() || dtype.is_uint() {
                     tokens.extend(quote! {
                         let #name = Tensor::<1, Int>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (&self.device.0, #dtype_tokens)
+                            (#device, #dtype_tokens)
                         );
                     });
                 } else if dtype.is_bool() {
                     tokens.extend(quote! {
                         let #name = Tensor::<1, Bool>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (&self.device.0, #dtype_tokens)
+                            (#device, #dtype_tokens)
                         );
                     });
                 } else {
@@ -2081,12 +2090,6 @@ mod tests {
         /// Runtime allocation device, moved alongside the model's parameters.
         #[derive(Clone, Debug)]
         struct AllocationDevice(Device);
-        impl core::ops::Deref for AllocationDevice {
-            type Target = Device;
-            fn deref(&self) -> &Self::Target {
-                &self.0
-            }
-        }
         impl burn::module::Module for AllocationDevice {
             fn collect_devices(
                 &self,
@@ -2142,6 +2145,10 @@ mod tests {
                 Self {
                     device: AllocationDevice(device.clone()),
                 }
+            }
+            #[allow(dead_code)]
+            fn device(&self) -> &Device {
+                &self.device.0
             }
             #[allow(clippy::let_and_return, clippy::approx_constant)]
             /// # Arguments

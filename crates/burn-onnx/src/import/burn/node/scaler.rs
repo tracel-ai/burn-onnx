@@ -48,12 +48,12 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
                             {
                                 let offset_tensor = Tensor::<1>::from_data(
                                     [#(#offset_values),*],
-                                    (&self.device.0, burn::tensor::DType::F32),
+                                    (self.device(), burn::tensor::DType::F32),
                                 )
                                 .reshape([#(#reshape_dims),*]);
                                 let scale_tensor = Tensor::<1>::from_data(
                                     [#(#scale_values),*],
-                                    (&self.device.0, burn::tensor::DType::F32),
+                                    (self.device(), burn::tensor::DType::F32),
                                 )
                                 .reshape([#(#reshape_dims),*]);
                                 (#input_expr - offset_tensor) * scale_tensor
@@ -69,7 +69,7 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
                             {
                                 let offset_tensor = Tensor::<1>::from_data(
                                     [#(#offset_values),*],
-                                    (&self.device.0, burn::tensor::DType::F32),
+                                    (self.device(), burn::tensor::DType::F32),
                                 )
                                 .reshape([#(#reshape_dims),*]);
                                 #input_expr - offset_tensor
@@ -85,7 +85,7 @@ impl NodeCodegen for onnx_ir::scaler::ScalerNode {
                             {
                                 let scale_tensor = Tensor::<1>::from_data(
                                     [#(#scale_values),*],
-                                    (&self.device.0, burn::tensor::DType::F32),
+                                    (self.device(), burn::tensor::DType::F32),
                                 )
                                 .reshape([#(#reshape_dims),*]);
                                 #input_expr * scale_tensor
@@ -135,7 +135,7 @@ mod tests {
             let output = {
                 let scale_tensor = Tensor::<
                     1,
-                >::from_data([2f32], (&self.device.0, burn::tensor::DType::F32))
+                >::from_data([2f32], (self.device(), burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
                 input.clone() * scale_tensor
             };
@@ -162,7 +162,7 @@ mod tests {
             let output = {
                 let offset_tensor = Tensor::<
                     1,
-                >::from_data([1f32], (&self.device.0, burn::tensor::DType::F32))
+                >::from_data([1f32], (self.device(), burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
                 input.clone() - offset_tensor
             };
@@ -189,11 +189,11 @@ mod tests {
             let output = {
                 let offset_tensor = Tensor::<
                     1,
-                >::from_data([1f32], (&self.device.0, burn::tensor::DType::F32))
+                >::from_data([1f32], (self.device(), burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
                 let scale_tensor = Tensor::<
                     1,
-                >::from_data([2f32], (&self.device.0, burn::tensor::DType::F32))
+                >::from_data([2f32], (self.device(), burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
                 (input.clone() - offset_tensor) * scale_tensor
             };
@@ -241,11 +241,11 @@ mod tests {
             let output = {
                 let offset_tensor = Tensor::<
                     1,
-                >::from_data([0.5f32, 1f32, 1.5f32], (&self.device.0, burn::tensor::DType::F32))
+                >::from_data([0.5f32, 1f32, 1.5f32], (self.device(), burn::tensor::DType::F32))
                     .reshape([1usize, 3usize]);
                 let scale_tensor = Tensor::<
                     1,
-                >::from_data([1f32, 2f32, 3f32], (&self.device.0, burn::tensor::DType::F32))
+                >::from_data([1f32, 2f32, 3f32], (self.device(), burn::tensor::DType::F32))
                     .reshape([1usize, 3usize]);
                 (input.clone() - offset_tensor) * scale_tensor
             };
@@ -273,11 +273,11 @@ mod tests {
             let output = {
                 let offset_tensor = Tensor::<
                     1,
-                >::from_data([1f32], (&self.device.0, burn::tensor::DType::F32))
+                >::from_data([1f32], (self.device(), burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
                 let scale_tensor = Tensor::<
                     1,
-                >::from_data([2f32], (&self.device.0, burn::tensor::DType::F32))
+                >::from_data([2f32], (self.device(), burn::tensor::DType::F32))
                     .reshape([1usize, 1usize]);
                 (input.float().cast(burn::tensor::DType::F32) - offset_tensor) * scale_tensor
             };

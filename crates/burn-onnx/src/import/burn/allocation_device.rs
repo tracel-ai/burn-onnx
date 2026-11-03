@@ -1,20 +1,27 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
+/// Expression borrowing the allocation device inside a generated method.
+pub(crate) fn device_ref() -> TokenStream {
+    quote! { self.device() }
+}
+
+/// Accessor emitted on every generated struct that holds an `AllocationDevice`.
+pub(super) fn accessor() -> TokenStream {
+    quote! {
+        #[allow(dead_code)]
+        fn device(&self) -> &Device {
+            &self.device.0
+        }
+    }
+}
+
 /// Generate non-persistent allocation state that participates in module movement.
 pub(super) fn codegen() -> TokenStream {
     quote! {
         /// Runtime allocation device, moved alongside the model's parameters.
         #[derive(Clone, Debug)]
         struct AllocationDevice(Device);
-
-        impl core::ops::Deref for AllocationDevice {
-            type Target = Device;
-
-            fn deref(&self) -> &Self::Target {
-                &self.0
-            }
-        }
 
         impl burn::module::Module for AllocationDevice {
             fn collect_devices(&self, mut devices: burn::module::Devices) -> burn::module::Devices {

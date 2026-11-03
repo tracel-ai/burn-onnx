@@ -972,7 +972,7 @@ impl Model {
         let custom2_out1 = crate::custom_ops::ops::add_window(
             custom1_out1,
             &[0.25f32, 0.5f32, 0.75f32, 1f32],   // constant input inlined
-            &self.device,                        // struct device is reachable
+            self.device(),                       // allocation device accessor
         );
         let custom3_out1 = custom2_out1;                               // CustomOp
         let relu1_out1 = crate::custom_ops::ops::my_relu(custom3_out1); // OpOverride

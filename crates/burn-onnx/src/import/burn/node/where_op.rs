@@ -202,14 +202,14 @@ fn where_input_as_tensor(
                 quote! {
                     Tensor::<1>::from_data(
                         burn::tensor::TensorData::from([#name as f64]),
-                        (&self.device.0, #dtype_tokens)
+                        (self.device(), #dtype_tokens)
                     ).reshape([#(#shape_vec),*])
                 }
             } else if target_dtype.is_int() || target_dtype.is_uint() {
                 quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from([#name as i64]),
-                        (&self.device.0, #dtype_tokens)
+                        (self.device(), #dtype_tokens)
                     ).reshape([#(#shape_vec),*])
                 }
             } else {
@@ -222,7 +222,7 @@ fn where_input_as_tensor(
                 quote! {
                     Tensor::<1, burn::tensor::Bool>::from_data(
                         burn::tensor::TensorData::from([#bool_expr]),
-                        (&self.device.0, #dtype_tokens)
+                        (self.device(), #dtype_tokens)
                     ).reshape([#(#shape_vec),*])
                 }
             }
@@ -234,7 +234,7 @@ fn where_input_as_tensor(
             let tensor = quote! {
                 Tensor::<1, burn::tensor::Int>::from_data(
                     burn::tensor::TensorData::from(&#name as &[i64]),
-                    (&self.device.0, #dtype_tokens)
+                    (self.device(), #dtype_tokens)
                 )
             };
 
@@ -337,7 +337,7 @@ mod tests {
                     1,
                 >::from_data(
                         burn::tensor::TensorData::from([y as f64]),
-                        (&self.device.0, burn::tensor::DType::F32),
+                        (self.device(), burn::tensor::DType::F32),
                     )
                     .reshape([1, 1])
                     .expand(cond.dims())
