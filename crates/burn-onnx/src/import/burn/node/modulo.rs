@@ -84,14 +84,14 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                     quote! {
                         #tensor_type::from_data(
                             burn::tensor::TensorData::from([#lhs as #cast_as]),
-                            (&self.device, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         ).unsqueeze_dims(&[#(#dims),*])
                     }
                 } else {
                     quote! {
                         #tensor_type::from_data(
                             burn::tensor::TensorData::from([#lhs as #cast_as]),
-                            (&self.device, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         )
                     }
                 };
@@ -156,7 +156,7 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 let lhs_tensor = quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#lhs as &[i64]),
-                        (&self.device, #dtype_tokens)
+                        (self.device(), #dtype_tokens)
                     )
                 };
                 let expr = if self.config.fmod {
@@ -173,7 +173,7 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
                 let rhs_tensor = quote! {
                     Tensor::<1, burn::tensor::Int>::from_data(
                         burn::tensor::TensorData::from(&#rhs as &[i64]),
-                        (&self.device, #dtype_tokens)
+                        (self.device(), #dtype_tokens)
                     )
                 };
                 let expr = if self.config.fmod {
@@ -527,7 +527,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([a as f64]),
-                    (&self.device, burn::tensor::DType::F32),
+                    (self.device(), burn::tensor::DType::F32),
                 )
                 .unsqueeze_dims(&[0isize])
                 .remainder(b);
@@ -551,7 +551,7 @@ mod tests {
                 1,
             >::from_data(
                     burn::tensor::TensorData::from([a as f64]),
-                    (&self.device, burn::tensor::DType::F32),
+                    (self.device(), burn::tensor::DType::F32),
                 )
                 .unsqueeze_dims(&[0isize])
                 .fmod(b);
@@ -722,7 +722,7 @@ mod tests {
                 burn::tensor::Int,
             >::from_data(
                     burn::tensor::TensorData::from(&lhs as &[i64]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 )
                 .remainder(rhs);
             output
@@ -747,7 +747,7 @@ mod tests {
                     burn::tensor::Int,
                 >::from_data(
                     burn::tensor::TensorData::from(&lhs as &[i64]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 );
                 dividend.clone().abs().remainder(rhs.abs()) * dividend.sign()
             };
@@ -774,7 +774,7 @@ mod tests {
                         burn::tensor::Int,
                     >::from_data(
                         burn::tensor::TensorData::from(&rhs as &[i64]),
-                        (&self.device, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     ),
                 );
             output
@@ -804,7 +804,7 @@ mod tests {
                             burn::tensor::Int,
                         >::from_data(
                                 burn::tensor::TensorData::from(&rhs as &[i64]),
-                                (&self.device, burn::tensor::DType::I64),
+                                (self.device(), burn::tensor::DType::I64),
                             )
                             .abs(),
                     ) * dividend.sign()
@@ -985,7 +985,7 @@ mod tests {
                     burn::tensor::Int,
                 >::from_data(
                     burn::tensor::TensorData::from([a as i64]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 );
                 dividend.clone().abs().remainder(b.abs()) * dividend.sign()
             };

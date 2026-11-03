@@ -78,7 +78,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                 quote! {
                                     let #output = Tensor::<1, Int>::from_data(
                                         burn::tensor::TensorData::from([#input_name[0]]),
-                                        (&self.device, #dtype_tokens),
+                                        (self.device(), #dtype_tokens),
                                     );
                                 }
                             }
@@ -118,7 +118,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                         let shape_array = #input_name as [i64; #input_rank];
                                         Tensor::<1, Int>::from_data(
                                             TensorData::from(shape_array),
-                                            (&self.device, #dtype_tokens)
+                                            (self.device(), #dtype_tokens)
                                         )
                                     }.reshape(#shape_values);
                                 }
@@ -140,7 +140,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                     quote! {
                                         let #output = Tensor::<#output_rank>::from_data(
                                             burn::tensor::TensorData::from([#input_name as f64]),
-                                            (&self.device, #dtype_tokens)
+                                            (self.device(), #dtype_tokens)
                                         ).reshape(#shape_values);
                                     }
                                 } else if tensor_type.dtype.is_int() || tensor_type.dtype.is_uint()
@@ -148,7 +148,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                     quote! {
                                         let #output = Tensor::<#output_rank, Int>::from_data(
                                             burn::tensor::TensorData::from([#input_name as i64]),
-                                            (&self.device, #dtype_tokens)
+                                            (self.device(), #dtype_tokens)
                                         ).reshape(#shape_values);
                                     }
                                 } else {
@@ -161,7 +161,7 @@ impl NodeCodegen for onnx_ir::reshape::ReshapeNode {
                                     quote! {
                                         let #output = Tensor::<#output_rank, Bool>::from_data(
                                             burn::tensor::TensorData::from([#bool_expr]),
-                                            (&self.device, #dtype_tokens)
+                                            (self.device(), #dtype_tokens)
                                         ).reshape(#shape_values);
                                     }
                                 }
@@ -605,7 +605,7 @@ mod tests {
                     Int,
                 >::from_data(
                     TensorData::from(shape_array),
-                    (&self.device, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 )
             }
                 .reshape(burn::tensor::ZeroDimPlaceholders([0, 1]));
@@ -738,7 +738,7 @@ mod tests {
                 Int,
             >::from_data(
                     burn::tensor::TensorData::from([value as i64]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 )
                 .reshape(burn::tensor::ZeroDimPlaceholders([-1]));
             tensor_out
@@ -764,7 +764,7 @@ mod tests {
                 1usize,
             >::from_data(
                     burn::tensor::TensorData::from([val as f64]),
-                    (&self.device, burn::tensor::DType::F32),
+                    (self.device(), burn::tensor::DType::F32),
                 )
                 .reshape(burn::tensor::ZeroDimPlaceholders([1]));
             out
@@ -833,7 +833,7 @@ mod tests {
                 Int,
             >::from_data(
                 burn::tensor::TensorData::from([shape_in[0]]),
-                (&self.device, burn::tensor::DType::I64),
+                (self.device(), burn::tensor::DType::I64),
             );
             output
         }

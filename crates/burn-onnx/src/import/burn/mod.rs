@@ -6,6 +6,7 @@ pub(crate) mod custom_op;
 pub(crate) mod node_codegen; // Implements NodeCodegen<PS> for onnx_ir::Node
 pub(crate) mod node_traits;
 
+mod allocation_device;
 mod imports;
 
 mod argument_helpers;

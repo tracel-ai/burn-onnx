@@ -78,7 +78,7 @@ fn forward_shape_gather(
                         quote! {
                             let #output = Tensor::<1, Int>::from_data(
                                 burn::tensor::TensorData::from([#input_shape_name[#idx_lit]]),
-                                &self.device,
+                                self.device(),
                             );
                         }
                     } else {
@@ -90,7 +90,7 @@ fn forward_shape_gather(
                             #index_resolve
                             let #output = Tensor::<1, Int>::from_data(
                                 burn::tensor::TensorData::from([#input_shape_name[actual_idx]]),
-                                &self.device,
+                                self.device(),
                             );
                         }
                     }
@@ -355,7 +355,7 @@ fn forward_tensor_gather(
                         let #output = {
                             let indices = Tensor::<1, burn::tensor::Int>::from_data(
                                 #shape_name,
-                                (&self.device, burn::tensor::DType::I64),
+                                (self.device(), burn::tensor::DType::I64),
                             );
                             Tensor::select(#input, #dim, indices)
                         };
@@ -616,7 +616,7 @@ mod tests {
             let result = Tensor::<
                 1,
                 Int,
-            >::from_data(burn::tensor::TensorData::from([input_shape[1]]), &self.device);
+            >::from_data(burn::tensor::TensorData::from([input_shape[1]]), self.device());
             result
         }
         ");
@@ -637,7 +637,7 @@ mod tests {
             let result = Tensor::<
                 1,
                 Int,
-            >::from_data(burn::tensor::TensorData::from([input_shape[3]]), &self.device);
+            >::from_data(burn::tensor::TensorData::from([input_shape[3]]), self.device());
             result
         }
         ");
@@ -969,7 +969,7 @@ mod tests {
                 let indices = Tensor::<
                     1,
                     burn::tensor::Int,
-                >::from_data(positions, (&self.device, burn::tensor::DType::I64));
+                >::from_data(positions, (self.device(), burn::tensor::DType::I64));
                 Tensor::select(weights, 0, indices)
             };
             selected_weights
@@ -993,7 +993,7 @@ mod tests {
                 let indices = Tensor::<
                     1,
                     burn::tensor::Int,
-                >::from_data(col_indices, (&self.device, burn::tensor::DType::I64));
+                >::from_data(col_indices, (self.device(), burn::tensor::DType::I64));
                 Tensor::select(matrix_data, 1, indices)
             };
             columns
@@ -1017,7 +1017,7 @@ mod tests {
                 let indices = Tensor::<
                     1,
                     burn::tensor::Int,
-                >::from_data(plane_ids, (&self.device, burn::tensor::DType::I64));
+                >::from_data(plane_ids, (self.device(), burn::tensor::DType::I64));
                 Tensor::select(tensor3d, 2, indices)
             };
             planes

@@ -131,6 +131,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/blackman_window/blackman_window_runtime.onnx")
         .input("tests/blackman_window/blackman_window_symmetric.onnx")
         .input("tests/cast/cast.onnx")
+        .input("tests/cast/cast_partitioned_device.onnx")
         .input("tests/cast/cast_shape.onnx")
         .input("tests/cast/cast_shape_to_bool.onnx")
         .input("tests/cast/cast_shape_to_float.onnx")
@@ -870,8 +871,9 @@ impl CustomOp for AddWindowOp {
             .ok_or_else(|| ProcessError::Custom("window constant missing".to_string()))?
             .try_into_vec::<f32>()
             .map_err(|_| ProcessError::Custom("window constant must be f32".to_string()))?;
+        let device = ctx.device();
         Ok(quote! {
-            let #out = crate::custom_ops::ops::add_window(#input, &[#(#window),*], &self.device);
+            let #out = crate::custom_ops::ops::add_window(#input, &[#(#window),*], #device);
         })
     }
 }

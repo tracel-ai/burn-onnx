@@ -428,7 +428,7 @@ const GATE_LAYOUT: GateLayout = GateLayout::new(
 /// The module's type, and the expression that builds it on `device`.
 ///
 /// `device` is the only thing that differs between the two paths: `device` names the
-/// parameter of the generated `new()`, `&self.device` the field read inside `forward()`.
+/// parameter of the generated `new()`, `self.device()` the accessor called inside `forward()`.
 fn module_parts(node: &onnx_ir::gru::GruNode, device: TokenStream) -> (TokenStream, TokenStream) {
     if node.config.clip.is_some() {
         panic!(
@@ -501,7 +501,7 @@ impl NodeCodegen for onnx_ir::gru::GruNode {
             &GATE_LAYOUT,
             self.config.hidden_size,
             self.config.direction.num_directions(),
-            || module_parts(self, quote! { &self.device }).1,
+            || module_parts(self, quote! { self.device() }).1,
         );
 
         let output_y = self
@@ -890,7 +890,7 @@ mod tests {
             let (Y, Y_h) = {
                 let mut gru1 = burn::nn::gru::GruConfig::new(4, 8, true)
                     .with_reset_after(false)
-                    .init(&self.device);
+                    .init(self.device());
                 {
                     let w_dir = W.select_dim::<2>(0, 0);
                     let r_dir = R.select_dim::<2>(0, 0);

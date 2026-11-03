@@ -125,7 +125,7 @@ fn forward_with_indices(
     let planes = quote! {
         Tensor::<1, Int>::arange(
             0..(batch * channels) as i64,
-            (&self.device, burn::tensor::DType::I64),
+            (self.device(), burn::tensor::DType::I64),
         )
         .mul_scalar((height * width) as i64)
         .reshape([batch, channels, 1, 1])
@@ -491,7 +491,7 @@ mod tests {
                             Int,
                         >::arange(
                                 0..(batch * channels) as i64,
-                                (&self.device, burn::tensor::DType::I64),
+                                (self.device(), burn::tensor::DType::I64),
                             )
                             .mul_scalar((height * width) as i64)
                             .reshape([batch, channels, 1, 1]),
@@ -530,7 +530,7 @@ mod tests {
                             Int,
                         >::arange(
                                 0..(batch * channels) as i64,
-                                (&self.device, burn::tensor::DType::I64),
+                                (self.device(), burn::tensor::DType::I64),
                             )
                             .mul_scalar((height * width) as i64)
                             .reshape([batch, channels, 1, 1]),
@@ -587,7 +587,7 @@ mod tests {
                             Int,
                         >::arange(
                                 0..(batch * channels) as i64,
-                                (&self.device, burn::tensor::DType::I64),
+                                (self.device(), burn::tensor::DType::I64),
                             )
                             .mul_scalar((height * width) as i64)
                             .reshape([batch, channels, 1, 1]),
@@ -649,7 +649,7 @@ mod tests {
                             Int,
                         >::arange(
                                 0..(batch * channels) as i64,
-                                (&self.device, burn::tensor::DType::I64),
+                                (self.device(), burn::tensor::DType::I64),
                             )
                             .mul_scalar((height * width) as i64)
                             .reshape([batch, channels, 1, 1]),
@@ -708,7 +708,7 @@ mod tests {
                             Int,
                         >::arange(
                                 0..(batch * channels) as i64,
-                                (&self.device, burn::tensor::DType::I64),
+                                (self.device(), burn::tensor::DType::I64),
                             )
                             .mul_scalar((height * width) as i64)
                             .reshape([batch, channels, 1, 1]),

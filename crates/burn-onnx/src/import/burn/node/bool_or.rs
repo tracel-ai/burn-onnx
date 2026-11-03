@@ -30,13 +30,13 @@ impl NodeCodegen for onnx_ir::node::or::OrNode {
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => {
                 let rank = rhs_ty.rank();
                 quote! {
-                    if #lhs { Tensor::<#rank, Int>::ones(#rhs.shape(), &self.device).bool() } else { #rhs }
+                    if #lhs { Tensor::<#rank, Int>::ones(#rhs.shape(), self.device()).bool() } else { #rhs }
                 }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                 let rank = lhs_ty.rank();
                 quote! {
-                    if #rhs { Tensor::<#rank, Int>::ones(#lhs.shape(), &self.device).bool() } else { #lhs }
+                    if #rhs { Tensor::<#rank, Int>::ones(#lhs.shape(), self.device()).bool() } else { #lhs }
                 }
             }
             (ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {
@@ -78,7 +78,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, lhs: bool, rhs: Tensor<4, Bool>) -> Tensor<4, Bool> {
             let output = if lhs {
-                Tensor::<4usize, Int>::ones(rhs.shape(), &self.device).bool()
+                Tensor::<4usize, Int>::ones(rhs.shape(), self.device()).bool()
             } else {
                 rhs
             };
@@ -98,7 +98,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, lhs: Tensor<4, Bool>, rhs: bool) -> Tensor<4, Bool> {
             let output = if rhs {
-                Tensor::<4usize, Int>::ones(lhs.shape(), &self.device).bool()
+                Tensor::<4usize, Int>::ones(lhs.shape(), self.device()).bool()
             } else {
                 lhs
             };

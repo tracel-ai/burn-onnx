@@ -90,7 +90,7 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
             }
             let flat = Tensor::<1, Int>::arange(
                 0..n as i64,
-                (&self.device, burn::tensor::DType::I64),
+                (self.device(), burn::tensor::DType::I64),
             );
             let mut columns: alloc::vec::Vec<Tensor<2, Int>> =
                 alloc::vec::Vec::with_capacity(#rank_lit);
@@ -214,7 +214,7 @@ mod tests {
                     let flat = Tensor::<
                         1,
                         Int,
-                    >::arange(0..n as i64, (&self.device, burn::tensor::DType::I64));
+                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
                     let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
                         2,
                     );
@@ -281,7 +281,7 @@ mod tests {
                     let flat = Tensor::<
                         1,
                         Int,
-                    >::arange(0..n as i64, (&self.device, burn::tensor::DType::I64));
+                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
                     let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
                         2,
                     );
@@ -348,7 +348,7 @@ mod tests {
                     let flat = Tensor::<
                         1,
                         Int,
-                    >::arange(0..n as i64, (&self.device, burn::tensor::DType::I64));
+                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
                     let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
                         2,
                     );
@@ -415,7 +415,7 @@ mod tests {
                     let flat = Tensor::<
                         1,
                         Int,
-                    >::arange(0..n as i64, (&self.device, burn::tensor::DType::I64));
+                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
                     let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
                         2,
                     );
@@ -482,7 +482,7 @@ mod tests {
                     let flat = Tensor::<
                         1,
                         Int,
-                    >::arange(0..n as i64, (&self.device, burn::tensor::DType::I64));
+                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
                     let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
                         2,
                     );
@@ -549,7 +549,7 @@ mod tests {
                     let flat = Tensor::<
                         1,
                         Int,
-                    >::arange(0..n as i64, (&self.device, burn::tensor::DType::I64));
+                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
                     let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
                         2,
                     );
@@ -645,7 +645,7 @@ mod tests {
                     let flat = Tensor::<
                         1,
                         Int,
-                    >::arange(0..n as i64, (&self.device, burn::tensor::DType::I64));
+                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
                     let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
                         2,
                     );

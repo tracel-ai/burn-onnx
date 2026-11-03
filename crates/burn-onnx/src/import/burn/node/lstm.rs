@@ -288,7 +288,7 @@ const GATE_LAYOUT: GateLayout = GateLayout::new(
 /// The module's type, and the expression that builds it on `device`.
 ///
 /// `device` is the only thing that differs between the two paths: `device` names the
-/// parameter of the generated `new()`, `&self.device` the field read inside `forward()`.
+/// parameter of the generated `new()`, `self.device()` the accessor called inside `forward()`.
 fn module_parts(node: &onnx_ir::lstm::LstmNode, device: TokenStream) -> (TokenStream, TokenStream) {
     let d_input = node.config.input_size.to_tokens();
     let d_hidden = node.config.hidden_size.to_tokens();
@@ -393,7 +393,7 @@ impl NodeCodegen for onnx_ir::lstm::LstmNode {
             &GATE_LAYOUT,
             self.config.hidden_size,
             self.config.direction.num_directions(),
-            || module_parts(self, quote! { &self.device }).1,
+            || module_parts(self, quote! { self.device() }).1,
         );
 
         // Get output variable names
@@ -784,7 +784,7 @@ mod tests {
                 let mut lstm1 = LstmConfig::new(4, 8, true)
                     .with_batch_first(false)
                     .with_input_forget(false)
-                    .init(&self.device);
+                    .init(self.device());
                 {
                     let w_dir = W.select_dim::<2>(0, 0);
                     let r_dir = R.select_dim::<2>(0, 0);

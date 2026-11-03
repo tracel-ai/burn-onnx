@@ -867,7 +867,7 @@ fn generate_shape_slice_to_tensor(
             let slice_data: alloc::vec::Vec<i64> = #shape_name[start_idx..end_idx].to_vec();
             Tensor::<1, Int>::from_data(
                 burn::tensor::TensorData::new(slice_data, [len]),
-                (&self.device, burn::tensor::DType::I64),
+                (self.device(), burn::tensor::DType::I64),
             )
         };
     }
@@ -1925,7 +1925,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::new(slice_data, [len]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 )
             };
             sliced_shape
@@ -1982,7 +1982,7 @@ mod tests {
                     Int,
                 >::from_data(
                     burn::tensor::TensorData::new(slice_data, [len]),
-                    (&self.device, burn::tensor::DType::I64),
+                    (self.device(), burn::tensor::DType::I64),
                 )
             };
             sliced_shape

@@ -18,28 +18,28 @@ fn scalar_native_to_tensor(expr: TokenStream, dtype: DType) -> TokenStream {
         quote! {
             Tensor::<1>::from_data(
                 burn::tensor::TensorData::from([(#expr).to_f64()]),
-                (&self.device, #dtype_tokens)
+                (self.device(), #dtype_tokens)
             )
         }
     } else if matches!(dtype, DType::F32) {
         quote! {
             Tensor::<1>::from_data(
                 burn::tensor::TensorData::from([f64::from(#expr)]),
-                (&self.device, #dtype_tokens)
+                (self.device(), #dtype_tokens)
             )
         }
     } else if matches!(dtype, DType::F64) {
         quote! {
             Tensor::<1>::from_data(
                 burn::tensor::TensorData::from([#expr]),
-                (&self.device, #dtype_tokens)
+                (self.device(), #dtype_tokens)
             )
         }
     } else if dtype.is_int() || dtype.is_uint() {
         quote! {
             Tensor::<1, burn::tensor::Int>::from_data(
                 burn::tensor::TensorData::from([#expr as i64]),
-                (&self.device, #dtype_tokens)
+                (self.device(), #dtype_tokens)
             )
         }
     } else {
@@ -250,7 +250,7 @@ mod tests {
                         1,
                     >::from_data(
                             burn::tensor::TensorData::from([f64::from(scale)]),
-                            (&self.device, burn::tensor::DType::F32),
+                            (self.device(), burn::tensor::DType::F32),
                         )
                         .into(),
                     rhs.into(),
@@ -279,7 +279,7 @@ mod tests {
                         1,
                     >::from_data(
                             burn::tensor::TensorData::from([(scale).to_f64()]),
-                            (&self.device, burn::tensor::DType::F16),
+                            (self.device(), burn::tensor::DType::F16),
                         )
                         .into(),
                     rhs.into(),
@@ -379,14 +379,14 @@ mod tests {
                             1,
                         >::from_data(
                                 burn::tensor::TensorData::from([f64::from(lhs)]),
-                                (&self.device, burn::tensor::DType::F32),
+                                (self.device(), burn::tensor::DType::F32),
                             )
                             .into(),
                         Tensor::<
                             1,
                         >::from_data(
                                 burn::tensor::TensorData::from([f64::from(rhs)]),
-                                (&self.device, burn::tensor::DType::F32),
+                                (self.device(), burn::tensor::DType::F32),
                             )
                             .into(),
                     ],

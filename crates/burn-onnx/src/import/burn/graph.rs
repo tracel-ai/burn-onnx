@@ -1,4 +1,4 @@
-use super::{BurnImports, Scope, ToTokens, shadow_check};
+use super::{BurnImports, Scope, ToTokens, allocation_device, shadow_check};
 use crate::LoadStrategy;
 use crate::burn::custom_op::HookRegistry;
 use crate::burn::node::NodeCodegen;
@@ -32,7 +32,7 @@ pub struct BurnGraph {
     /// Graph I/O args that were converted from ScalarTensor to ScalarNative at the
     /// boundary. Maps arg name -> DType. Used to insert conversion code:
     /// - Outputs: `.into_scalar::<T>()` before the return
-    /// - Inputs: `Tensor::from_data([name as T], &self.device)` after the params
+    /// - Inputs: `Tensor::from_data([name as T], self.device())` after the params
     boundary_output_conversions: HashMap<String, onnx_ir::ir::DType>,
     boundary_input_conversions: HashMap<String, onnx_ir::ir::DType>,
     /// User codegen hooks for custom (non-built-in) ops
@@ -274,6 +274,7 @@ impl BurnGraph {
         self.build_scope();
 
         let codegen_imports = self.imports.codegen();
+        let allocation_device = allocation_device::codegen();
         let codegen_struct = self.codegen_struct();
         let codegen_new = self.codegen_new();
         let codegen_forward = self.codegen_forward();
@@ -306,6 +307,7 @@ impl BurnGraph {
             #maybe_top_file_comment
             #codegen_imports
             #maybe_blank
+            #allocation_device
             #maybe_blank
 
             #codegen_struct
@@ -331,6 +333,8 @@ impl BurnGraph {
         };
 
         let codegen_imports = self.imports.codegen();
+        let allocation_device = allocation_device::codegen();
+        let device_accessor = allocation_device::accessor();
         let maybe_top_file_comment = match &self.top_comment {
             Some(comment) => {
                 let c = comment.clone();
@@ -446,8 +450,7 @@ impl BurnGraph {
                 #[derive(Module, Debug)]
                 pub struct #struct_name {
                     #(#struct_fields)*
-                    #[module(skip)]
-                    device: Device,
+                    device: AllocationDevice,
                 }
 
                 impl #struct_name {
@@ -456,9 +459,11 @@ impl BurnGraph {
                         #field_init_code
                         Self {
                             #(#field_names_for_init,)*
-                            device: device.clone(),
+                            device: AllocationDevice(device.clone()),
                         }
                     }
+
+                    #device_accessor
 
                     #[allow(clippy::let_and_return, clippy::approx_constant)]
                     #maybe_args_doc
@@ -544,6 +549,7 @@ impl BurnGraph {
             #maybe_top_file_comment
             #codegen_imports
             #maybe_blank
+            #allocation_device
             #maybe_blank
 
             #(#submodule_defs)*
@@ -552,8 +558,7 @@ impl BurnGraph {
             #[derive(Module, Debug)]
             pub struct Model {
                 #(#submodule_field_decls)*
-                #[module(skip)]
-                device: Device,
+                device: AllocationDevice,
             }
             #maybe_blank
 
@@ -565,9 +570,11 @@ impl BurnGraph {
                     #(#submodule_field_inits)*
                     Self {
                         #(#submodule_field_names,)*
-                        device: device.clone(),
+                        device: AllocationDevice(device.clone()),
                     }
                 }
+
+                #device_accessor
 
                 #maybe_blank
 
@@ -776,8 +783,7 @@ impl BurnGraph {
             .for_each(|code| body.extend(code));
 
         body.extend(quote! {
-            #[module(skip)]
-            device: Device,
+            device: AllocationDevice,
         });
 
         quote! {
@@ -799,6 +805,7 @@ impl BurnGraph {
 
         // Collect field names for struct initialization
         let field_names: Vec<_> = all_fields.iter().map(|(name, _, _)| name.clone()).collect();
+        let device_accessor = allocation_device::accessor();
 
         quote! {
             #[allow(unused_variables)]
@@ -807,9 +814,11 @@ impl BurnGraph {
 
                 Self {
                     #(#field_names,)*
-                    device: device.clone(),
+                    device: AllocationDevice(device.clone()),
                 }
             }
+
+            #device_accessor
         }
     }
 
@@ -951,21 +960,21 @@ impl BurnGraph {
                     tokens.extend(quote! {
                         let #name = Tensor::<1>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (&self.device, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         );
                     });
                 } else if dtype.is_int() || dtype.is_uint() {
                     tokens.extend(quote! {
                         let #name = Tensor::<1, Int>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (&self.device, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         );
                     });
                 } else if dtype.is_bool() {
                     tokens.extend(quote! {
                         let #name = Tensor::<1, Bool>::from_data(
                             burn::tensor::TensorData::from([#name]),
-                            (&self.device, #dtype_tokens)
+                            (self.device(), #dtype_tokens)
                         );
                     });
                 } else {
@@ -2074,18 +2083,71 @@ mod tests {
         let graph = build_abs_chain(1);
         let code = format_tokens(graph.codegen());
 
-        insta::assert_snapshot!(code, @r"
+        insta::assert_snapshot!(code, @r#"
         extern crate alloc;
         use burn::prelude::*;
+        /// Runtime allocation device, moved alongside the model's parameters.
+        #[derive(Clone, Debug)]
+        struct AllocationDevice(Device);
+        impl burn::module::Module for AllocationDevice {
+            fn collect_devices(
+                &self,
+                mut devices: burn::module::Devices,
+            ) -> burn::module::Devices {
+                if !devices.contains(&self.0) {
+                    devices.push(self.0.clone());
+                }
+                devices
+            }
+            fn to_device(self, device: &Device) -> Self {
+                Self(device.clone().with_autodiff_context_from(&self.0))
+            }
+            fn fork(self, device: &Device) -> Self {
+                self.to_device(device)
+            }
+            fn visit<V: burn::module::ModuleVisitor>(&self, _visitor: &mut V) {}
+            fn map<M: burn::module::ModuleMapper>(self, _mapper: &mut M) -> Self {
+                self
+            }
+            fn materialize(self) -> Self {
+                self
+            }
+            fn valid(&self) -> Self {
+                Self(self.0.clone().without_autodiff())
+            }
+            fn train(self) -> Self {
+                #[allow(dead_code)]
+                trait AutodiffFallback {
+                    fn autodiff(self) -> Self;
+                }
+                impl AutodiffFallback for Device {
+                    fn autodiff(self) -> Self {
+                        self
+                    }
+                }
+                Self(self.0.autodiff())
+            }
+        }
+        impl burn::module::ModuleDisplayDefault for AllocationDevice {
+            fn content(&self, content: burn::module::Content) -> Option<burn::module::Content> {
+                content.add_debug_attribute("device", &self.0).optional()
+            }
+        }
+        impl burn::module::ModuleDisplay for AllocationDevice {}
         #[derive(Module, Debug)]
         pub struct Model {
-            #[module(skip)]
-            device: Device,
+            device: AllocationDevice,
         }
         impl Model {
             #[allow(unused_variables)]
             pub fn new(device: &Device) -> Self {
-                Self { device: device.clone() }
+                Self {
+                    device: AllocationDevice(device.clone()),
+                }
+            }
+            #[allow(dead_code)]
+            fn device(&self) -> &Device {
+                &self.device.0
             }
             #[allow(clippy::let_and_return, clippy::approx_constant)]
             /// # Arguments
@@ -2095,7 +2157,7 @@ mod tests {
                 t0
             }
         }
-        ");
+        "#);
     }
 
     #[test]
@@ -2160,6 +2222,19 @@ mod tests {
         // No duplicate struct definitions
         let submodule1_count = code.matches("pub struct Submodule1").count();
         assert_eq!(submodule1_count, 1, "Submodule1 defined more than once");
+
+        // Every module struct holds a movable allocation device and its accessor,
+        // and the shared wrapper type is defined once.
+        assert!(!code.contains("#[module(skip)]"));
+        assert_eq!(
+            code.matches("device: AllocationDevice,").count(),
+            module_derive_count
+        );
+        assert_eq!(
+            code.matches("fn device(&self) -> &Device").count(),
+            module_derive_count
+        );
+        assert_eq!(code.matches("struct AllocationDevice").count(), 1);
     }
 
     /// Create a temporary .bpk file for tests that need `with_burnpack`.

@@ -55,7 +55,7 @@ impl NodeCodegen for onnx_ir::gathernd::GatherNDNode {
                         let dim_size = data_dims[b];
                         let arange = Tensor::<1, Int>::arange(
                             0i64..dim_size as i64,
-                            (&self.device, burn::tensor::DType::I64),
+                            (self.device(), burn::tensor::DType::I64),
                         );
                         let mut init_shape = [1usize; #indices_rank_lit];
                         init_shape[b] = dim_size;
@@ -148,7 +148,7 @@ mod tests {
                     Int,
                 >::from_data(
                         burn::tensor::TensorData::from(dim_sizes.as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .reshape(bcast_shape);
                 let negative = indices_i64.clone().lower_elem(0i64);
@@ -190,7 +190,7 @@ mod tests {
                     Int,
                 >::from_data(
                         burn::tensor::TensorData::from(dim_sizes.as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .reshape(bcast_shape);
                 let negative = indices_i64.clone().lower_elem(0i64);
@@ -232,7 +232,7 @@ mod tests {
                     Int,
                 >::from_data(
                         burn::tensor::TensorData::from(dim_sizes.as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .reshape(bcast_shape);
                 let negative = indices_i64.clone().lower_elem(0i64);
@@ -274,7 +274,7 @@ mod tests {
                     Int,
                 >::from_data(
                         burn::tensor::TensorData::from(dim_sizes.as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .reshape(bcast_shape);
                 let negative = indices_i64.clone().lower_elem(0i64);
@@ -293,7 +293,7 @@ mod tests {
                             Int,
                         >::arange(
                             0i64..dim_size as i64,
-                            (&self.device, burn::tensor::DType::I64),
+                            (self.device(), burn::tensor::DType::I64),
                         );
                         let mut init_shape = [1usize; 2];
                         init_shape[b] = dim_size;
@@ -342,7 +342,7 @@ mod tests {
                     Int,
                 >::from_data(
                         burn::tensor::TensorData::from(dim_sizes.as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .reshape(bcast_shape);
                 let negative = indices_i64.clone().lower_elem(0i64);
@@ -361,7 +361,7 @@ mod tests {
                             Int,
                         >::arange(
                             0i64..dim_size as i64,
-                            (&self.device, burn::tensor::DType::I64),
+                            (self.device(), burn::tensor::DType::I64),
                         );
                         let mut init_shape = [1usize; 3];
                         init_shape[b] = dim_size;
@@ -408,7 +408,7 @@ mod tests {
                     Int,
                 >::from_data(
                         burn::tensor::TensorData::from(dim_sizes.as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .reshape(bcast_shape);
                 let negative = indices_i64.clone().lower_elem(0i64);
@@ -450,7 +450,7 @@ mod tests {
                     Int,
                 >::from_data(
                         burn::tensor::TensorData::from(dim_sizes.as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .reshape(bcast_shape);
                 let negative = indices_i64.clone().lower_elem(0i64);
@@ -495,7 +495,7 @@ mod tests {
                     Int,
                 >::from_data(
                         burn::tensor::TensorData::from(dim_sizes.as_slice()),
-                        (&self.device, burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I64),
                     )
                     .reshape(bcast_shape);
                 let negative = indices_i64.clone().lower_elem(0i64);

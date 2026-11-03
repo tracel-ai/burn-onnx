@@ -156,10 +156,9 @@ impl CustomOp for ChannelScale {
         let scale = Self::scale_values(node)?;
         let x = ctx.arg(&node.inputs[0]);
         let out = arg_to_ident(&node.outputs[0]);
-        // `self.device` is reachable: the generated forward is a method on the
-        // model struct.
+        let device = ctx.device();
         Ok(quote! {
-            let #out = ops::channel_scale(#x, &[#(#scale),*], &self.device);
+            let #out = ops::channel_scale(#x, &[#(#scale),*], #device);
         })
     }
 
