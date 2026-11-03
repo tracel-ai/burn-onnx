@@ -3,7 +3,7 @@ use quote::quote;
 
 use onnx_ir::ir::DType;
 use onnx_ir::node::padding::{
-    AutoPad, PaddingConfig1d, PaddingConfig2d, PaddingConfig3d, forward_time_same_blocker,
+    AutoPad, PaddingConfig1d, PaddingConfig2d, forward_time_same_blocker,
 };
 
 // ============================================================================
@@ -152,29 +152,6 @@ impl ToTokens for PaddingConfig2d {
                 let bottom = bottom.to_tokens();
                 let right = right.to_tokens();
                 quote! { PaddingConfig2d::Explicit(#top, #left, #bottom, #right) }
-            }
-        }
-    }
-}
-
-/// Converts PaddingConfig3d to Rust code tokens.
-/// Burn only supports symmetric 3D padding: Explicit(depth, height, width).
-/// Asymmetric 3D padding will cause a codegen-time panic.
-impl ToTokens for PaddingConfig3d {
-    fn to_tokens(&self) -> TokenStream {
-        match self {
-            Self::Valid => quote! { PaddingConfig3d::Valid },
-            Self::Explicit(front, top, left, back, bottom, right) => {
-                if self.is_asymmetric() {
-                    panic!(
-                        "Asymmetric 3D padding is not supported by Burn. \
-                         Got front={front}, top={top}, left={left}, back={back}, bottom={bottom}, right={right}"
-                    );
-                }
-                let depth = front.to_tokens();
-                let height = top.to_tokens();
-                let width = left.to_tokens();
-                quote! { PaddingConfig3d::Explicit(#depth, #height, #width) }
             }
         }
     }
@@ -405,32 +382,20 @@ pub fn padding_pairs_tokens(pairs: &[(usize, usize)]) -> TokenStream {
     quote! { [#(#pairs),*] }
 }
 
-/// Resolve auto_pad to the tokens of a `PaddingConfig3d`.
-///
-/// A dynamically shaped input has no fallback here: burn's 3D `Same` panics at forward time on
-/// an asymmetric total, so `validate_auto_pad` rejects it upstream. The static path below is not
-/// unrestricted either; `PaddingConfig3d::to_tokens` still rejects asymmetric pads.
-pub fn resolve_auto_pad_3d(
-    auto_pad: &AutoPad,
-    padding: &PaddingConfig3d,
-    input_spatial: Option<&[usize]>,
-    kernel: &[usize; 3],
-    stride: &[usize; 3],
-    dilation: &[usize; 3],
-) -> TokenStream {
-    match auto_pad {
-        AutoPad::NotSet => padding.to_tokens(),
-        AutoPad::Valid => PaddingConfig3d::Valid.to_tokens(),
-        AutoPad::SameUpper | AutoPad::SameLower => {
-            let shape = input_spatial.expect(UNREACHABLE_DYNAMIC_AUTO_PAD);
-            let (front, back) =
-                compute_auto_pad_1dim(auto_pad, shape[0], kernel[0], stride[0], dilation[0]);
-            let (top, bottom) =
-                compute_auto_pad_1dim(auto_pad, shape[1], kernel[1], stride[1], dilation[1]);
-            let (left, right) =
-                compute_auto_pad_1dim(auto_pad, shape[2], kernel[2], stride[2], dilation[2]);
-            PaddingConfig3d::Explicit(front, top, left, back, bottom, right).to_tokens()
+/// burn-nn `PaddingConfig3d` tokens for resolved `[(begin, end); 3]` pads (depth, height,
+/// width), or `None` when an axis pads its two ends differently: burn-nn's
+/// `Explicit(depth, height, width)` is symmetric, so such pads have to go through the
+/// functional `conv3d`, which takes `(begin, end)` pairs.
+pub fn padding_config_3d_tokens(pairs: &[(usize, usize)]) -> Option<TokenStream> {
+    match pairs {
+        [(0, 0), (0, 0), (0, 0)] => Some(quote! { PaddingConfig3d::Valid }),
+        [(depth, d_end), (height, h_end), (width, w_end)]
+            if depth == d_end && height == h_end && width == w_end =>
+        {
+            let [depth, height, width] = [depth, height, width].map(ToTokens::to_tokens);
+            Some(quote! { PaddingConfig3d::Explicit(#depth, #height, #width) })
         }
+        _ => None,
     }
 }
 
@@ -637,18 +602,18 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_auto_pad_3d_valid() {
-        let result = resolve_auto_pad_3d(
-            &AutoPad::Valid,
-            &PaddingConfig3d::Explicit(1, 1, 1, 1, 1, 1),
-            None,
-            &[3, 3, 3],
-            &[1, 1, 1],
-            &[1, 1, 1],
+    fn test_padding_config_3d_tokens() {
+        let tokens =
+            |pairs: &[(usize, usize)]| padding_config_3d_tokens(pairs).map(|t| t.to_string());
+        assert_eq!(
+            tokens(&[(0, 0), (0, 0), (0, 0)]),
+            Some(quote! { PaddingConfig3d::Valid }.to_string())
         );
         assert_eq!(
-            result.to_string(),
-            quote! { PaddingConfig3d::Valid }.to_string()
+            tokens(&[(1, 1), (0, 0), (2, 2)]),
+            Some(quote! { PaddingConfig3d::Explicit(1, 0, 2) }.to_string())
         );
+        // One asymmetric axis is enough to leave burn-nn's symmetric config.
+        assert_eq!(tokens(&[(1, 1), (0, 1), (2, 2)]), None);
     }
 }

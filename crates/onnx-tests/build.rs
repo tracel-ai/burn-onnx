@@ -191,6 +191,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/conv/conv1d_same_upper_dynamic.onnx")
         .input("tests/conv/conv2d_asymmetric_padding.onnx")
         .input("tests/conv/conv2d_same_upper_dynamic.onnx")
+        .input("tests/conv/conv3d_asymmetric_padding.onnx")
         .input("tests/conv1d/conv1d.onnx")
         .input("tests/conv2d/conv2d.onnx")
         .input("tests/conv3d/conv3d.onnx")

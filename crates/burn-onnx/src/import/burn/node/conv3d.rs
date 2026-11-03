@@ -1,7 +1,8 @@
 use super::prelude::*;
 use burn_pack::Tensor as PackTensor;
+use onnx_ir::conv3d::Conv3dNode;
 
-impl NodeCodegen for onnx_ir::conv3d::Conv3dNode {
+impl NodeCodegen for Conv3dNode {
     fn inputs(&self) -> &[Argument] {
         // Filter inputs only dynamic and constant
         &self.inputs
@@ -28,15 +29,9 @@ impl NodeCodegen for onnx_ir::conv3d::Conv3dNode {
         let groups = groups.to_tokens();
         let bias = self.inputs.get(2).is_some_and(|bias| !bias.is_optional());
 
-        let input_spatial = onnx_ir::node::padding::static_spatial_dims(&self.inputs[0].ty);
-        let padding = crate::burn::codegen::resolve_auto_pad_3d(
-            &self.config.auto_pad,
-            &self.config.padding,
-            input_spatial.as_deref(),
-            &self.config.kernel_size,
-            &self.config.stride,
-            &self.config.dilation,
-        );
+        // Pads burn-nn cannot express are applied by the functional op in `forward`, so the
+        // module itself pads nothing and only holds the weight and bias.
+        let padding = module_padding(self).unwrap_or_else(|| quote! { PaddingConfig3d::Valid });
 
         Some(Field::new(
             self.name.clone(),
@@ -56,30 +51,38 @@ impl NodeCodegen for onnx_ir::conv3d::Conv3dNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
+        let explicit = explicit_pads(self);
         // A runtime weight has no module to live in, so the functional op takes it.
         if !self.inputs[1].is_static() {
-            let (front, top, left, back, bottom, right) = self.config.padding.as_tuple();
-            let explicit = [(front, back), (top, bottom), (left, right)];
-            let geometry = super::conv_helpers::ConvGeometry {
-                auto_pad: &self.config.auto_pad,
-                explicit: &explicit,
-                kernel: &self.config.kernel_size,
-                stride: &self.config.stride,
-                dilation: &self.config.dilation,
-                groups: self.config.groups,
-            };
             return super::conv_helpers::functional_conv(
                 scope,
                 &self.inputs,
                 &self.outputs[0],
                 "conv3d",
-                geometry,
+                geometry(self, &explicit),
             );
         }
         let input = scope.arg(self.inputs.first().unwrap());
-        let output = arg_to_ident(self.outputs.first().unwrap());
         let field = Ident::new(&self.name, Span::call_site());
 
+        if module_padding(self).is_none() {
+            // The module's weight and bias, run through the functional op that takes
+            // `(begin, end)` pads.
+            let operands = super::conv_helpers::ConvOperands {
+                input,
+                weight: quote! { self.#field.weight.val() },
+                bias: quote! { self.#field.bias.as_ref().map(burn::module::Param::val) },
+            };
+            return super::conv_helpers::functional_conv_call(
+                &self.inputs[0],
+                operands,
+                &self.outputs[0],
+                "conv3d",
+                geometry(self, &explicit),
+            );
+        }
+
+        let output = arg_to_ident(self.outputs.first().unwrap());
         quote! {
             let #output = self.#field.forward(#input);
         }
@@ -119,6 +122,45 @@ impl NodeCodegen for onnx_ir::conv3d::Conv3dNode {
 
         tensors
     }
+}
+
+/// Explicit `pads` as `(begin, end)` per spatial axis: depth, height, width.
+fn explicit_pads(node: &Conv3dNode) -> [(usize, usize); 3] {
+    let (front, top, left, back, bottom, right) = node.config.padding.as_tuple();
+    [(front, back), (top, bottom), (left, right)]
+}
+
+/// The conv's geometry for the functional op, with `explicit` from [`explicit_pads`].
+fn geometry<'a>(
+    node: &'a Conv3dNode,
+    explicit: &'a [(usize, usize)],
+) -> super::conv_helpers::ConvGeometry<'a> {
+    super::conv_helpers::ConvGeometry {
+        auto_pad: &node.config.auto_pad,
+        explicit,
+        kernel: &node.config.kernel_size,
+        stride: &node.config.stride,
+        dilation: &node.config.dilation,
+        groups: node.config.groups,
+    }
+}
+
+/// The burn-nn `PaddingConfig3d` the `Conv3d` module field pads with, or `None` when the
+/// functional op has to apply the pads instead: burn-nn's explicit 3D padding is symmetric,
+/// so this covers pads that differ between the two ends of an axis (explicit, or SAME with an
+/// odd total), as well as SAME on an input sized only at run time.
+fn module_padding(node: &Conv3dNode) -> Option<TokenStream> {
+    let explicit = explicit_pads(node);
+    let input_spatial = onnx_ir::node::padding::static_spatial_dims(&node.inputs[0].ty);
+    let pads = crate::burn::codegen::resolve_padding_pairs(
+        &node.config.auto_pad,
+        &explicit,
+        input_spatial.as_deref(),
+        &node.config.kernel_size,
+        &node.config.stride,
+        &node.config.dilation,
+    )?;
+    crate::burn::codegen::padding_config_3d_tokens(&pads)
 }
 
 #[cfg(test)]
@@ -221,12 +263,122 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Asymmetric 3D padding is not supported by Burn")]
     fn test_conv3d_field_init_asymmetric_padding() {
+        // burn-nn cannot express the pads, so the module pads nothing.
         let node = create_conv3d_node_asymmetric("conv1");
-        // Asymmetric 3D padding panics at codegen time since Burn doesn't support it
-        let _ = codegen_field_init(&node);
+        let code = codegen_field_init(&node);
+        assert_snapshot!(code, @r"
+        let conv1 = Conv3dConfig::new([3, 64], [3, 3, 3])
+            .with_stride([1, 1, 1])
+            .with_padding(PaddingConfig3d::Valid)
+            .with_dilation([1, 1, 1])
+            .with_groups(1)
+            .with_bias(true)
+            .init(device);
+        ");
     }
+
+    #[test]
+    fn test_conv3d_forward_asymmetric_padding() {
+        let node = create_conv3d_node_asymmetric("conv1");
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<5>) -> Tensor<5> {
+            let output = burn::tensor::module::conv3d(
+                input,
+                self.conv1.weight.val(),
+                self.conv1.bias.as_ref().map(burn::module::Param::val),
+                burn::tensor::ops::ConvOptions::new_with_padding(
+                    [1, 1, 1],
+                    [(1usize, 4usize), (2usize, 5usize), (3usize, 6usize)],
+                    [1, 1, 1],
+                    1,
+                ),
+            );
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_conv3d_forward_auto_pad_same_upper_asymmetric() {
+        // An even kernel extent leaves an odd SAME total on depth and width.
+        let config = Conv3dConfig::new(
+            [2, 3, 2],
+            [1, 1, 1],
+            [1, 1, 1],
+            1,
+            PaddingConfig3d::Valid,
+            AutoPad::SameUpper,
+        );
+        let node = Conv3dNodeBuilder::new("conv1")
+            .input_tensor_shape("input", vec![1, 3, 7, 7, 7], DType::F32)
+            .input_static_tensor_shape("weight", vec![64, 3, 2, 3, 2], DType::F32)
+            .output_tensor("output", 5, DType::F32)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_field_init(&node), @r"
+        let conv1 = Conv3dConfig::new([3, 64], [2, 3, 2])
+            .with_stride([1, 1, 1])
+            .with_padding(PaddingConfig3d::Valid)
+            .with_dilation([1, 1, 1])
+            .with_groups(1)
+            .with_bias(false)
+            .init(device);
+        ");
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, input: Tensor<5>) -> Tensor<5> {
+            let output = burn::tensor::module::conv3d(
+                input,
+                self.conv1.weight.val(),
+                self.conv1.bias.as_ref().map(burn::module::Param::val),
+                burn::tensor::ops::ConvOptions::new_with_padding(
+                    [1, 1, 1],
+                    [(0usize, 1usize), (1usize, 1usize), (0usize, 1usize)],
+                    [1, 1, 1],
+                    1,
+                ),
+            );
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_conv3d_runtime_weight_asymmetric_padding() {
+        let config = Conv3dConfig::new(
+            [3, 3, 3],
+            [1, 1, 1],
+            [1, 1, 1],
+            1,
+            PaddingConfig3d::Explicit(0, 1, 0, 1, 0, 1),
+            AutoPad::NotSet,
+        );
+        let node = Conv3dNodeBuilder::new("conv1")
+            .input_tensor("input", 5, DType::F32)
+            .input_tensor("weight", 5, DType::F32)
+            .output_tensor("output", 5, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<5>, weight: Tensor<5>) -> Tensor<5> {
+            let output = burn::tensor::module::conv3d(
+                input,
+                weight,
+                None,
+                burn::tensor::ops::ConvOptions::new_with_padding(
+                    [1, 1, 1],
+                    [(0usize, 1usize), (1usize, 0usize), (0usize, 1usize)],
+                    [1, 1, 1],
+                    1,
+                ),
+            );
+            output
+        }
+        ");
+    }
+
     #[test]
     fn test_conv3d_runtime_weight() {
         let node = {
