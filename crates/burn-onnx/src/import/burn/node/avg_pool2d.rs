@@ -13,10 +13,6 @@ impl NodeCodegen for onnx_ir::node::avg_pool2d::AveragePool2dNode {
         let name = Ident::new(&self.name, Span::call_site());
         let kernel_size = self.config.kernel_size.to_tokens();
         let strides = self.config.strides.to_tokens();
-        // count_include_pad is a no-op in burn whenever the padding comes out asymmetric,
-        // including PaddingConfig::Same on an odd total: the module materialises the pads as
-        // zeros and then pools with none, so they land in the divisor either way.
-        // See <https://github.com/tracel-ai/burn/issues/5450>.
         let count_include_pad = self.config.count_include_pad;
         let ceil_mode = self.config.ceil_mode;
 

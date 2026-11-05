@@ -9,6 +9,7 @@
 use crate::include_simplified_models;
 
 include_simplified_models!(
+    simplify_multinomial,
     simplify_shape_folding,
     simplify_gather_on_shape,
     simplify_slice_on_shape,
@@ -1034,4 +1035,25 @@ mod tests {
         }
         ");
     }
+}
+
+#[test]
+fn multinomial_draws_remain_independent() {
+    let device = Default::default();
+    let model = simplified::simplify_multinomial::Model::from_file(
+        concat!(
+            env!("OUT_DIR"),
+            "/model_simplified/simplify_multinomial.bpk"
+        ),
+        &device,
+    );
+    let samples = model
+        .forward(burn::tensor::Tensor::<2>::from_data([[0f32, 0.]], &device))
+        .into_data()
+        .to_vec::<i32>()
+        .unwrap();
+    assert!(
+        samples.contains(&1),
+        "independent binary draws must not become twice one draw"
+    );
 }

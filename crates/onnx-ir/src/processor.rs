@@ -261,6 +261,11 @@ pub trait NodeProcessor: Send + Sync {
         )))
     }
 
+    /// Whether identical inputs and attributes always produce the same result.
+    fn is_deterministic(&self) -> bool {
+        true
+    }
+
     /// Returns true if this node is a no-op (output equals input).
     ///
     /// When true, the node will be eliminated during post-processing and its output

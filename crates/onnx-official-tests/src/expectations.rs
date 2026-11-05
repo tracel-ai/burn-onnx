@@ -35,6 +35,12 @@ pub struct Entry {
     /// plan to close.
     #[serde(default)]
     pub wontfix: bool,
+    /// Absolute tolerance for float output comparison, overriding the
+    /// harness default (`Tolerance::default()`, 1e-5). Meant for outputs
+    /// whose reference values are exactly 0 and where f32 rounding in
+    /// the op lands just above the default (e.g. DFT spectra).
+    #[serde(default)]
+    pub atol: Option<f64>,
 }
 
 /// Declared expected outcome of a single upstream test.
@@ -109,6 +115,10 @@ mod tests {
 [test_pass]
 status = "pass"
 
+[test_pass_atol]
+status = "pass"
+atol = 1e-4
+
 [test_skip_codegen]
 status = "skip-codegen"
 reason = "unsupported op"
@@ -133,7 +143,7 @@ reason = "exotic dtype"
 wontfix = true
 "##;
         let parsed: Expectations = toml::from_str(toml).expect("toml parse");
-        assert_eq!(parsed.entries.len(), 6);
+        assert_eq!(parsed.entries.len(), 7);
         assert_eq!(parsed.get("test_pass").unwrap().status, Status::Pass);
         assert_eq!(
             parsed.get("test_skip_codegen").unwrap().status,
@@ -162,6 +172,9 @@ wontfix = true
         assert!(!pass.wontfix);
         assert!(pass.reason.is_none());
         assert!(pass.tracking.is_none());
+        assert!(pass.atol.is_none());
+
+        assert_eq!(parsed.get("test_pass_atol").unwrap().atol, Some(1e-4));
     }
 
     /// A typo'd status (e.g. `passes` instead of `pass`) must be

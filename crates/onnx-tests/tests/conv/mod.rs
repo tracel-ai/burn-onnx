@@ -7,13 +7,14 @@ include_models!(
     conv2d,
     conv2d_asymmetric_padding,
     conv2d_same_upper_dynamic,
-    conv3d
+    conv3d,
+    conv3d_asymmetric_padding
 );
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Device, Shape, Tensor};
+    use burn::tensor::{Device, Int, Shape, Tensor, TensorData, Tolerance};
     use core::f64::consts;
     use float_cmp::ApproxEq;
 
@@ -191,5 +192,152 @@ mod tests {
                 "{height}x{width}: expected {expected_sum}, got {output_sum}"
             );
         }
+    }
+
+    #[test]
+    fn conv3d_asymmetric_padding() {
+        // Pads whose two ends differ on an axis, which burn-nn's symmetric
+        // PaddingConfig3d cannot express (issue #646). y1-y3 have constant weights and
+        // used to panic in codegen; y4 takes its weight at run time.
+        let device = Default::default();
+        let model = conv3d_asymmetric_padding::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/conv3d_asymmetric_padding.bpk"),
+            &device,
+        );
+
+        let seq = |shape: [usize; 5], scale: f32| -> Tensor<5> {
+            let n = shape.iter().product::<usize>() as i64;
+            Tensor::<1, Int>::arange(0..n, &device)
+                .float()
+                .reshape(shape)
+                .mul_scalar(scale)
+                .sub_scalar(1.0)
+        };
+        let (y1, y2, y3, y4) = model.forward(seq([1, 2, 3, 3, 3], 0.1), seq([2, 2, 2, 2, 2], 0.04));
+
+        // Ground truth from ReferenceEvaluator (conv/conv3d_asymmetric_padding.py).
+        let tolerance = Tolerance::absolute(1e-4);
+        // Constant weight, pads [0, 1, 0, 1, 0, 1].
+        y1.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[
+                [
+                    [
+                        [-1.38f32, -1.84, -1.14],
+                        [-4.82, -5.82, -3.4],
+                        [-7.82, -8.82, -4.96],
+                    ],
+                    [
+                        [-5.52, -5.98, -3.3],
+                        [-13.82, -14.82, -8.08],
+                        [-16.82, -17.82, -9.64],
+                    ],
+                    [
+                        [-4.855, -5.125, -2.75],
+                        [-11.4, -11.98, -6.39],
+                        [-13.14, -13.72, -7.29],
+                    ],
+                ],
+                [
+                    [[4.06, 4.24, 2.06], [7.98, 8.26, 3.96], [8.82, 9.1, 4.32]],
+                    [[5.68, 5.86, 2.78], [10.5, 10.78, 5.04], [11.34, 11.62, 5.4]],
+                    [[2.185, 2.235, 1.01], [3.64, 3.7, 1.61], [3.82, 3.88, 1.67]],
+                ],
+            ]]),
+            tolerance,
+        );
+        // Constant weight and bias, pads [1, 0, 2, 0, 1, 1], strides [2, 1, 1].
+        y2.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[
+                [[
+                    [0.752f32, 0.308, -0.856, -1.18],
+                    [-0.124, -1.26, -2.924, -2.348],
+                ]],
+                [[
+                    [13.508, 28.616, 44.3, 29.72],
+                    [9.176, 19.704, 30.568, 20.344],
+                ]],
+            ]]),
+            tolerance,
+        );
+        // Constant weight, SAME_UPPER over kernel [2, 3, 2]: pads (0, 1), (1, 1), (0, 1).
+        y3.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[
+                [
+                    [
+                        [-5.38f32, -6.38, -3.584],
+                        [-10.968, -12.54, -6.906],
+                        [-9.628, -10.724, -5.816],
+                    ],
+                    [
+                        [-14.38, -15.38, -8.192],
+                        [-25.116, -26.688, -14.142],
+                        [-19.492, -20.588, -10.856],
+                    ],
+                    [
+                        [-11.456, -12.028, -6.31],
+                        [-19.281, -20.175, -10.554],
+                        [-14.444, -15.064, -7.858],
+                    ],
+                ],
+                [
+                    [
+                        [6.14, 6.292, 3.04],
+                        [8.904, 9.06, 4.326],
+                        [5.348, 5.404, 2.536],
+                    ],
+                    [
+                        [7.508, 7.66, 3.616],
+                        [10.308, 10.464, 4.866],
+                        [5.852, 5.908, 2.68],
+                    ],
+                    [
+                        [2.08, 2.084, 0.89],
+                        [2.319, 2.289, 0.894],
+                        [0.82, 0.776, 0.206],
+                    ],
+                ],
+            ]]),
+            tolerance,
+        );
+        // Weight fed at run time, pads [1, 0, 1, 0, 1, 1].
+        y4.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[
+                [
+                    [
+                        [-0.312f32, -0.944, -1.44, -0.904],
+                        [-1.032, -2.432, -2.928, -1.672],
+                        [-0.784, -1.772, -2.036, -1.132],
+                    ],
+                    [
+                        [-3.104, -7.056, -8.176, -4.56],
+                        [-4.736, -10.416, -11.536, -6.288],
+                        [-3.024, -6.56, -7.152, -3.856],
+                    ],
+                    [
+                        [-8.0, -17.136, -18.256, -9.744],
+                        [-9.632, -20.496, -21.616, -11.472],
+                        [-5.616, -11.888, -12.48, -6.592],
+                    ],
+                ],
+                [
+                    [
+                        [0.968, 1.872, 1.888, 0.888],
+                        [1.016, 1.92, 1.936, 0.888],
+                        [0.432, 0.788, 0.78, 0.34],
+                    ],
+                    [
+                        [1.76, 3.184, 3.088, 1.328],
+                        [1.664, 2.896, 2.8, 1.136],
+                        [0.56, 0.864, 0.784, 0.24],
+                    ],
+                    [
+                        [1.472, 2.32, 2.224, 0.752],
+                        [1.376, 2.032, 1.936, 0.56],
+                        [0.272, 0.144, 0.064, -0.192],
+                    ],
+                ],
+            ]]),
+            tolerance,
+        );
     }
 }

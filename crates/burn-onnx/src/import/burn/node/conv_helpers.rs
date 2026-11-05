@@ -43,6 +43,37 @@ pub(crate) fn functional_conv(
     let input = scope.arg(&inputs[0]);
     let weight = scope.arg(&inputs[1]);
     let bias = optional_input(scope, inputs.get(2));
+    let operands = ConvOperands {
+        input,
+        weight,
+        bias,
+    };
+    functional_conv_call(&inputs[0], operands, output, op, geometry)
+}
+
+/// The operand expressions of a functional conv call.
+pub(crate) struct ConvOperands {
+    pub input: TokenStream,
+    pub weight: TokenStream,
+    /// `Option<Tensor<1>>` expression.
+    pub bias: TokenStream,
+}
+
+/// `burn::tensor::module::<op>` over operands already turned into expressions, so the
+/// weight and bias can also come from a module field. `x` is the graph input behind
+/// `operands.input`, read for its static spatial size.
+pub(crate) fn functional_conv_call(
+    x: &Argument,
+    operands: ConvOperands,
+    output: &Argument,
+    op: &str,
+    geometry: ConvGeometry<'_>,
+) -> TokenStream {
+    let ConvOperands {
+        input,
+        weight,
+        bias,
+    } = operands;
     let output = arg_to_ident(output);
     let op = Ident::new(op, Span::call_site());
 
@@ -54,7 +85,7 @@ pub(crate) fn functional_conv(
         dilation,
         groups,
     } = geometry;
-    let input_spatial = onnx_ir::node::padding::static_spatial_dims(&inputs[0].ty);
+    let input_spatial = onnx_ir::node::padding::static_spatial_dims(&x.ty);
     let static_padding = crate::burn::codegen::conv_padding_pairs(
         auto_pad,
         explicit,

@@ -13,7 +13,8 @@
 #   fail-compare - compiles and runs but produces incorrect output
 #   flaky        - intermittent, ignored by the gate
 #
-# Optional fields: reason, tracking (issue/PR ref), wontfix (bool)
+# Optional fields: reason, tracking (issue/PR ref), wontfix (bool),
+#   atol (float; absolute tolerance for float outputs, default 1e-5)
 #
 # Initial classification sourced from:
 #   - tracel-ai/burn-onnx#314 (skip-codegen list, ~656 entries)
@@ -2033,21 +2034,19 @@ status = "pass"
 status = "pass"
 
 [test_dft]
-status = "skip-codegen"
-reason = "Node 'dft1' (Dft): DFT: axis must be a compile-time constant"
+status = "pass"
 
 [test_dft_axis]
-status = "skip-codegen"
-reason = "Node 'dft1' (Dft): DFT: axis must be a compile-time constant"
+status = "pass"
 
 [test_dft_axis_opset19]
-status = "fail-compare"
-reason = "Burn rfft requires power-of-2 signal dimension; test uses dim=10"
-tracking = "#549"
+# Expected near-zero bins come out at ~2.2e-5 (f32 Bluestein FFT rounding), above the
+# default 1e-5 absolute tolerance.
+status = "pass"
+atol = 1e-4
 
 [test_dft_inverse]
-status = "skip-codegen"
-reason = "Node 'dft1' (Dft): DFT: axis must be a compile-time constant"
+status = "pass"
 
 [test_dft_inverse_opset19]
 status = "pass"
@@ -2061,17 +2060,19 @@ status = "skip-codegen"
 reason = "Node 'dft1' (Dft): DFT: onesided output requires a real input and a forward transform"
 
 [test_dft_opset19]
-status = "fail-compare"
-reason = "Burn rfft requires power-of-2 signal dimension; test uses dim=10"
-tracking = "#549"
+# Expected near-zero bins come out at ~2.2e-5 (f32 Bluestein FFT rounding), above the
+# default 1e-5 absolute tolerance.
+status = "pass"
+atol = 1e-4
 
 [test_dft_rfft]
-status = "skip-codegen"
-reason = "Node 'dft1' (Dft): DFT: axis must be a compile-time constant"
+status = "pass"
 
 [test_dft_rfft_opset19]
-status = "fail-compare"
-reason = "burn rfft requires a power-of-two signal length"
+# Expected near-zero bins come out at ~2.2e-5 (f32 Bluestein FFT rounding), above the
+# default 1e-5 absolute tolerance.
+status = "pass"
+atol = 1e-4
 
 [test_div]
 status = "pass"
@@ -5523,12 +5524,10 @@ status = "pass"
 status = "pass"
 
 [test_stft]
-status = "skip-codegen"
-reason = "Node 'stft1' (Stft): STFT: frame_step must be a compile-time constant"
+status = "pass"
 
 [test_stft_with_window]
-status = "skip-codegen"
-reason = "Node 'stft1' (Stft): STFT: frame_step must be a compile-time constant"
+status = "pass"
 
 [test_string_concat]
 status = "skip-codegen"

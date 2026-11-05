@@ -370,6 +370,24 @@ fn mul(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn multinomial(graph: &OnnxGraph) {
+    let node = find_node(graph, "multinomial");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    Multinomial "multinomial1"
+      Inputs:
+        multinomial_input: F32[2, 3]
+      Outputs:
+        multinomial1_out1: I32[2, 4]
+      Config:
+        MultinomialConfig {
+            dtype: I32,
+            sample_size: 4,
+            seed: None,
+        }
+    "#);
+}
+
+#[rstest]
 fn or_op(graph: &OnnxGraph) {
     let node = find_node(graph, "or");
     insta::assert_snapshot!(format!("{node}"), @r#"

@@ -127,6 +127,7 @@ pub(crate) mod min;
 pub(crate) mod mish;
 pub(crate) mod modulo;
 pub(crate) mod mul;
+pub(crate) mod multinomial;
 pub(crate) mod neg;
 pub(crate) mod non_max_suppression;
 pub(crate) mod nonzero;
