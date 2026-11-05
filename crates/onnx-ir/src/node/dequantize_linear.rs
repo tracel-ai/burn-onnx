@@ -49,13 +49,7 @@ impl NodeProcessor for DequantizeLinearProcessor {
             )));
         }
 
-        if let Some(block_size) = config.block_size
-            && block_size > 0
-        {
-            return Err(ProcessError::Custom(format!(
-                "DequantizeLinear: blocked quantization (block_size={block_size}) is not supported yet"
-            )));
-        }
+        super::quantization_shape::validate(node, config.axis, config.block_size, opset)?;
 
         if !node.inputs[0].ty.is_on_device() {
             return Err(ProcessError::TypeMismatch {
@@ -64,9 +58,10 @@ impl NodeProcessor for DequantizeLinearProcessor {
             });
         }
 
-        if !node.inputs[1].ty.is_on_device() {
+        // Per-tensor scales are rank 0 and may arrive as native scalars (e.g. graph inputs).
+        if matches!(node.inputs[1].ty, ArgType::Shape(_)) {
             return Err(ProcessError::TypeMismatch {
-                expected: "on-device tensor for x_scale".to_string(),
+                expected: "tensor or scalar for x_scale".to_string(),
                 actual: format!("{:?}", node.inputs[1].ty),
             });
         }
@@ -88,9 +83,9 @@ impl NodeProcessor for DequantizeLinearProcessor {
         }
 
         if let Some(zero) = node.get_input(2) {
-            if !zero.ty.is_on_device() {
+            if matches!(zero.ty, ArgType::Shape(_)) {
                 return Err(ProcessError::TypeMismatch {
-                    expected: "on-device tensor for x_zero_point".to_string(),
+                    expected: "tensor or scalar for x_zero_point".to_string(),
                     actual: format!("{:?}", zero.ty),
                 });
             }
@@ -248,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dequantize_linear_rejects_blocked_quantization() {
+    fn test_dequantize_linear_rejects_blocked_scalar_scale() {
         let mut node = TestNodeBuilder::new(NodeType::DequantizeLinear, "dq")
             .input_tensor_i32("x", 2, None)
             .input_tensor_f32("x_scale", 0, None)
@@ -264,6 +259,6 @@ mod tests {
             .unwrap_err();
 
         let err_msg = format!("{}", err);
-        assert!(err_msg.contains("blocked quantization"));
+        assert!(err_msg.contains("Blocked quantization"));
     }
 }

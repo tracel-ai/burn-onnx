@@ -1859,12 +1859,10 @@ status = "pass"
 status = "pass"
 
 [test_convinteger_with_padding]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): ConvInteger (node 'convinteger1')"
+status = "pass"
 
 [test_convinteger_without_padding]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): ConvInteger (node 'convinteger1')"
+status = "pass"
 
 [test_convtranspose]
 status = "pass"
@@ -1978,15 +1976,13 @@ status = "pass"
 status = "pass"
 
 [test_dequantizelinear]
-status = "skip-codegen"
-reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
+status = "pass"
 
 [test_dequantizelinear_axis]
 status = "pass"
 
 [test_dequantizelinear_blocked]
-status = "skip-codegen"
-reason = "Node 'dequantizelinear1' (DequantizeLinear): DequantizeLinear: blocked quantization (block_size=2) is not supported yet"
+status = "pass"
 
 [test_dequantizelinear_e4m3fn]
 status = "skip-codegen"
@@ -2009,8 +2005,7 @@ status = "skip-codegen"
 reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
 
 [test_dequantizelinear_int16]
-status = "skip-codegen"
-reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
+status = "pass"
 
 [test_dequantizelinear_int2]
 status = "skip-codegen"
@@ -2021,8 +2016,7 @@ status = "skip-codegen"
 reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
 
 [test_dequantizelinear_uint16]
-status = "skip-codegen"
-reason = "Node 'dequantizelinear1' (DequantizeLinear): Type mismatch: expected on-device tensor for x_scale, got ScalarNative(F32)"
+status = "pass"
 
 [test_dequantizelinear_uint2]
 status = "skip-codegen"
@@ -2128,22 +2122,19 @@ status = "pass"
 status = "pass"
 
 [test_dynamicquantizelinear]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): DynamicQuantizeLinear (node 'dynamicquantizelinear1')"
+status = "pass"
 
 [test_dynamicquantizelinear_expanded]
 status = "pass"
 
 [test_dynamicquantizelinear_max_adjusted]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): DynamicQuantizeLinear (node 'dynamicquantizelinear1')"
+status = "pass"
 
 [test_dynamicquantizelinear_max_adjusted_expanded]
 status = "pass"
 
 [test_dynamicquantizelinear_min_adjusted]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): DynamicQuantizeLinear (node 'dynamicquantizelinear1')"
+status = "pass"
 
 [test_dynamicquantizelinear_min_adjusted_expanded]
 status = "pass"
@@ -3936,8 +3927,7 @@ status = "pass"
 status = "pass"
 
 [test_qlinearconv]
-status = "skip-codegen"
-reason = "Unsupported ONNX operation(s): QLinearConv (node 'qlinearconv1')"
+status = "pass"
 
 [test_qlinearmatmul_2D_int8_float16]
 status = "pass"
@@ -3952,35 +3942,28 @@ status = "pass"
 status = "pass"
 
 [test_qlinearmatmul_3D_int8_float16]
-status = "skip-codegen"
-reason = "Node 'qlinearmatmul1' (QLinearMatMul): Type mismatch: expected Rank compatibility between a and a_scale: scale can be rank 0, rank 1 (if a is rank 2), or match a's rank, got a rank 3 vs a_scale rank 1"
+status = "pass"
 
 [test_qlinearmatmul_3D_int8_float32]
-status = "skip-codegen"
-reason = "Node 'qlinearmatmul1' (QLinearMatMul): Type mismatch: expected Rank compatibility between a and a_scale: scale can be rank 0, rank 1 (if a is rank 2), or match a's rank, got a rank 3 vs a_scale rank 1"
+status = "pass"
 
 [test_qlinearmatmul_3D_uint8_float16]
-status = "skip-codegen"
-reason = "Node 'qlinearmatmul1' (QLinearMatMul): Type mismatch: expected Rank compatibility between a and a_scale: scale can be rank 0, rank 1 (if a is rank 2), or match a's rank, got a rank 3 vs a_scale rank 1"
+status = "pass"
 
 [test_qlinearmatmul_3D_uint8_float32]
-status = "skip-codegen"
-reason = "Node 'qlinearmatmul1' (QLinearMatMul): Type mismatch: expected Rank compatibility between a and a_scale: scale can be rank 0, rank 1 (if a is rank 2), or match a's rank, got a rank 3 vs a_scale rank 1"
+status = "pass"
 
 [test_quantizelinear]
-status = "skip-codegen"
-reason = "Node 'quantizelinear1' (QuantizeLinear): Type mismatch: expected on-device tensor for y_scale, got ScalarNative(F32)"
+status = "pass"
 
 [test_quantizelinear_axis]
 status = "pass"
 
 [test_quantizelinear_blocked_asymmetric]
-status = "skip-codegen"
-reason = "Node 'quantizelinear1' (QuantizeLinear): QuantizeLinear: blocked quantization (block_size=2) is not supported yet"
+status = "pass"
 
 [test_quantizelinear_blocked_symmetric]
-status = "skip-codegen"
-reason = "Node 'quantizelinear1' (QuantizeLinear): QuantizeLinear: blocked quantization (block_size=2) is not supported yet"
+status = "pass"
 
 [test_quantizelinear_e4m3fn]
 status = "skip-codegen"
@@ -3995,8 +3978,7 @@ status = "skip-codegen"
 reason = "Node 'quantizelinear1' (QuantizeLinear): QuantizeLinear: output dtype F32 is not supported yet"
 
 [test_quantizelinear_int16]
-status = "skip-codegen"
-reason = "Node 'quantizelinear1' (QuantizeLinear): Type mismatch: expected on-device tensor for y_scale, got ScalarNative(F32)"
+status = "pass"
 
 [test_quantizelinear_int2]
 status = "skip-codegen"
@@ -4007,8 +3989,7 @@ status = "skip-codegen"
 reason = "Node 'quantizelinear1' (QuantizeLinear): QuantizeLinear: output dtype F32 is not supported yet"
 
 [test_quantizelinear_uint16]
-status = "skip-codegen"
-reason = "Node 'quantizelinear1' (QuantizeLinear): Type mismatch: expected on-device tensor for y_scale, got ScalarNative(F32)"
+status = "pass"
 
 [test_quantizelinear_uint2]
 status = "skip-codegen"

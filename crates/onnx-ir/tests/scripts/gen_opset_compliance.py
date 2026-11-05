@@ -203,6 +203,9 @@ SUPPORTED_OPS = {
     "NonMaxSuppression": "non_max_suppression",
     # Quantization
     "QuantizeLinear": "quantize_linear",
+    "DynamicQuantizeLinear": "dynamic_quantize_linear",
+    "ConvInteger": "quantized_conv",
+    "QLinearConv": "quantized_conv",
     "DequantizeLinear": "dequantize_linear",
     "Where": "where_op_gen",
     "NonZero": "nonzero",
@@ -1238,6 +1241,26 @@ def make_lrn(op_name: str, opset: int):
     return [node], [inp], [out], []
 
 
+def make_dynamic_quantize_linear(op_name: str, opset: int):
+    inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [2, 3])
+    outs = [helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.UINT8, [2, 3]), helper.make_tensor_value_info(_p(op_name, "scale"), TensorProto.FLOAT, []), helper.make_tensor_value_info(_p(op_name, "zero"), TensorProto.UINT8, [])]
+    node = helper.make_node(op_name, [inp.name], [o.name for o in outs], name=_p(op_name, "node"))
+    return [node], [inp], outs, []
+
+
+def make_quantized_conv(op_name: str, opset: int):
+    inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.UINT8, [1, 2, 4, 4])
+    weight = numpy_helper.from_array(np.ones([3, 2, 2, 2], dtype=np.int8), name=_p(op_name, "weight"))
+    initializers = [weight]
+    args = [inp.name, weight.name]
+    if op_name == "QLinearConv":
+        for name, value in [("xs", np.float32(0.5)), ("xz", np.uint8(3)), ("ws", np.float32(0.25)), ("wz", np.int8(0)), ("ys", np.float32(0.5)), ("yz", np.uint8(128))]:
+            initializers.append(numpy_helper.from_array(np.array(value), name=_p(op_name, name)))
+        args = [inp.name, _p(op_name, "xs"), _p(op_name, "xz"), weight.name, _p(op_name, "ws"), _p(op_name, "wz"), _p(op_name, "ys"), _p(op_name, "yz")]
+    out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.UINT8 if op_name == "QLinearConv" else TensorProto.INT32, [1, 3, 3, 3])
+    return [helper.make_node(op_name, args, [out.name], name=_p(op_name, "node"))], [inp], [out], initializers
+
+
 def make_shrink(op_name: str, opset: int):
     inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [2, 3, 4])
     out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.FLOAT, [2, 3, 4])
@@ -1540,6 +1563,8 @@ GENERATORS = {
     "unique": make_unique,
     "col2im": make_col2im,
     "quantize_linear": make_quantize_linear,
+    "dynamic_quantize_linear": make_dynamic_quantize_linear,
+    "quantized_conv": make_quantized_conv,
     "dequantize_linear": make_dequantize_linear,
     "qlinear_matmul": make_qlinear_matmul,
     "non_max_suppression": make_non_max_suppression,

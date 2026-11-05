@@ -24,7 +24,7 @@ pub trait TensorDataExt {
     /// Extract the first element as i64, converting from any numeric type
     fn scalar_i64(&self) -> Result<i64, burn_tensor::DataError>;
 
-    /// Convert to `Vec<i64>`, handling Int32 and Int64 types
+    /// Convert to `Vec<i64>`, handling signed integers and unsigned integers up to 32 bits
     ///
     /// Useful for extracting indices, shapes, or other integer arrays that need to be i64.
     fn to_i64_vec(&self) -> Result<Vec<i64>, burn_tensor::DataError>;
@@ -105,7 +105,13 @@ impl TensorDataExt for burn_tensor::TensorData {
     fn to_i64_vec(&self) -> Result<Vec<i64>, burn_tensor::DataError> {
         use burn_tensor::DType;
         match self.dtype() {
-            DType::I64 | DType::I32 => self.try_to_vec_as::<i64>(),
+            DType::I64
+            | DType::I32
+            | DType::I16
+            | DType::I8
+            | DType::U32
+            | DType::U16
+            | DType::U8 => self.try_to_vec_as::<i64>(),
             other => Err(burn_tensor::DataError::UnsupportedConversion {
                 from: other,
                 to: DType::I64,
@@ -147,5 +153,25 @@ impl TensorDataExt for burn_tensor::TensorData {
                 to: DType::F64,
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn narrow_integer_constants_convert_to_i64() {
+        assert_eq!(
+            TensorData::from([0u8, 255]).to_i64_vec().unwrap(),
+            vec![0, 255]
+        );
+        assert_eq!(
+            TensorData::from([-128i8, 127]).to_i64_vec().unwrap(),
+            vec![-128, 127]
+        );
+        assert_eq!(
+            TensorData::from([0u16, 65535]).to_i64_vec().unwrap(),
+            vec![0, 65535]
+        );
     }
 }

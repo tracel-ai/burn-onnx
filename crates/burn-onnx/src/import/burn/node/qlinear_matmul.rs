@@ -46,14 +46,21 @@ impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
             _ => quote! {},
         };
 
-        let reshape_a_scale_and_zp = reshape_scale_and_zp(a_scale_arg, &a, &a_scale, &a_zero_point);
-        let reshape_b_scale_and_zp = reshape_scale_and_zp(b_scale_arg, &b, &b_scale, &b_zero_point);
+        let reshape_a_scale_and_zp =
+            reshape_scale_and_zp(a_scale_arg, a_arg.ty.rank(), &a, &a_scale, &a_zero_point);
+        let reshape_b_scale_and_zp =
+            reshape_scale_and_zp(b_scale_arg, b_arg.ty.rank(), &b, &b_scale, &b_zero_point);
 
         // Generate y reshape code by passing a TokenStream for `output_tensor`.
         // This will be inserted after `output_tensor` is created in the quote block.
         let output_tensor_ts = quote! { output_tensor };
-        let reshape_y_scale_and_zp =
-            reshape_scale_and_zp(y_scale_arg, &output_tensor_ts, &y_scale, &y_zero_point);
+        let reshape_y_scale_and_zp = reshape_scale_and_zp(
+            y_scale_arg,
+            self.outputs[0].ty.rank(),
+            &output_tensor_ts,
+            &y_scale,
+            &y_zero_point,
+        );
 
         // Convert inputs into floats
         // NOTE: A faster path can be achieved if both `a`, `b` and their zero points are int dtypes,
@@ -122,6 +129,7 @@ fn to_float(arg: &Argument, token_stream: TokenStream) -> TokenStream {
 
 fn reshape_scale_and_zp(
     scale_arg: &Argument,
+    tensor_rank: usize,
     tensor: &TokenStream,
     scale: &TokenStream,
     zero_point: &TokenStream,
@@ -131,6 +139,10 @@ fn reshape_scale_and_zp(
     //   1. Scalar; per-tensor quantization
     //   2. Vectors; row/column-based quantization
     //   3. N-D tensors; higher-dim row/column-based quantization
+    let single_element = matches!(&scale_arg.ty, ArgType::Tensor(t) if t.static_shape.as_ref().is_some_and(|shape| shape.iter().all(|dim| *dim == Some(1))));
+    if single_element && tensor_rank > 2 {
+        return quote! { let (#scale, #zero_point) = (#scale.reshape([1; #tensor_rank]), #zero_point.reshape([1; #tensor_rank])); };
+    }
     if scale_arg.ty.is_scalar() {
         // Case 1: All zero point and inputs are scalars
         // Reshaping is not required.
@@ -483,6 +495,55 @@ mod tests {
             let output_tensor = a_dequantized.matmul(b_dequantized);
             let y = (output_tensor / y_scale).round();
             let y = (y + y_zero_point.float().cast(burn::tensor::DType::F32))
+                .clamp(-128f32, 127f32)
+                .int()
+                .cast(burn::tensor::DType::I8);
+            y
+        }
+        ");
+    }
+    #[test]
+    fn single_element_parameters_for_batched_operands() {
+        let mut node = QLinearMatMulNodeBuilder::new("qmm")
+            .input_tensor("a", 3, DType::I8)
+            .input_tensor("a_scale", 1, DType::F32)
+            .input_tensor("a_zero", 1, DType::I8)
+            .input_tensor("b", 3, DType::I8)
+            .input_tensor("b_scale", 1, DType::F32)
+            .input_tensor("b_zero", 1, DType::I8)
+            .input_tensor("y_scale", 1, DType::F32)
+            .input_tensor("y_zero", 1, DType::I8)
+            .output_tensor("y", 3, DType::I8)
+            .build();
+        for i in [1, 2, 4, 5, 6, 7] {
+            if let onnx_ir::ArgType::Tensor(t) = &mut node.inputs[i].ty {
+                t.static_shape = Some(vec![Some(1)]);
+            }
+        }
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(
+            &self,
+            a: Tensor<3, Int>,
+            a_scale: Tensor<1>,
+            a_zero: Tensor<1, Int>,
+            b: Tensor<3, Int>,
+            b_scale: Tensor<1>,
+            b_zero: Tensor<1, Int>,
+            y_scale: Tensor<1>,
+            y_zero: Tensor<1, Int>,
+        ) -> Tensor<3, Int> {
+            let (a_scale, a_zero) = (a_scale.reshape([1; 3usize]), a_zero.reshape([1; 3usize]));
+            let (b_scale, b_zero) = (b_scale.reshape([1; 3usize]), b_zero.reshape([1; 3usize]));
+            let a_dequantized = a_scale
+                * (a.float().cast(burn::tensor::DType::F32)
+                    - a_zero.float().cast(burn::tensor::DType::F32));
+            let b_dequantized = b_scale
+                * (b.float().cast(burn::tensor::DType::F32)
+                    - b_zero.float().cast(burn::tensor::DType::F32));
+            let output_tensor = a_dequantized.matmul(b_dequantized);
+            let (y_scale, y_zero) = (y_scale.reshape([1; 3usize]), y_zero.reshape([1; 3usize]));
+            let y = (output_tensor / y_scale).round();
+            let y = (y + y_zero.float().cast(burn::tensor::DType::F32))
                 .clamp(-128f32, 127f32)
                 .int()
                 .cast(burn::tensor::DType::I8);

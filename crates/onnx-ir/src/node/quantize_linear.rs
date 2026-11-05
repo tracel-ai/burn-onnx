@@ -45,19 +45,18 @@ impl NodeProcessor for QuantizeLinearProcessor {
     ) -> Result<(), ProcessError> {
         let config = self.extract_config(node, opset)?;
 
+        if config.precision.is_some_and(|dtype| !dtype.is_float()) {
+            return Err(ProcessError::Custom(
+                "QuantizeLinear precision must be floating point".into(),
+            ));
+        }
         if config.saturate.is_some() && opset < 19 {
             return Err(ProcessError::Custom(format!(
                 "QuantizeLinear: saturate requires opset 19+, got {opset}"
             )));
         }
 
-        if let Some(block_size) = config.block_size
-            && block_size > 0
-        {
-            return Err(ProcessError::Custom(format!(
-                "QuantizeLinear: blocked quantization (block_size={block_size}) is not supported yet"
-            )));
-        }
+        super::quantization_shape::validate(node, config.axis, config.block_size, opset)?;
 
         if !node.inputs[0].ty.is_on_device() {
             return Err(ProcessError::TypeMismatch {
@@ -66,9 +65,10 @@ impl NodeProcessor for QuantizeLinearProcessor {
             });
         }
 
-        if !node.inputs[1].ty.is_on_device() {
+        // Per-tensor scales are rank 0 and may arrive as native scalars (e.g. graph inputs).
+        if matches!(node.inputs[1].ty, ArgType::Shape(_)) {
             return Err(ProcessError::TypeMismatch {
-                expected: "on-device tensor for y_scale".to_string(),
+                expected: "tensor or scalar for y_scale".to_string(),
                 actual: format!("{:?}", node.inputs[1].ty),
             });
         }
@@ -264,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn test_quantize_linear_rejects_blocked_quantization() {
+    fn test_quantize_linear_rejects_blocked_scalar_scale() {
         let mut node = TestNodeBuilder::new(NodeType::QuantizeLinear, "q")
             .input_tensor_f32("x", 2, None)
             .input_tensor_f32("y_scale", 0, None)
@@ -278,6 +278,6 @@ mod tests {
             .unwrap_err();
 
         let err_msg = format!("{}", err);
-        assert!(err_msg.contains("blocked quantization"));
+        assert!(err_msg.contains("Blocked quantization"));
     }
 }
