@@ -20,7 +20,7 @@ import onnx.helper
 from onnx import TensorProto
 
 
-def build_model(name, sample_size, dtype=None, seed=None):
+def build_model(name, sample_size, dtype=None, seed=None, shape=(3,4), input_dtype=TensorProto.FLOAT):
     attrs = {} if sample_size == 1 else {"sample_size": sample_size}
     if dtype is not None:
         attrs["dtype"] = dtype
@@ -39,9 +39,9 @@ def build_model(name, sample_size, dtype=None, seed=None):
     graph = onnx.helper.make_graph(
         name="main_graph",
         nodes=[node],
-        inputs=[onnx.helper.make_tensor_value_info("input", TensorProto.FLOAT, [3, 4])],
+        inputs=[onnx.helper.make_tensor_value_info("input", input_dtype, list(shape))],
         outputs=[
-            onnx.helper.make_tensor_value_info("output", out_type, [3, sample_size])
+            onnx.helper.make_tensor_value_info("output", out_type, [shape[0], sample_size])
         ],
     )
 
@@ -65,3 +65,13 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+build_model("multinomial_half.onnx", 32, shape=(1,65536), input_dtype=TensorProto.FLOAT16)
+build_model("multinomial_empty.onnx", 2, shape=(0,4))
+model = onnx.helper.make_model(onnx.helper.make_graph([
+    onnx.helper.make_node("Multinomial", ["input"], ["a"], sample_size=128),
+    onnx.helper.make_node("Multinomial", ["input"], ["b"], sample_size=128),
+    onnx.helper.make_node("Add", ["a", "b"], ["sum"]),
+], "independent_draws", [onnx.helper.make_tensor_value_info("input", TensorProto.FLOAT, [1,2])], [onnx.helper.make_tensor_value_info("sum", TensorProto.INT32, [1,128])]), opset_imports=[onnx.helper.make_opsetid("", 22)])
+onnx.checker.check_model(model)
+onnx.save(model, Path(__file__).parent.parent / "simplify" / "simplify_multinomial.onnx")

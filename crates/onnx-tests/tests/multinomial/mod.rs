@@ -2,7 +2,13 @@
 // output shape and dtype, that every index is a valid class, and that a one-hot input (one
 // class at log-probability 0, the rest at -inf or -1e9) always samples that class.
 use crate::include_models;
-include_models!(multinomial, multinomial_int64, multinomial_default);
+include_models!(
+    multinomial_half,
+    multinomial_empty,
+    multinomial,
+    multinomial_int64,
+    multinomial_default
+);
 
 #[cfg(test)]
 mod tests {
@@ -68,4 +74,30 @@ mod tests {
         assert_eq!(output.dtype(), DType::I32);
         check_rows(output, 1);
     }
+}
+
+#[test]
+fn multinomial_large_half_and_empty_batch() {
+    use burn::tensor::{DType, Tensor, TensorData};
+    let device = Default::default();
+    let model = multinomial_half::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/multinomial_half.bpk"),
+        &device,
+    );
+    let x = Tensor::<2>::from_data(
+        TensorData::new(alloc::vec![0f32;65536], [1, 65536]),
+        (&device, DType::F16),
+    );
+    let samples = model.forward(x).into_data().to_vec::<i32>().unwrap();
+    assert!(samples.iter().any(|&v| v < 32768));
+    assert!(samples.iter().any(|&v| v >= 32768));
+    let model = multinomial_empty::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/multinomial_empty.bpk"),
+        &device,
+    );
+    let x = Tensor::<2>::from_data(
+        TensorData::new(alloc::vec::Vec::<f32>::new(), [0, 4]),
+        (&device, DType::F32),
+    );
+    assert_eq!(model.forward(x).dims(), [0, 2]);
 }

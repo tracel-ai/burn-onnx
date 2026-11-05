@@ -1,4 +1,5 @@
 use super::prelude::*;
+use onnx_ir::ir::DType;
 
 impl NodeCodegen for onnx_ir::node::multinomial::MultinomialNode {
     fn inputs(&self) -> &[Argument] {
@@ -17,6 +18,11 @@ impl NodeCodegen for onnx_ir::node::multinomial::MultinomialNode {
             );
         }
         let input = scope.arg(&self.inputs[0]);
+        let input = if matches!(self.inputs[0].ty.elem_type(), DType::F16 | DType::BF16) {
+            quote! { #input.cast(burn::tensor::DType::F32) }
+        } else {
+            input
+        };
         let output = arg_to_ident(&self.outputs[0]);
         let sample_size = self.config.sample_size;
         let dtype = self.config.dtype.to_tokens();
@@ -27,8 +33,15 @@ impl NodeCodegen for onnx_ir::node::multinomial::MultinomialNode {
         quote! {
             let #output = {
                 let logits = #input;
-                let max = logits.clone().max_dim(1);
-                (logits - max).exp().categorical(#sample_size).cast(#dtype)
+                if logits.dims()[0] == 0 {
+                    burn::tensor::Tensor::<2, burn::tensor::Int>::from_data(
+                        burn::tensor::TensorData::new(alloc::vec::Vec::<i64>::new(), [0, #sample_size]),
+                        (&logits.device(), #dtype),
+                    )
+                } else {
+                    let max = logits.clone().max_dim(1);
+                    (logits - max).exp().categorical(#sample_size).cast(#dtype)
+                }
             };
         }
     }
@@ -53,8 +66,21 @@ mod tests {
         pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Int> {
             let output = {
                 let logits = input;
-                let max = logits.clone().max_dim(1);
-                (logits - max).exp().categorical(1usize).cast(burn::tensor::DType::I32)
+                if logits.dims()[0] == 0 {
+                    burn::tensor::Tensor::<
+                        2,
+                        burn::tensor::Int,
+                    >::from_data(
+                        burn::tensor::TensorData::new(
+                            alloc::vec::Vec::<i64>::new(),
+                            [0, 1usize],
+                        ),
+                        (&logits.device(), burn::tensor::DType::I32),
+                    )
+                } else {
+                    let max = logits.clone().max_dim(1);
+                    (logits - max).exp().categorical(1usize).cast(burn::tensor::DType::I32)
+                }
             };
             output
         }
@@ -78,8 +104,21 @@ mod tests {
         pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Int> {
             let output = {
                 let logits = input;
-                let max = logits.clone().max_dim(1);
-                (logits - max).exp().categorical(10usize).cast(burn::tensor::DType::I64)
+                if logits.dims()[0] == 0 {
+                    burn::tensor::Tensor::<
+                        2,
+                        burn::tensor::Int,
+                    >::from_data(
+                        burn::tensor::TensorData::new(
+                            alloc::vec::Vec::<i64>::new(),
+                            [0, 10usize],
+                        ),
+                        (&logits.device(), burn::tensor::DType::I64),
+                    )
+                } else {
+                    let max = logits.clone().max_dim(1);
+                    (logits - max).exp().categorical(10usize).cast(burn::tensor::DType::I64)
+                }
             };
             output
         }
@@ -95,5 +134,36 @@ mod tests {
                 .build();
             shadow_check_result(&node).unwrap();
         }
+    }
+    #[test]
+    fn half_logits_promoted() {
+        let node = MultinomialNodeBuilder::new("multinomial")
+            .input_tensor("input", 2, DType::F16)
+            .output_tensor("output", 2, DType::I32)
+            .config(MultinomialConfig::default())
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Int> {
+            let output = {
+                let logits = input.cast(burn::tensor::DType::F32);
+                if logits.dims()[0] == 0 {
+                    burn::tensor::Tensor::<
+                        2,
+                        burn::tensor::Int,
+                    >::from_data(
+                        burn::tensor::TensorData::new(
+                            alloc::vec::Vec::<i64>::new(),
+                            [0, 1usize],
+                        ),
+                        (&logits.device(), burn::tensor::DType::I32),
+                    )
+                } else {
+                    let max = logits.clone().max_dim(1);
+                    (logits - max).exp().categorical(1usize).cast(burn::tensor::DType::I32)
+                }
+            };
+            output
+        }
+        ");
     }
 }

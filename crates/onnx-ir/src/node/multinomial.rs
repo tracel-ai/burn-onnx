@@ -55,6 +55,10 @@ pub(crate) struct MultinomialProcessor;
 impl NodeProcessor for MultinomialProcessor {
     type Config = MultinomialConfig;
 
+    fn is_deterministic(&self) -> bool {
+        false
+    }
+
     fn spec(&self) -> NodeSpec {
         NodeSpec {
             min_opset: 7,

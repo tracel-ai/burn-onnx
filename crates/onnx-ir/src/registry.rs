@@ -24,6 +24,8 @@ pub trait ProcessorMethods: Send + Sync {
         opset: usize,
         output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError>;
+    /// Whether common-subexpression elimination may merge this processor.
+    fn is_deterministic(&self) -> bool;
     fn is_noop(&self, node: &RawNode) -> bool;
     fn build_node(&self, builder: RawNode, opset: usize) -> Result<Node, ProcessError>;
 }
@@ -53,6 +55,10 @@ impl<T: crate::processor::NodeProcessor> ProcessorMethods for T {
         output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
         crate::processor::NodeProcessor::infer_types(self, node, opset, output_preferences)
+    }
+
+    fn is_deterministic(&self) -> bool {
+        crate::processor::NodeProcessor::is_deterministic(self)
     }
 
     fn is_noop(&self, node: &RawNode) -> bool {
