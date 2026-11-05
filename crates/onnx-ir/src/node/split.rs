@@ -85,7 +85,7 @@ impl NodeProcessor for SplitProcessor {
     fn infer_types(
         &self,
         node: &mut RawNode,
-        _opset: usize,
+        opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
         // Extract the input type to determine rank and shape
@@ -101,54 +101,22 @@ impl NodeProcessor for SplitProcessor {
             }
         };
 
-        // Try to get static split sizes to compute output static shapes
-        let split_sizes: Option<Vec<usize>> = if node.inputs.len() > 1 {
-            node.inputs[1]
-                .value()
-                .and_then(|v| v.try_into_vec::<i64>().ok())
-                .map(|sizes| sizes.into_iter().map(|s| s as usize).collect())
-        } else {
-            // For opset < 13, split sizes are an attribute
-            node.attrs
-                .get("split")
-                .map(|v| v.clone().into_i64s())
-                .transpose()?
-                .map(|sizes| sizes.into_iter().map(|s| s as usize).collect())
-        };
-
-        // Infer output types - all outputs have the same rank and element type as input
+        let config = self.extract_config(node, opset)?;
         for (i, output_arg) in node.outputs.iter_mut().enumerate() {
-            let static_shape = if let Some(ref sizes) = split_sizes {
-                // When split sizes are known, compute output static shape
-                if let Some(ref input_shape) = input_static_shape {
-                    // Get the split axis (default 0)
-                    let axis = node
-                        .attrs
-                        .get("axis")
-                        .map(|v| v.clone().into_i64())
-                        .transpose()?
-                        .map(|a| {
-                            if a < 0 {
-                                (a + rank as i64) as usize
-                            } else {
-                                a as usize
-                            }
-                        })
-                        .unwrap_or(0);
-                    if i < sizes.len() {
-                        let mut shape = input_shape.clone();
-                        shape[axis] = Some(sizes[i]);
-                        Some(shape)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
+            let split_dim = match &config.split_sizes {
+                Some(SplitSizesInput::Static(sizes)) => sizes.get(i).copied(),
+                Some(SplitSizesInput::Runtime(_)) => None,
+                None => config.split_size,
+            };
+            let static_shape = if input_static_shape.is_some() || split_dim.is_some() {
+                let mut shape = input_static_shape
+                    .clone()
+                    .unwrap_or_else(|| vec![None; rank]);
+                shape[config.axis] = split_dim;
+                Some(shape)
             } else {
                 None
             };
-
             output_arg.ty = ArgType::Tensor(TensorType {
                 dtype,
                 rank,
@@ -920,5 +888,30 @@ mod tests {
             &config.split_sizes,
             Some(SplitSizesInput::Static(sizes)) if sizes == &vec![3, 7]
         ));
+    }
+    #[test]
+    fn test_preserves_known_dimensions() {
+        let mut node = TestNodeBuilder::new(NodeType::Split, "split")
+            .add_input(
+                "data",
+                ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank: 3,
+                    static_shape: Some(vec![None, Some(2), Some(3)]),
+                }),
+            )
+            .output_default("a")
+            .output_default("b")
+            .attr_int("axis", 1)
+            .attr_int("num_outputs", 2)
+            .build();
+        SplitProcessor
+            .infer_types(&mut node, 18, &OutputPreferences::new())
+            .unwrap();
+        for output in &node.outputs {
+            assert!(
+                matches!(&output.ty, ArgType::Tensor(t) if t.static_shape == Some(vec![None, Some(1), Some(3)]))
+            );
+        }
     }
 }

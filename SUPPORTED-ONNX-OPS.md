@@ -232,6 +232,12 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 devices without f64 (e.g. Metal) it falls back to f32, which can lose precision in
 near-zero spectral bins.
 
+`AffineGrid` supports both the native operator and the official 2D/3D function
+expansions, with either `align_corners` setting. `Squeeze` without axes can use a
+partial static shape: known unit dimensions are removed and unknown dimensions
+must remain non-unit at runtime. A runtime guard reports inputs that would change
+the generated model's fixed output rank.
+
 [1]: https://onnx.ai/onnx/operators/onnx__Abs.html "ONNX Abs"
 [2]: https://onnx.ai/onnx/operators/onnx__Acos.html "ONNX Acos"
 [3]: https://onnx.ai/onnx/operators/onnx__Acosh.html "ONNX Acosh"

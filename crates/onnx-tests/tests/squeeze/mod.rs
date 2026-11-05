@@ -8,7 +8,8 @@ include_models!(
     squeeze_float,
     squeeze_tensor_to_scalar,
     squeeze_opset13_axes_input,
-    squeeze_no_axes
+    squeeze_no_axes,
+    squeeze_partial
 );
 
 #[cfg(test)]
@@ -119,4 +120,33 @@ mod tests {
         let output = model.forward(input);
         assert_eq!(expected_shape, output.shape());
     }
+}
+
+#[test]
+fn squeeze_partial_shape() {
+    let device = Default::default();
+    let model = squeeze_partial::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/squeeze_partial.bpk"),
+        &device,
+    );
+    let output = model.forward(burn::tensor::Tensor::<3>::from_data(
+        [[[0., 1., 2.]], [[3., 4., 5.]]],
+        &device,
+    ));
+    assert_eq!(output.dims(), [2, 3]);
+    assert_eq!(
+        output.to_data().to_vec::<f32>().unwrap(),
+        [0., 1., 2., 3., 4., 5.]
+    );
+}
+
+#[test]
+#[should_panic(expected = "an unknown dimension became 1")]
+fn squeeze_partial_shape_rejects_rank_change() {
+    let device = Default::default();
+    let model = squeeze_partial::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/squeeze_partial.bpk"),
+        &device,
+    );
+    let _ = model.forward(burn::tensor::Tensor::<3>::ones([1, 1, 3], &device));
 }

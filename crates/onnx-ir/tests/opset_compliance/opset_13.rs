@@ -140,7 +140,7 @@ fn concat(graph: &OnnxGraph) {
         concat_a: F32[2, 3]
         concat_b: F32[2, 3]
       Outputs:
-        concat1_out1: F32[?, ?]
+        concat1_out1: F32[4, 3]
       Config:
         ConcatConfig {
             axis: 0,
@@ -1475,11 +1475,11 @@ fn sign(graph: &OnnxGraph) {
 fn size(graph: &OnnxGraph) {
     let node = find_node(graph, "size");
     insta::assert_snapshot!(format!("{node}"), @r#"
-    Size "size1"
+    Constant "size1"
       Inputs:
-        size_input: F32[2, 3, 4]
+        size1_out1_const: ScalarNative(I64) [static(35)]
       Outputs:
-        size1_out1: ScalarNative(I64)
+        size1_out1: ScalarTensor(I64) [constant]
     "#);
 }
 

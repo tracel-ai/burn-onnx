@@ -82,12 +82,10 @@ status = "pass"
 status = "pass"
 
 [test_affine_grid_2d_align_corners_expanded]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"Failed to build then_branch: Type inference failed: Node 'squeeze1' (Squeeze): Squeeze: Cannot infer output rank when axes is None and input tensor static shape is unknown\")"
+status = "pass"
 
 [test_affine_grid_2d_expanded]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"Failed to build then_branch: Type inference failed: Node 'squeeze1' (Squeeze): Squeeze: Cannot infer output rank when axes is None and input tensor static shape is unknown\")"
+status = "pass"
 
 [test_affine_grid_3d]
 status = "pass"
@@ -96,12 +94,10 @@ status = "pass"
 status = "pass"
 
 [test_affine_grid_3d_align_corners_expanded]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"Failed to build then_branch: Type inference failed: Node 'squeeze1' (Squeeze): Squeeze: Cannot infer output rank when axes is None and input tensor static shape is unknown\")"
+status = "pass"
 
 [test_affine_grid_3d_expanded]
-status = "skip-codegen"
-reason = "Config extraction failed: Custom(\"Failed to build then_branch: Type inference failed: Node 'squeeze1' (Squeeze): Squeeze: Cannot infer output rank when axes is None and input tensor static shape is unknown\")"
+status = "pass"
 
 [test_ai_onnx_ml_array_feature_extractor]
 status = "skip-codegen"

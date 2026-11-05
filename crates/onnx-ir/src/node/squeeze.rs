@@ -137,16 +137,12 @@ impl NodeProcessor for SqueezeProcessor {
                             ));
                         }
                         // When axes is None, ONNX spec squeezes all dimensions of size 1.
-                        // An unknown dim may be 1 at runtime, so the rank is only known
-                        // when every dim is.
+                        // Specialize to the dimensions known to be one. Codegen guards
+                        // every unknown dimension against becoming one at runtime, because
+                        // that would change the output's compile-time rank.
                         match &tensor.static_shape {
-                            Some(static_shape) if static_shape.iter().all(Option::is_some) => {
+                            Some(static_shape) => {
                                 static_shape.iter().filter(|dim| **dim != Some(1)).count()
-                            }
-                            Some(_) => {
-                                return Err(ProcessError::Custom(
-                                    "Squeeze: Cannot infer output rank when axes is None and some input dims are unknown".to_string()
-                                ));
                             }
                             None => {
                                 return Err(ProcessError::Custom(
@@ -512,7 +508,7 @@ mod tests {
     }
 
     #[test]
-    fn test_squeeze_no_axes_partial_shape_rejected() {
+    fn test_squeeze_no_axes_partial_shape_specializes_rank() {
         // [N, 64, 1, 1] with no axes: rank is 1 if N == 1 at runtime, 2 otherwise
         let mut node = TestNodeBuilder::new(NodeType::Squeeze, "test_squeeze")
             .add_input(
@@ -529,8 +525,14 @@ mod tests {
         let processor = SqueezeProcessor;
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 16, &prefs);
-        assert!(
-            matches!(result, Err(ProcessError::Custom(ref msg)) if msg.contains("some input dims are unknown"))
+        result.unwrap();
+        assert_eq!(
+            node.outputs[0].ty,
+            ArgType::Tensor(TensorType::new(
+                crate::ir::DType::F32,
+                2,
+                Some(vec![None, Some(64)])
+            ))
         );
     }
 

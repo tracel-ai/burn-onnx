@@ -831,11 +831,11 @@ fn shape(graph: &OnnxGraph) {
 fn size(graph: &OnnxGraph) {
     let node = find_node(graph, "size");
     insta::assert_snapshot!(format!("{node}"), @r#"
-    Size "size1"
+    Constant "size1"
       Inputs:
-        size_input: F32[2, 3, 4]
+        size1_out1_const: ScalarNative(I64) [static(21)]
       Outputs:
-        size1_out1: ScalarNative(I64)
+        size1_out1: ScalarTensor(I64) [constant]
     "#);
 }
 

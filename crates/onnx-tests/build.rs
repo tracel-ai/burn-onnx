@@ -653,6 +653,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/squeeze/squeeze_float.onnx")
         .input("tests/squeeze/squeeze_multiple.onnx")
         .input("tests/squeeze/squeeze_no_axes.onnx")
+        .input("tests/squeeze/squeeze_partial.onnx")
         .input("tests/squeeze/squeeze_opset13_axes_input.onnx")
         .input("tests/squeeze/squeeze_scalar.onnx")
         .input("tests/squeeze/squeeze_shape.onnx")

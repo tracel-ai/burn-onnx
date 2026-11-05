@@ -99,6 +99,13 @@ impl NodeCodegen for onnx_ir::node::range::RangeNode {
                             let native = on_device_to_native(quote! { #tensor }, dtype);
                             (quote! { let #local = #native; }, quote! { #local })
                         }
+                        ArgType::Tensor(tensor_type) => {
+                            // The processor also accepts a one-element rank-1 tensor.
+                            let tensor = scope.arg(arg);
+                            let native =
+                                on_device_to_native(quote! { #tensor }, &tensor_type.dtype);
+                            (quote! { let #local = #native; }, quote! { #local })
+                        }
                         _ => panic!("Range parameter must be a scalar"),
                     }
                 }
@@ -560,6 +567,45 @@ mod tests {
                 .cast(burn::tensor::DType::I16)
                 .mul_scalar(2i16)
                 .add_scalar(-3i16);
+            output
+        }
+        ");
+    }
+    #[test]
+    fn test_range_one_element_tensor() {
+        // A static literal and a scalar tensor readback are each bound once;
+        // the native scalar is used directly.
+        let config = RangeConfig::new(
+            RangeInput::Static(0),
+            RangeInput::Runtime(RuntimeInputRef {
+                name: "limit".to_string(),
+                input_index: 0,
+            }),
+            RangeInput::Runtime(RuntimeInputRef {
+                name: "delta".to_string(),
+                input_index: 1,
+            }),
+        );
+        let node = RangeNodeBuilder::new("range1")
+            .input_tensor("limit", 1, DType::I64)
+            .input_scalar("delta", DType::I64)
+            .output_tensor("output", 1, DType::I64)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, limit: Tensor<1, Int>, delta: i64) -> Tensor<1, Int> {
+            let output = {
+                let start = 0i64;
+                let limit = (limit).into_scalar::<i64>();
+                assert!(delta != 0);
+                let n = (((limit as i128 - start as i128) as f64) / delta as f64).ceil().max(0.0)
+                    as i64;
+                Tensor::arange(0..n, self.device())
+                    .cast(burn::tensor::DType::I64)
+                    .mul_scalar(delta)
+                    .add_scalar(start)
+            };
             output
         }
         ");
