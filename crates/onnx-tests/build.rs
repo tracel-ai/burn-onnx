@@ -464,6 +464,11 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/mul/mul_shape_broadcast.onnx")
         .input("tests/mul/mul_shape_rank_lift.onnx")
         .input("tests/mul/mul_shape_tensor.onnx")
+        .input("tests/multinomial/multinomial.onnx")
+        .input("tests/multinomial/multinomial_half.onnx")
+        .input("tests/multinomial/multinomial_empty.onnx")
+        .input("tests/multinomial/multinomial_default.onnx")
+        .input("tests/multinomial/multinomial_int64.onnx")
         .input("tests/name_collision/name_collision.onnx")
         .input("tests/neg/neg.onnx")
         .input("tests/neg/neg_shape.onnx")
@@ -943,6 +948,7 @@ impl OpOverride for ReluOverride {
 
 fn add_simplify_inputs(model_gen: &mut ModelGen) {
     model_gen
+        .input("tests/simplify/simplify_multinomial.onnx")
         .input("tests/simplify/simplify_shape_folding.onnx")
         .input("tests/simplify/simplify_gather_on_shape.onnx")
         .input("tests/simplify/simplify_slice_on_shape.onnx")

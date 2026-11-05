@@ -191,6 +191,7 @@ MIN_OPSET = {
     "RandomNormalLike": 1,
     "RandomUniformLike": 1,
     "Bernoulli": 15,
+    "Multinomial": 7,
     # RNN
     "LSTM": 1,
     "GRU": 1,

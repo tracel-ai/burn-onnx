@@ -130,7 +130,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [Mish][105]                      | ✅             | ✅           |
 | [Mod][106]                       | ✅             | ✅           |
 | [Mul][107]                       | ✅             | ✅           |
-| [Multinomial][108]               | ❌             | ❌           |
+| [Multinomial][108]               | ✅             | ✅           |
 | [Neg][109]                       | ✅             | ✅           |
 | [NegativeLogLikelihoodLoss][110] | ❌             | ❌           |
 | [NonMaxSuppression][112]         | ✅             | ✅¹          |
@@ -475,3 +475,5 @@ targets inside `If`/`Loop`/`Scan` subgraph bodies are not supported yet and
 are rejected with a clear error. See the "Custom Operators and Overrides"
 section of `DEVELOPMENT-GUIDE.md` for the full reference, and
 `examples/custom-op-hooks/` for a runnable example.
+
+Multinomial preserves the `seed` attribute but warns that Burn uses its backend random generator; per-node seeds are not honored.

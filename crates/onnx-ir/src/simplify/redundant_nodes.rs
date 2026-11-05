@@ -58,6 +58,13 @@ pub(crate) fn eliminate_redundant_nodes(mut nodes: Vec<RawNode>) -> Vec<RawNode>
 ///
 /// Nodes with graph-valued attributes get a unique key (not eligible for CSE).
 fn cse_key(node: &RawNode) -> String {
+    if !crate::processor::get_processor_registry()
+        .get(&node.node_type)
+        .is_deterministic()
+    {
+        return format!("__unique__:{}", node.name);
+    }
+
     // Custom ops have unknown semantics (possibly stateful or random), so two
     // identical-looking custom nodes must never be merged.
     if node.node_type == crate::ir::NodeType::Custom {
@@ -186,5 +193,15 @@ mod tests {
         // c_out should be rewritten to b_out
         assert_eq!(add.inputs[0].name, "b_out");
         assert_eq!(add.inputs[1].name, "b_out");
+    }
+    #[test]
+    fn independent_multinomial_draws_are_not_merged() {
+        let nodes = vec![
+            node("a", NodeType::Multinomial, &["logits"], &["a"]),
+            node("b", NodeType::Multinomial, &["logits"], &["b"]),
+            node("sum", NodeType::Add, &["a", "b"], &["sum"]),
+        ];
+        let result = eliminate_redundant_nodes(nodes);
+        assert_eq!(result[2].inputs[1].name, "b");
     }
 }

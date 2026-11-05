@@ -4,7 +4,7 @@
 4:Concat|
 5:Reshape|
 6:Abs,Add,BatchNormalization,Cast,Ceil,Clip,Div,Dropout,Elu,Exp,Floor,Gemm,HardSigmoid,InstanceNormalization,LeakyRelu,Linear,Log,Max,Mean,Min,Mul,Neg,PRelu,Reciprocal,Relu,Selu,Sigmoid,Sqrt,Sub,Sum,Tanh,Tile|
-7:Acos,Add,And,Asin,Atan,AveragePool,AveragePool1d,AveragePool3d,BatchNormalization,Cos,Div,Dropout,Equal,GRU,Gemm,Greater,LSTM,Less,Linear,Mul,Or,PRelu,Pow,RNN,Sin,Sub,Tan,Upsample,Xor|
+7:Acos,Add,And,Asin,Atan,AveragePool,AveragePool1d,AveragePool3d,BatchNormalization,Cos,Div,Dropout,Equal,GRU,Gemm,Greater,LSTM,Less,Linear,Mul,Multinomial,Or,PRelu,Pow,RNN,Sin,Sub,Tan,Upsample,Xor|
 8:Expand,Max,MaxPool,MaxPool1d,MaxPool3d,Mean,Min,Sum|Scan
 9:Acosh,Asinh,Atanh,BatchNormalization,Cast,Compress,Constant,ConstantOfShape,Cosh,Erf,EyeLike,Flatten,Gemm,Greater,IsNaN,Less,Linear,MatMul,MeanVarianceNormalization,NonZero,OneHot,PRelu,Scan,Scatter,Shrink,Sign,Sinh,Upsample,Where|
 10:AveragePool,AveragePool1d,AveragePool3d,DequantizeLinear,Dropout,IsInf,MatMulInteger,MaxPool,MaxPool1d,MaxPool3d,Mod,NonMaxSuppression,QLinearMatMul,QuantizeLinear,Resize,Slice,ThresholdedRelu,TopK,Upsample|
@@ -19,7 +19,7 @@
 19:AveragePool,AveragePool1d,AveragePool3d,Cast,CastLike,Constant,DeformConv,DequantizeLinear,Equal,Identity,If,Loop,Pad,QuantizeLinear,Reshape,Resize,Scan,Shape,Size|
 20:AffineGrid,ConstantOfShape,DFT,Gelu,GridSample,IsInf,IsNaN,ReduceMax,ReduceMin|
 21:Cast,CastLike,Constant,ConstantOfShape,DequantizeLinear,Flatten,GroupNormalization,Identity,If,Loop,Pad,QLinearMatMul,QuantizeLinear,Reshape,Scan,Shape,Size,Squeeze,Transpose,Unsqueeze|
-22:Acos,Acosh,Asin,Asinh,Atan,Atanh,AveragePool,AveragePool1d,AveragePool3d,Bernoulli,Conv,Conv1d,Conv3d,ConvTranspose,ConvTranspose1d,ConvTranspose3d,Cos,Cosh,DeformConv,Det,Dropout,Elu,EyeLike,GRU,GlobalAveragePool,GlobalLpPool,GlobalMaxPool,GridSample,HardSigmoid,HardSwish,InstanceNormalization,LSTM,LpNormalization,LpPool,LpPool1d,MaxPool,MaxPool1d,MaxPool3d,Mish,RNN,RandomNormal,RandomNormalLike,RandomUniform,RandomUniformLike,Round,Selu,Sin,Sinh,Softplus,Softsign,Tan,ThresholdedRelu|
+22:Acos,Acosh,Asin,Asinh,Atan,Atanh,AveragePool,AveragePool1d,AveragePool3d,Bernoulli,Conv,Conv1d,Conv3d,ConvTranspose,ConvTranspose1d,ConvTranspose3d,Cos,Cosh,DeformConv,Det,Dropout,Elu,EyeLike,GRU,GlobalAveragePool,GlobalLpPool,GlobalMaxPool,GridSample,HardSigmoid,HardSwish,InstanceNormalization,LSTM,LpNormalization,LpPool,LpPool1d,MaxPool,MaxPool1d,MaxPool3d,Mish,Multinomial,RNN,RandomNormal,RandomNormalLike,RandomUniform,RandomUniformLike,Round,Selu,Sin,Sinh,Softplus,Softsign,Tan,ThresholdedRelu|
 23:Attention,Cast,CastLike,Constant,ConstantOfShape,DequantizeLinear,Flatten,Identity,If,Loop,Pad,QuantizeLinear,Reshape,Scan,Shape,Size,Squeeze,Transpose,Unsqueeze|
 24:Attention,Cast,CastLike,Constant,ConstantOfShape,DequantizeLinear,Flatten,Identity,If,Loop,Pad,QuantizeLinear,Reshape,Scan,Shape,Size,Squeeze,Swish,TopK,Transpose,Unsqueeze|
 26:CumProd|
