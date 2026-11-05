@@ -47,7 +47,10 @@ mod tests {
 #[test]
 fn attributes_preserve_f32_values_in_f64_models() {
     use burn::tensor::{DType, Tensor, TensorData};
-    let device = Default::default();
+    let device = burn::tensor::Device::default();
+    if !device.supports_dtype(DType::F64) {
+        return;
+    }
     let model = image_scaler_f64::Model::from_file(
         concat!(env!("OUT_DIR"), "/model/image_scaler_f64.bpk"),
         &device,
