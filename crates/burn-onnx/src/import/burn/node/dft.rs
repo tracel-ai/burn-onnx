@@ -22,30 +22,24 @@ impl NodeCodegen for onnx_ir::node::dft::DftNode {
         let input_rank = input_tensor.rank;
         let config = &self.config;
 
-        // A runtime axis is read (and normalized against the static input rank) before the
-        // input is touched, then referred to as `axis`.
-        let (axis_prep, axis) = match &config.axis {
-            DftAxis::Static(axis) => (quote! {}, quote! { #axis }),
+        let input = scope.arg(input_arg);
+        // Capture the graph input before binding any temporary named axis.
+        let (axis_prep, axis, input) = match &config.axis {
+            DftAxis::Static(axis) => (quote! {}, quote! { #axis }, input),
             DftAxis::Runtime(r) => {
                 let axis_arg = &self.inputs[r.input_index];
                 let value = scalar_as_i64(axis_arg, scope.arg(axis_arg));
-                // A native i64 is used as is; anything else (a cast or an on-device readback)
-                // is bound once first.
-                let (bind, value) = if matches!(axis_arg.ty, ArgType::ScalarNative(DType::I64)) {
-                    (quote! {}, value)
-                } else {
-                    (quote! { let axis = #value; }, quote! { axis })
-                };
                 let rank = input_rank as i64;
                 let prep = quote! {
-                    #bind
-                    let axis = (if #value < 0 { #value + #rank } else { #value }) as usize;
+                    let (input, axis) = (#input, {
+                        let axis = #value;
+                        (if axis < 0 { axis + #rank } else { axis }) as usize
+                    });
                 };
-                (prep, quote! { axis })
+                (prep, quote! { axis }, quote! { input })
             }
         };
 
-        let input = scope.arg(input_arg);
         let output = arg_to_ident(output_arg);
 
         // onnx-ir rejects onesided output for inverse or complex transforms.
@@ -436,7 +430,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<4>, axis: i64) -> Tensor<4> {
             let output = {
-                let axis = (if axis < 0 { axis + 4i64 } else { axis }) as usize;
+                let (input, axis) = (
+                    input,
+                    {
+                        let axis = axis;
+                        (if axis < 0 { axis + 4i64 } else { axis }) as usize
+                    },
+                );
                 let signal = input.squeeze_dims::<3usize>(&[3isize]);
                 let (re, im) = rfft(signal, axis, None);
                 Tensor::<3usize>::stack::<4usize>([re, im].to_vec(), 3usize)
@@ -453,8 +453,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<4>, axis: i32) -> Tensor<4> {
             let output = {
-                let axis = axis as i64;
-                let axis = (if axis < 0 { axis + 4i64 } else { axis }) as usize;
+                let (input, axis) = (
+                    input,
+                    {
+                        let axis = axis as i64;
+                        (if axis < 0 { axis + 4i64 } else { axis }) as usize
+                    },
+                );
                 let signal = input.squeeze_dims::<3usize>(&[3isize]);
                 let n = signal.dims()[axis];
                 let (re_half, im_half) = rfft(signal, axis, None);
@@ -489,8 +494,13 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<4>, axis: Tensor<1, Int>) -> Tensor<4> {
             let output = {
-                let axis = (axis).into_scalar::<i64>();
-                let axis = (if axis < 0 { axis + 4i64 } else { axis }) as usize;
+                let (input, axis) = (
+                    input,
+                    {
+                        let axis = (axis).into_scalar::<i64>();
+                        (if axis < 0 { axis + 4i64 } else { axis }) as usize
+                    },
+                );
                 let re = input.clone().narrow(3usize, 0, 1).squeeze_dims::<3usize>(&[3isize]);
                 let im = input.narrow(3usize, 1, 1).squeeze_dims::<3usize>(&[3isize]);
                 let (re, im) = burn::tensor::signal::ifft(re, im, axis, None);

@@ -28,7 +28,7 @@ impl NodeCodegen for onnx_ir::node::stft::StftNode {
         } = &self.config;
 
         // Static values are usize literals; runtime ones are scalars read on the host.
-        let mut usize_tokens = |input: &StftInput| match input {
+        let mut usize_tokens = |input: &StftInput, parameter: &str| match input {
             StftInput::Static(v) => quote! { #v },
             StftInput::Runtime(r) => {
                 let arg = &self.inputs[r.input_index];
@@ -36,11 +36,16 @@ impl NodeCodegen for onnx_ir::node::stft::StftNode {
                     ArgType::ScalarTensor(dtype) => on_device_to_native(scope.arg(arg), dtype),
                     _ => scope.arg(arg),
                 };
-                quote! { #value as usize }
+                let message = format!("STFT {parameter} must be positive");
+                quote! {{
+                    let value = #value;
+                    assert!(value > 0, #message);
+                    usize::try_from(value).expect("STFT parameter does not fit usize")
+                }}
             }
         };
-        let n_fft = usize_tokens(frame_length);
-        let hop_length = usize_tokens(frame_step);
+        let n_fft = usize_tokens(frame_length, "frame_length");
+        let hop_length = usize_tokens(frame_step, "frame_step");
 
         let signal = scope.arg(signal_arg);
         let output = arg_to_ident(output_arg);
@@ -66,17 +71,17 @@ impl NodeCodegen for onnx_ir::node::stft::StftNode {
 
         // Burn's stft handles any n_fft: radix-2 FFT for powers of two, Bluestein otherwise.
         quote! {
-            let #output = {
-                #signal_prep
-                let options = burn::tensor::signal::StftOptions {
+            let #output = stft(
+                { #signal_prep signal },
+                #window_expr,
+                burn::tensor::signal::StftOptions {
                     n_fft: #n_fft,
                     hop_length: #hop_length,
                     win_length: None,
                     center: false,
                     onesided: #onesided,
-                };
-                stft(signal, #window_expr, options)
-            };
+                },
+            );
         }
     }
 
@@ -109,17 +114,20 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, signal: Tensor<3>) -> Tensor<4> {
-            let output = {
-                let signal = signal.squeeze_dims::<2usize>(&[2isize]);
-                let options = burn::tensor::signal::StftOptions {
+            let output = stft(
+                {
+                    let signal = signal.squeeze_dims::<2usize>(&[2isize]);
+                    signal
+                },
+                None,
+                burn::tensor::signal::StftOptions {
                     n_fft: 16usize,
                     hop_length: 4usize,
                     win_length: None,
                     center: false,
                     onesided: true,
-                };
-                stft(signal, None, options)
-            };
+                },
+            );
             output
         }
         ");
@@ -141,17 +149,20 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, signal: Tensor<3>) -> Tensor<4> {
-            let output = {
-                let signal = signal.squeeze_dims::<2usize>(&[2isize]);
-                let options = burn::tensor::signal::StftOptions {
+            let output = stft(
+                {
+                    let signal = signal.squeeze_dims::<2usize>(&[2isize]);
+                    signal
+                },
+                None,
+                burn::tensor::signal::StftOptions {
                     n_fft: 8usize,
                     hop_length: 8usize,
                     win_length: None,
                     center: false,
                     onesided: false,
-                };
-                stft(signal, None, options)
-            };
+                },
+            );
             output
         }
         ");
@@ -175,17 +186,20 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, signal: Tensor<2>) -> Tensor<4> {
-            let output = {
-                let signal = signal;
-                let options = burn::tensor::signal::StftOptions {
+            let output = stft(
+                {
+                    let signal = signal;
+                    signal
+                },
+                None,
+                burn::tensor::signal::StftOptions {
                     n_fft: 16usize,
                     hop_length: 4usize,
                     win_length: None,
                     center: false,
                     onesided: true,
-                };
-                stft(signal, None, options)
-            };
+                },
+            );
             output
         }
         ");
@@ -209,17 +223,20 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, signal: Tensor<2>) -> Tensor<4> {
-            let output = {
-                let signal = signal;
-                let options = burn::tensor::signal::StftOptions {
+            let output = stft(
+                {
+                    let signal = signal;
+                    signal
+                },
+                None,
+                burn::tensor::signal::StftOptions {
                     n_fft: 20usize,
                     hop_length: 5usize,
                     win_length: None,
                     center: false,
                     onesided: true,
-                };
-                stft(signal, None, options)
-            };
+                },
+            );
             output
         }
         ");
@@ -252,17 +269,20 @@ mod tests {
             _frame_step_placeholder: Tensor<0, Int>,
             window: Tensor<1>,
         ) -> Tensor<4> {
-            let output = {
-                let signal = signal.squeeze_dims::<2usize>(&[2isize]);
-                let options = burn::tensor::signal::StftOptions {
+            let output = stft(
+                {
+                    let signal = signal.squeeze_dims::<2usize>(&[2isize]);
+                    signal
+                },
+                Some(window),
+                burn::tensor::signal::StftOptions {
                     n_fft: 32usize,
                     hop_length: 16usize,
                     win_length: None,
                     center: false,
                     onesided: true,
-                };
-                stft(signal, Some(window), options)
-            };
+                },
+            );
             output
         }
         ");
@@ -285,27 +305,38 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
             signal: Tensor<3>,
             frame_step: i64,
             frame_length: i32,
         ) -> Tensor<4> {
-            let output = {
-                let signal = signal.squeeze_dims::<2usize>(&[2isize]);
-                let options = burn::tensor::signal::StftOptions {
-                    n_fft: frame_length as usize,
-                    hop_length: frame_step as usize,
+            let output = stft(
+                {
+                    let signal = signal.squeeze_dims::<2usize>(&[2isize]);
+                    signal
+                },
+                None,
+                burn::tensor::signal::StftOptions {
+                    n_fft: {
+                        let value = frame_length;
+                        assert!(value > 0, "STFT frame_length must be positive");
+                        usize::try_from(value).expect("STFT parameter does not fit usize")
+                    },
+                    hop_length: {
+                        let value = frame_step;
+                        assert!(value > 0, "STFT frame_step must be positive");
+                        usize::try_from(value).expect("STFT parameter does not fit usize")
+                    },
                     win_length: None,
                     center: false,
                     onesided: true,
-                };
-                stft(signal, None, options)
-            };
+                },
+            );
             output
         }
-        ");
+        "#);
     }
 
     #[test]
@@ -325,26 +356,33 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @r#"
         pub fn forward(
             &self,
             signal: Tensor<3>,
             frame_step: Tensor<1, Int>,
             window: Tensor<1>,
         ) -> Tensor<4> {
-            let output = {
-                let signal = signal.squeeze_dims::<2usize>(&[2isize]);
-                let options = burn::tensor::signal::StftOptions {
+            let output = stft(
+                {
+                    let signal = signal.squeeze_dims::<2usize>(&[2isize]);
+                    signal
+                },
+                Some(window),
+                burn::tensor::signal::StftOptions {
                     n_fft: 16usize,
-                    hop_length: (frame_step).into_scalar::<i64>() as usize,
+                    hop_length: {
+                        let value = (frame_step).into_scalar::<i64>();
+                        assert!(value > 0, "STFT frame_step must be positive");
+                        usize::try_from(value).expect("STFT parameter does not fit usize")
+                    },
                     win_length: None,
                     center: false,
                     onesided: true,
-                };
-                stft(signal, Some(window), options)
-            };
+                },
+            );
             output
         }
-        ");
+        "#);
     }
 }

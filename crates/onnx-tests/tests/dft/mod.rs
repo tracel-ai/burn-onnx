@@ -1,5 +1,6 @@
 use crate::include_models;
 include_models!(
+    dft_axis_name,
     dft_onesided,
     dft_full,
     dft_length,
@@ -337,5 +338,22 @@ mod tests {
             ]]),
             tolerance,
         );
+    }
+}
+
+#[test]
+fn runtime_axis_does_not_shadow_data() {
+    use burn::tensor::Tensor;
+    let device = Default::default();
+    let model = dft_axis_name::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/dft_axis_name.bpk"),
+        &device,
+    );
+    let (full, half) = model.forward(Tensor::<4>::ones([1, 3, 5, 1], &device), 1);
+    assert_eq!(full.dims(), [1, 3, 5, 2]);
+    assert_eq!(half.dims(), [1, 2, 5, 2]);
+    for (i, v) in full.into_data().to_vec::<f32>().unwrap().iter().enumerate() {
+        let expected = if i < 10 && i % 2 == 0 { 3. } else { 0. };
+        assert!((v - expected).abs() < 1e-4);
     }
 }

@@ -1,5 +1,7 @@
 use crate::include_models;
 include_models!(
+    stft_frame_step_name,
+    stft_frame_length_name,
     stft_basic,
     stft_full,
     stft_large_non_pow2,
@@ -416,4 +418,49 @@ mod tests {
             .to_data()
             .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::rel_abs(1e-3, 1e-4));
     }
+}
+
+#[test]
+fn runtime_parameters_named_signal() {
+    use burn::tensor::Tensor;
+    let device = Default::default();
+    let a = stft_frame_step_name::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/stft_frame_step_name.bpk"),
+        &device,
+    );
+    let b = stft_frame_length_name::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/stft_frame_length_name.bpk"),
+        &device,
+    );
+    for out in [
+        a.forward(Tensor::<3>::ones([1, 32, 1], &device), 4, 12),
+        b.forward(Tensor::<3>::ones([1, 32, 1], &device), 4, 12),
+    ] {
+        assert_eq!(out.dims(), [1, 6, 7, 2]);
+        for (i, v) in out.into_data().to_vec::<f32>().unwrap().iter().enumerate() {
+            assert!((v - if i % 14 == 0 { 12. } else { 0. }).abs() < 1e-4);
+        }
+    }
+}
+
+#[test]
+#[should_panic(expected = "STFT frame_length must be positive")]
+fn runtime_negative_frame_length_rejected() {
+    let device = Default::default();
+    let model = stft_runtime_params::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/stft_runtime_params.bpk"),
+        &device,
+    );
+    let _ = model.forward(burn::tensor::Tensor::<3>::ones([1, 32, 1], &device), 4, -1);
+}
+
+#[test]
+#[should_panic(expected = "STFT frame_step must be positive")]
+fn runtime_zero_frame_step_rejected() {
+    let device = Default::default();
+    let model = stft_runtime_params::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/stft_runtime_params.bpk"),
+        &device,
+    );
+    let _ = model.forward(burn::tensor::Tensor::<3>::ones([1, 32, 1], &device), 0, 12);
 }
