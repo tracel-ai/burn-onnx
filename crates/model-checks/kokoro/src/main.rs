@@ -6,9 +6,8 @@ use std::time::Instant;
 model_checks_common::backend_type!();
 
 // Include the generated model code. For the ONNX file `kokoro-v1.0.onnx`,
-// burn-onnx's ModelGen emits `kokoro-v1.rs`: the dash is preserved, and the
-// trailing `.0` portion is dropped rather than encoded into the Rust filename.
-include!(concat!(env!("OUT_DIR"), "/model/kokoro-v1.rs"));
+// ModelGen preserves the complete file stem, including the version suffix.
+include!(concat!(env!("OUT_DIR"), "/model/kokoro-v1.0.rs"));
 
 #[derive(Debug, Deserialize)]
 struct AudioStats {
@@ -64,7 +63,7 @@ fn main() {
 
     println!("Initializing Kokoro model...");
     let start = Instant::now();
-    let weights_path = concat!(env!("OUT_DIR"), "/model/kokoro-v1.bpk");
+    let weights_path = concat!(env!("OUT_DIR"), "/model/kokoro-v1.0.bpk");
     let model: Model = Model::from_file(weights_path, &device);
     println!("  Model initialized in {:.2?}", start.elapsed());
 

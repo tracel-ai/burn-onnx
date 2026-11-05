@@ -19,11 +19,47 @@ voice-style embedding.
 
 ## Current Status
 
-**Runs end-to-end; numeric output is close but does not yet match ORT to
-the test tolerance.** The model codegens, compiles (about 7 minutes on a
-2024 M3), and runs a forward pass producing 13,200 audio samples for the
-reference 10-token input. Burn audio peaks at ~170 vs ORT's ~131 (about
-1.3× too large) with Pearson correlation 0.69 against the ORT reference.
+**Runs end-to-end, but still fails strict numerical comparison (#371).**
+The normal check loads `kokoro-v1.0.rs` and `kokoro-v1.0.bpk`, matching the
+complete ONNX file stem. The default smoke threshold is not a numerical match.
+
+### FFT experiments (2026-11-05)
+
+Measured on Apple Silicon/macOS with the Flex backend, a release build, main
+`9c04afa5`, Burn `26d3257e`, ONNX 1.19.0, and ONNX Runtime 1.19.2 CPU. Inputs
+are the existing seed-42, 10-token case from `get_model.py` (13,200 samples).
+ORT's original-model peak is 130.7800. The model SHA-256 is
+`7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5`.
+
+| STFT / phase calculation | Burn peak | Pearson r | Max absolute error | Mean absolute error |
+|---|---:|---:|---:|---:|
+| Main: f64 matrix DFT / original phase | 224.9446 | 0.748335 | 155.3031 | 1.733947 |
+| Native f32 FFT / original phase | 1113.1952 | 0.405139 | 1096.1067 | 5.217939 |
+| Native f64 FFT / original phase | 655.5057 | 0.825044 | 541.4872 | 2.311333 |
+| Native f32 FFT / `atan2` | 428.4377 | 0.655831 | 411.3493 | 3.119516 |
+| Native f64 FFT / `atan2` | 655.5063 | 0.825044 | 541.4872 | 2.311338 |
+
+All five variants fail the unchanged strict limits (max 1.3078, mean 0.1308).
+Native f32 FFT also fails the smoke correlation floor of 0.5. Therefore simply
+removing the matrix DFT, as proposed in [PR #674](https://github.com/tracel-ai/burn-onnx/pull/674),
+does **not** resolve this model's divergence. These experimental code changes
+are not part of this check.
+
+To reproduce the native experiment, apply the STFT IR and codegen files from
+PR #674 (`fb12a137`) and run the normal check. The f64 experiment casts both the
+signal and window to F64 before `stft`, then casts its result back to F32. The
+phase experiment replaces the final manual phase result with
+`imag.atan2(real)`; it is a diagnostic substitution, not a semantics-preserving
+ONNX rewrite. In particular, for negative real and positive zero imaginary,
+the graph's `imag > 0` branch returns -pi while `atan2` returns +pi.
+
+Instrumentation itself also changes ORT results: adding the bisection taps
+changes its peak to 150.1652 for the same input. `bisect_setup.py` now runs
+both original and instrumented graphs and records their difference in
+`bisect_taps.json`. Tap statistics describe the instrumented graph; equal
+summary statistics do not imply element-wise equality. A successful fix still
+needs strict validation against the original model, without relaxing tolerances
+or altering phase semantics.
 
 ### Debug history
 
@@ -31,7 +67,7 @@ The `bisect_setup.py` + `src/bin/bisect.rs` (gated behind the `bisect`
 feature) infrastructure modifies the kokoro ONNX to expose ~190
 intermediate tensors and compares Burn's outputs to ORT layer-by-layer.
 
-The first round of bisection found that all upstream ops were bit-accurate
+The first round of bisection found matching upstream summary statistics
 through `ups.0`; the smoking gun was `/decoder/decoder/generator/Div`
 (idx 1582), which computes `imag/real` of the STFT output to recover phase.
 Both Burn and ORT agreed on STFT summary stats (`abs_max`, `abs_mean`
@@ -72,7 +108,7 @@ Where`) interacting badly with sign-of-zero in the STFT output:
   returns true/false depending on its noise sign, picking different `Where`
   branches and shifting phase by ±π. **9,424 of 29,051 Atan output elements
   (~32%) end up differing by more than 0.01 rad, with `max |Δ| = π`.**
-- That phase noise feeds `noise_convs.0` and propagates through the
+- Those phase differences feed `noise_convs.0` and propagate through the
   generator stack into the audio, surfacing as the residual 1.3× peak
   factor.
 
@@ -130,7 +166,7 @@ The check has two acceptance tiers:
 
 - **Smoke tier (default).** Pass requires no NaN/Inf in the audio and Pearson
   r > 0.5 vs the ORT reference. This catches catastrophic regressions while
-  tolerating the documented ~1.3× peak / r=0.69 residual divergence
+  tolerating the documented residual divergence
   ([burn-onnx#371][issue-371]) so a default `cargo run` does not exit(1) on
   expected behavior.
 - **Strict tier (`KOKORO_STRICT=1`).** Same plus a 1%-of-peak tolerance on
