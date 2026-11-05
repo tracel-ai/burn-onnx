@@ -1475,11 +1475,11 @@ fn sign(graph: &OnnxGraph) {
 fn size(graph: &OnnxGraph) {
     let node = find_node(graph, "size");
     insta::assert_snapshot!(format!("{node}"), @r#"
-    Constant "size1"
+    Size "size1"
       Inputs:
-        size1_out1_const: ScalarNative(I64) [static(35)]
+        size_input: F32[2, 3, 4]
       Outputs:
-        size1_out1: ScalarTensor(I64) [constant]
+        size1_out1: ScalarNative(I64)
     "#);
 }
 
