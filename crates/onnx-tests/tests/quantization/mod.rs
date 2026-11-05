@@ -188,8 +188,14 @@ fn review_quantization_regressions() {
         concat!(env!("OUT_DIR"), "/model/dynamic_matmul.bpk"),
         &device,
     );
-    let out = model.forward(Tensor::<3>::from_data([[[0f32, 1.], [2., 3.]]], &device));
+    let (out, host_zero, host_scale) =
+        model.forward(Tensor::<3>::from_data([[[0f32, 1.], [2., 3.]]], &device));
     assert_eq!(out.into_data().to_vec::<u8>().unwrap(), [0, 1, 2, 3]);
+    assert_eq!(host_zero.into_data().to_vec::<u8>().unwrap(), [0, 1, 2, 3]);
+    assert_eq!(
+        host_scale.into_data().to_vec::<u8>().unwrap(),
+        [0, 85, 170, 255]
+    );
     let model = qmatmul_shared::Model::from_file(
         concat!(env!("OUT_DIR"), "/model/qmatmul_shared.bpk"),
         &device,

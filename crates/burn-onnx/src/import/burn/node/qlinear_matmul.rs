@@ -56,6 +56,7 @@ impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
         let y_zero_float = to_float(y_zero_point_arg, y_zero_point);
         let reshape_a = reshape_scale_and_zp(
             a_scale_arg,
+            a_zero_point_arg,
             a_arg.ty.rank(),
             &quote! { lhs },
             &quote! { lhs_scale },
@@ -63,6 +64,7 @@ impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
         );
         let reshape_b = reshape_scale_and_zp(
             b_scale_arg,
+            b_zero_point_arg,
             b_arg.ty.rank(),
             &quote! { rhs },
             &quote! { rhs_scale },
@@ -70,6 +72,7 @@ impl NodeCodegen for onnx_ir::qlinear_matmul::QLinearMatMulNode {
         );
         let reshape_y = reshape_scale_and_zp(
             y_scale_arg,
+            y_zero_point_arg,
             self.outputs[0].ty.rank(),
             &quote! { product },
             &quote! { result_scale },
@@ -128,36 +131,38 @@ fn to_float(arg: &Argument, token_stream: TokenStream) -> TokenStream {
 
 fn reshape_scale_and_zp(
     scale_arg: &Argument,
+    zero_arg: &Argument,
     tensor_rank: usize,
     tensor: &TokenStream,
     scale: &TokenStream,
     zero_point: &TokenStream,
 ) -> TokenStream {
-    // Reshape the scale and zero point, if necessary.
-    // There are three possible quantization cases, based on the scale and zero point shapes:
-    //   1. Scalar; per-tensor quantization
-    //   2. Vectors; row/column-based quantization
-    //   3. N-D tensors; higher-dim row/column-based quantization
-    let single_element = matches!(&scale_arg.ty, ArgType::ScalarTensor(_))
-        || matches!(&scale_arg.ty, ArgType::Tensor(t) if t.static_shape.as_ref().is_some_and(|shape| shape.iter().all(|dim| *dim == Some(1))));
-    if single_element {
-        return quote! { let (#scale, #zero_point) = (#scale.reshape([1; #tensor_rank]), #zero_point.reshape([1; #tensor_rank])); };
-    }
-    if matches!(scale_arg.ty, ArgType::ScalarNative(_)) {
-        // Case 1: All zero point and inputs are scalars
-        // Reshaping is not required.
-        quote! {}
-    } else if scale_arg.ty.rank() == 1 {
-        // Case 2: Scale and zero point are vectors. Infer whether they are row or column vectors and expand appropriate.
-        quote! {
-            let (#scale, #zero_point) = {
-                let expansion_dim = if #scale.dims()[0] == #tensor.dims()[0] { 1 } else { 0 };
-                (#scale.unsqueeze_dim(expansion_dim), #zero_point.unsqueeze_dim(expansion_dim))
-            };
+    // Equal ONNX shapes can have different host/device representations. Reshape
+    // each parameter independently, leaving native scalar arithmetic on the host.
+    let reshape = |arg: &Argument, value: &TokenStream| {
+        if matches!(arg.ty, ArgType::ScalarNative(_)) {
+            (false, value.clone())
+        } else if matches!(arg.ty, ArgType::ScalarTensor(_))
+            || matches!(&arg.ty, ArgType::Tensor(t) if t.static_shape.as_ref().is_some_and(|shape| shape.iter().all(|dim| *dim == Some(1))))
+        {
+            (true, quote! { #value.reshape([1; #tensor_rank]) })
+        } else if arg.ty.rank() == 1 {
+            (
+                true,
+                quote! {{
+                    let expansion_dim = if #value.dims()[0] == #tensor.dims()[0] { 1 } else { 0 };
+                    #value.unsqueeze_dim(expansion_dim)
+                }},
+            )
+        } else {
+            (false, value.clone())
         }
+    };
+    let (scale_changed, scale_value) = reshape(scale_arg, scale);
+    let (zero_changed, zero_value) = reshape(zero_arg, zero_point);
+    if scale_changed || zero_changed {
+        quote! { let (#scale, #zero_point) = (#scale_value, #zero_value); }
     } else {
-        // Case 3: Scale and zero_point have the same rank as their operands. Either the last or second-to-last dimension has a size of 1.
-        // Reshaping is not required.
         quote! {}
     }
 }
@@ -456,34 +461,63 @@ mod tests {
                     y_scale,
                     y_zero_point.float().cast(burn::tensor::DType::F32),
                 );
-                let (lhs_scale, lhs_zero) = {
-                    let expansion_dim = if lhs_scale.dims()[0] == lhs.dims()[0] { 1 } else { 0 };
-                    (
-                        lhs_scale.unsqueeze_dim(expansion_dim),
-                        lhs_zero.unsqueeze_dim(expansion_dim),
-                    )
-                };
-                let (rhs_scale, rhs_zero) = {
-                    let expansion_dim = if rhs_scale.dims()[0] == rhs.dims()[0] { 1 } else { 0 };
-                    (
-                        rhs_scale.unsqueeze_dim(expansion_dim),
-                        rhs_zero.unsqueeze_dim(expansion_dim),
-                    )
-                };
+                let (lhs_scale, lhs_zero) = (
+                    {
+                        let expansion_dim = if lhs_scale.dims()[0] == lhs.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        lhs_scale.unsqueeze_dim(expansion_dim)
+                    },
+                    {
+                        let expansion_dim = if lhs_zero.dims()[0] == lhs.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        lhs_zero.unsqueeze_dim(expansion_dim)
+                    },
+                );
+                let (rhs_scale, rhs_zero) = (
+                    {
+                        let expansion_dim = if rhs_scale.dims()[0] == rhs.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        rhs_scale.unsqueeze_dim(expansion_dim)
+                    },
+                    {
+                        let expansion_dim = if rhs_zero.dims()[0] == rhs.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        rhs_zero.unsqueeze_dim(expansion_dim)
+                    },
+                );
                 let lhs = lhs_scale * (lhs - lhs_zero);
                 let rhs = rhs_scale * (rhs - rhs_zero);
                 let product = lhs.matmul(rhs);
-                let (result_scale, result_zero) = {
-                    let expansion_dim = if result_scale.dims()[0] == product.dims()[0] {
-                        1
-                    } else {
-                        0
-                    };
-                    (
-                        result_scale.unsqueeze_dim(expansion_dim),
-                        result_zero.unsqueeze_dim(expansion_dim),
-                    )
-                };
+                let (result_scale, result_zero) = (
+                    {
+                        let expansion_dim = if result_scale.dims()[0] == product.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        result_scale.unsqueeze_dim(expansion_dim)
+                    },
+                    {
+                        let expansion_dim = if result_zero.dims()[0] == product.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        result_zero.unsqueeze_dim(expansion_dim)
+                    },
+                );
                 ((product / result_scale).round() + result_zero)
                     .clamp(-128f32, 127f32)
                     .int()
@@ -542,34 +576,63 @@ mod tests {
                     y_scale.cast(burn::tensor::DType::F32),
                     y_zero_point.float().cast(burn::tensor::DType::F32),
                 );
-                let (lhs_scale, lhs_zero) = {
-                    let expansion_dim = if lhs_scale.dims()[0] == lhs.dims()[0] { 1 } else { 0 };
-                    (
-                        lhs_scale.unsqueeze_dim(expansion_dim),
-                        lhs_zero.unsqueeze_dim(expansion_dim),
-                    )
-                };
-                let (rhs_scale, rhs_zero) = {
-                    let expansion_dim = if rhs_scale.dims()[0] == rhs.dims()[0] { 1 } else { 0 };
-                    (
-                        rhs_scale.unsqueeze_dim(expansion_dim),
-                        rhs_zero.unsqueeze_dim(expansion_dim),
-                    )
-                };
+                let (lhs_scale, lhs_zero) = (
+                    {
+                        let expansion_dim = if lhs_scale.dims()[0] == lhs.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        lhs_scale.unsqueeze_dim(expansion_dim)
+                    },
+                    {
+                        let expansion_dim = if lhs_zero.dims()[0] == lhs.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        lhs_zero.unsqueeze_dim(expansion_dim)
+                    },
+                );
+                let (rhs_scale, rhs_zero) = (
+                    {
+                        let expansion_dim = if rhs_scale.dims()[0] == rhs.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        rhs_scale.unsqueeze_dim(expansion_dim)
+                    },
+                    {
+                        let expansion_dim = if rhs_zero.dims()[0] == rhs.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        rhs_zero.unsqueeze_dim(expansion_dim)
+                    },
+                );
                 let lhs = lhs_scale * (lhs - lhs_zero);
                 let rhs = rhs_scale * (rhs - rhs_zero);
                 let product = lhs.matmul(rhs);
-                let (result_scale, result_zero) = {
-                    let expansion_dim = if result_scale.dims()[0] == product.dims()[0] {
-                        1
-                    } else {
-                        0
-                    };
-                    (
-                        result_scale.unsqueeze_dim(expansion_dim),
-                        result_zero.unsqueeze_dim(expansion_dim),
-                    )
-                };
+                let (result_scale, result_zero) = (
+                    {
+                        let expansion_dim = if result_scale.dims()[0] == product.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        result_scale.unsqueeze_dim(expansion_dim)
+                    },
+                    {
+                        let expansion_dim = if result_zero.dims()[0] == product.dims()[0] {
+                            1
+                        } else {
+                            0
+                        };
+                        result_zero.unsqueeze_dim(expansion_dim)
+                    },
+                );
                 ((product / result_scale).round() + result_zero)
                     .clamp(-128f32, 127f32)
                     .int()

@@ -66,11 +66,18 @@ impl NodeCodegen for onnx_ir::dequantize_linear::DequantizeLinearNode {
         {
             let zp = scope.arg(zp_arg);
             let integer_centering = !x_arg.ty.elem_type().is_float();
+            // I32 exactly centers 8/16-bit values and works on more backends than I64.
+            let center_dtype = if x_arg.ty.elem_type().size() > 2 {
+                DType::I64
+            } else {
+                DType::I32
+            }
+            .to_tokens();
             let zp_expr = if integer_centering {
                 if matches!(zp_arg.ty, ArgType::ScalarNative(_)) {
-                    quote! { burn::tensor::Tensor::<1, burn::tensor::Int>::from_data(burn::tensor::TensorData::from([burn::tensor::ElementConversion::elem::<i64>(#zp)]), (self.device(), burn::tensor::DType::I64)) }
+                    quote! { burn::tensor::Tensor::<1, burn::tensor::Int>::from_data(burn::tensor::TensorData::from([burn::tensor::ElementConversion::elem::<i64>(#zp)]), (self.device(), #center_dtype)) }
                 } else {
-                    quote! { (#zp).cast(burn::tensor::DType::I64) }
+                    quote! { (#zp).cast(#center_dtype) }
                 }
             } else if matches!(zp_arg.ty, ArgType::ScalarNative(_)) {
                 let dtype = out_dtype_tokens.clone();
@@ -96,7 +103,7 @@ impl NodeCodegen for onnx_ir::dequantize_linear::DequantizeLinearNode {
                 align_rhs_for_lhs_rank(zp_expr, x_rank, zp_arg.ty.rank().max(1), self.config.axis)
             };
             if integer_centering {
-                quote! { (#x).cast(burn::tensor::DType::I64).sub(#zp_expr).float().cast(#out_dtype_tokens) }
+                quote! { (#x).cast(#center_dtype).sub(#zp_expr).float().cast(#out_dtype_tokens) }
             } else {
                 quote! { (#x_expr).sub(#zp_expr) }
             }
@@ -158,8 +165,8 @@ mod tests {
             x_zero_point: Tensor<0, Int>,
         ) -> Tensor<2> {
             let y = ((x)
-                .cast(burn::tensor::DType::I64)
-                .sub(((x_zero_point).cast(burn::tensor::DType::I64)).unsqueeze_dims(&[0isize]))
+                .cast(burn::tensor::DType::I32)
+                .sub(((x_zero_point).cast(burn::tensor::DType::I32)).unsqueeze_dims(&[0isize]))
                 .float()
                 .cast(burn::tensor::DType::F32))
                 .mul((x_scale).unsqueeze_dims(&[0isize]));
@@ -179,7 +186,7 @@ mod tests {
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, x: Tensor<2, Int>, scale: f32, zero: u8) -> Tensor<2> {
             let y = ((x)
-                .cast(burn::tensor::DType::I64)
+                .cast(burn::tensor::DType::I32)
                 .sub(
                     (burn::tensor::Tensor::<
                         1,
@@ -188,7 +195,7 @@ mod tests {
                         burn::tensor::TensorData::from([
                             burn::tensor::ElementConversion::elem::<i64>(zero),
                         ]),
-                        (self.device(), burn::tensor::DType::I64),
+                        (self.device(), burn::tensor::DType::I32),
                     ))
                         .unsqueeze_dims(&[0isize]),
                 )
@@ -230,10 +237,10 @@ mod tests {
             zero: Tensor<2, Int>,
         ) -> Tensor<2> {
             let y = (((x).clone())
-                .cast(burn::tensor::DType::I64)
+                .cast(burn::tensor::DType::I32)
                 .sub({
                     let (parameter, axis_size) = (
-                        (zero).cast(burn::tensor::DType::I64),
+                        (zero).cast(burn::tensor::DType::I32),
                         x.dims()[1usize],
                     );
                     let mut shape = parameter.dims();

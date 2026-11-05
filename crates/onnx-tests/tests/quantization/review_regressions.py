@@ -24,5 +24,7 @@ save("qmatmul_shared",[h.make_node("QLinearMatMul",["a","scale","zero","a","scal
 save("dynamic_matmul",[
  h.make_node("DynamicQuantizeLinear",["x"],["a","as","az"]),
  h.make_node("QLinearMatMul",["a","as","az","b","bs","bz","bs","bz"],["y"]),
- ],[info("x",T.FLOAT,[1,2,2])],[info("y",T.UINT8,[1,2,2])],dict(x=np.array([[[0,1],[2,3]]],np.float32)),
+ h.make_node("QLinearMatMul",["a","as","bz","b","bs","bz","bs","bz"],["host_zero"]),
+ h.make_node("QLinearMatMul",["a","bs","az","b","bs","bz","bs","bz"],["host_scale"]),
+ ],[info("x",T.FLOAT,[1,2,2])],[info("y",T.UINT8,[1,2,2]),info("host_zero",T.UINT8,[1,2,2]),info("host_scale",T.UINT8,[1,2,2])],dict(x=np.array([[[0,1],[2,3]]],np.float32)),
  [nh.from_array(np.array([[[1,0],[0,1]]],np.uint8),"b"),nh.from_array(np.array(1,np.float32),"bs"),nh.from_array(np.array(0,np.uint8),"bz")])
