@@ -325,42 +325,31 @@ pub fn runtime_same_padding(
     }}
 }
 
-/// Cut a ceil-mode pool output back to the ONNX size.
-///
-/// ONNX drops a ceil-mode window that would start in the end padding. burn's pool modules
-/// apply asymmetric pads to the input before pooling, so their check counts the end padding
-/// as input and keeps that window. Only explicit `pads` can do this: VALID has none, and
-/// SAME pads leave no window starting in them. `pooled` is returned unchanged otherwise.
-#[allow(clippy::too_many_arguments)]
-pub fn trim_ceil_pool(
-    pooled: TokenStream,
-    input: &TokenStream,
+/// `(begin, end)` padding per spatial dim for burn's functional pool options
+/// (`MaxPoolOptions::with_padding_pairs`), as `[(begin, end); N]` tokens: the explicit pads,
+/// the `auto_pad` pads resolved against the static input size, or, for `SAME_*` on an input
+/// sized only at run time, pads computed from `input`'s dims in the generated code.
+pub fn pool_padding_pairs(
     auto_pad: &AutoPad,
-    ceil_mode: bool,
-    pads: &[(usize, usize)],
+    explicit: &[(usize, usize)],
+    input_ty: &onnx_ir::ir::ArgType,
+    input: &TokenStream,
     kernel: &[usize],
     stride: &[usize],
     dilation: &[usize],
 ) -> TokenStream {
-    if !ceil_mode || *auto_pad != AutoPad::NotSet || pads.iter().all(|(b, e)| b == e) {
-        return pooled;
+    let input_spatial = onnx_ir::node::padding::static_spatial_dims(input_ty);
+    match resolve_padding_pairs(
+        auto_pad,
+        explicit,
+        input_spatial.as_deref(),
+        kernel,
+        stride,
+        dilation,
+    ) {
+        Some(pairs) => padding_pairs_tokens(&pairs),
+        None => runtime_same_padding(auto_pad, input, kernel, stride, dilation),
     }
-    // `extent` is the dilated kernel size.
-    let ranges = pads.iter().enumerate().map(|(i, &(begin, end))| {
-        let axis = i + 2;
-        let extent = (kernel[i] - 1) * dilation[i] + 1;
-        let stride = stride[i];
-        quote! { 0..out_len(dims[#axis], #begin, #end, #extent, #stride) }
-    });
-    quote! {{
-        let dims = #input.dims();
-        let out_len = |size: usize, begin: usize, end: usize, extent: usize, stride: usize| {
-            let len = (size + begin + end + stride - 1 - extent) / stride + 1;
-            if (len - 1) * stride >= size + begin { len - 1 } else { len }
-        };
-        let pooled = #pooled;
-        pooled.slice(s![.., .., #(#ranges),*])
-    }}
 }
 
 /// [`resolve_padding_pairs`] as the `[(begin, end); N]` tokens `ConvOptions` takes.

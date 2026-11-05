@@ -12,7 +12,8 @@ include_models!(
     maxpool2d,
     maxpool2d_asymmetric_padding,
     maxpool2d_same_upper_dynamic,
-    maxpool2d_ceil_mode
+    maxpool2d_ceil_mode,
+    pool_ceil_asymmetric
 );
 
 #[cfg(test)]
@@ -551,5 +552,86 @@ mod tests {
         i_asym
             .to_data()
             .assert_eq(&TensorData::from([[[[2i64, 4], [17, 19]]]]), true);
+    }
+    #[test]
+    fn pool_ceil_mode_asymmetric_padding() {
+        // MaxPool, LpPool and AveragePool with ceil_mode and asymmetric pads: the
+        // last window is kept on the 2D height axis (partial) and dropped on the
+        // width and 1D axes (it would start in the end padding). Expected values
+        // from pool_ceil_asymmetric.py (onnx.reference, checked against onnxruntime).
+        let device = Default::default();
+        let model = pool_ceil_asymmetric::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/pool_ceil_asymmetric.bpk"),
+            &device,
+        );
+        let x = Tensor::<3>::from_data(
+            TensorData::from([[
+                [9.0f32, 11., 0., 12., 5., 8., 2.],
+                [1., 13., 4., 7., 10., 3., 6.],
+            ]]),
+            &device,
+        );
+        #[rustfmt::skip]
+        let xx: alloc::vec::Vec<f32> = alloc::vec![
+            40.0f32, 65., 4., 47., 42., 69., 26., 11., 10., 44., 73., 55., 68., 97.,
+            0., 18., 53., 80., 82., 91., 36., 12., 31., 66., 90., 62., 22., 85.,
+            81., 77., 15., 30., 45., 9., 33., 56., 64., 28., 79., 5., 71., 70.,
+            39., 35., 16., 60., 34., 51., 7., 43., 67., 74., 27., 19., 89., 94.,
+            25., 8., 83., 49., 13., 78., 24., 3., 17., 38., 86., 6., 72., 96.,
+            88., 54., 50., 84., 46., 76., 61., 14., 92., 41., 58., 48., 95., 57.,
+            75., 32., 20., 59., 63., 93., 37., 29., 87., 1., 52., 21., 2., 23.,
+        ];
+        let xx = Tensor::<4>::from_data(TensorData::new(xx, [1, 2, 7, 7]), &device);
+
+        let (max1d, max2d, lp1d, lp2d, avg1d, avg2d, avg2d_pad) = model.forward(x, xx);
+
+        let tolerance = burn::tensor::Tolerance::absolute(1e-3);
+        max1d
+            .to_data()
+            .assert_eq(&TensorData::from([[[12.0f32, 8.], [13., 10.]]]), true);
+        max2d.to_data().assert_eq(
+            &TensorData::from([[
+                [[80.0f32, 97.], [90., 85.], [60., 51.]],
+                [[86., 96.], [92., 95.], [87., 23.]],
+            ]]),
+            true,
+        );
+        lp1d.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[[18.6011f32, 9.6437], [15.3297, 12.0416]]]),
+            tolerance,
+        );
+        lp2d.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[
+                [
+                    [158.3319f32, 201.3951],
+                    [203.551, 157.2069],
+                    [81.2527, 61.6928],
+                ],
+                [
+                    [177.9326, 195.9158],
+                    [210.834, 200.4445],
+                    [105.4277, 31.209],
+                ],
+            ]]),
+            tolerance,
+        );
+        avg1d.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[[8.0f32, 5.], [6.25, 6.3333]]]),
+            tolerance,
+        );
+        avg2d.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[
+                [[37.0833f32, 62.8889], [52.4167, 44.6667], [37.5, 30.6667]],
+                [[43.3333, 54.5556], [55.5833, 64.], [42.25, 15.3333]],
+            ]]),
+            tolerance,
+        );
+        avg2d_pad.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[
+                [[37.0833f32, 47.1667], [52.4167, 33.5], [12.5, 7.6667]],
+                [[43.3333, 40.9167], [55.5833, 48.], [14.0833, 3.8333]],
+            ]]),
+            tolerance,
+        );
     }
 }
