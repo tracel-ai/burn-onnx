@@ -108,7 +108,7 @@ Where`) interacting badly with sign-of-zero in the STFT output:
   returns true/false depending on its noise sign, picking different `Where`
   branches and shifting phase by ±π. **9,424 of 29,051 Atan output elements
   (~32%) end up differing by more than 0.01 rad, with `max |Δ| = π`.**
-- Those phase differences feed `noise_convs.0` and propagates through the
+- Those phase differences feed `noise_convs.0` and propagate through the
   generator stack into the audio, surfacing as the residual 1.3× peak
   factor.
 
