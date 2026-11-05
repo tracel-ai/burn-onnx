@@ -19,20 +19,9 @@ pub(super) fn pool3d_padding(
             [(*front, *back), (*top, *bottom), (*left, *right)]
         }
     };
-    let input_spatial = onnx_ir::node::padding::static_spatial_dims(input_ty);
-    match crate::burn::codegen::resolve_padding_pairs(
-        auto_pad,
-        &explicit,
-        input_spatial.as_deref(),
-        kernel,
-        strides,
-        dilation,
-    ) {
-        Some(pairs) => crate::burn::codegen::padding_pairs_tokens(&pairs),
-        None => {
-            crate::burn::codegen::runtime_same_padding(auto_pad, input, kernel, strides, dilation)
-        }
-    }
+    crate::burn::codegen::pool_padding_pairs(
+        auto_pad, &explicit, input_ty, input, kernel, strides, dilation,
+    )
 }
 
 impl NodeCodegen for onnx_ir::node::avg_pool3d::AveragePool3dNode {
