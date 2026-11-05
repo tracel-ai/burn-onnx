@@ -642,6 +642,10 @@ impl ProcessorRegistry {
             NodeType::Bernoulli,
             Box::new(crate::node::bernoulli::BernoulliProcessor),
         );
+        registry.register(
+            NodeType::Multinomial,
+            Box::new(crate::node::multinomial::MultinomialProcessor),
+        );
 
         // Signal processing operations
         registry.register(

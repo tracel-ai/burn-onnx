@@ -391,6 +391,7 @@ define_node_enum! {
     RandomNormalLike => random_like::RandomNormalLikeNode,
     RandomUniformLike => random_like::RandomUniformLikeNode,
     Bernoulli => bernoulli::BernoulliNode,
+    Multinomial => multinomial::MultinomialNode,
 
     // RANGE & SEQUENCE OPERATIONS
     Range => range::RangeNode,
@@ -444,7 +445,6 @@ define_node_enum! {
     MaxRoiPool => unsupported::MaxRoiPoolNode,
     MaxUnpool => unsupported::MaxUnpoolNode,
     MelWeightMatrix => mel_weight_matrix::MelWeightMatrixNode,
-    Multinomial => unsupported::MultinomialNode,
     NegativeLogLikelihoodLoss => unsupported::NegativeLogLikelihoodLossNode,
     NonMaxSuppression => non_max_suppression::NonMaxSuppressionNode,
     OneHotEncoder => one_hot_encoder::OneHotEncoderNode,
