@@ -9,6 +9,7 @@
 use crate::include_simplified_models;
 
 include_simplified_models!(
+    simplify_equal_vector,
     simplify_shape_folding,
     simplify_gather_on_shape,
     simplify_slice_on_shape,
@@ -1034,4 +1035,21 @@ mod tests {
         }
         ");
     }
+}
+
+#[test]
+fn folded_equal_keeps_tensor_mask() {
+    let device = Default::default();
+    let model = simplified::simplify_equal_vector::Model::from_file(
+        concat!(
+            env!("OUT_DIR"),
+            "/model_simplified/simplify_equal_vector.bpk"
+        ),
+        &device,
+    );
+    let output = model.forward(
+        burn::tensor::Tensor::<1>::from_data([1., 2., 3.], &device),
+        burn::tensor::Tensor::<1>::from_data([4., 5., 6.], &device),
+    );
+    assert_eq!(output.to_data().to_vec::<f32>().unwrap(), [1., 2., 3.]);
 }

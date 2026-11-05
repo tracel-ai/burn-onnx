@@ -189,9 +189,22 @@ fn try_evaluate(node: &RawNode) -> Option<(TensorData, ArgType)> {
             if lhs.len() != 1 || rhs.len() != 1 {
                 return None;
             }
+            // One element is not necessarily a scalar. Preserve the broadcast
+            // rank so consumers inferred before folding still receive tensor masks.
+            let rank = lhs_data.shape().len().max(rhs_data.shape().len());
+            let dtype = DType::Bool(crate::ir::BoolStore::Native);
+            let ty = if rank == 0 {
+                ArgType::ScalarNative(dtype)
+            } else {
+                ArgType::Tensor(crate::ir::TensorType {
+                    dtype,
+                    rank,
+                    static_shape: Some(vec![Some(1); rank]),
+                })
+            };
             Some((
-                TensorData::new(vec![lhs[0] == rhs[0]], Vec::<usize>::new()),
-                ArgType::ScalarNative(DType::Bool(crate::ir::BoolStore::Native)),
+                TensorData::new(vec![lhs[0] == rhs[0]], vec![1usize; rank]),
+                ty,
             ))
         }
         NodeType::Add => eval_binary(node, BinaryOp::Add),
@@ -1682,5 +1695,17 @@ mod tests {
         let result = fold_weight_rearrangements(vec![size, equal], &test_state());
         assert_eq!(result[0].node_type, NodeType::Size);
         assert_eq!(result[1].node_type, NodeType::Equal);
+    }
+    #[test]
+    fn equal_single_element_tensor_retains_rank() {
+        let node = raw_node(
+            "equal",
+            NodeType::Equal,
+            vec![const_i64_vec("a", &[2]), const_i64_vec("b", &[2])],
+            vec![scalar_out("out", DType::Bool(crate::ir::BoolStore::Native))],
+        );
+        let (data, ty) = try_evaluate(&node).unwrap();
+        assert_eq!(data.shape().as_slice(), &[1]);
+        assert!(matches!(ty, ArgType::Tensor(t) if t.rank == 1));
     }
 }
