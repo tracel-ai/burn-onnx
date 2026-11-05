@@ -437,7 +437,13 @@ fn runtime_parameters_named_signal() {
         b.forward(Tensor::<3>::ones([1, 32, 1], &device), 4, 12),
     ] {
         assert_eq!(out.dims(), [1, 6, 7, 2]);
-        for (i, v) in out.into_data().to_vec::<f32>().unwrap().iter().enumerate() {
+        for (i, v) in out
+            .into_data()
+            .try_into_vec::<f32>()
+            .unwrap()
+            .iter()
+            .enumerate()
+        {
             assert!((v - if i % 14 == 0 { 12. } else { 0. }).abs() < 1e-4);
         }
     }
