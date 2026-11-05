@@ -1,5 +1,10 @@
 use crate::include_models;
-include_models!(image_scaler, image_scaler_default);
+include_models!(
+    image_scaler,
+    image_scaler_default,
+    image_scaler_f64,
+    image_scaler_nonfinite
+);
 
 #[cfg(test)]
 mod tests {
@@ -37,4 +42,39 @@ mod tests {
             input.into_data()
         );
     }
+}
+
+#[test]
+fn attributes_preserve_f32_values_in_f64_models() {
+    use burn::tensor::{DType, Tensor, TensorData};
+    let device = Default::default();
+    let model = image_scaler_f64::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/image_scaler_f64.bpk"),
+        &device,
+    );
+    let input = Tensor::<4>::from_data(
+        TensorData::new(alloc::vec![0f64], [1, 1, 1, 1]),
+        (&device, DType::F64),
+    );
+    assert_eq!(
+        model.forward(input).into_data().to_vec::<f64>().unwrap(),
+        [0.1f32 as f64]
+    );
+    let model = image_scaler_nonfinite::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/image_scaler_nonfinite.bpk"),
+        &device,
+    );
+    let input = Tensor::<4>::from_data(
+        TensorData::new(alloc::vec![0f64; 2], [1, 2, 1, 1]),
+        (&device, DType::F64),
+    );
+    assert!(
+        model
+            .forward(input)
+            .into_data()
+            .to_vec::<f64>()
+            .unwrap()
+            .iter()
+            .all(|v| v.is_nan())
+    );
 }

@@ -603,6 +603,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/shape/shape_slice.onnx")
         .input("tests/shrink/shrink.onnx")
         .input("tests/image_scaler/image_scaler.onnx")
+        .input("tests/image_scaler/image_scaler_f64.onnx")
+        .input("tests/image_scaler/image_scaler_nonfinite.onnx")
         .input("tests/image_scaler/image_scaler_default.onnx")
         .input("tests/sigmoid/sigmoid.onnx")
         .input("tests/sign/sign.onnx")
