@@ -8,8 +8,9 @@ use crate::tensor_store::TensorDataRef;
 
 /// Fold shape conditions and weight rearrangements before type inference.
 ///
-/// Size can use a fully known input shape without reading the input values; scalar
-/// int64 Equal conditions then let If specialize its reachable branch.
+/// Size can use constant data or a shape-domain length; export-time tensor
+/// dimensions are not runtime invariants. Constant int64 Equal conditions can
+/// then let If specialize its reachable branch.
 ///
 /// This is a targeted pass designed to run before type inference to resolve weight
 /// rearrangement patterns (e.g., PyTorch's GRU/LSTM export inserts Slice+Concat+Unsqueeze
@@ -164,11 +165,7 @@ fn try_evaluate(node: &RawNode) -> Option<(TensorData, ArgType)> {
     match node.node_type {
         NodeType::Size => {
             let shape = match &node.inputs.first()?.ty {
-                ArgType::Tensor(t) => t
-                    .static_shape
-                    .clone()?
-                    .into_iter()
-                    .collect::<Option<Vec<_>>>()?,
+                ArgType::Tensor(_) => node.inputs.first()?.value()?.shape().to_vec(),
                 ArgType::Shape(len) => vec![*len],
                 _ => vec![],
             };
@@ -188,6 +185,12 @@ fn try_evaluate(node: &RawNode) -> Option<(TensorData, ArgType)> {
             let rhs = rhs_data.to_i64_vec().ok()?;
             if lhs.len() != 1 || rhs.len() != 1 {
                 return None;
+            }
+            if let ArgType::Shape(len) = node.outputs.first()?.ty {
+                return Some((
+                    TensorData::new(vec![i64::from(lhs[0] == rhs[0])], vec![len]),
+                    ArgType::Shape(len),
+                ));
             }
             // One element is not necessarily a scalar. Preserve the broadcast
             // rank so consumers inferred before folding still receive tensor masks.
@@ -1626,7 +1629,7 @@ mod tests {
         );
     }
     #[test]
-    fn early_fold_static_size_and_condition() {
+    fn early_fold_keeps_runtime_size_and_folds_constant_condition() {
         let input = Argument::new(
             "input",
             ArgType::Tensor(crate::ir::TensorType {
@@ -1642,11 +1645,7 @@ mod tests {
             vec![scalar_out("count", DType::I64)],
         );
         let result = fold_weight_rearrangements(vec![size], &test_state());
-        assert_eq!(result[0].node_type, NodeType::Constant);
-        assert_eq!(
-            result[0].outputs[0].value().unwrap().to_i64_vec().unwrap(),
-            vec![6]
-        );
+        assert_eq!(result[0].node_type, NodeType::Size);
         let equal = raw_node(
             "equal",
             NodeType::Equal,
@@ -1707,5 +1706,31 @@ mod tests {
         let (data, ty) = try_evaluate(&node).unwrap();
         assert_eq!(data.shape().as_slice(), &[1]);
         assert!(matches!(ty, ArgType::Tensor(t) if t.rank == 1));
+    }
+    #[test]
+    fn size_uses_constant_data_dimensions() {
+        let size = raw_node(
+            "size",
+            NodeType::Size,
+            vec![const_i64_vec("input", &[2, 3, 4])],
+            vec![scalar_out("count", DType::I64)],
+        );
+        let (data, _) = try_evaluate(&size).unwrap();
+        assert_eq!(data.to_i64_vec().unwrap(), vec![3]);
+    }
+
+    #[test]
+    fn equal_shape_outputs_use_integer_boolean_storage() {
+        for (rhs, expected) in [(2, 1), (3, 0)] {
+            let node = raw_node(
+                "equal",
+                NodeType::Equal,
+                vec![const_i64_vec("a", &[2]), const_i64_vec("b", &[rhs])],
+                vec![Argument::new("out", ArgType::Shape(1))],
+            );
+            let (data, ty) = try_evaluate(&node).unwrap();
+            assert_eq!(data.to_i64_vec().unwrap(), vec![expected]);
+            assert!(matches!(ty, ArgType::Shape(1)));
+        }
     }
 }

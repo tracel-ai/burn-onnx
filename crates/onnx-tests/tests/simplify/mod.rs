@@ -9,6 +9,9 @@
 use crate::include_simplified_models;
 
 include_simplified_models!(
+    simplify_runtime_size,
+    simplify_equal_shapes,
+    simplify_range_name,
     simplify_partial_expand,
     simplify_equal_vector,
     simplify_shape_folding,
@@ -1075,4 +1078,56 @@ fn partial_expand_is_not_removed() {
         output.into_data().to_vec::<f32>().unwrap(),
         [1., 2., 3., 1., 2., 3., 1., 2., 3., 1., 2., 3.]
     );
+}
+
+#[test]
+fn size_uses_runtime_dimensions() {
+    use burn::tensor::{DType, Tensor};
+    let device = Default::default();
+    let model = simplified::simplify_runtime_size::Model::from_file(
+        concat!(
+            env!("OUT_DIR"),
+            "/model_simplified/simplify_runtime_size.bpk"
+        ),
+        &device,
+    );
+    for rows in [2, 4] {
+        let (count, matches) = model.forward(Tensor::<2>::ones([rows, 3], (&device, DType::F32)));
+        assert_eq!(count, (rows * 3) as i64);
+        assert_eq!(matches, rows == 2);
+    }
+}
+
+#[test]
+fn folded_shape_comparisons_keep_shape_storage() {
+    use burn::tensor::{DType, Tensor};
+    let device = Default::default();
+    let model = simplified::simplify_equal_shapes::Model::from_file(
+        concat!(
+            env!("OUT_DIR"),
+            "/model_simplified/simplify_equal_shapes.bpk"
+        ),
+        &device,
+    );
+    let (same, different) = model.forward(
+        Tensor::<2>::ones([2, 3], (&device, DType::F32)),
+        Tensor::<2>::ones([4, 3], (&device, DType::F32)),
+    );
+    assert_eq!(same, [1i64]);
+    assert_eq!(
+        different.into_data().try_into_vec::<bool>().unwrap(),
+        [false]
+    );
+}
+
+#[test]
+fn range_runtime_limit_named_start() {
+    use burn::tensor::{DType, Int, Tensor};
+    let device = Default::default();
+    let model = simplified::simplify_range_name::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model_simplified/simplify_range_name.bpk"),
+        &device,
+    );
+    let out = model.forward(Tensor::<1, Int>::from_data([4i64], (&device, DType::I64)));
+    assert_eq!(out.into_data().try_into_vec::<i64>().unwrap(), [0, 1, 2, 3]);
 }

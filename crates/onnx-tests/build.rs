@@ -944,6 +944,9 @@ impl OpOverride for ReluOverride {
 fn add_simplify_inputs(model_gen: &mut ModelGen) {
     model_gen
         .input("tests/simplify/simplify_equal_vector.onnx")
+        .input("tests/simplify/simplify_runtime_size.onnx")
+        .input("tests/simplify/simplify_equal_shapes.onnx")
+        .input("tests/simplify/simplify_range_name.onnx")
         .input("tests/simplify/simplify_shape_folding.onnx")
         .input("tests/simplify/simplify_partial_expand.onnx")
         .input("tests/simplify/simplify_gather_on_shape.onnx")
