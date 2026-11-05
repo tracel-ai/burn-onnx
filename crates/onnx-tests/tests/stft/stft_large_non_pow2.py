@@ -9,10 +9,10 @@
 
 # used to generate model: onnx-tests/tests/stft/stft_large_non_pow2.onnx
 #
-# Large non-power-of-two STFT (n_fft=400, Whisper's size) through burn-onnx's
-# matrix-DFT codegen path. The input is a pure cosine at an integer bin, so the
+# Large non-power-of-two STFT (n_fft=400, Whisper's size) through the Bluestein
+# path of Burn's stft. The input is a pure cosine at an integer bin, so the
 # exact output is known: N/2 at that bin and 0 everywhere else. That pins the
-# accuracy of near-zero bins, where an f32 matmul accumulates O(N * eps) error.
+# accuracy of near-zero bins.
 #
 # Input: [1, 1200, 1] real signal, x[n] = cos(2 pi * 7 * n / 400)
 # frame_step=400, frame_length=400 -> n_frames = 1 + (1200-400)/400 = 3

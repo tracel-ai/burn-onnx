@@ -4,7 +4,8 @@ include_models!(
     dft_full,
     dft_length,
     dft_complex,
-    dft_inverse_length
+    dft_inverse_length,
+    dft_runtime_axis
 );
 
 #[cfg(test)]
@@ -203,6 +204,136 @@ mod tests {
                 [0.2576, -0.13207],
                 [-0.85355, 0.35355],
                 [0.08945, -1.29323],
+            ]]),
+            tolerance,
+        );
+    }
+
+    #[test]
+    fn dft_runtime_axis_non_pow2() {
+        // Expected values from dft_runtime_axis.py (onnx ReferenceEvaluator). The axis is a
+        // forward() argument, and both signal axes have non-power-of-two lengths (3 and 5).
+        let device = Default::default();
+        let model = dft_runtime_axis::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/dft_runtime_axis.bpk"),
+            &device,
+        );
+        // np.random.seed(42); np.random.randn(1, 3, 5, 1)
+        let values: alloc::vec::Vec<f32> = alloc::vec![
+            0.496_714_14,
+            -0.138_264_3,
+            0.647_688_57,
+            1.523_029_8,
+            -0.234_153_38,
+            -0.234_136_95,
+            1.579_212_8,
+            0.767_434_7,
+            -0.469_474_38,
+            0.542_560_04,
+            -0.463_417_68,
+            -0.465_729_74,
+            0.241_962_27,
+            -1.913_280_2,
+            -1.724_917_9,
+        ];
+        let x = burn::tensor::Tensor::<4>::from_data(
+            burn::tensor::TensorData::new(values, [1, 3, 5, 1]),
+            &device,
+        );
+        let tolerance = burn::tensor::Tolerance::absolute(1e-4);
+
+        // axis = 1 (length 3)
+        let (full, half) = model.forward(x.clone(), 1);
+        let expected_full = burn::tensor::TensorData::from([[
+            [
+                [-0.200_840_49f32, 0.0],
+                [0.975_218_77, 0.0],
+                [1.657_085_5, 0.0],
+                [-0.859_724_8, 0.0],
+                [-1.416_511_2, 0.0],
+            ],
+            [
+                [0.845_491_47, -0.198_562_93],
+                [-0.695_005_83, -1.770_972_1],
+                [0.142_990_08, -0.455_072_5],
+                [2.714_407_2, -1.250_372_5],
+                [0.357_025_56, -1.963_693_5],
+            ],
+            [
+                [0.845_491_47, 0.198_562_93],
+                [-0.695_005_83, 1.770_972_1],
+                [0.142_990_08, 0.455_072_5],
+                [2.714_407_2, 1.250_372_5],
+                [0.357_025_56, 1.963_693_5],
+            ],
+        ]]);
+        full.to_data()
+            .assert_approx_eq::<f32>(&expected_full, tolerance);
+        half.to_data().assert_approx_eq::<f32>(
+            &burn::tensor::TensorData::from([[
+                [
+                    [-0.200_840_49f32, 0.0],
+                    [0.975_218_77, 0.0],
+                    [1.657_085_5, 0.0],
+                    [-0.859_724_8, 0.0],
+                    [-1.416_511_2, 0.0],
+                ],
+                [
+                    [0.845_491_47, -0.198_562_93],
+                    [-0.695_005_83, -1.770_972_1],
+                    [0.142_990_08, -0.455_072_5],
+                    [2.714_407_2, -1.250_372_5],
+                    [0.357_025_56, -1.963_693_5],
+                ],
+            ]]),
+            tolerance,
+        );
+
+        // axis = -2 counts from the end of the rank-4 input: axis 2 (length 5)
+        let (full, half) = model.forward(x, -2);
+        full.to_data().assert_approx_eq::<f32>(
+            &burn::tensor::TensorData::from([[
+                [
+                    [2.295_014_9f32, 0.0],
+                    [-1.374_517_3, 0.423_316_75],
+                    [1.468_795_2, -0.888_861_2],
+                    [1.468_795_2, 0.888_861_2],
+                    [-1.374_517_3, -0.423_316_75],
+                ],
+                [
+                    [2.185_596_2, 0.0],
+                    [0.180_471_93, -1.712_952_3],
+                    [-1.858_612_4, 0.567_041_3],
+                    [-1.858_612_4, -0.567_041_3],
+                    [0.180_471_93, 1.712_952_3],
+                ],
+                [
+                    [-4.325_383, 0.0],
+                    [0.211_759_63, -2.464_378_8],
+                    [0.792_387_84, 1.309_625_3],
+                    [0.792_387_84, -1.309_625_3],
+                    [0.211_759_63, 2.464_378_8],
+                ],
+            ]]),
+            tolerance,
+        );
+        half.to_data().assert_approx_eq::<f32>(
+            &burn::tensor::TensorData::from([[
+                [
+                    [2.295_014_9f32, 0.0],
+                    [-1.374_517_3, 0.423_316_75],
+                    [1.468_795_2, -0.888_861_2],
+                ],
+                [
+                    [2.185_596_2, 0.0],
+                    [0.180_471_93, -1.712_952_3],
+                    [-1.858_612_4, 0.567_041_3],
+                ],
+                [
+                    [-4.325_383, 0.0],
+                    [0.211_759_63, -2.464_378_8],
+                    [0.792_387_84, 1.309_625_3],
+                ],
             ]]),
             tolerance,
         );

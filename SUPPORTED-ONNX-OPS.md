@@ -203,7 +203,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [SplitToSequence][174]           | ❌             | ❌           |
 | [Sqrt][175]                      | ✅             | ✅           |
 | [Squeeze][176]                   | ✅             | ✅           |
-| [STFT][177]                      | ✅             | ✅²          |
+| [STFT][177]                      | ✅             | ✅           |
 | [StringConcat][201]              | ❌             | ❌           |
 | [StringNormalizer][178]          | ❌             | ❌           |
 | [StringSplit][202]               | ❌             | ❌           |
@@ -227,10 +227,6 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [Unsqueeze][193]                 | ✅             | ✅           |
 
 ¹ Requires `burn/vision`; backend support follows Burn Vision.
-
-² Non-power-of-two `frame_length` computes the DFT as an f64 matmul for accuracy. On
-devices without f64 (e.g. Metal) it falls back to f32, which can lose precision in
-near-zero spectral bins.
 
 [1]: https://onnx.ai/onnx/operators/onnx__Abs.html "ONNX Abs"
 [2]: https://onnx.ai/onnx/operators/onnx__Acos.html "ONNX Acos"

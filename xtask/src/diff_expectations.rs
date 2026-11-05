@@ -411,6 +411,7 @@ mod tests {
                     reason: None,
                     tracking: None,
                     wontfix: false,
+                    atol: None,
                 },
             );
         }
