@@ -96,6 +96,7 @@ pub(crate) mod hard_swish;
 pub(crate) mod hardmax;
 pub(crate) mod identity;
 pub(crate) mod if_node;
+pub(crate) mod image_scaler;
 pub(crate) mod imputer;
 pub(crate) mod instance_norm;
 pub(crate) mod is_inf;

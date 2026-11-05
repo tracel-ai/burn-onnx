@@ -468,6 +468,7 @@ define_node_enum! {
     SequenceInsert => unsupported::SequenceInsertNode,
     SequenceLength => unsupported::SequenceLengthNode,
     SequenceMap => unsupported::SequenceMapNode,
+    ImageScaler => image_scaler::ImageScalerNode,
     Shrink => shrink::ShrinkNode,
     SoftmaxCrossEntropyLoss => unsupported::SoftmaxCrossEntropyLossNode,
     SplitToSequence => unsupported::SplitToSequenceNode,

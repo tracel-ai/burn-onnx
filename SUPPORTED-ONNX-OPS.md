@@ -99,6 +99,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [If][77]                         | ✅             | ✅           |
 | [Im][78]                         | ❌             | ❌           |
 | [ImageDecoder][197]              | ❌             | ❌           |
+| [ImageScaler](https://github.com/onnx/onnx/blob/v1.3.0/docs/Operators.md#ImageScaler) | ✅ | ✅ |
 | [Imputer][205]                   | ✅             | ✅           |
 | [InstanceNormalization][79]      | ✅             | ✅           |
 | [IsInf][80]                      | ✅             | ✅           |

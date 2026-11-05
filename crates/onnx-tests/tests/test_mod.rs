@@ -91,6 +91,7 @@ pub mod hard_swish;
 pub mod hardmax;
 pub mod identity;
 pub mod if_op;
+pub mod image_scaler;
 pub mod imputer;
 pub mod initializer_to_const;
 pub mod instance_norm;
