@@ -192,6 +192,26 @@ def main():
     outputs = sess.run(out_names, {"tokens": tokens, "style": style, "speed": speed})
     by_name = dict(zip(out_names, outputs))
 
+    # Exposing intermediate outputs can inhibit ORT fusions and change rounding.
+    # Measure that effect on the same inputs before treating this graph's taps as
+    # an explanation of the uninstrumented model's final audio.
+    del sess
+    original_session = ort.InferenceSession(str(src), providers=["CPUExecutionProvider"])
+    original_audio = original_session.run(None, {"tokens": tokens, "style": style, "speed": speed})[0].reshape(-1)
+    debug_audio = by_name[model.graph.output[0].name].reshape(-1)
+    delta = np.abs(debug_audio.astype(np.float64) - original_audio.astype(np.float64))
+    graph_comparison = {
+        "original_peak": float(np.abs(original_audio).max()),
+        "instrumented_peak": float(np.abs(debug_audio).max()),
+        "max_abs_error": float(delta.max()),
+        "mean_abs_error": float(delta.mean()),
+        "pearson": float(np.corrcoef(original_audio, debug_audio)[0, 1]),
+    }
+    del original_session
+    print("Original vs instrumented ORT audio:", graph_comparison)
+    if graph_comparison["max_abs_error"] > 0:
+        print("WARNING: instrumentation changed ORT audio; tap statistics describe the instrumented graph only.")
+
     summary = []
     for (op_type, tensor_name, node_name) in taps:
         val = by_name.get(tensor_name)
@@ -223,7 +243,7 @@ def main():
 
     out_json = artifacts / "bisect_taps.json"
     with open(out_json, "w") as f:
-        json.dump({"taps": summary}, f, indent=2)
+        json.dump({"reference_graph": "instrumented", "original_graph_comparison": graph_comparison, "taps": summary}, f, indent=2)
     print(f"Wrote {out_json}")
 
     # Also dump full STFT real/imag values for element-wise comparison.

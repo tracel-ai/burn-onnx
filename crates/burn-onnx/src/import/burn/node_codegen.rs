@@ -370,6 +370,7 @@ impl_node_codegen_dispatch! {
     RandomNormalLike,
     RandomUniformLike,
     Bernoulli,
+    Multinomial,
 
     // Spatial ops
     DepthToSpace,

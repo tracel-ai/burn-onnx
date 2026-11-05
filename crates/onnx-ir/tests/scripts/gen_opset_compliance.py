@@ -228,6 +228,7 @@ SUPPORTED_OPS = {
     "RandomNormalLike": "random_like",
     "RandomUniformLike": "random_like",
     "Bernoulli": "bernoulli",
+    "Multinomial": "multinomial",
     # RNN
     "LSTM": "lstm",
     "GRU": "gru",
@@ -985,6 +986,13 @@ def make_bernoulli(op_name: str, opset: int):
     return [node], [inp], [out], []
 
 
+def make_multinomial(op_name: str, opset: int):
+    inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [2, 3])
+    out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.INT32, [2, 4])
+    node = helper.make_node(op_name, [_p(op_name, "input")], [_p(op_name, "output")], name=_p(op_name, "node"), sample_size=4)
+    return [node], [inp], [out], []
+
+
 def make_lstm(op_name: str, opset: int):
     inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [1, 2, 3])
     w_init = numpy_helper.from_array(np.zeros([1, 16, 3], dtype=np.float32), name=_p(op_name, "W"))
@@ -1512,6 +1520,7 @@ GENERATORS = {
     "random_uniform": make_random_uniform,
     "random_like": make_random_like,
     "bernoulli": make_bernoulli,
+    "multinomial": make_multinomial,
     "lstm": make_lstm,
     "gru": make_gru,
     "if_op": make_if_op,

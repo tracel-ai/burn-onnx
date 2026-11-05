@@ -14,6 +14,7 @@ include_simplified_models!(
     simplify_range_name,
     simplify_partial_expand,
     simplify_equal_vector,
+    simplify_multinomial,
     simplify_shape_folding,
     simplify_gather_on_shape,
     simplify_slice_on_shape,
@@ -1130,4 +1131,25 @@ fn range_runtime_limit_named_start() {
     );
     let out = model.forward(Tensor::<1, Int>::from_data([4i64], (&device, DType::I64)));
     assert_eq!(out.into_data().try_into_vec::<i64>().unwrap(), [0, 1, 2, 3]);
+}
+
+#[test]
+fn multinomial_draws_remain_independent() {
+    let device = Default::default();
+    let model = simplified::simplify_multinomial::Model::from_file(
+        concat!(
+            env!("OUT_DIR"),
+            "/model_simplified/simplify_multinomial.bpk"
+        ),
+        &device,
+    );
+    let samples = model
+        .forward(burn::tensor::Tensor::<2>::from_data([[0f32, 0.]], &device))
+        .into_data()
+        .to_vec::<i32>()
+        .unwrap();
+    assert!(
+        samples.contains(&1),
+        "independent binary draws must not become twice one draw"
+    );
 }

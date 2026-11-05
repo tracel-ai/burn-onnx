@@ -141,9 +141,7 @@ pub fn forward_time_same_blocker(
 /// Reject a `SAME_UPPER`/`SAME_LOWER` auto_pad whose input spatial dimensions are unknown and
 /// that burn cannot resolve at forward time either.
 ///
-/// Known spatial dimensions let the pads be computed during import, which covers every mode over
-/// one or two spatial dimensions. 3D still requires the resulting pads to come out symmetric;
-/// `PaddingConfig3d::to_tokens` in burn-onnx rejects the rest.
+/// Known spatial dimensions let the pads be computed during import, which covers every mode.
 pub(crate) fn validate_auto_pad(node: &RawNode) -> Result<(), ProcessError> {
     let auto_pad = match node.attrs.get("auto_pad") {
         None => return Ok(()),

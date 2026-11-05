@@ -8,7 +8,7 @@
 //! `burn_onnx::ModelGen` over ~500 vendored models on every xtask
 //! compile (~18s instead of ~3s).
 //!
-//! The schema is small and stable (four fields, five status variants)
+//! The schema is small and stable (five fields, five status variants)
 //! so the duplication is cheap. A unit test asserts the kebab-case
 //! status names the parser accepts, which catches the most likely
 //! form of drift — someone renaming a variant in `onnx-official-tests`
@@ -35,6 +35,8 @@ pub struct Entry {
     pub tracking: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub wontfix: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub atol: Option<f64>,
 }
 
 fn is_false(b: &bool) -> bool {

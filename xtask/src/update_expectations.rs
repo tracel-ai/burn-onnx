@@ -230,10 +230,8 @@ fn parse_failure_line(line: &str) -> Option<&str> {
 ///
 /// We do this with line-based editing rather than serde round-trip
 /// because serde would destroy comments, reorder sections, and wipe
-/// the human-curated structure of the file. Every row in the demote
-/// set is a pass entry today, which means the block currently has
-/// exactly one field (`status = "pass"`) — so replacing the block
-/// is as simple as matching the header and the next non-blank line.
+/// the human-curated structure of the file. Preserve per-test tolerance
+/// overrides when replacing the status, reason, and tracking fields.
 fn apply_demotions(original: &str, to_demote: &[String], tracking: Option<&str>) -> String {
     let demote_set: std::collections::BTreeSet<&str> =
         to_demote.iter().map(String::as_str).collect();
@@ -247,11 +245,18 @@ fn apply_demotions(original: &str, to_demote: &[String], tracking: Option<&str>)
         {
             // Consume the rest of the block (until next blank line or
             // next `[header]`). We drop every line so we can emit a
-            // clean replacement below.
+            // clean replacement below, retaining tolerance overrides.
+            let mut tolerance_lines = Vec::new();
             while let Some(&peek) = lines.peek() {
                 let trimmed = peek.trim();
                 if trimmed.is_empty() || trimmed.starts_with('[') {
                     break;
+                }
+                if trimmed
+                    .split_once('=')
+                    .is_some_and(|(key, _)| key.trim() == "atol")
+                {
+                    tolerance_lines.push(peek);
                 }
                 lines.next();
             }
@@ -260,6 +265,10 @@ fn apply_demotions(original: &str, to_demote: &[String], tracking: Option<&str>)
             // one we did NOT consume in the loop above).
             out.push_str(&format!("[{name}]\n"));
             out.push_str("status = \"fail-compare\"\n");
+            for line in tolerance_lines {
+                out.push_str(line);
+                out.push('\n');
+            }
             out.push_str(
                 "reason = \"demoted by `cargo xtask update-expectations` after test failure\"\n",
             );
@@ -443,5 +452,12 @@ status = \"pass\"
             Expectations::from_toml(PathBuf::from("t.toml"), &demoted_no_tracking).unwrap();
         assert_eq!(parsed.entries["test_a"].status, Status::FailCompare);
         assert!(parsed.entries["test_a"].tracking.is_none());
+    }
+    #[test]
+    fn demotion_preserves_tolerance_override() {
+        let input = "[test_dft]\nstatus = \"pass\"\natol = 1e-4 # near-zero FFT bins\n\n";
+        let result = apply_demotions(input, &["test_dft".into()], None);
+        assert!(result.contains("status = \"fail-compare\""));
+        assert!(result.contains("atol = 1e-4 # near-zero FFT bins"));
     }
 }

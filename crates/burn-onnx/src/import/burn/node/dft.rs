@@ -1,5 +1,5 @@
 use super::prelude::*;
-use onnx_ir::node::dft::DftConfig;
+use onnx_ir::node::dft::{DftAxis, DftConfig};
 
 impl NodeCodegen for onnx_ir::node::dft::DftNode {
     fn inputs(&self) -> &[Argument] {
@@ -13,8 +13,6 @@ impl NodeCodegen for onnx_ir::node::dft::DftNode {
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
         let input_arg = self.inputs.first().unwrap();
         let output_arg = self.outputs.first().unwrap();
-        let input = scope.arg(input_arg);
-        let output = arg_to_ident(output_arg);
 
         let input_tensor = match &input_arg.ty {
             ArgType::Tensor(t) => t,
@@ -24,13 +22,40 @@ impl NodeCodegen for onnx_ir::node::dft::DftNode {
         let input_rank = input_tensor.rank;
         let config = &self.config;
 
+        let input = scope.arg(input_arg);
+        // Capture the graph input before binding any temporary named axis.
+        let (axis_prep, axis, input) = match &config.axis {
+            DftAxis::Static(axis) => (quote! {}, quote! { #axis }, input),
+            DftAxis::Runtime(r) => {
+                let axis_arg = &self.inputs[r.input_index];
+                let value = scalar_as_i64(axis_arg, scope.arg(axis_arg));
+                let rank = input_rank as i64;
+                let prep = quote! {
+                    let (input, axis) = (#input, {
+                        let axis = #value;
+                        (if axis < 0 { axis + #rank } else { axis }) as usize
+                    });
+                };
+                (prep, quote! { axis }, quote! { input })
+            }
+        };
+
+        let output = arg_to_ident(output_arg);
+
         // onnx-ir rejects onesided output for inverse or complex transforms.
-        if config.inverse || !config.is_real_input {
-            forward_cfft(config, input, output, input_rank)
+        let body = if config.inverse || !config.is_real_input {
+            forward_cfft(config, input, &axis, input_rank)
         } else if config.onesided {
-            forward_rfft(config, input, output, input_rank)
+            forward_rfft(config, input, &axis, input_rank)
         } else {
-            forward_rfft_full(config, input, output, input_rank)
+            forward_rfft_full(config, input, &axis, input_rank)
+        };
+
+        quote! {
+            let #output = {
+                #axis_prep
+                #body
+            };
         }
     }
 
@@ -48,28 +73,25 @@ impl NodeCodegen for onnx_ir::node::dft::DftNode {
 fn forward_rfft(
     config: &DftConfig,
     input: TokenStream,
-    output: Ident,
+    axis: &TokenStream,
     input_rank: usize,
 ) -> TokenStream {
     // After squeezing trailing [1] dim: signal has rank = input_rank - 1
     let signal_rank = input_rank - 1;
     let out_rank = input_rank; // output [..., K, 2] same rank as input [..., N, 1]
-    let axis = config.axis;
     // squeeze_dims takes &[isize]
     let squeeze_dim = signal_rank as isize;
 
     let n = dft_length_tokens(config);
 
     quote! {
-        let #output = {
-            let signal = #input.squeeze_dims::<#signal_rank>(&[#squeeze_dim]);
-            let (re, im) = rfft(signal, #axis, #n);
-            // Stack re and im along new last dim: [.., K] + [.., K] -> [.., K, 2]
-            Tensor::<#signal_rank>::stack::<#out_rank>(
-                [re, im].to_vec(),
-                #signal_rank,
-            )
-        };
+        let signal = #input.squeeze_dims::<#signal_rank>(&[#squeeze_dim]);
+        let (re, im) = rfft(signal, #axis, #n);
+        // Stack re and im along new last dim: [.., K] + [.., K] -> [.., K, 2]
+        Tensor::<#signal_rank>::stack::<#out_rank>(
+            [re, im].to_vec(),
+            #signal_rank,
+        )
     }
 }
 
@@ -82,14 +104,21 @@ fn forward_rfft(
 fn forward_rfft_full(
     config: &DftConfig,
     input: TokenStream,
-    output: Ident,
+    axis: &TokenStream,
     input_rank: usize,
 ) -> TokenStream {
     let signal_rank = input_rank - 1;
     let out_rank = input_rank;
-    let axis = config.axis;
     let squeeze_dim = signal_rank as isize;
-    let flip_axis = axis as isize; // flip() takes &[isize]
+
+    // flip() takes &[isize]
+    let flip_axis = match &config.axis {
+        DftAxis::Static(axis) => {
+            let axis = *axis as isize;
+            quote! { #axis }
+        }
+        DftAxis::Runtime(_) => quote! { #axis as isize },
+    };
 
     let dft_length = dft_length_tokens(config);
     let n = match config.dft_length {
@@ -98,44 +127,42 @@ fn forward_rfft_full(
     };
 
     quote! {
-        let #output = {
-            let signal = #input.squeeze_dims::<#signal_rank>(&[#squeeze_dim]);
-            let n = #n;
-            let (re_half, im_half) = rfft(signal, #axis, #dft_length);
-            let half_len = re_half.dims()[#axis];
-            let mirror_len = n - half_len;
+        let signal = #input.squeeze_dims::<#signal_rank>(&[#squeeze_dim]);
+        let n = #n;
+        let (re_half, im_half) = rfft(signal, #axis, #dft_length);
+        let half_len = re_half.dims()[#axis];
+        let mirror_len = n - half_len;
 
-            if mirror_len == 0 {
-                // Degenerate case (n <= 1): no mirrored bins to reconstruct
-                Tensor::<#signal_rank>::stack::<#out_rank>(
-                    [re_half, im_half].to_vec(),
-                    #signal_rank,
-                )
-            } else {
-                // Mirror conjugate symmetry: X[N-k] = conj(X[k])
-                let mirror_re = re_half
-                    .clone()
-                    .narrow(#axis, 1, mirror_len)
-                    .flip([#flip_axis]);
-                let mirror_im = im_half
-                    .clone()
-                    .narrow(#axis, 1, mirror_len)
-                    .flip([#flip_axis])
-                    .neg();
+        if mirror_len == 0 {
+            // Degenerate case (n <= 1): no mirrored bins to reconstruct
+            Tensor::<#signal_rank>::stack::<#out_rank>(
+                [re_half, im_half].to_vec(),
+                #signal_rank,
+            )
+        } else {
+            // Mirror conjugate symmetry: X[N-k] = conj(X[k])
+            let mirror_re = re_half
+                .clone()
+                .narrow(#axis, 1, mirror_len)
+                .flip([#flip_axis]);
+            let mirror_im = im_half
+                .clone()
+                .narrow(#axis, 1, mirror_len)
+                .flip([#flip_axis])
+                .neg();
 
-                let re_full = Tensor::<#signal_rank>::cat(
-                    [re_half, mirror_re].to_vec(), #axis,
-                );
-                let im_full = Tensor::<#signal_rank>::cat(
-                    [im_half, mirror_im].to_vec(), #axis,
-                );
+            let re_full = Tensor::<#signal_rank>::cat(
+                [re_half, mirror_re].to_vec(), #axis,
+            );
+            let im_full = Tensor::<#signal_rank>::cat(
+                [im_half, mirror_im].to_vec(), #axis,
+            );
 
-                Tensor::<#signal_rank>::stack::<#out_rank>(
-                    [re_full, im_full].to_vec(),
-                    #signal_rank,
-                )
-            }
-        };
+            Tensor::<#signal_rank>::stack::<#out_rank>(
+                [re_full, im_full].to_vec(),
+                #signal_rank,
+            )
+        }
     }
 }
 
@@ -146,12 +173,11 @@ fn forward_rfft_full(
 fn forward_cfft(
     config: &DftConfig,
     input: TokenStream,
-    output: Ident,
+    axis: &TokenStream,
     input_rank: usize,
 ) -> TokenStream {
     let signal_rank = input_rank - 1;
     let out_rank = input_rank;
-    let axis = config.axis;
     let last = signal_rank as isize;
     let n = dft_length_tokens(config);
 
@@ -178,11 +204,9 @@ fn forward_cfft(
     };
 
     quote! {
-        let #output = {
-            #split
-            #transform
-            Tensor::<#signal_rank>::stack::<#out_rank>([re, im].to_vec(), #signal_rank)
-        };
+        #split
+        #transform
+        Tensor::<#signal_rank>::stack::<#out_rank>([re, im].to_vec(), #signal_rank)
     }
 }
 
@@ -199,14 +223,15 @@ mod tests {
     use super::super::test_helpers::*;
     use burn::tensor::DType;
     use insta::assert_snapshot;
-    use onnx_ir::node::dft::{DftConfig, DftNodeBuilder};
+    use onnx_ir::ir::RuntimeInputRef;
+    use onnx_ir::node::dft::{DftAxis, DftConfig, DftNodeBuilder};
 
     #[test]
     fn test_dft_forward_onesided_real() {
         let config = DftConfig {
             inverse: false,
             onesided: true,
-            axis: 1,
+            axis: DftAxis::Static(1),
             dft_length: None,
             is_real_input: true,
         };
@@ -233,7 +258,7 @@ mod tests {
         let config = DftConfig {
             inverse: false,
             onesided: false,
-            axis: 1,
+            axis: DftAxis::Static(1),
             dft_length: None,
             is_real_input: true,
         };
@@ -275,7 +300,7 @@ mod tests {
         let config = DftConfig {
             inverse: false,
             onesided: true,
-            axis: 1,
+            axis: DftAxis::Static(1),
             dft_length: Some(32),
             is_real_input: true,
         };
@@ -301,7 +326,7 @@ mod tests {
         let config = DftConfig {
             inverse,
             onesided: false,
-            axis: 1,
+            axis: DftAxis::Static(1),
             dft_length: None,
             is_real_input: false,
         };
@@ -349,7 +374,7 @@ mod tests {
         let config = DftConfig {
             inverse: true,
             onesided: false,
-            axis: 1,
+            axis: DftAxis::Static(1),
             dft_length: Some(16),
             is_real_input: true,
         };
@@ -366,6 +391,120 @@ mod tests {
                 let im = re.zeros_like();
                 let (re, im) = burn::tensor::signal::ifft(re, im, 1usize, Some(16usize));
                 Tensor::<2usize>::stack::<3usize>([re, im].to_vec(), 2usize)
+            };
+            output
+        }
+        ");
+    }
+
+    fn runtime_axis_node(
+        onesided: bool,
+        inverse: bool,
+        is_real_input: bool,
+        axis_ty: DType,
+        scalar_tensor: bool,
+    ) -> onnx_ir::node::dft::DftNode {
+        let config = DftConfig {
+            inverse,
+            onesided,
+            axis: DftAxis::Runtime(RuntimeInputRef::new("axis".to_string(), 1)),
+            dft_length: None,
+            is_real_input,
+        };
+        let builder = DftNodeBuilder::new("dft1").input_tensor("input", 4, DType::F32);
+        let builder = if scalar_tensor {
+            builder.input_scalar_tensor("axis", axis_ty)
+        } else {
+            builder.input_scalar("axis", axis_ty)
+        };
+        builder
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build()
+    }
+
+    #[test]
+    fn test_dft_runtime_axis_onesided_real() {
+        let node = runtime_axis_node(true, false, true, DType::I64, false);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<4>, axis: i64) -> Tensor<4> {
+            let output = {
+                let (input, axis) = (
+                    input,
+                    {
+                        let axis = axis;
+                        (if axis < 0 { axis + 4i64 } else { axis }) as usize
+                    },
+                );
+                let signal = input.squeeze_dims::<3usize>(&[3isize]);
+                let (re, im) = rfft(signal, axis, None);
+                Tensor::<3usize>::stack::<4usize>([re, im].to_vec(), 3usize)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_dft_runtime_axis_full_real() {
+        let node = runtime_axis_node(false, false, true, DType::I32, false);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<4>, axis: i32) -> Tensor<4> {
+            let output = {
+                let (input, axis) = (
+                    input,
+                    {
+                        let axis = axis as i64;
+                        (if axis < 0 { axis + 4i64 } else { axis }) as usize
+                    },
+                );
+                let signal = input.squeeze_dims::<3usize>(&[3isize]);
+                let n = signal.dims()[axis];
+                let (re_half, im_half) = rfft(signal, axis, None);
+                let half_len = re_half.dims()[axis];
+                let mirror_len = n - half_len;
+                if mirror_len == 0 {
+                    Tensor::<3usize>::stack::<4usize>([re_half, im_half].to_vec(), 3usize)
+                } else {
+                    let mirror_re = re_half
+                        .clone()
+                        .narrow(axis, 1, mirror_len)
+                        .flip([axis as isize]);
+                    let mirror_im = im_half
+                        .clone()
+                        .narrow(axis, 1, mirror_len)
+                        .flip([axis as isize])
+                        .neg();
+                    let re_full = Tensor::<3usize>::cat([re_half, mirror_re].to_vec(), axis);
+                    let im_full = Tensor::<3usize>::cat([im_half, mirror_im].to_vec(), axis);
+                    Tensor::<3usize>::stack::<4usize>([re_full, im_full].to_vec(), 3usize)
+                }
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_dft_runtime_axis_inverse_complex_scalar_tensor() {
+        let node = runtime_axis_node(false, true, false, DType::I64, true);
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<4>, axis: Tensor<1, Int>) -> Tensor<4> {
+            let output = {
+                let (input, axis) = (
+                    input,
+                    {
+                        let axis = (axis).into_scalar::<i64>();
+                        (if axis < 0 { axis + 4i64 } else { axis }) as usize
+                    },
+                );
+                let re = input.clone().narrow(3usize, 0, 1).squeeze_dims::<3usize>(&[3isize]);
+                let im = input.narrow(3usize, 1, 1).squeeze_dims::<3usize>(&[3isize]);
+                let (re, im) = burn::tensor::signal::ifft(re, im, axis, None);
+                Tensor::<3usize>::stack::<4usize>([re, im].to_vec(), 3usize)
             };
             output
         }

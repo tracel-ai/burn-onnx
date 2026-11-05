@@ -130,7 +130,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [Mish][105]                      | ✅             | ✅           |
 | [Mod][106]                       | ✅             | ✅           |
 | [Mul][107]                       | ✅             | ✅           |
-| [Multinomial][108]               | ❌             | ❌           |
+| [Multinomial][108]               | ✅             | ✅           |
 | [Neg][109]                       | ✅             | ✅           |
 | [NegativeLogLikelihoodLoss][110] | ❌             | ❌           |
 | [NonMaxSuppression][112]         | ✅             | ✅¹          |
@@ -203,7 +203,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [SplitToSequence][174]           | ❌             | ❌           |
 | [Sqrt][175]                      | ✅             | ✅           |
 | [Squeeze][176]                   | ✅             | ✅           |
-| [STFT][177]                      | ✅             | ✅²          |
+| [STFT][177]                      | ✅             | ✅           |
 | [StringConcat][201]              | ❌             | ❌           |
 | [StringNormalizer][178]          | ❌             | ❌           |
 | [StringSplit][202]               | ❌             | ❌           |
@@ -227,10 +227,6 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [Unsqueeze][193]                 | ✅             | ✅           |
 
 ¹ Requires `burn/vision`; backend support follows Burn Vision.
-
-² Non-power-of-two `frame_length` computes the DFT as an f64 matmul for accuracy. On
-devices without f64 (e.g. Metal) it falls back to f32, which can lose precision in
-near-zero spectral bins.
 
 `AffineGrid` supports both the native operator and the official 2D/3D function
 expansions, with either `align_corners` setting. `Squeeze` without axes can use a
@@ -481,3 +477,5 @@ targets inside `If`/`Loop`/`Scan` subgraph bodies are not supported yet and
 are rejected with a clear error. See the "Custom Operators and Overrides"
 section of `DEVELOPMENT-GUIDE.md` for the full reference, and
 `examples/custom-op-hooks/` for a runnable example.
+
+Multinomial preserves the `seed` attribute but warns that Burn uses its backend random generator; per-node seeds are not honored.

@@ -88,7 +88,9 @@ fn dft(graph: &OnnxGraph) {
         DftConfig {
             inverse: false,
             onesided: true,
-            axis: 1,
+            axis: Static(
+                1,
+            ),
             dft_length: None,
             is_real_input: true,
         }

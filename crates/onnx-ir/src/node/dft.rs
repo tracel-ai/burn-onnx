@@ -17,8 +17,8 @@
 //!
 //! Not supported: `onesided=1` together with complex input or `inverse=1`.
 //!
-//! burn's `rfft`, `cfft` and `ifft` panic at run time unless the transform length (the signal
-//! length, or `dft_length` when given) is a power of two.
+//! The opset 20 `axis` input may be a runtime value (e.g. a graph input). It is then read at
+//! run time and normalized against the input rank, which is always static.
 //!
 //! ## Type Constraints
 //! - **T1**: tensor(bfloat16), tensor(double), tensor(float), tensor(float16)
@@ -26,7 +26,7 @@
 
 use onnx_ir_derive::NodeBuilder;
 
-use crate::ir::{ArgType, Argument, Node, RawNode, TensorData, TensorType};
+use crate::ir::{ArgType, Argument, DType, Node, RawNode, RuntimeInputRef, TensorData, TensorType};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError, validate_opset,
 };
@@ -52,6 +52,23 @@ fn extract_scalar_int(data: TensorData, name: &str) -> Result<i64, ProcessError>
     }
 }
 
+/// The axis along which the DFT is computed.
+#[derive(Debug, Clone)]
+pub enum DftAxis {
+    /// Axis known at compile time, resolved to a non-negative index into the input rank.
+    Static(usize),
+    /// Axis read at run time from the opset 20 `axis` input (a scalar integer). It may be
+    /// negative, in which case it counts from the end of the input rank (including the trailing
+    /// real/complex dimension), as in ONNX.
+    Runtime(RuntimeInputRef),
+}
+
+impl Default for DftAxis {
+    fn default() -> Self {
+        Self::Static(0)
+    }
+}
+
 /// Configuration for the DFT operation
 #[derive(Debug, Clone, Default)]
 pub struct DftConfig {
@@ -59,8 +76,8 @@ pub struct DftConfig {
     pub inverse: bool,
     /// Whether to produce onesided output for real input (default: false)
     pub onesided: bool,
-    /// The axis along which to perform the DFT (resolved to positive index)
-    pub axis: usize,
+    /// The axis along which to perform the DFT
+    pub axis: DftAxis,
     /// Optional DFT length (None means use the signal dimension size)
     pub dft_length: Option<usize>,
     /// Whether the input is real (trailing dim = 1) or complex (trailing dim = 2)
@@ -212,11 +229,28 @@ impl NodeProcessor for DftProcessor {
                 *last = Some(2);
             }
 
-            // Effective DFT length: dft_length if provided, otherwise the input dim
-            let effective_n = static_dft_length.or_else(|| out_shape.get(axis).copied().flatten());
+            // Length of the transformed axis given its input length: dft_length if provided,
+            // otherwise the input dim, halved (+1) when onesided.
+            let transformed = |dim: Option<usize>| {
+                static_dft_length
+                    .or(dim)
+                    .map(|n| if onesided { n / 2 + 1 } else { n })
+            };
 
-            if let Some(n) = effective_n {
-                out_shape[axis] = Some(if onesided { n / 2 + 1 } else { n });
+            match &axis {
+                DftAxis::Static(axis) => {
+                    out_shape[*axis] = transformed(out_shape[*axis]);
+                }
+                DftAxis::Runtime(_) => {
+                    // Any signal dim may be the transformed one. Keep a dim only where it is
+                    // the same whether or not it is transformed.
+                    let signal_dims = out_shape.len() - 1;
+                    for dim in out_shape.iter_mut().take(signal_dims) {
+                        if dim.is_some() && transformed(*dim) != *dim {
+                            *dim = None;
+                        }
+                    }
+                }
             }
 
             Some(out_shape)
@@ -311,13 +345,14 @@ impl NodeProcessor for DftProcessor {
 impl DftProcessor {
     /// Resolve the axis parameter.
     ///
-    /// In opset 17-19, axis is an attribute. In opset 20+, it moved to input[2].
+    /// In opset 17-19, axis is an attribute. In opset 20+, it moved to input[2], which may be a
+    /// runtime scalar.
     fn resolve_axis(
         &self,
         node: &RawNode,
         input_tensor: &TensorType,
         opset: usize,
-    ) -> Result<usize, ProcessError> {
+    ) -> Result<DftAxis, ProcessError> {
         let rank = input_tensor.rank as i64;
 
         let raw_axis: i64 = if opset < 20 {
@@ -333,9 +368,22 @@ impl DftProcessor {
                 Some(input) if !input.is_optional() => match input.value() {
                     Some(data) => extract_scalar_int(data, "axis")?,
                     None => {
-                        return Err(ProcessError::Custom(
-                            "DFT: axis must be a compile-time constant".to_string(),
-                        ));
+                        let is_int_scalar = match &input.ty {
+                            ArgType::ScalarNative(dtype) | ArgType::ScalarTensor(dtype) => {
+                                matches!(dtype, DType::I32 | DType::I64)
+                            }
+                            _ => false,
+                        };
+                        if !is_int_scalar {
+                            return Err(ProcessError::Custom(format!(
+                                "DFT: runtime axis must be an int32 or int64 scalar, got {:?}",
+                                input.ty
+                            )));
+                        }
+                        return Ok(DftAxis::Runtime(RuntimeInputRef::new(
+                            input.name.clone(),
+                            2,
+                        )));
                     }
                 },
                 _ => -2,
@@ -360,14 +408,14 @@ impl DftProcessor {
             raw_axis as usize
         };
 
-        Ok(axis)
+        Ok(DftAxis::Static(axis))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{DType, NodeType};
+    use crate::ir::NodeType;
     use crate::node::test_utils::TestNodeBuilder;
     use crate::processor::OutputPreferences;
 
@@ -552,7 +600,7 @@ mod tests {
 
         assert!(config.inverse);
         assert!(config.onesided);
-        assert_eq!(config.axis, 1); // default -2 on rank 3 = 1
+        assert!(matches!(config.axis, DftAxis::Static(1))); // default -2 on rank 3 = 1
         assert_eq!(config.dft_length, None);
         assert!(config.is_real_input);
     }
@@ -645,5 +693,94 @@ mod tests {
             }
             _ => panic!("Expected Tensor output"),
         }
+    }
+
+    fn runtime_axis_node(onesided: bool) -> RawNode {
+        // Opset 20 with `axis` as a graph input (as in the ONNX backend test `test_dft`).
+        TestNodeBuilder::new(NodeType::Dft, "test_dft")
+            .input_tensor_f32("input", 4, Some(vec![1, 10, 8, 1]))
+            .add_input(
+                "",
+                ArgType::Tensor(TensorType {
+                    dtype: DType::I64,
+                    rank: 0,
+                    static_shape: None,
+                }),
+            ) // optional dft_length
+            .input_scalar_i64("axis")
+            .output_tensor_f32("output", 0, None)
+            .attr_int("onesided", onesided as i64)
+            .build()
+    }
+
+    #[test]
+    fn test_dft_runtime_axis_config() {
+        let node = runtime_axis_node(false);
+        let config = DftProcessor.extract_config(&node, 20).unwrap();
+        match config.axis {
+            DftAxis::Runtime(r) => {
+                assert_eq!(r.name, "axis");
+                assert_eq!(r.input_index, 2);
+            }
+            other => panic!("expected runtime axis, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_dft_runtime_axis_twosided_keeps_shape() {
+        // A two-sided DFT without dft_length keeps every signal dim, whatever the axis.
+        let mut node = runtime_axis_node(false);
+        DftProcessor
+            .infer_types(&mut node, 20, &OutputPreferences::new())
+            .unwrap();
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(
+                    t.static_shape,
+                    Some(vec![Some(1), Some(10), Some(8), Some(2)])
+                );
+            }
+            _ => panic!("Expected Tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_dft_runtime_axis_onesided_unknown_dims() {
+        // Onesided changes the transformed dim, so with an unknown axis only dims that are
+        // unchanged by the transform (here the size-1 batch: 1/2+1 = 1) stay known.
+        let mut node = runtime_axis_node(true);
+        DftProcessor
+            .infer_types(&mut node, 20, &OutputPreferences::new())
+            .unwrap();
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.static_shape, Some(vec![Some(1), None, None, Some(2)]));
+            }
+            _ => panic!("Expected Tensor output"),
+        }
+    }
+
+    #[test]
+    fn test_dft_runtime_axis_must_be_int_scalar() {
+        let mut node = TestNodeBuilder::new(NodeType::Dft, "test_dft")
+            .input_tensor_f32("input", 3, Some(vec![1, 16, 1]))
+            .add_input(
+                "",
+                ArgType::Tensor(TensorType {
+                    dtype: DType::I64,
+                    rank: 0,
+                    static_shape: None,
+                }),
+            )
+            .input_tensor_i64("axis", 1, None)
+            .output_tensor_f32("output", 0, None)
+            .build();
+        let result = DftProcessor.infer_types(&mut node, 20, &OutputPreferences::new());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("runtime axis must be an int32 or int64 scalar")
+        );
     }
 }
