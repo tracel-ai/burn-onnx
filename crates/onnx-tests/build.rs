@@ -722,6 +722,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         // If operator tests
         .input("tests/if_op/if_conv2d.onnx")
         .input("tests/if_op/if_linear.onnx")
+        .input("tests/if_op/if_rank_alignment.onnx")
         .input("tests/if_op/nested_if.onnx")
         // Loop operator tests
         .input("tests/loop/loop_simple.onnx")
@@ -944,6 +945,7 @@ fn add_simplify_inputs(model_gen: &mut ModelGen) {
     model_gen
         .input("tests/simplify/simplify_equal_vector.onnx")
         .input("tests/simplify/simplify_shape_folding.onnx")
+        .input("tests/simplify/simplify_partial_expand.onnx")
         .input("tests/simplify/simplify_gather_on_shape.onnx")
         .input("tests/simplify/simplify_slice_on_shape.onnx")
         .input("tests/simplify/simplify_concat_shapes.onnx")

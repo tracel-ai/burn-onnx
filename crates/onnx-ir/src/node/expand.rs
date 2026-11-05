@@ -257,7 +257,7 @@ impl NodeProcessor for ExpandProcessor {
             (&node.inputs[0].ty, &node.outputs[0].ty)
             && let (Some(in_shape), Some(out_shape)) = (&in_t.static_shape, &out_t.static_shape)
         {
-            return in_shape == out_shape;
+            return in_shape == out_shape && in_shape.iter().all(Option::is_some);
         }
         false
     }

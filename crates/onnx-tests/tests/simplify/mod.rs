@@ -9,6 +9,7 @@
 use crate::include_simplified_models;
 
 include_simplified_models!(
+    simplify_partial_expand,
     simplify_equal_vector,
     simplify_shape_folding,
     simplify_gather_on_shape,
@@ -1052,4 +1053,26 @@ fn folded_equal_keeps_tensor_mask() {
         burn::tensor::Tensor::<1>::from_data([4., 5., 6.], &device),
     );
     assert_eq!(output.to_data().to_vec::<f32>().unwrap(), [1., 2., 3.]);
+}
+
+#[test]
+fn partial_expand_is_not_removed() {
+    use burn::tensor::{Int, Tensor};
+    let device = Default::default();
+    let model = simplified::simplify_partial_expand::Model::from_file(
+        concat!(
+            env!("OUT_DIR"),
+            "/model_simplified/simplify_partial_expand.bpk"
+        ),
+        &device,
+    );
+    let output = model.forward(
+        Tensor::<2>::from_data([[1f32, 2., 3.]], &device),
+        Tensor::<1, Int>::from_ints([4, 3], &device),
+    );
+    assert_eq!(output.dims(), [4, 3]);
+    assert_eq!(
+        output.into_data().to_vec::<f32>().unwrap(),
+        [1., 2., 3., 1., 2., 3., 1., 2., 3., 1., 2., 3.]
+    );
 }

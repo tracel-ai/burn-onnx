@@ -195,10 +195,18 @@ impl NodeCodegen for onnx_ir::node::if_node::IfNode {
 
         // Handle rank mismatches between branches by adding unsqueeze_dims
         // to the lower-rank branch so both arms of the `if` have the same type.
-        let then_output =
-            align_branch_output(then_output, &self.config.then_branch.outputs, &self.outputs);
-        let else_output =
-            align_branch_output(else_output, &self.config.else_branch.outputs, &self.outputs);
+        let then_output = align_branch_output(
+            then_output,
+            &self.config.then_branch.outputs,
+            &self.config.else_branch.outputs,
+            &self.outputs,
+        );
+        let else_output = align_branch_output(
+            else_output,
+            &self.config.else_branch.outputs,
+            &self.config.then_branch.outputs,
+            &self.outputs,
+        );
 
         // Generate output variable declarations
         let output_names: Vec<_> = self.outputs.iter().map(arg_to_ident).collect();
@@ -239,6 +247,7 @@ impl NodeCodegen for onnx_ir::node::if_node::IfNode {
 fn align_branch_output(
     branch_output: TokenStream,
     branch_outputs: &[Argument],
+    peer_outputs: &[Argument],
     if_outputs: &[Argument],
 ) -> TokenStream {
     if branch_outputs.len() == 1 && if_outputs.len() == 1 {
@@ -248,7 +257,7 @@ fn align_branch_output(
         if branch_rank < target_rank {
             let dims = find_unsqueeze_dims(
                 branch_outputs[0].ty.static_shape().map(|v| v.as_slice()),
-                if_outputs[0].ty.static_shape().map(|v| v.as_slice()),
+                peer_outputs[0].ty.static_shape().map(|v| v.as_slice()),
                 branch_rank,
                 target_rank,
             );
@@ -319,5 +328,25 @@ mod tests {
             (a, b)
         }
         ");
+    }
+    #[test]
+    fn alignment_uses_higher_rank_branch_shape() {
+        let arg = |name, dims: Vec<Option<usize>>| {
+            Argument::new(
+                name,
+                ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank: dims.len(),
+                    static_shape: Some(dims),
+                }),
+            )
+        };
+        let result = align_branch_output(
+            quote! { value },
+            &[arg("lower", vec![Some(3)])],
+            &[arg("higher", vec![Some(1), Some(3)])],
+            &[arg("out", vec![None, None])],
+        );
+        assert_snapshot!(result.to_string(), @"value . unsqueeze_dims :: < 2usize > (& [0isize])");
     }
 }

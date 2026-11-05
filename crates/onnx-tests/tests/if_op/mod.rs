@@ -2,7 +2,9 @@
 
 use crate::include_models;
 include_models!(
-    if_conv2d, if_linear,
+    if_rank_alignment,
+    if_conv2d,
+    if_linear,
     nested_if // TODO: Enable when Loop and Scan support is added
               // nested_if_loop_if,
               // nested_if_loop_if_scan
@@ -649,4 +651,27 @@ mod tests {
     // Note: Expected values should be copied from Python script output
     // Run: cd tests/subgraph && uv run if_conv2d.py
     // Then copy the printed values into the test assertions below
+}
+
+#[test]
+fn if_rank_alignment_before_matmul() {
+    use burn::tensor::Tensor;
+    let device = Default::default();
+    let model = if_rank_alignment::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/if_rank_alignment.bpk"),
+        &device,
+    );
+    for cond in [true, false] {
+        let output = model.forward(
+            cond,
+            Tensor::<2>::from_data([[1f32, 2., 3.]], &device),
+            Tensor::<1>::from_data([4f32, 5., 6.], &device),
+            Tensor::<2>::ones([3, 2], &device),
+        );
+        assert_eq!(output.dims(), [1, 2]);
+        assert_eq!(
+            output.into_data().to_vec::<f32>().unwrap(),
+            if cond { [6., 6.] } else { [15., 15.] }
+        );
+    }
 }
