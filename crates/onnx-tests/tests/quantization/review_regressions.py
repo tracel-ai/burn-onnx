@@ -28,3 +28,12 @@ save("dynamic_matmul",[
  h.make_node("QLinearMatMul",["a","bs","az","b","bs","bz","bs","bz"],["host_scale"]),
  ],[info("x",T.FLOAT,[1,2,2])],[info("y",T.UINT8,[1,2,2]),info("host_zero",T.UINT8,[1,2,2]),info("host_scale",T.UINT8,[1,2,2])],dict(x=np.array([[[0,1],[2,3]]],np.float32)),
  [nh.from_array(np.array([[[1,0],[0,1]]],np.uint8),"b"),nh.from_array(np.array(1,np.float32),"bs"),nh.from_array(np.array(0,np.uint8),"bz")])
+save("qmatmul_symbolic_zero",[h.make_node("QLinearMatMul",["a","scale","zero","a","scale","zero","scale","zero"],["y"])],
+ [info("a",T.UINT8,["batch",2,2]),info("scale",T.FLOAT,[1]),info("zero",T.UINT8,["n"])],[info("y",T.UINT8,["batch",2,2])],
+ dict(a=np.array([[[1,2],[3,4]]],np.uint8),scale=np.array([1],np.float32),zero=np.array([1],np.uint8)))
+save("blocked_shared",[
+ h.make_node("QuantizeLinear",["x","x","zero"],["q"],axis=1,block_size=1),
+ h.make_node("DequantizeLinear",["zero","scale","zero"],["y"],axis=1,block_size=1)],
+ [info("x",T.FLOAT,[2,2]),info("zero",T.UINT8,[2,2])],[info("q",T.UINT8,[2,2]),info("y",T.FLOAT,[2,2])],
+ dict(x=np.array([[1,2],[3,4]],np.float32),zero=np.array([[1,2],[3,4]],np.uint8)),
+ [nh.from_array(np.ones((2,2),np.float32),"scale")])

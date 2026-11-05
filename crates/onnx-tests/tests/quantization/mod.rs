@@ -1,5 +1,7 @@
 use crate::include_models;
 include_models!(
+    qmatmul_symbolic_zero,
+    blocked_shared,
     dequantize_half_center,
     dynamic_scalar,
     qmatmul_shared,
@@ -159,6 +161,7 @@ mod tests {
 }
 
 #[test]
+#[cfg_attr(feature = "test-wgpu", ignore = "WGSL has no 8/16-bit integers")]
 fn review_quantization_regressions() {
     use burn::tensor::{DType, Int, Tensor, TensorData};
     let device = Default::default();
@@ -205,4 +208,48 @@ fn review_quantization_regressions() {
     let zero = Tensor::<1, Int>::from_data(TensorData::from([0u8]), (&device, DType::U8));
     let out = model.forward(a, Tensor::<1>::from_data([1f32], &device), zero);
     assert_eq!(out.into_data().to_vec::<u8>().unwrap(), [7, 10, 15, 22]);
+}
+
+#[test]
+#[cfg_attr(feature = "test-wgpu", ignore = "WGSL has no 8-bit integers")]
+fn symbolic_singleton_zero_point() {
+    use burn::tensor::{DType, Int, Tensor, TensorData};
+    let device = Default::default();
+    let model = qmatmul_symbolic_zero::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/qmatmul_symbolic_zero.bpk"),
+        &device,
+    );
+    for batch in [1, 2] {
+        let a = Tensor::<3, Int>::from_data(
+            TensorData::from([[[1u8, 2], [3, 4]]]),
+            (&device, DType::U8),
+        );
+        let zero = Tensor::<1, Int>::from_data(TensorData::from([1u8]), (&device, DType::U8));
+        let out = model.forward(
+            a.repeat_dim(0, batch),
+            Tensor::<1>::from_data([1f32], (&device, DType::F32)),
+            zero,
+        );
+        assert_eq!(
+            out.into_data().try_into_vec::<u8>().unwrap(),
+            [3, 4, 7, 12].repeat(batch)
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(feature = "test-wgpu", ignore = "WGSL has no 8-bit integers")]
+fn shared_blocked_parameters() {
+    use burn::tensor::{DType, Int, Tensor, TensorData};
+    let device = Default::default();
+    let model = blocked_shared::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/blocked_shared.bpk"),
+        &device,
+    );
+    let (q, y) = model.forward(
+        Tensor::<2>::from_data([[1f32, 2.], [3., 4.]], (&device, DType::F32)),
+        Tensor::<2, Int>::from_data(TensorData::from([[1u8, 2], [3, 4]]), (&device, DType::U8)),
+    );
+    assert_eq!(q.into_data().try_into_vec::<u8>().unwrap(), [2, 3, 4, 5]);
+    assert_eq!(y.into_data().try_into_vec::<f32>().unwrap(), [0.; 4]);
 }

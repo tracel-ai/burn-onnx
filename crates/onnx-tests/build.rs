@@ -608,6 +608,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/quantization/dynamic_scalar.onnx")
         .input("tests/quantization/qmatmul_shared.onnx")
         .input("tests/quantization/dynamic_matmul.onnx")
+        .input("tests/quantization/qmatmul_symbolic_zero.onnx")
+        .input("tests/quantization/blocked_shared.onnx")
         .input("tests/quantization/large_accumulation.onnx")
         .input("tests/quantization/quant_conv1d.onnx")
         .input("tests/quantization/quant_conv2d.onnx")

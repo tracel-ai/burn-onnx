@@ -16,13 +16,31 @@ impl NodeCodegen for onnx_ir::dequantize_linear::DequantizeLinearNode {
         let output = arg_to_ident(self.outputs.first().unwrap());
 
         let x = scope.arg(x_arg);
-        let input_shape_source = x.clone();
-        let x = if self.config.block_size.is_some_and(|size| size > 0) {
-            quote! { (#x).clone() }
-        } else {
-            x
-        };
         let scale = scope.arg(scale_arg);
+        let zp_arg = self.inputs.get(2).filter(|arg| !arg.is_optional());
+        let zp = zp_arg.map(|arg| scope.arg(arg));
+        // Capture dimensions and every graph value together before local bindings
+        // can shadow an input or a shared parameter can consume the data tensor.
+        let (prepare, x, scale, zp) = if self.config.block_size.is_some_and(|size| size > 0) {
+            if let Some(zp) = zp {
+                (
+                    quote! { let (input_dims, input, scale, zero_point) = ((#x).dims(), #x, #scale, #zp); },
+                    quote! { input },
+                    quote! { scale },
+                    Some(quote! { zero_point }),
+                )
+            } else {
+                (
+                    quote! { let (input_dims, input, scale) = ((#x).dims(), #x, #scale); },
+                    quote! { input },
+                    quote! { scale },
+                    None,
+                )
+            }
+        } else {
+            (quote! {}, x, scale, zp)
+        };
+        let input_shape_source = quote! { input_dims };
 
         let out_dtype = self.outputs.first().unwrap().ty.elem_type();
         let out_dtype_tokens = out_dtype.to_tokens();
@@ -61,10 +79,7 @@ impl NodeCodegen for onnx_ir::dequantize_linear::DequantizeLinearNode {
             align_rhs_for_lhs_rank(scale_expr, x_rank, scale_rank, self.config.axis)
         };
 
-        let centered_expr = if let Some(zp_arg) =
-            self.inputs.get(2).filter(|arg| !arg.is_optional())
-        {
-            let zp = scope.arg(zp_arg);
+        let centered_expr = if let (Some(zp_arg), Some(zp)) = (zp_arg, zp) {
             let integer_centering = !x_arg.ty.elem_type().is_float();
             // I32 exactly centers 8/16-bit values and works on more backends than I64.
             let center_dtype = if x_arg.ty.elem_type().size() > 2 {
@@ -111,8 +126,11 @@ impl NodeCodegen for onnx_ir::dequantize_linear::DequantizeLinearNode {
             x_expr
         };
 
-        quote! {
-            let #output = (#centered_expr).mul(#scale_expr);
+        let value = quote! { (#centered_expr).mul(#scale_expr) };
+        if prepare.is_empty() {
+            quote! { let #output = #value; }
+        } else {
+            quote! { let #output = { #prepare #value }; }
         }
     }
 }
@@ -236,33 +254,36 @@ mod tests {
             scale: Tensor<2>,
             zero: Tensor<2, Int>,
         ) -> Tensor<2> {
-            let y = (((x).clone())
-                .cast(burn::tensor::DType::I32)
-                .sub({
-                    let (parameter, axis_size) = (
-                        (zero).cast(burn::tensor::DType::I32),
-                        x.dims()[1usize],
-                    );
-                    let mut shape = parameter.dims();
-                    shape[1usize] *= 2usize;
-                    parameter
-                        .unsqueeze_dim::<3usize>(2usize)
-                        .repeat_dim(2usize, 2usize)
-                        .reshape::<2usize, _>(shape)
-                        .slice_dim(1usize, 0..axis_size)
-                })
-                .float()
-                .cast(burn::tensor::DType::F32))
-                .mul({
-                    let (parameter, axis_size) = (scale, x.dims()[1usize]);
-                    let mut shape = parameter.dims();
-                    shape[1usize] *= 2usize;
-                    parameter
-                        .unsqueeze_dim::<3usize>(2usize)
-                        .repeat_dim(2usize, 2usize)
-                        .reshape::<2usize, _>(shape)
-                        .slice_dim(1usize, 0..axis_size)
-                });
+            let y = {
+                let (input_dims, input, scale, zero_point) = ((x).dims(), x, scale, zero);
+                ((input)
+                    .cast(burn::tensor::DType::I32)
+                    .sub({
+                        let (parameter, axis_size) = (
+                            (zero_point).cast(burn::tensor::DType::I32),
+                            input_dims[1usize],
+                        );
+                        let mut shape = parameter.dims();
+                        shape[1usize] *= 2usize;
+                        parameter
+                            .unsqueeze_dim::<3usize>(2usize)
+                            .repeat_dim(2usize, 2usize)
+                            .reshape::<2usize, _>(shape)
+                            .slice_dim(1usize, 0..axis_size)
+                    })
+                    .float()
+                    .cast(burn::tensor::DType::F32))
+                    .mul({
+                        let (parameter, axis_size) = (scale, input_dims[1usize]);
+                        let mut shape = parameter.dims();
+                        shape[1usize] *= 2usize;
+                        parameter
+                            .unsqueeze_dim::<3usize>(2usize)
+                            .repeat_dim(2usize, 2usize)
+                            .reshape::<2usize, _>(shape)
+                            .slice_dim(1usize, 0..axis_size)
+                    })
+            };
             y
         }
         ");
