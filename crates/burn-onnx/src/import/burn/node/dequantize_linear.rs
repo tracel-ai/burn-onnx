@@ -65,7 +65,14 @@ impl NodeCodegen for onnx_ir::dequantize_linear::DequantizeLinearNode {
             self.inputs.get(2).filter(|arg| !arg.is_optional())
         {
             let zp = scope.arg(zp_arg);
-            let zp_expr = if matches!(zp_arg.ty, ArgType::ScalarNative(_)) {
+            let integer_centering = !x_arg.ty.elem_type().is_float();
+            let zp_expr = if integer_centering {
+                if matches!(zp_arg.ty, ArgType::ScalarNative(_)) {
+                    quote! { burn::tensor::Tensor::<1, burn::tensor::Int>::from_data(burn::tensor::TensorData::from([burn::tensor::ElementConversion::elem::<i64>(#zp)]), (self.device(), burn::tensor::DType::I64)) }
+                } else {
+                    quote! { (#zp).cast(burn::tensor::DType::I64) }
+                }
+            } else if matches!(zp_arg.ty, ArgType::ScalarNative(_)) {
                 let dtype = out_dtype_tokens.clone();
                 quote! { burn::tensor::Tensor::<1>::from_data(burn::tensor::TensorData::from([burn::tensor::ElementConversion::elem::<f64>(#zp)]), (self.device(), #dtype)) }
             } else if zp_arg.ty.elem_type() == out_dtype {
@@ -88,7 +95,11 @@ impl NodeCodegen for onnx_ir::dequantize_linear::DequantizeLinearNode {
             } else {
                 align_rhs_for_lhs_rank(zp_expr, x_rank, zp_arg.ty.rank().max(1), self.config.axis)
             };
-            quote! { (#x_expr).sub(#zp_expr) }
+            if integer_centering {
+                quote! { (#x).cast(burn::tensor::DType::I64).sub(#zp_expr).float().cast(#out_dtype_tokens) }
+            } else {
+                quote! { (#x_expr).sub(#zp_expr) }
+            }
         } else {
             x_expr
         };
@@ -146,14 +157,11 @@ mod tests {
             x_scale: Tensor<0>,
             x_zero_point: Tensor<0, Int>,
         ) -> Tensor<2> {
-            let y = (((x).cast(burn::tensor::DType::I32).float().cast(burn::tensor::DType::F32))
-                .sub(
-                    ((x_zero_point)
-                        .cast(burn::tensor::DType::I32)
-                        .float()
-                        .cast(burn::tensor::DType::F32))
-                        .unsqueeze_dims(&[0isize]),
-                ))
+            let y = ((x)
+                .cast(burn::tensor::DType::I64)
+                .sub(((x_zero_point).cast(burn::tensor::DType::I64)).unsqueeze_dims(&[0isize]))
+                .float()
+                .cast(burn::tensor::DType::F32))
                 .mul((x_scale).unsqueeze_dims(&[0isize]));
             y
         }
@@ -170,18 +178,22 @@ mod tests {
             .build();
         assert_snapshot!(codegen_forward_default(&node), @r"
         pub fn forward(&self, x: Tensor<2, Int>, scale: f32, zero: u8) -> Tensor<2> {
-            let y = (((x).cast(burn::tensor::DType::I32).float().cast(burn::tensor::DType::F32))
+            let y = ((x)
+                .cast(burn::tensor::DType::I64)
                 .sub(
                     (burn::tensor::Tensor::<
                         1,
+                        burn::tensor::Int,
                     >::from_data(
                         burn::tensor::TensorData::from([
-                            burn::tensor::ElementConversion::elem::<f64>(zero),
+                            burn::tensor::ElementConversion::elem::<i64>(zero),
                         ]),
-                        (self.device(), burn::tensor::DType::F32),
+                        (self.device(), burn::tensor::DType::I64),
                     ))
                         .unsqueeze_dims(&[0isize]),
-                ))
+                )
+                .float()
+                .cast(burn::tensor::DType::F32))
                 .mul(
                     (burn::tensor::Tensor::<
                         1,
@@ -217,16 +229,11 @@ mod tests {
             scale: Tensor<2>,
             zero: Tensor<2, Int>,
         ) -> Tensor<2> {
-            let y = ((((x).clone())
-                .cast(burn::tensor::DType::I32)
-                .float()
-                .cast(burn::tensor::DType::F32))
+            let y = (((x).clone())
+                .cast(burn::tensor::DType::I64)
                 .sub({
                     let (parameter, axis_size) = (
-                        (zero)
-                            .cast(burn::tensor::DType::I32)
-                            .float()
-                            .cast(burn::tensor::DType::F32),
+                        (zero).cast(burn::tensor::DType::I64),
                         x.dims()[1usize],
                     );
                     let mut shape = parameter.dims();
@@ -236,7 +243,9 @@ mod tests {
                         .repeat_dim(2usize, 2usize)
                         .reshape::<2usize, _>(shape)
                         .slice_dim(1usize, 0..axis_size)
-                }))
+                })
+                .float()
+                .cast(burn::tensor::DType::F32))
                 .mul({
                     let (parameter, axis_size) = (scale, x.dims()[1usize]);
                     let mut shape = parameter.dims();

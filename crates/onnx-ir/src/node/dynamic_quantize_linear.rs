@@ -37,7 +37,7 @@ impl NodeProcessor for DynamicQuantizeLinearProcessor {
             ArgType::Tensor(t) => {
                 ArgType::Tensor(TensorType::new(DType::U8, t.rank, t.static_shape.clone()))
             }
-            ArgType::ScalarTensor(_) => ArgType::ScalarTensor(DType::U8),
+            ArgType::ScalarTensor(_) | ArgType::ScalarNative(_) => ArgType::ScalarTensor(DType::U8),
             _ => {
                 return Err(ProcessError::Custom(
                     "DynamicQuantizeLinear requires an on-device tensor".into(),

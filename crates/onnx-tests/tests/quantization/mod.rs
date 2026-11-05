@@ -1,5 +1,9 @@
 use crate::include_models;
 include_models!(
+    dequantize_half_center,
+    dynamic_scalar,
+    qmatmul_shared,
+    dynamic_matmul,
     scalar,
     dynamic,
     quant_conv1d,
@@ -152,4 +156,47 @@ mod tests {
             assert_eq!(zero, expected_zero);
         }
     }
+}
+
+#[test]
+fn review_quantization_regressions() {
+    use burn::tensor::{DType, Int, Tensor, TensorData};
+    let device = Default::default();
+    let model = dequantize_half_center::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/dequantize_half_center.bpk"),
+        &device,
+    );
+    let x = Tensor::<1, Int>::from_data(TensorData::from([2049u16]), (&device, DType::U16));
+    assert_eq!(
+        model
+            .forward(x, half::f16::from_f32(1.), 2048)
+            .into_data()
+            .convert::<f32>()
+            .to_vec::<f32>()
+            .unwrap(),
+        [1.]
+    );
+    let model = dynamic_scalar::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/dynamic_scalar.bpk"),
+        &device,
+    );
+    let (y, scale, zero) = model.forward(2.);
+    assert_eq!(y, 255);
+    assert_eq!(zero, 0);
+    assert!((scale - 2. / 255.).abs() < 1e-8);
+    let model = dynamic_matmul::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/dynamic_matmul.bpk"),
+        &device,
+    );
+    let out = model.forward(Tensor::<3>::from_data([[[0f32, 1.], [2., 3.]]], &device));
+    assert_eq!(out.into_data().to_vec::<u8>().unwrap(), [0, 1, 2, 3]);
+    let model = qmatmul_shared::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/qmatmul_shared.bpk"),
+        &device,
+    );
+    let a =
+        Tensor::<3, Int>::from_data(TensorData::from([[[1u8, 2], [3, 4]]]), (&device, DType::U8));
+    let zero = Tensor::<1, Int>::from_data(TensorData::from([0u8]), (&device, DType::U8));
+    let out = model.forward(a, Tensor::<1>::from_data([1f32], &device), zero);
+    assert_eq!(out.into_data().to_vec::<u8>().unwrap(), [7, 10, 15, 22]);
 }
