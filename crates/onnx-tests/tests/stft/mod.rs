@@ -1,9 +1,12 @@
 use crate::include_models;
 include_models!(
+    stft_frame_step_name,
+    stft_frame_length_name,
     stft_basic,
     stft_full,
     stft_large_non_pow2,
     stft_non_pow2,
+    stft_runtime_params,
     stft_with_window
 );
 
@@ -163,11 +166,9 @@ mod tests {
 
     #[test]
     fn stft_non_pow2() {
-        // Exercises the matrix-DFT codegen path for non-power-of-two n_fft.
-        // Burn's built-in `stft` is pow2-only (tracel-ai/burn#4865), so
-        // burn-onnx emits a matmul-based DFT when n_fft is not pow2. This
-        // test pins that path to ORT's reference output for n_fft = 20,
-        // hop = 5 (matching Kokoro's decoder head).
+        // Non-power-of-two n_fft, which Burn's stft computes with Bluestein's
+        // algorithm. This test pins that path to ORT's reference output for
+        // n_fft = 20, hop = 5 (matching Kokoro's decoder head).
         let device = Default::default();
         let model: stft_non_pow2::Model = stft_non_pow2::Model::new(&device);
         let input = make_signal(&device);
@@ -306,7 +307,7 @@ mod tests {
 
     #[test]
     fn stft_large_non_pow2() {
-        // n_fft = 400 through the matrix-DFT path. The input is a pure cosine at
+        // n_fft = 400 through Burn's Bluestein path. The input is a pure cosine at
         // bin 7 with hop = n_fft, so every frame's exact spectrum is N/2 at bin 7
         // and 0 elsewhere (see stft_large_non_pow2.py).
         const N_FFT: usize = 400;
@@ -337,14 +338,135 @@ mod tests {
             .zip(expected.as_slice::<f32>().unwrap())
             .map(|(a, b)| (a - b).abs())
             .fold(0.0f32, f32::max);
-        // Measured: ~1.2e-6 with the f64 matmul, ~7.6e-5 with the f32 fallback
-        // (Metal). The tight bound fails if an f64-capable device loses the
-        // f64 path.
-        let atol = if device.supports_dtype(burn::tensor::DType::F64) {
-            1e-5
-        } else {
-            5e-4
-        };
+        // Measured: ~3.1e-5 with Burn's f32 Bluestein FFT on NdArray, i.e. about
+        // f32 epsilon times the peak (N/2 = 200). The f64 matmul DFT that burn-onnx
+        // used to emit got ~1.2e-6 (and ~7.6e-5 with its f32 fallback on Metal).
+        let atol = 1e-4;
         assert!(max_err < atol, "max abs error {max_err:e} exceeds {atol:e}");
     }
+
+    #[test]
+    fn stft_runtime_params() {
+        // frame_step and frame_length are forward() arguments; frame_length = 12 is not a
+        // power of two. Expected values from stft_runtime_params.py (onnx ReferenceEvaluator).
+        let device = Default::default();
+        let model = stft_runtime_params::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/stft_runtime_params.bpk"),
+            &device,
+        );
+        let input = make_signal(&device);
+
+        let output = model.forward(input, 4, 12);
+
+        let expected = burn::tensor::TensorData::from([[
+            [
+                [3.551_463_6f32, 0.0],
+                [-1.623_472_9, -1.809_456_8],
+                [0.234_667_38, -1.909_432_2],
+                [-1.970_397_2, 1.654_575_9],
+                [4.436_543_5, -0.392_527_64],
+                [0.346_374_27, 0.522_623_54],
+                [-0.438_323_5, 0.0],
+            ],
+            [
+                [-2.936_228, 0.0],
+                [-0.486_093, -5.594_274],
+                [0.275_085_99, -2.888_565_5],
+                [0.147_457_3, 1.344_274_6],
+                [-1.297_010_9, 4.066_601_3],
+                [1.026_428_6, -1.103_596_2],
+                [0.794_651_45, 0.0],
+            ],
+            [
+                [-7.833_496_6, 0.0],
+                [2.345_841_4, -0.993_681_8],
+                [-2.644_410_4, -2.161_313_3],
+                [1.856_016_4, -1.383_848_1],
+                [0.397_936_3, -3.564_598],
+                [-0.435_527_4, 1.949_765],
+                [-0.839_909, 0.0],
+            ],
+            [
+                [-7.094_782_4, 0.0],
+                [-1.844_99, 3.416_232_1],
+                [-1.493_754_4, 1.324_195_5],
+                [3.260_193_8, -1.574_530_1],
+                [1.366_202_8, 2.512_441],
+                [2.034_755_5, -3.981_228_6],
+                [3.353_514_7, 0.0],
+            ],
+            [
+                [-4.345_014_6, 0.0],
+                [-0.543_594_8, -0.996_690_45],
+                [0.444_666_48, 2.621_878_6],
+                [1.899_924_4, -2.660_747_5],
+                [-1.197_518_6, -0.438_762_63],
+                [-4.597_407_3, 2.905_621_8],
+                [0.178_905_68, 0.0],
+            ],
+            [
+                [-0.967_864_04, 0.0],
+                [3.909_23, 1.676_176],
+                [3.927_258_3, 1.039_490_5],
+                [2.005_799_3, 1.209_775_6],
+                [-1.618_748_1, 2.101_201],
+                [1.934_897_7, 2.932_762_9],
+                [-1.761_225_3, 0.0],
+            ],
+        ]]);
+        output
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::rel_abs(1e-3, 1e-4));
+    }
+}
+
+#[test]
+fn runtime_parameters_named_signal() {
+    use burn::tensor::Tensor;
+    let device = Default::default();
+    let a = stft_frame_step_name::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/stft_frame_step_name.bpk"),
+        &device,
+    );
+    let b = stft_frame_length_name::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/stft_frame_length_name.bpk"),
+        &device,
+    );
+    for out in [
+        a.forward(Tensor::<3>::ones([1, 32, 1], &device), 4, 12),
+        b.forward(Tensor::<3>::ones([1, 32, 1], &device), 4, 12),
+    ] {
+        assert_eq!(out.dims(), [1, 6, 7, 2]);
+        for (i, v) in out
+            .into_data()
+            .try_into_vec::<f32>()
+            .unwrap()
+            .iter()
+            .enumerate()
+        {
+            assert!((v - if i % 14 == 0 { 12. } else { 0. }).abs() < 1e-4);
+        }
+    }
+}
+
+#[test]
+#[should_panic(expected = "STFT frame_length must be positive")]
+fn runtime_negative_frame_length_rejected() {
+    let device = Default::default();
+    let model = stft_runtime_params::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/stft_runtime_params.bpk"),
+        &device,
+    );
+    let _ = model.forward(burn::tensor::Tensor::<3>::ones([1, 32, 1], &device), 4, -1);
+}
+
+#[test]
+#[should_panic(expected = "STFT frame_step must be positive")]
+fn runtime_zero_frame_step_rejected() {
+    let device = Default::default();
+    let model = stft_runtime_params::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/stft_runtime_params.bpk"),
+        &device,
+    );
+    let _ = model.forward(burn::tensor::Tensor::<3>::ones([1, 32, 1], &device), 0, 12);
 }

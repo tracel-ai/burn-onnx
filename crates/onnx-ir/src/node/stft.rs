@@ -13,33 +13,28 @@
 //! - Real input: rank-3 `[batch, signal_length, 1]` (ONNX spec form) or rank-2
 //!   `[batch, signal_length]` (produced by PyTorch's ONNX exporter and accepted
 //!   by ONNX Runtime), `onesided = 0 | 1`.
-//! - `frame_step` and `frame_length` must be compile-time constants (burn-onnx
-//!   codegen needs them as `usize` values).
+//! - `frame_step` and `frame_length` may be compile-time constants or runtime scalars
+//!   (e.g. graph inputs). Runtime values are read on the host when the model runs; the output
+//!   shape then has unknown frame/frequency dimensions.
 //! - Optional window tensor, rank 1, length equal to `frame_length`.
 //!
-//! Power-of-two `frame_length` takes Burn's fast `burn::tensor::signal::stft`
-//! path (O(N log N)). Non-power-of-two `frame_length` uses a matrix-based DFT
-//! emitted directly in burn-onnx codegen (O(N²) per frame, but N is typically
-//! small - e.g. 20 in Kokoro). Burn's upstream `stft` cannot be used for
-//! non-power-of-two `n_fft` until Bluestein's algorithm lands
-//! ([tracel-ai/burn#4865](https://github.com/tracel-ai/burn/issues/4865)).
+//! Any `frame_length` maps to Burn's `burn::tensor::signal::stft`, which uses a radix-2 FFT
+//! for power-of-two lengths and Bluestein's algorithm otherwise.
 //!
 //! Not supported (rejected with a clear error):
 //! - Complex-to-complex STFT (signal rank 3, trailing dim = 2): Burn's STFT
 //!   has no complex input path.
-//! - Runtime `frame_step` / `frame_length`.
 //!
 //! ## `frame_length` default
 //!
 //! The ONNX spec's default for `frame_length` when absent is `signal_length`.
-//! That would require a runtime-sized DFT, so we instead fall back to the
-//! `window` tensor's static shape when `frame_length` is absent. Real ONNX
-//! models that omit `frame_length` virtually always provide a window, so this
-//! deviation is safe in practice.
+//! We instead fall back to the `window` tensor's static shape when
+//! `frame_length` is absent. Real ONNX models that omit `frame_length`
+//! virtually always provide a window, so this deviation is safe in practice.
 
 use onnx_ir_derive::NodeBuilder;
 
-use crate::ir::{ArgType, Argument, Node, RawNode, TensorData, TensorType};
+use crate::ir::{ArgType, Argument, DType, Node, RawNode, RuntimeInputRef, TensorData, TensorType};
 use crate::processor::{
     InputSpec, NodeProcessor, NodeSpec, OutputPreferences, OutputSpec, ProcessError, validate_opset,
 };
@@ -67,15 +62,40 @@ fn extract_scalar_int(data: TensorData, name: &str) -> Result<i64, ProcessError>
     }
 }
 
+/// A scalar STFT input (`frame_step` or `frame_length`).
+#[derive(Debug, Clone)]
+pub enum StftInput {
+    /// Value known at compile time.
+    Static(usize),
+    /// Value read at run time from a scalar int32/int64 input.
+    Runtime(RuntimeInputRef),
+}
+
+impl Default for StftInput {
+    fn default() -> Self {
+        Self::Static(0)
+    }
+}
+
+impl StftInput {
+    /// The compile-time value, if known.
+    pub fn as_static(&self) -> Option<usize> {
+        match self {
+            Self::Static(v) => Some(*v),
+            Self::Runtime(_) => None,
+        }
+    }
+}
+
 /// Configuration for the STFT operation.
 #[derive(Debug, Clone, Default)]
 pub struct StftConfig {
     /// If true, produces onesided output (`n_fft / 2 + 1` frequency bins).
     pub onesided: bool,
     /// Number of samples to step between successive DFTs (Burn's `hop_length`).
-    pub frame_step: usize,
-    /// Size of each DFT window (Burn's `n_fft`). Must be a power of two.
-    pub frame_length: usize,
+    pub frame_step: StftInput,
+    /// Size of each DFT window (Burn's `n_fft`).
+    pub frame_length: StftInput,
     /// Whether a window tensor is provided as input.
     pub has_window: bool,
 }
@@ -92,53 +112,62 @@ pub struct StftNode {
 pub(crate) struct StftProcessor;
 
 impl StftProcessor {
-    /// Extract `frame_step` from input[1] (required, must be a positive scalar constant).
-    fn extract_frame_step(node: &RawNode) -> Result<usize, ProcessError> {
-        let input = node.inputs.get(1).ok_or_else(|| {
-            ProcessError::Custom(format!("{OP_NAME}: missing required frame_step input"))
-        })?;
-        let data = input.value().ok_or_else(|| {
-            ProcessError::Custom(format!(
-                "{OP_NAME}: frame_step must be a compile-time constant"
-            ))
-        })?;
-        let val = extract_scalar_int(data, "frame_step")?;
+    /// Read a scalar `frame_step` / `frame_length` input: its positive value when it is a
+    /// constant, or a runtime reference when it is a scalar int32/int64 computed at run time.
+    fn extract_scalar_input(
+        node: &RawNode,
+        index: usize,
+        name: &str,
+    ) -> Result<StftInput, ProcessError> {
+        let input = &node.inputs[index];
+        let Some(data) = input.value() else {
+            let is_int_scalar = match &input.ty {
+                ArgType::ScalarNative(dtype) | ArgType::ScalarTensor(dtype) => {
+                    matches!(dtype, DType::I32 | DType::I64)
+                }
+                _ => false,
+            };
+            if !is_int_scalar {
+                return Err(ProcessError::Custom(format!(
+                    "{OP_NAME}: runtime {name} must be an int32 or int64 scalar, got {:?}",
+                    input.ty
+                )));
+            }
+            return Ok(StftInput::Runtime(RuntimeInputRef::new(
+                input.name.clone(),
+                index,
+            )));
+        };
+        let val = extract_scalar_int(data, name)?;
         if val <= 0 {
             return Err(ProcessError::Custom(format!(
-                "{OP_NAME}: frame_step must be a positive integer, got {val}"
+                "{OP_NAME}: {name} must be a positive integer, got {val}"
             )));
         }
-        usize::try_from(val).map_err(|_| {
-            ProcessError::Custom(format!(
-                "{OP_NAME}: frame_step must fit in usize, got {val}"
-            ))
-        })
+        let val = usize::try_from(val).map_err(|_| {
+            ProcessError::Custom(format!("{OP_NAME}: {name} must fit in usize, got {val}"))
+        })?;
+        Ok(StftInput::Static(val))
+    }
+
+    /// Extract `frame_step` from input[1] (required).
+    fn extract_frame_step(node: &RawNode) -> Result<StftInput, ProcessError> {
+        if node.inputs.len() < 2 {
+            return Err(ProcessError::Custom(format!(
+                "{OP_NAME}: missing required frame_step input"
+            )));
+        }
+        Self::extract_scalar_input(node, 1, "frame_step")
     }
 
     /// Extract `frame_length` from input[3] if present, otherwise infer from `window` shape.
     ///
     /// Returns `None` only if neither is provided (which the caller rejects).
-    fn extract_frame_length(node: &RawNode) -> Result<Option<usize>, ProcessError> {
+    fn extract_frame_length(node: &RawNode) -> Result<Option<StftInput>, ProcessError> {
         if let Some(input) = node.inputs.get(3)
             && !input.is_optional()
         {
-            let data = input.value().ok_or_else(|| {
-                ProcessError::Custom(format!(
-                    "{OP_NAME}: frame_length must be a compile-time constant"
-                ))
-            })?;
-            let val = extract_scalar_int(data, "frame_length")?;
-            if val <= 0 {
-                return Err(ProcessError::Custom(format!(
-                    "{OP_NAME}: frame_length must be a positive integer, got {val}"
-                )));
-            }
-            let val = usize::try_from(val).map_err(|_| {
-                ProcessError::Custom(format!(
-                    "{OP_NAME}: frame_length must fit in usize, got {val}"
-                ))
-            })?;
-            return Ok(Some(val));
+            return Self::extract_scalar_input(node, 3, "frame_length").map(Some);
         }
 
         // Fall back to inferring from the window's static shape.
@@ -148,37 +177,33 @@ impl StftProcessor {
             && let Some(shape) = &t.static_shape
             && let Some(Some(w)) = shape.first()
         {
-            return Ok(Some(*w));
+            return Ok(Some(StftInput::Static(*w)));
         }
 
         Ok(None)
     }
 
-    /// Compute the output shape `[batch, n_frames, n_freqs, 2]` when the signal length is known.
+    /// Compute the output shape `[batch, n_frames, n_freqs, 2]`. Dimensions that depend on a
+    /// runtime `frame_step` / `frame_length` (`None`) or on an unknown signal length are `None`.
     fn compute_output_shape(
         signal_shape: &[Option<usize>],
-        frame_step: usize,
-        frame_length: usize,
+        frame_step: Option<usize>,
+        frame_length: Option<usize>,
         onesided: bool,
     ) -> Vec<Option<usize>> {
         let batch = signal_shape.first().copied().flatten();
         let signal_len = signal_shape.get(1).copied().flatten();
 
-        let n_frames = signal_len.map(|l| {
-            if l < frame_length {
-                0
-            } else {
-                1 + (l - frame_length) / frame_step
+        let n_frames = match (signal_len, frame_step, frame_length) {
+            (Some(l), Some(step), Some(len)) => {
+                Some(if l < len { 0 } else { 1 + (l - len) / step })
             }
-        });
-
-        let n_freqs = if onesided {
-            frame_length / 2 + 1
-        } else {
-            frame_length
+            _ => None,
         };
 
-        vec![batch, n_frames, Some(n_freqs), Some(2)]
+        let n_freqs = frame_length.map(|len| if onesided { len / 2 + 1 } else { len });
+
+        vec![batch, n_frames, n_freqs, Some(2)]
     }
 }
 
@@ -299,37 +324,41 @@ impl NodeProcessor for StftProcessor {
         let frame_step = Self::extract_frame_step(node)?;
         let frame_length = Self::extract_frame_length(node)?.ok_or_else(|| {
             ProcessError::Custom(format!(
-                "{OP_NAME}: frame_length must be provided as a constant input \
+                "{OP_NAME}: frame_length must be provided as an input \
                  or inferable from a window with a static shape"
             ))
         })?;
+        let static_step = frame_step.as_static();
+        let static_length = frame_length.as_static();
 
-        // Non-power-of-two frame_length is handled in burn-onnx codegen via a
-        // matrix DFT (upstream Burn's stft only supports pow2 n_fft pending
-        // tracel-ai/burn#4865). Only reject `0`, which is nonsensical.
-        if frame_length == 0 {
+        // Burn's stft handles any n_fft (Bluestein for non-power-of-two lengths). Only reject
+        // `0`, which is nonsensical. A runtime frame_length is checked by burn when it runs.
+        if static_length == Some(0) {
             return Err(ProcessError::Custom(format!(
-                "{OP_NAME}: frame_length must be >= 1, got {frame_length}"
+                "{OP_NAME}: frame_length must be >= 1, got 0"
             )));
         }
 
-        if frame_step > frame_length {
+        if let (Some(step), Some(length)) = (static_step, static_length)
+            && step > length
+        {
             return Err(ProcessError::Custom(format!(
-                "{OP_NAME}: frame_step ({frame_step}) must be <= frame_length ({frame_length}) \
+                "{OP_NAME}: frame_step ({step}) must be <= frame_length ({length}) \
                  to satisfy the overlap-add constraint"
             )));
         }
 
         // Cross-check window length against frame_length when both are statically known.
-        if let Some(window) = node.inputs.get(2)
+        if let Some(length) = static_length
+            && let Some(window) = node.inputs.get(2)
             && !window.is_optional()
             && let ArgType::Tensor(t) = &window.ty
             && let Some(shape) = &t.static_shape
             && let Some(Some(w)) = shape.first()
-            && *w != frame_length
+            && *w != length
         {
             return Err(ProcessError::Custom(format!(
-                "{OP_NAME}: window length ({w}) must equal frame_length ({frame_length})"
+                "{OP_NAME}: window length ({w}) must equal frame_length ({length})"
             )));
         }
 
@@ -343,7 +372,7 @@ impl NodeProcessor for StftProcessor {
         let static_shape = signal_tensor
             .static_shape
             .as_ref()
-            .map(|s| Self::compute_output_shape(s, frame_step, frame_length, onesided));
+            .map(|s| Self::compute_output_shape(s, static_step, static_length, onesided));
 
         node.outputs[0].ty = ArgType::Tensor(TensorType {
             dtype: signal_tensor.dtype,
@@ -381,8 +410,9 @@ impl NodeProcessor for StftProcessor {
     fn build_node(&self, builder: RawNode, opset: usize) -> Result<Node, ProcessError> {
         let config = self.extract_config(&builder, opset)?;
 
-        // frame_step (input[1]) and frame_length (input[3]) were lifted to Static by
-        // lift_constants, so they are dropped from the generated forward() signature.
+        // Constant frame_step (input[1]) and frame_length (input[3]) were lifted to Static by
+        // lift_constants, so they are dropped from the generated forward() signature. Runtime
+        // ones stay as forward() inputs.
         Ok(Node::Stft(StftNode {
             name: builder.name,
             inputs: builder.inputs,
@@ -490,8 +520,8 @@ mod tests {
         processor.infer_types(&mut node, 17, &prefs).unwrap();
 
         let config = processor.extract_config(&node, 17).unwrap();
-        assert_eq!(config.frame_step, 16);
-        assert_eq!(config.frame_length, 32);
+        assert_eq!(config.frame_step.as_static(), Some(16));
+        assert_eq!(config.frame_length.as_static(), Some(32));
         assert!(config.has_window);
     }
 
@@ -576,10 +606,8 @@ mod tests {
 
     #[test]
     fn test_stft_non_power_of_two_accepted() {
-        // Non-pow2 frame_length (20, matching Kokoro) used to be rejected
-        // because upstream Burn's stft is pow2-only. burn-onnx now handles
-        // non-pow2 via a matmul DFT path, so onnx-ir accepts it and leaves
-        // the branching to codegen.
+        // Non-pow2 frame_length (20, matching Kokoro). Burn's stft handles
+        // it through Bluestein's algorithm.
         let mut node = builder_with_signal(vec![1, 128, 1])
             .input_tensor_i64_data("frame_step", vec![5], vec![])
             .add_input(
@@ -608,14 +636,86 @@ mod tests {
         }
 
         let config = processor.extract_config(&node, 17).unwrap();
-        assert_eq!(config.frame_length, 20);
-        assert_eq!(config.frame_step, 5);
+        assert_eq!(config.frame_length.as_static(), Some(20));
+        assert_eq!(config.frame_step.as_static(), Some(5));
     }
 
     #[test]
-    fn test_stft_runtime_frame_step_rejected() {
+    fn test_stft_runtime_frame_step_with_window() {
+        // As in the ONNX backend test `test_stft_with_window`: frame_step is a graph input,
+        // frame_length comes from the window's static shape.
+        let mut node = builder_with_signal(vec![1, 128, 1])
+            .input_scalar_i64("frame_step")
+            .input_tensor_f32("window", 1, Some(vec![16]))
+            .output_tensor_f32("output", 0, None)
+            .build_with_graph_data(17);
+
+        let processor = StftProcessor;
+        processor
+            .infer_types(&mut node, 17, &OutputPreferences::new())
+            .unwrap();
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                // n_frames depends on the runtime frame_step; n_freqs = 16/2+1 = 9
+                assert_eq!(t.static_shape, Some(vec![Some(1), None, Some(9), Some(2)]));
+            }
+            _ => panic!("Expected Tensor output"),
+        }
+
+        let config = processor.extract_config(&node, 17).unwrap();
+        match &config.frame_step {
+            StftInput::Runtime(r) => {
+                assert_eq!(r.name, "frame_step");
+                assert_eq!(r.input_index, 1);
+            }
+            other => panic!("expected runtime frame_step, got {other:?}"),
+        }
+        assert_eq!(config.frame_length.as_static(), Some(16));
+    }
+
+    #[test]
+    fn test_stft_runtime_frame_step_and_length() {
+        // As in the ONNX backend test `test_stft`: both are graph inputs.
+        let mut node = builder_with_signal(vec![1, 128, 1])
+            .input_scalar_i64("frame_step")
+            .add_input(
+                "",
+                ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank: 1,
+                    static_shape: None,
+                }),
+            )
+            .input_scalar_i64("frame_length")
+            .output_tensor_f32("output", 0, None)
+            .build_with_graph_data(17);
+
+        let processor = StftProcessor;
+        processor
+            .infer_types(&mut node, 17, &OutputPreferences::new())
+            .unwrap();
+        match &node.outputs[0].ty {
+            ArgType::Tensor(t) => {
+                assert_eq!(t.static_shape, Some(vec![Some(1), None, None, Some(2)]));
+            }
+            _ => panic!("Expected Tensor output"),
+        }
+
+        let config = processor.extract_config(&node, 17).unwrap();
+        assert!(matches!(config.frame_step, StftInput::Runtime(_)));
+        match &config.frame_length {
+            StftInput::Runtime(r) => {
+                assert_eq!(r.name, "frame_length");
+                assert_eq!(r.input_index, 3);
+            }
+            other => panic!("expected runtime frame_length, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_stft_runtime_frame_step_must_be_int_scalar() {
         let mut node = builder_with_signal(vec![1, 64, 1])
-            .input_tensor_i64("frame_step", 0, None) // runtime
+            .input_tensor_i64("frame_step", 1, None) // runtime, but a rank-1 tensor
             .add_input(
                 "",
                 ArgType::Tensor(TensorType {
@@ -631,12 +731,11 @@ mod tests {
         let processor = StftProcessor;
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 17, &prefs);
-        assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
                 .to_string()
-                .contains("compile-time constant")
+                .contains("runtime frame_step must be an int32 or int64 scalar")
         );
     }
 
@@ -689,7 +788,7 @@ mod tests {
 
         let processor = StftProcessor;
         let config = processor.extract_config(&node, 17).unwrap();
-        assert_eq!(config.frame_length, 16);
+        assert_eq!(config.frame_length.as_static(), Some(16));
         assert!(config.has_window);
     }
 
@@ -723,14 +822,24 @@ mod tests {
     #[test]
     fn test_stft_shape_signal_shorter_than_frame_length() {
         // signal_length (8) < frame_length (16) -> n_frames = 0
-        let shape = StftProcessor::compute_output_shape(&[Some(1), Some(8), Some(1)], 4, 16, true);
+        let shape = StftProcessor::compute_output_shape(
+            &[Some(1), Some(8), Some(1)],
+            Some(4),
+            Some(16),
+            true,
+        );
         assert_eq!(shape, vec![Some(1), Some(0), Some(9), Some(2)]);
     }
 
     #[test]
     fn test_stft_shape_signal_equals_frame_length() {
         // signal_length == frame_length -> exactly 1 frame
-        let shape = StftProcessor::compute_output_shape(&[Some(1), Some(16), Some(1)], 8, 16, true);
+        let shape = StftProcessor::compute_output_shape(
+            &[Some(1), Some(16), Some(1)],
+            Some(8),
+            Some(16),
+            true,
+        );
         assert_eq!(shape, vec![Some(1), Some(1), Some(9), Some(2)]);
     }
 
@@ -738,7 +847,12 @@ mod tests {
     fn test_stft_shape_non_exact_division() {
         // signal_length=33, frame_length=16, frame_step=8:
         // (33 - 16) / 8 = 17/8 = 2 (floor) -> n_frames = 3
-        let shape = StftProcessor::compute_output_shape(&[Some(1), Some(33), Some(1)], 8, 16, true);
+        let shape = StftProcessor::compute_output_shape(
+            &[Some(1), Some(33), Some(1)],
+            Some(8),
+            Some(16),
+            true,
+        );
         assert_eq!(shape, vec![Some(1), Some(3), Some(9), Some(2)]);
     }
 }

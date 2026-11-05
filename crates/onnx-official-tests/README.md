@@ -86,7 +86,10 @@ the next `cargo test` either confirms the fix or reveals a more-specific failure
 `fail-compare`) that gets demoted.
 
 Optional fields per entry: `reason`, `tracking` (issue/PR ref), `wontfix` (bool; `true` means out of
-scope rather than an intentional gap to close).
+scope rather than an intentional gap to close), `atol` (float; overrides the absolute tolerance of
+the float output comparison, which defaults to `Tolerance::default()`'s 1e-5. Use it for outputs
+whose reference values are exactly 0 where the op's f32 rounding error lands just above 1e-5, and
+say why in a comment next to it).
 
 The initial M2 classification was sourced from tracel-ai/burn-onnx#314 (skip-codegen list from the
 ~656 codegen failures) and tracel-ai/burn-onnx#311 (fail-compare list from the op- family comparison

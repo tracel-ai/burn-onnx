@@ -43,7 +43,9 @@ fn dft(graph: &OnnxGraph) {
         DftConfig {
             inverse: false,
             onesided: true,
-            axis: 1,
+            axis: Static(
+                1,
+            ),
             dft_length: None,
             is_real_input: true,
         }
@@ -143,8 +145,12 @@ fn stft(graph: &OnnxGraph) {
       Config:
         StftConfig {
             onesided: true,
-            frame_step: 8,
-            frame_length: 16,
+            frame_step: Static(
+                8,
+            ),
+            frame_length: Static(
+                16,
+            ),
             has_window: false,
         }
     "#);

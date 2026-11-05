@@ -73,25 +73,26 @@ use std::path::{Path, PathBuf};
 
 // --- Expectations parsing -----------------------------------------------
 //
-// build.rs only cares about the `status` field per entry, so this is a
-// deliberately narrow sub-schema of the one in `src/expectations.rs`.
-// Duplicating the parse avoids pulling the crate's lib into the build
-// graph (which would be a circular `[dependencies]` + `[build-dependencies]`
-// edge).
+// build.rs only cares about the `status` and `atol` fields per entry, so
+// this is a deliberately narrow sub-schema of the one in
+// `src/expectations.rs`. Duplicating the parse avoids pulling the crate's
+// lib into the build graph (which would be a circular `[dependencies]` +
+// `[build-dependencies]` edge).
 
 #[derive(Debug, Deserialize)]
 struct ExpectationRow {
     status: String,
+    /// Per-test absolute tolerance override for float output comparison.
+    #[serde(default)]
+    atol: Option<f64>,
 }
 
-/// Load `expectations.toml` and return a name -> status map. Only the
-/// `status` field is read; other fields (reason / tracking / wontfix)
-/// are documentation for humans and are ignored here.
-fn load_expectations(path: &Path) -> BTreeMap<String, String> {
+/// Load `expectations.toml` and return a name -> row map. Only the
+/// `status` and `atol` fields are read; other fields (reason / tracking /
+/// wontfix) are documentation for humans and are ignored here.
+fn load_expectations(path: &Path) -> BTreeMap<String, ExpectationRow> {
     let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    let raw: BTreeMap<String, ExpectationRow> =
-        toml::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
-    raw.into_iter().map(|(k, v)| (k, v.status)).collect()
+    toml::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()))
 }
 
 // --- Dtype mapping ------------------------------------------------------
@@ -258,6 +259,9 @@ struct IoDesc {
 struct TestMeta {
     inputs: Vec<IoDesc>,
     outputs: Vec<IoDesc>,
+    /// Absolute tolerance override from the entry's `atol` field. `None`
+    /// keeps `Tolerance::default()`.
+    atol: Option<f64>,
 }
 
 /// Why a pass-listed test was skipped from harness generation. Logged
@@ -343,7 +347,11 @@ fn introspect(model_path: &Path) -> Result<TestMeta, SkipReason> {
         return Err(SkipReason::RankZero);
     }
 
-    Ok(TestMeta { inputs, outputs })
+    Ok(TestMeta {
+        inputs,
+        outputs,
+        atol: None,
+    })
 }
 
 /// Extract `(rank, dtype)` from a single `ValueInfoProto`.
@@ -421,14 +429,14 @@ fn main() {
     // expectations.toml is caught by the runtime test, not the build.
     let mut pass_names: Vec<String> = expectations
         .iter()
-        .filter(|(_, s)| s.as_str() == "pass")
+        .filter(|(_, row)| row.status == "pass")
         .map(|(k, _)| k.clone())
         .collect();
     pass_names.sort();
 
     let mut fail_compare_names: Vec<String> = expectations
         .iter()
-        .filter(|(_, s)| s.as_str() == "fail-compare")
+        .filter(|(_, row)| row.status == "fail-compare")
         .map(|(k, _)| k.clone())
         .collect();
     fail_compare_names.sort();
@@ -461,7 +469,8 @@ fn main() {
         model_gen.input(dst.to_str().expect("non-utf8 staged path"));
 
         match introspect(&src) {
-            Ok(meta) => {
+            Ok(mut meta) => {
+                meta.atol = expectations[name].atol;
                 harnessable.insert(name.clone(), meta);
             }
             Err(reason) => {
@@ -538,7 +547,8 @@ fn main() {
         }
 
         match introspect_result {
-            Ok(meta) => {
+            Ok(mut meta) => {
+                meta.atol = expectations[name].atol;
                 fail_compare_harnessable.insert(name.clone(), meta);
             }
             Err(reason) => {
@@ -968,10 +978,19 @@ fn emit_single_test(buf: &mut String, name: &str, meta: &TestMeta, mode: TestMod
         .unwrap();
         if outp.dtype.is_float() {
             let elem_ty = outp.dtype.assert_elem_type();
+            // `atol` in expectations.toml overrides only the absolute
+            // tolerance, for outputs whose expected values are exactly 0
+            // and where the default 1e-5 is below the op's rounding error.
+            let tolerance = match meta.atol {
+                Some(atol) => {
+                    format!("burn::tensor::Tolerance::default().set_absolute({atol:e})")
+                }
+                None => "burn::tensor::Tolerance::default()".to_string(),
+            };
             writeln!(
                 buf,
                 "    actual_{idx}_data.assert_approx_eq::<{elem_ty}>\
-                 (&expected_{idx}_data, burn::tensor::Tolerance::default());"
+                 (&expected_{idx}_data, {tolerance});"
             )
             .unwrap();
         } else {
