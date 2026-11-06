@@ -20,7 +20,7 @@ fn concat(graph: &OnnxGraph) {
         concat_a: F32[2, 3]
         concat_b: F32[2, 3]
       Outputs:
-        concat1_out1: F32[?, ?]
+        concat1_out1: F32[4, 3]
       Config:
         ConcatConfig {
             axis: 0,

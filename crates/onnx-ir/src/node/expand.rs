@@ -228,10 +228,21 @@ impl NodeProcessor for ExpandProcessor {
                 if output_rank == 0 {
                     node.outputs[0].ty = ArgType::ScalarTensor(input_elem_type);
                 } else {
+                    // A non-unit input dimension cannot change under valid broadcasting,
+                    // even when the target shape is supplied at runtime.
+                    let static_shape = input_static_shape.as_ref().and_then(|shape| {
+                        let mut result = vec![None; output_rank];
+                        for (i, dim) in shape.iter().enumerate() {
+                            if *dim != Some(1) {
+                                result[output_rank - input_rank + i] = *dim;
+                            }
+                        }
+                        result.iter().any(Option::is_some).then_some(result)
+                    });
                     node.outputs[0].ty = ArgType::Tensor(TensorType {
                         dtype: input_elem_type,
                         rank: output_rank,
-                        static_shape: None,
+                        static_shape,
                     });
                 }
             }
@@ -246,7 +257,7 @@ impl NodeProcessor for ExpandProcessor {
             (&node.inputs[0].ty, &node.outputs[0].ty)
             && let (Some(in_shape), Some(out_shape)) = (&in_t.static_shape, &out_t.static_shape)
         {
-            return in_shape == out_shape;
+            return in_shape == out_shape && in_shape.iter().all(Option::is_some);
         }
         false
     }
@@ -946,4 +957,18 @@ mod tests {
     // TODO: Add test for different data types - Spec supports many types (all numeric types, bool, strings) - Only testing f32, i64, bool
     // TODO: Add test for opset < 8 - Should fail per spec, Expand introduced in opset 8 - Missing opset validation test
     // TODO: Add test for unexpected attributes - Should validate and reject unknown attributes - Missing attribute validation test
+    #[test]
+    fn test_preserves_known_dimensions() {
+        let mut node = TestNodeBuilder::new(NodeType::Expand, "expand")
+            .input_tensor_f32("data", 2, Some(vec![2, 3]))
+            .input_tensor_i64("shape", 1, Some(vec![3]))
+            .output_default("out")
+            .build();
+        ExpandProcessor
+            .infer_types(&mut node, 18, &OutputPreferences::new())
+            .unwrap();
+        assert!(
+            matches!(&node.outputs[0].ty, ArgType::Tensor(t) if t.static_shape == Some(vec![None, Some(2), Some(3)]))
+        );
+    }
 }

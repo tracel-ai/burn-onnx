@@ -59,15 +59,21 @@ pub(super) fn generate_outer_scope_bindings(
             continue;
         }
 
-        // Skip names not actually used in this subgraph (if used_names filter is provided)
-        if let Some(used) = used_names
-            && !used.contains(scope_ref_name)
-        {
-            continue;
-        }
-
         if let Some(outer_input) = outer_scope_inputs.get(idx) {
-            let var_name = crate::burn::shadow_check::value_ident(scope_ref_name);
+            // Constants retain their parent name so their value store can resolve
+            // them; dynamic values use the original ONNX scope name.
+            let binding_name = if let Some(used) = used_names {
+                if used.contains(scope_ref_name) {
+                    scope_ref_name
+                } else if used.contains(&outer_input.name) {
+                    &outer_input.name
+                } else {
+                    continue;
+                }
+            } else {
+                scope_ref_name
+            };
+            let var_name = crate::burn::shadow_check::value_ident(binding_name);
             let outer_var = scope.at_position(node_position).arg(outer_input);
 
             match &outer_input.ty {
@@ -76,12 +82,11 @@ pub(super) fn generate_outer_scope_bindings(
                         let #var_name = #outer_var.clone();
                     });
                 }
-                ArgType::ScalarNative(_) => {
+                ArgType::ScalarNative(_) | ArgType::Shape(_) => {
                     bindings.extend(quote! {
                         let #var_name = #outer_var;
                     });
                 }
-                _ => {}
             }
         }
     }
@@ -134,7 +139,7 @@ pub(super) fn register_subgraph_scope(
 
     // Register future uses for subgraph outputs
     for output in &subgraph.outputs {
-        if let ArgType::Tensor(_) = &output.ty {
+        if matches!(&output.ty, ArgType::Tensor(_) | ArgType::ScalarTensor(_)) {
             scope.tensor_register_future_use(output, node_position + subgraph.nodes.len());
         }
     }

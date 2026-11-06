@@ -139,6 +139,29 @@ impl NodeProcessor for IfProcessor {
             }
         }
 
+        // A dimension is known after a dynamic conditional only when both branches
+        // agree. Constant conditions already select the same branch above.
+        for ((output, then_output), else_output) in node
+            .outputs
+            .iter_mut()
+            .zip(&then_outputs)
+            .zip(&else_outputs)
+        {
+            if let (ArgType::Tensor(out), ArgType::Tensor(lhs), ArgType::Tensor(rhs)) =
+                (&mut output.ty, &then_output.ty, &else_output.ty)
+            {
+                out.static_shape = match (&lhs.static_shape, &rhs.static_shape) {
+                    (Some(a), Some(b)) if lhs.rank == rhs.rank => Some(
+                        a.iter()
+                            .zip(b)
+                            .map(|(a, b)| if a == b { *a } else { None })
+                            .collect(),
+                    ),
+                    _ => None,
+                };
+            }
+        }
+
         Ok(())
     }
 
@@ -155,6 +178,28 @@ impl NodeProcessor for IfProcessor {
             .get("else_branch")
             .ok_or_else(|| ProcessError::MissingAttribute("else_branch".to_string()))?
             .clone();
+
+        // A compile-time condition makes the other branch unreachable. Building it can
+        // fail on shapes that are only valid in the selected branch.
+        let constant_condition = node
+            .inputs
+            .first()
+            .and_then(|arg| arg.value())
+            .and_then(|data| {
+                data.as_slice::<bool>()
+                    .ok()
+                    .and_then(|values| (values.len() == 1).then(|| values[0]))
+            });
+        let then_attr = if constant_condition == Some(false) {
+            else_attr.clone()
+        } else {
+            then_attr
+        };
+        let else_attr = if constant_condition == Some(true) {
+            then_attr.clone()
+        } else {
+            else_attr
+        };
 
         // Build outer scope types map from additional inputs (beyond ONNX inputs)
         // These are outer-scope references that were added during node conversion
@@ -359,5 +404,29 @@ mod tests {
         let prefs = OutputPreferences::new();
         let result = processor.infer_types(&mut node, 16, &prefs);
         assert!(matches!(result, Err(ProcessError::Custom(_))));
+    }
+    #[test]
+    fn test_dynamic_branches_merge_dimensions() {
+        let mut then_branch = create_test_branch(2, DType::F32);
+        let mut else_branch = create_test_branch(2, DType::F32);
+        if let ArgType::Tensor(t) = &mut then_branch.outputs[0].ty {
+            t.static_shape = Some(vec![Some(2), Some(3)]);
+        }
+        if let ArgType::Tensor(t) = &mut else_branch.outputs[0].ty {
+            t.static_shape = Some(vec![Some(5), Some(3)]);
+        }
+        let mut node = TestNodeBuilder::new(NodeType::If, "if")
+            .input_scalar("cond", DType::Bool(BoolStore::Native))
+            .build();
+        node.attrs
+            .insert("then_branch".into(), AttributeValue::Graph(then_branch));
+        node.attrs
+            .insert("else_branch".into(), AttributeValue::Graph(else_branch));
+        IfProcessor
+            .infer_types(&mut node, 18, &OutputPreferences::new())
+            .unwrap();
+        assert!(
+            matches!(&node.outputs[0].ty, ArgType::Tensor(t) if t.static_shape == Some(vec![None, Some(3)]))
+        );
     }
 }

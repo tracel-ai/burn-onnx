@@ -678,6 +678,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/squeeze/squeeze_float.onnx")
         .input("tests/squeeze/squeeze_multiple.onnx")
         .input("tests/squeeze/squeeze_no_axes.onnx")
+        .input("tests/squeeze/squeeze_partial.onnx")
         .input("tests/squeeze/squeeze_opset13_axes_input.onnx")
         .input("tests/squeeze/squeeze_scalar.onnx")
         .input("tests/squeeze/squeeze_shape.onnx")
@@ -749,6 +750,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         // If operator tests
         .input("tests/if_op/if_conv2d.onnx")
         .input("tests/if_op/if_linear.onnx")
+        .input("tests/if_op/if_rank_alignment.onnx")
         .input("tests/if_op/nested_if.onnx")
         // Loop operator tests
         .input("tests/loop/loop_simple.onnx")
@@ -969,8 +971,13 @@ impl OpOverride for ReluOverride {
 
 fn add_simplify_inputs(model_gen: &mut ModelGen) {
     model_gen
+        .input("tests/simplify/simplify_equal_vector.onnx")
+        .input("tests/simplify/simplify_runtime_size.onnx")
+        .input("tests/simplify/simplify_equal_shapes.onnx")
+        .input("tests/simplify/simplify_range_name.onnx")
         .input("tests/simplify/simplify_multinomial.onnx")
         .input("tests/simplify/simplify_shape_folding.onnx")
+        .input("tests/simplify/simplify_partial_expand.onnx")
         .input("tests/simplify/simplify_gather_on_shape.onnx")
         .input("tests/simplify/simplify_slice_on_shape.onnx")
         .input("tests/simplify/simplify_concat_shapes.onnx")

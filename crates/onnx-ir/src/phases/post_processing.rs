@@ -155,6 +155,16 @@ fn apply_noop_elimination(
         }
     }
 
+    // Outer-scope values have no producer in this graph. Preserve their constant
+    // metadata too when an Identity returning one of them is eliminated.
+    for node in nodes.iter() {
+        for input in &node.inputs {
+            output_arg_map
+                .entry(input.name.clone())
+                .or_insert_with(|| input.clone());
+        }
+    }
+
     // Step 2: Resolve transitive rewiring
     // If A -> B and B -> C, we need to make sure we map A -> C directly
     let mut resolved_rewire_map = rewire_map.clone();
@@ -414,5 +424,20 @@ mod tests {
 
         // Add node input should be rewired
         assert_eq!(nodes[0].inputs[0].name, "input1");
+    }
+    #[test]
+    fn identity_outer_constant_output_keeps_value() {
+        let mut identity = create_identity_node("identity", "outer", "out");
+        identity.inputs[0] = Argument::from_const_i64("outer", 7);
+        let mut outputs = vec![identity.outputs[0].clone()];
+        let mut nodes = vec![identity];
+        let plan = plan_noop_elimination(&nodes, &HashMap::new(), true);
+        apply_noop_elimination(&mut nodes, &mut outputs, plan);
+        assert!(nodes.is_empty());
+        assert_eq!(
+            outputs[0].value_source,
+            Argument::from_const_i64("outer", 7).value_source
+        );
+        assert_eq!(outputs[0].value().unwrap().as_slice::<i64>().unwrap(), &[7]);
     }
 }

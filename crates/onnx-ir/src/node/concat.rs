@@ -149,7 +149,7 @@ impl NodeProcessor for ConcatProcessor {
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
         // Get reference to config for type inference (not used, but extracted for consistency)
-        let _config = self.extract_config(node, opset)?;
+        let config = self.extract_config(node, opset)?;
 
         // For shapes, axis must be 0 (since they're 1D) - validation already done in extract_config
 
@@ -329,10 +329,37 @@ impl NodeProcessor for ConcatProcessor {
 
         match first_input_type {
             ArgType::Tensor(tensor) => {
+                let mut shape = vec![None; tensor.rank];
+                if config.axis < tensor.rank {
+                    let tensors = node
+                        .inputs
+                        .iter()
+                        .filter_map(|input| match &input.ty {
+                            ArgType::Tensor(t) if t.rank == tensor.rank => Some(t),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>();
+                    if tensors.len() == node.inputs.len() {
+                        for (axis, dimension) in shape.iter_mut().enumerate() {
+                            if axis == config.axis {
+                                *dimension = tensors.iter().try_fold(0usize, |sum, t| {
+                                    sum.checked_add(
+                                        t.static_shape.as_ref()?.get(axis).copied().flatten()?,
+                                    )
+                                });
+                            } else {
+                                // Valid concatenation preserves every other dimension.
+                                *dimension = tensors
+                                    .iter()
+                                    .find_map(|t| t.static_shape.as_ref().and_then(|s| s[axis]));
+                            }
+                        }
+                    }
+                }
                 node.outputs[0].ty = ArgType::Tensor(TensorType {
                     dtype: tensor.dtype,
                     rank: tensor.rank,
-                    static_shape: None,
+                    static_shape: shape.iter().any(Option::is_some).then_some(shape),
                 });
             }
             ArgType::Shape(_) => {
@@ -819,5 +846,20 @@ mod tests {
     fn test_concat_multiple_inputs_is_not_noop() {
         let node = create_test_node(0, 3, 2).build();
         assert!(!ConcatProcessor.is_noop(&node));
+    }
+    #[test]
+    fn test_preserves_known_dimensions() {
+        let mut node = TestNodeBuilder::new(NodeType::Concat, "concat")
+            .input_tensor_i64("a", 1, Some(vec![1]))
+            .input_tensor_i64("b", 1, Some(vec![2]))
+            .output_default("out")
+            .attr_int("axis", 0)
+            .build();
+        ConcatProcessor
+            .infer_types(&mut node, 18, &OutputPreferences::new())
+            .unwrap();
+        assert!(
+            matches!(&node.outputs[0].ty, ArgType::Tensor(t) if t.static_shape == Some(vec![Some(3)]))
+        );
     }
 }

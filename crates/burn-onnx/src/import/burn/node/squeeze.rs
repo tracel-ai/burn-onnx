@@ -75,8 +75,16 @@ impl NodeCodegen for onnx_ir::squeeze::SqueezeNode {
                     None => {
                         // When axes is None, squeeze all dimensions with size 1
                         let output_rank = output_tensor.rank.to_tokens();
-                        quote! {
-                            let #output = #input.squeeze::<#output_rank>();
+                        let guards: Vec<_> = match &input_arg.ty {
+                            ArgType::Tensor(t) => t.static_shape.as_ref().map(|shape| shape.iter().enumerate().filter(|(_, dim)| dim.is_none()).map(|(axis, _)| quote! {
+                                assert_ne!(#input.dims()[#axis], 1, "Squeeze without axes: an unknown dimension became 1, changing the inferred output rank");
+                            }).collect()).unwrap_or_default(),
+                            _ => Vec::new(),
+                        };
+                        if guards.is_empty() {
+                            quote! { let #output = #input.squeeze::<#output_rank>(); }
+                        } else {
+                            quote! { let #output = { #(#guards)* #input.squeeze::<#output_rank>() }; }
                         }
                     }
                 }
@@ -292,5 +300,29 @@ mod tests {
             output
         }
         ");
+    }
+    #[test]
+    fn test_squeeze_partial_shape_guard() {
+        let mut node = SqueezeNodeBuilder::new("squeeze1")
+            .input_tensor("input", 3, DType::F32)
+            .output_tensor("output", 2, DType::F32)
+            .config(SqueezeConfig { axes: None })
+            .build();
+        if let onnx_ir::ir::ArgType::Tensor(t) = &mut node.inputs[0].ty {
+            t.static_shape = Some(vec![None, Some(1), Some(3)]);
+        }
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r#"
+        pub fn forward(&self, input: Tensor<3>) -> Tensor<2> {
+            let output = {
+                assert_ne!(
+                    input.dims() [0usize], 1,
+                    "Squeeze without axes: an unknown dimension became 1, changing the inferred output rank"
+                );
+                input.squeeze::<2>()
+            };
+            output
+        }
+        "#);
     }
 }

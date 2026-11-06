@@ -75,29 +75,20 @@ impl NodeCodegen for onnx_ir::node::range::RangeNode {
 
         let elem_dtype = self.outputs.first().unwrap().ty.elem_type();
 
-        // A static literal or a scalar tensor readback is bound to a local
-        // (start and delta are read more than once below). Native scalars are
-        // plain `Copy` idents and are used directly. Returns the binding
-        // statement (possibly empty) and the expression to use.
+        // Read every graph operand before introducing any bound-name locals.
         let range_param_tokens = |config: &RangeInput,
                                   inputs: &[Argument],
-                                  scope: &mut super::super::scope::ScopeAtPosition<'_>,
-                                  local: &str|
-         -> (TokenStream, TokenStream) {
-            let local = Ident::new(local, Span::call_site());
+                                  scope: &mut super::super::scope::ScopeAtPosition<'_>|
+         -> TokenStream {
             match (config, static_literal(config, &elem_dtype)) {
-                (_, Some(literal)) => (quote! { let #local = #literal; }, quote! { #local }),
+                (_, Some(literal)) => literal,
                 (RangeInput::Runtime(runtime_ref), None) => {
                     let arg = &inputs[runtime_ref.input_index];
                     match &arg.ty {
-                        ArgType::ScalarNative(_) => {
-                            let name = arg_to_ident(arg);
-                            (quote! {}, quote! { #name })
-                        }
-                        ArgType::ScalarTensor(dtype) => {
-                            let tensor = scope.arg(arg);
-                            let native = on_device_to_native(quote! { #tensor }, dtype);
-                            (quote! { let #local = #native; }, quote! { #local })
+                        ArgType::ScalarNative(_) => scope.arg(arg),
+                        ArgType::ScalarTensor(dtype) => on_device_to_native(scope.arg(arg), dtype),
+                        ArgType::Tensor(tensor_type) => {
+                            on_device_to_native(scope.arg(arg), &tensor_type.dtype)
                         }
                         _ => panic!("Range parameter must be a scalar"),
                     }
@@ -148,12 +139,10 @@ impl NodeCodegen for onnx_ir::node::range::RangeNode {
             }
             _ => {
                 // At least one runtime value: compute n at runtime
-                let (bind_start, start) =
-                    range_param_tokens(&self.config.start, &self.inputs, scope, "start");
-                let (bind_limit, limit) =
-                    range_param_tokens(&self.config.limit, &self.inputs, scope, "limit");
-                let (bind_delta, delta) =
-                    range_param_tokens(&self.config.delta, &self.inputs, scope, "delta");
+                let start_value = range_param_tokens(&self.config.start, &self.inputs, scope);
+                let limit_value = range_param_tokens(&self.config.limit, &self.inputs, scope);
+                let delta_value = range_param_tokens(&self.config.delta, &self.inputs, scope);
+                let (start, limit, delta) = (quote! { start }, quote! { limit }, quote! { delta });
                 // Floats subtract in the element type, like the ONNX function body
                 // and ORT. Ints widen first so a narrow subtraction cannot overflow.
                 let diff = if elem_dtype.is_float() {
@@ -163,9 +152,7 @@ impl NodeCodegen for onnx_ir::node::range::RangeNode {
                 };
                 quote! {
                     let #output = {
-                        #bind_start
-                        #bind_limit
-                        #bind_delta
+                        let (start, limit, delta) = (#start_value, #limit_value, #delta_value);
                         assert!(#delta != #zero);
                         let n = (#diff / #delta as f64)
                             .ceil().max(0.0) as i64;
@@ -261,6 +248,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, start: i64, limit: i64, delta: i64) -> Tensor<1, Int> {
             let output = {
+                let (start, limit, delta) = (start, limit, delta);
                 assert!(delta != 0);
                 let n = (((limit as i128 - start as i128) as f64) / delta as f64).ceil().max(0.0)
                     as i64;
@@ -299,8 +287,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, limit: Tensor<1, Int>, delta: i64) -> Tensor<1, Int> {
             let output = {
-                let start = 0i64;
-                let limit = (limit).into_scalar::<i64>();
+                let (start, limit, delta) = (0i64, (limit).into_scalar::<i64>(), delta);
                 assert!(delta != 0);
                 let n = (((limit as i128 - start as i128) as f64) / delta as f64).ceil().max(0.0)
                     as i64;
@@ -404,8 +391,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, limit: f32) -> Tensor<1> {
             let output = {
-                let start = 0f32;
-                let delta = 0.25f32;
+                let (start, limit, delta) = (0f32, limit, 0.25f32);
                 assert!(delta != 0.0);
                 let n = (((limit - start) as f64) / delta as f64).ceil().max(0.0) as i64;
                 Tensor::arange(0..n, self.device())
@@ -437,9 +423,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, start: Tensor<1>) -> Tensor<1> {
             let output = {
-                let start = (start).into_scalar::<f32>();
-                let limit = 4f32;
-                let delta = 1f32;
+                let (start, limit, delta) = ((start).into_scalar::<f32>(), 4f32, 1f32);
                 assert!(delta != 0.0);
                 let n = (((limit - start) as f64) / delta as f64).ceil().max(0.0) as i64;
                 Tensor::arange(0..n, self.device())
@@ -472,8 +456,7 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, limit: i32) -> Tensor<1, Int> {
             let output = {
-                let start = 1i32;
-                let delta = 3i32;
+                let (start, limit, delta) = (1i32, limit, 3i32);
                 assert!(delta != 0);
                 let n = (((limit as i128 - start as i128) as f64) / delta as f64).ceil().max(0.0)
                     as i64;
@@ -560,6 +543,44 @@ mod tests {
                 .cast(burn::tensor::DType::I16)
                 .mul_scalar(2i16)
                 .add_scalar(-3i16);
+            output
+        }
+        ");
+    }
+    #[test]
+    fn test_range_one_element_tensor() {
+        // A static literal and a scalar tensor readback are each bound once;
+        // the native scalar is used directly.
+        let config = RangeConfig::new(
+            RangeInput::Static(0),
+            RangeInput::Runtime(RuntimeInputRef {
+                name: "limit".to_string(),
+                input_index: 0,
+            }),
+            RangeInput::Runtime(RuntimeInputRef {
+                name: "delta".to_string(),
+                input_index: 1,
+            }),
+        );
+        let node = RangeNodeBuilder::new("range1")
+            .input_tensor("limit", 1, DType::I64)
+            .input_scalar("delta", DType::I64)
+            .output_tensor("output", 1, DType::I64)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, limit: Tensor<1, Int>, delta: i64) -> Tensor<1, Int> {
+            let output = {
+                let (start, limit, delta) = (0i64, (limit).into_scalar::<i64>(), delta);
+                assert!(delta != 0);
+                let n = (((limit as i128 - start as i128) as f64) / delta as f64).ceil().max(0.0)
+                    as i64;
+                Tensor::arange(0..n, self.device())
+                    .cast(burn::tensor::DType::I64)
+                    .mul_scalar(delta)
+                    .add_scalar(start)
+            };
             output
         }
         ");

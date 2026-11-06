@@ -29,7 +29,10 @@ fn generate_branch_code(
         node_position,
     );
 
-    // Register subgraph scope
+    // Each branch has its own lexical scope. Sharing clone counts across branches
+    // makes identical outer-scope names consume one another's future uses.
+    let mut branch_scope = Scope::default();
+    let scope = &mut branch_scope;
     subgraph_helper::register_subgraph_scope(subgraph, scope, node_position);
 
     // Generate forward code
@@ -37,7 +40,15 @@ fn generate_branch_code(
         subgraph_helper::generate_subgraph_forward_code(subgraph, scope, node_position);
 
     // Generate output tuple
-    let output_names: Vec<_> = subgraph.outputs.iter().map(arg_to_ident).collect();
+    let output_names: Vec<_> = subgraph
+        .outputs
+        .iter()
+        .map(|arg| {
+            scope
+                .at_position(node_position + subgraph.nodes.len())
+                .arg(arg)
+        })
+        .collect();
     let output_tuple = if output_names.len() == 1 {
         let out = &output_names[0];
         quote! { #out }
@@ -150,27 +161,52 @@ impl NodeCodegen for onnx_ir::node::if_node::IfNode {
 
         // Generate code for then and else branches
         let node_position = scope.node_position();
+        let mut then_scope = scope.scope().clone();
+        let mut else_scope = scope.scope().clone();
         let (then_body, then_output) = generate_branch_code(
             &self.config.then_branch,
             &outer_scope_inputs,
             &self.config.scope_ref_names,
-            scope.scope(),
+            &mut then_scope,
             node_position,
         );
         let (else_body, else_output) = generate_branch_code(
             &self.config.else_branch,
             &outer_scope_inputs,
             &self.config.scope_ref_names,
-            scope.scope(),
+            &mut else_scope,
             node_position,
         );
 
+        // Only one branch executes, so each capture consumes one parent use.
+        // A folded condition can leave captures used only by the unreachable branch;
+        // consume those explicitly so their producer does not become an unused binding.
+        let mut used = subgraph_helper::collect_subgraph_referenced_names(&self.config.then_branch);
+        used.extend(subgraph_helper::collect_subgraph_referenced_names(
+            &self.config.else_branch,
+        ));
+        let mut unused_captures = Vec::new();
+        for (input, name) in outer_scope_inputs.iter().zip(&self.config.scope_ref_names) {
+            let value = scope.arg(input);
+            if input.is_dynamic() && !used.contains(name) && !used.contains(&input.name) {
+                unused_captures.push(quote! { let _ = #value; });
+            }
+        }
+
         // Handle rank mismatches between branches by adding unsqueeze_dims
         // to the lower-rank branch so both arms of the `if` have the same type.
-        let then_output =
-            align_branch_output(then_output, &self.config.then_branch.outputs, &self.outputs);
-        let else_output =
-            align_branch_output(else_output, &self.config.else_branch.outputs, &self.outputs);
+        let then_output = align_branch_output(
+            then_output,
+            &self.config.then_branch.outputs,
+            &self.config.else_branch.outputs,
+            &self.outputs,
+        );
+        let else_output = align_branch_output(
+            else_output,
+            &self.config.else_branch.outputs,
+            &self.config.then_branch.outputs,
+            &self.outputs,
+        );
 
         // Generate output variable declarations
         let output_names: Vec<_> = self.outputs.iter().map(arg_to_ident).collect();
@@ -182,6 +218,7 @@ impl NodeCodegen for onnx_ir::node::if_node::IfNode {
         };
 
         quote! {
+            #(#unused_captures)*
             #output_decls = if #cond {
                 #then_body
                 #then_output
@@ -210,6 +247,7 @@ impl NodeCodegen for onnx_ir::node::if_node::IfNode {
 fn align_branch_output(
     branch_output: TokenStream,
     branch_outputs: &[Argument],
+    peer_outputs: &[Argument],
     if_outputs: &[Argument],
 ) -> TokenStream {
     if branch_outputs.len() == 1 && if_outputs.len() == 1 {
@@ -219,7 +257,7 @@ fn align_branch_output(
         if branch_rank < target_rank {
             let dims = find_unsqueeze_dims(
                 branch_outputs[0].ty.static_shape().map(|v| v.as_slice()),
-                if_outputs[0].ty.static_shape().map(|v| v.as_slice()),
+                peer_outputs[0].ty.static_shape().map(|v| v.as_slice()),
                 branch_rank,
                 target_rank,
             );
@@ -235,6 +273,80 @@ fn align_branch_output(
 
 #[cfg(test)]
 mod tests {
-    // If node tests require complex OnnxGraph construction which is better tested
-    // through integration tests
+    use super::super::test_helpers::codegen_forward_default;
+    use super::*;
+    use insta::assert_snapshot;
+    use onnx_ir::ir::{BoolStore, DType, TensorType};
+
+    #[test]
+    fn repeated_branch_outputs_and_unused_capture() {
+        let tensor = |name: &str| {
+            Argument::new(
+                name,
+                ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank: 1,
+                    static_shape: None,
+                }),
+            )
+        };
+        let mut branch = onnx_ir::OnnxGraph::default();
+        branch.outputs = vec![tensor("x"), tensor("x")];
+        let node = onnx_ir::node::if_node::IfNode {
+            name: "if1".into(),
+            inputs: vec![
+                Argument::new(
+                    "cond",
+                    ArgType::ScalarNative(DType::Bool(BoolStore::Native)),
+                ),
+                tensor("x"),
+                tensor("unused"),
+            ],
+            outputs: vec![tensor("a"), tensor("b")],
+            config: onnx_ir::node::if_node::IfConfig {
+                then_branch: branch.clone(),
+                else_branch: branch,
+                scope_ref_names: vec!["x".into(), "unused".into()],
+            },
+        };
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(
+            &self,
+            cond: bool,
+            x: Tensor<1>,
+            unused: Tensor<1>,
+        ) -> (Tensor<1>, Tensor<1>) {
+            let _ = unused;
+            let (a, b) = if cond {
+                let x = x.clone();
+                (x.clone(), x)
+            } else {
+                let x = x.clone();
+                (x.clone(), x)
+            };
+            (a, b)
+        }
+        ");
+    }
+    #[test]
+    fn alignment_uses_higher_rank_branch_shape() {
+        let arg = |name, dims: Vec<Option<usize>>| {
+            Argument::new(
+                name,
+                ArgType::Tensor(TensorType {
+                    dtype: DType::F32,
+                    rank: dims.len(),
+                    static_shape: Some(dims),
+                }),
+            )
+        };
+        let result = align_branch_output(
+            quote! { value },
+            &[arg("lower", vec![Some(3)])],
+            &[arg("higher", vec![Some(1), Some(3)])],
+            &[arg("out", vec![None, None])],
+        );
+        assert_snapshot!(result.to_string(), @"value . unsqueeze_dims :: < 2usize > (& [0isize])");
+    }
 }

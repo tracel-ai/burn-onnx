@@ -229,6 +229,13 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 
 ¹ Requires `burn/vision`; backend support follows Burn Vision.
 
+`AffineGrid` supports the native operator for 2D/3D with either `align_corners`
+setting. Official function expansions still require shape/rank inference support
+([#351](https://github.com/tracel-ai/burn-onnx/issues/351)).
+`Squeeze` without axes can use a partial static shape: known unit dimensions are removed and unknown dimensions
+must remain non-unit at runtime. A runtime guard reports inputs that would change
+the generated model's fixed output rank.
+
 [1]: https://onnx.ai/onnx/operators/onnx__Abs.html "ONNX Abs"
 [2]: https://onnx.ai/onnx/operators/onnx__Acos.html "ONNX Acos"
 [3]: https://onnx.ai/onnx/operators/onnx__Acosh.html "ONNX Acosh"

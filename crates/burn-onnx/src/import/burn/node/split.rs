@@ -15,31 +15,25 @@ impl NodeCodegen for onnx_ir::split::SplitNode {
 
         let outputs = self.outputs.iter().map(arg_to_ident).collect::<Vec<_>>();
 
-        let unpack_outputs = quote! {
-            let [#(#outputs),*] = split_tensors.try_into().unwrap();
-        };
+        let unpack_outputs = quote! { split_tensors.try_into().unwrap() };
 
-        // split_with_sizes drops zero-length parts, which would leave fewer tensors than
-        // outputs. Sizes that may contain a zero are sliced one part at a time instead.
+        // Zero-length outputs are retained by slicing each part. Evaluate graph operands
+        // before introducing closure/local names, since ONNX values may use those names.
         let slice_parts = |sizes: TokenStream| {
             quote! {
-                let split_tensors = {
-                    let mut start = 0;
-                    #sizes
-                        .into_iter()
-                        .map(|size: usize| {
-                            let end = start + size;
-                            let part = #input.clone().slice_dim(#axis, start..end);
-                            start = end;
-                            part
-                        })
-                        .collect::<alloc::vec::Vec<_>>()
-                };
+                let (lengths, source) = (#sizes, #input);
+                let mut start = 0;
+                let split_tensors = lengths.into_iter().map(|size: usize| {
+                    let end = start + size;
+                    let part = source.clone().slice_dim(#axis, start..end);
+                    start = end;
+                    part
+                }).collect::<alloc::vec::Vec<_>>();
                 #unpack_outputs
             }
         };
 
-        if let Some(split_sizes_input) = &self.config.split_sizes {
+        let body = if let Some(split_sizes_input) = &self.config.split_sizes {
             match split_sizes_input {
                 onnx_ir::split::SplitSizesInput::Static(sizes) if !sizes.contains(&0) => {
                     let sizes = sizes.iter().map(|s| s.to_tokens());
@@ -77,18 +71,16 @@ impl NodeCodegen for onnx_ir::split::SplitNode {
             // num_outputs chunks. A short axis leaves trailing parts empty (5 over 4
             // outputs is 2, 2, 1, 0).
             let n = num_outputs.to_tokens();
-            let split = slice_parts(quote! { sizes });
-            quote! {
+            slice_parts(quote! {{
                 let dim_size = #input.dims()[#axis];
                 let chunk = dim_size.div_ceil(#n);
-                let sizes: alloc::vec::Vec<usize> = (0..#n)
-                    .map(|i| chunk.min(dim_size.saturating_sub(i * chunk)))
-                    .collect();
-                #split
-            }
+                (0..#n).map(|i| chunk.min(dim_size.saturating_sub(i * chunk)))
+                    .collect::<alloc::vec::Vec<usize>>()
+            }})
         } else {
             panic!("Split node must have either split_size, split_sizes, or num_outputs")
-        }
+        };
+        quote! { let [#(#outputs),*] = { #body }; }
     }
 }
 
@@ -116,8 +108,10 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2>) {
-            let split_tensors = input.split(2, 0);
-            let [output0, output1] = split_tensors.try_into().unwrap();
+            let [output0, output1] = {
+                let split_tensors = input.split(2, 0);
+                split_tensors.try_into().unwrap()
+            };
             (output0, output1)
         }
         ");
@@ -141,8 +135,10 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2>, Tensor<2>) {
-            let split_tensors = input.split_with_sizes([1, 3, 2].into(), 1);
-            let [output0, output1, output2] = split_tensors.try_into().unwrap();
+            let [output0, output1, output2] = {
+                let split_tensors = input.split_with_sizes([1, 3, 2].into(), 1);
+                split_tensors.try_into().unwrap()
+            };
             (output0, output1, output2)
         }
         ");
@@ -166,19 +162,20 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> (Tensor<2>, Tensor<2>, Tensor<2>) {
-            let split_tensors = {
+            let [output0, output1, output2] = {
+                let (lengths, source) = ([3, 0, 2], input);
                 let mut start = 0;
-                [3, 0, 2]
+                let split_tensors = lengths
                     .into_iter()
                     .map(|size: usize| {
                         let end = start + size;
-                        let part = input.clone().slice_dim(1, start..end);
+                        let part = source.clone().slice_dim(1, start..end);
                         start = end;
                         part
                     })
-                    .collect::<alloc::vec::Vec<_>>()
+                    .collect::<alloc::vec::Vec<_>>();
+                split_tensors.try_into().unwrap()
             };
-            let [output0, output1, output2] = split_tensors.try_into().unwrap();
             (output0, output1, output2)
         }
         ");
@@ -209,25 +206,29 @@ mod tests {
             input: Tensor<1>,
             split: Tensor<1, Int>,
         ) -> (Tensor<1>, Tensor<1>) {
-            let split_tensors = {
+            let [output0, output1] = {
+                let (lengths, source) = (
+                    split
+                        .to_data()
+                        .convert::<i64>()
+                        .try_into_vec::<i64>()
+                        .unwrap()
+                        .into_iter()
+                        .map(|size| size as usize),
+                    input,
+                );
                 let mut start = 0;
-                split
-                    .to_data()
-                    .convert::<i64>()
-                    .try_into_vec::<i64>()
-                    .unwrap()
-                    .into_iter()
-                    .map(|size| size as usize)
+                let split_tensors = lengths
                     .into_iter()
                     .map(|size: usize| {
                         let end = start + size;
-                        let part = input.clone().slice_dim(0, start..end);
+                        let part = source.clone().slice_dim(0, start..end);
                         start = end;
                         part
                     })
-                    .collect::<alloc::vec::Vec<_>>()
+                    .collect::<alloc::vec::Vec<_>>();
+                split_tensors.try_into().unwrap()
             };
-            let [output0, output1] = split_tensors.try_into().unwrap();
             (output0, output1)
         }
         ");
@@ -252,23 +253,22 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @"
+        assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<1>, split: [i64; 2]) -> (Tensor<1>, Tensor<1>) {
-            let split_tensors = {
+            let [output0, output1] = {
+                let (lengths, source) = (split.into_iter().map(|size| size as usize), input);
                 let mut start = 0;
-                split
-                    .into_iter()
-                    .map(|size| size as usize)
+                let split_tensors = lengths
                     .into_iter()
                     .map(|size: usize| {
                         let end = start + size;
-                        let part = input.clone().slice_dim(0, start..end);
+                        let part = source.clone().slice_dim(0, start..end);
                         start = end;
                         part
                     })
-                    .collect::<alloc::vec::Vec<_>>()
+                    .collect::<alloc::vec::Vec<_>>();
+                split_tensors.try_into().unwrap()
             };
-            let [output0, output1] = split_tensors.try_into().unwrap();
             (output0, output1)
         }
         ");
@@ -293,24 +293,29 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<3>) -> (Tensor<3>, Tensor<3>, Tensor<3>) {
-            let dim_size = input.dims()[2];
-            let chunk = dim_size.div_ceil(3);
-            let sizes: alloc::vec::Vec<usize> = (0..3)
-                .map(|i| chunk.min(dim_size.saturating_sub(i * chunk)))
-                .collect();
-            let split_tensors = {
+            let [output0, output1, output2] = {
+                let (lengths, source) = (
+                    {
+                        let dim_size = input.dims()[2];
+                        let chunk = dim_size.div_ceil(3);
+                        (0..3)
+                            .map(|i| chunk.min(dim_size.saturating_sub(i * chunk)))
+                            .collect::<alloc::vec::Vec<usize>>()
+                    },
+                    input,
+                );
                 let mut start = 0;
-                sizes
+                let split_tensors = lengths
                     .into_iter()
                     .map(|size: usize| {
                         let end = start + size;
-                        let part = input.clone().slice_dim(2, start..end);
+                        let part = source.clone().slice_dim(2, start..end);
                         start = end;
                         part
                     })
-                    .collect::<alloc::vec::Vec<_>>()
+                    .collect::<alloc::vec::Vec<_>>();
+                split_tensors.try_into().unwrap()
             };
-            let [output0, output1, output2] = split_tensors.try_into().unwrap();
             (output0, output1, output2)
         }
         ");

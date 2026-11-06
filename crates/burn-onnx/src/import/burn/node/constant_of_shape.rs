@@ -10,7 +10,7 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
         &self.outputs
     }
 
-    fn forward(&self, _scope: &mut super::super::scope::ScopeAtPosition<'_>) -> TokenStream {
+    fn forward(&self, scope: &mut super::super::scope::ScopeAtPosition<'_>) -> TokenStream {
         let output = arg_to_ident(self.outputs.first().unwrap());
 
         // Extract fill value from config
@@ -56,8 +56,17 @@ impl NodeCodegen for onnx_ir::node::constant_of_shape::ConstantOfShapeNode {
             onnx_ir::node::constant_of_shape::ConstantOfShapeShape::Runtime(runtime_ref) => {
                 // Runtime shape input
                 let arg = &self.inputs[runtime_ref.input_index];
-                let input_name = arg_to_ident(arg);
-                quote! { #input_name }
+                let input_name = scope.arg(arg);
+                if matches!(arg.ty, ArgType::Tensor(_)) {
+                    let rank = self.outputs[0].ty.rank();
+                    quote! {{
+                        let values = #input_name.to_data().convert::<i64>().try_into_vec::<i64>().unwrap();
+                        let shape: [usize; #rank] = core::array::from_fn(|i| usize::try_from(values[i]).expect("ConstantOfShape dimensions must be nonnegative"));
+                        shape
+                    }}
+                } else {
+                    quote! { #input_name }
+                }
             }
         };
 
@@ -708,5 +717,45 @@ mod tests {
             result
         }
         ");
+    }
+    #[test]
+    fn test_constant_of_shape_device_shape() {
+        let config = ConstantOfShapeConfig {
+            shape: ConstantOfShapeShape::Runtime(RuntimeInputRef {
+                name: "dynamic_shape".to_string(),
+                input_index: 0,
+            }),
+            value: Some(TensorData::new(vec![2.5f32], [0usize; 0])),
+        };
+        let node = ConstantOfShapeNodeBuilder::new("const1")
+            .input_tensor("dynamic_shape", 1, DType::I64)
+            .output_tensor("tensor", 3, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r#"
+        pub fn forward(&self, dynamic_shape: Tensor<1, Int>) -> Tensor<3> {
+            let tensor = Tensor::<
+                1,
+            >::from_data(
+                    burn::tensor::TensorData::from([2.5f32 as f64]),
+                    (self.device(), burn::tensor::DType::F32),
+                )
+                .reshape([1, 1, 1])
+                .expand({
+                    let values = dynamic_shape
+                        .to_data()
+                        .convert::<i64>()
+                        .try_into_vec::<i64>()
+                        .unwrap();
+                    let shape: [usize; 3usize] = core::array::from_fn(|i| {
+                        usize::try_from(values[i])
+                            .expect("ConstantOfShape dimensions must be nonnegative")
+                    });
+                    shape
+                });
+            tensor
+        }
+        "#);
     }
 }
