@@ -266,6 +266,7 @@ impl_node_codegen_dispatch! {
     ThresholdedRelu,
     Swish,
     Hardmax,
+    ImageScaler,
     Shrink,
 
     // Shape ops

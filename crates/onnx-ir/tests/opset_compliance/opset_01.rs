@@ -962,6 +962,27 @@ fn if_op(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn image_scaler(graph: &OnnxGraph) {
+    let node = find_node(graph, "imagescaler");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ImageScaler "imagescaler1"
+      Inputs:
+        imagescaler_input: F32[2, 3, 4, 5]
+      Outputs:
+        imagescaler1_out1: F32[2, 3, 4, 5]
+      Config:
+        ImageScalerConfig {
+            scale: 0.5,
+            bias: [
+                1.0,
+                -2.0,
+                3.0,
+            ],
+        }
+    "#);
+}
+
+#[rstest]
 fn instance_normalization(graph: &OnnxGraph) {
     let node = find_node(graph, "instancenormalization");
     insta::assert_snapshot!(format!("{node}"), @r#"
