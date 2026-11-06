@@ -31,6 +31,7 @@ pub mod erf;
 pub mod exp;
 pub mod floor;
 pub mod gelu;
+pub mod image_scaler;
 pub mod log;
 pub mod neg;
 pub mod not;
