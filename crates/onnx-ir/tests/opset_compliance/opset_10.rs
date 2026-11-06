@@ -99,14 +99,36 @@ fn average_pool3d(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn conv_integer(graph: &OnnxGraph) {
+    let node = find_node(graph, "convinteger");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    ConvInteger "convinteger1"
+      Inputs:
+        convinteger_input: U8[1, 2, 4, 4]
+        constant1_out1: I8[3, 2, 2, 2] [constant]
+      Outputs:
+        convinteger1_out1: I32[1, 3, 3, 3]
+      Config:
+        QuantizedConvConfig {
+            auto_pad: NotSet,
+            pads: None,
+            kernel_shape: None,
+            strides: None,
+            dilations: None,
+            group: 1,
+        }
+    "#);
+}
+
+#[rstest]
 fn dequantize_linear(graph: &OnnxGraph) {
     let node = find_node(graph, "dequantizelinear");
     insta::assert_snapshot!(format!("{node}"), @r#"
     DequantizeLinear "dequantizelinear1"
       Inputs:
         dequantizelinear_input: U8[2, 3]
-        constant1_out1: ScalarTensor(F32) [constant]
-        constant2_out1: ScalarTensor(U8) [constant]
+        constant2_out1: ScalarTensor(F32) [constant]
+        constant3_out1: ScalarTensor(U8) [constant]
       Outputs:
         dequantizelinear1_out1: F32[2, 3]
       Config:
@@ -267,13 +289,41 @@ fn non_max_suppression(graph: &OnnxGraph) {
       Inputs:
         nonmaxsuppression_boxes: F32[1, 4, 4]
         nonmaxsuppression_scores: F32[1, 1, 4]
-        constant3_out1: I64[1] [constant]
-        constant4_out1: F32[1] [constant]
+        constant4_out1: I64[1] [constant]
+        constant5_out1: F32[1] [constant]
       Outputs:
         nonmaxsuppression1_out1: I64[?, 3]
       Config:
         NonMaxSuppressionConfig {
             center_point_box: None,
+        }
+    "#);
+}
+
+#[rstest]
+fn q_linear_conv(graph: &OnnxGraph) {
+    let node = find_node(graph, "qlinearconv");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    QLinearConv "qlinearconv1"
+      Inputs:
+        qlinearconv_input: U8[1, 2, 4, 4]
+        constant7_out1: ScalarTensor(F32) [constant]
+        constant8_out1: ScalarTensor(U8) [constant]
+        constant6_out1: I8[3, 2, 2, 2] [constant]
+        constant9_out1: ScalarTensor(F32) [constant]
+        constant10_out1: ScalarTensor(I8) [constant]
+        constant11_out1: ScalarTensor(F32) [constant]
+        constant12_out1: ScalarTensor(U8) [constant]
+      Outputs:
+        qlinearconv1_out1: U8[1, 3, 3, 3]
+      Config:
+        QuantizedConvConfig {
+            auto_pad: NotSet,
+            pads: None,
+            kernel_shape: None,
+            strides: None,
+            dilations: None,
+            group: 1,
         }
     "#);
 }
@@ -285,13 +335,13 @@ fn q_linear_mat_mul(graph: &OnnxGraph) {
     QLinearMatMul "qlinearmatmul1"
       Inputs:
         qlinearmatmul_a: U8[2, 3]
-        constant5_out1: ScalarTensor(F32) [constant]
-        constant6_out1: ScalarTensor(U8) [constant]
+        constant13_out1: ScalarTensor(F32) [constant]
+        constant14_out1: ScalarTensor(U8) [constant]
         qlinearmatmul_b: U8[3, 4]
-        constant7_out1: ScalarTensor(F32) [constant]
-        constant8_out1: ScalarTensor(U8) [constant]
-        constant9_out1: ScalarTensor(F32) [constant]
-        constant10_out1: ScalarTensor(U8) [constant]
+        constant15_out1: ScalarTensor(F32) [constant]
+        constant16_out1: ScalarTensor(U8) [constant]
+        constant17_out1: ScalarTensor(F32) [constant]
+        constant18_out1: ScalarTensor(U8) [constant]
       Outputs:
         qlinearmatmul1_out1: U8[?, ?]
     "#);
@@ -304,8 +354,8 @@ fn quantize_linear(graph: &OnnxGraph) {
     QuantizeLinear "quantizelinear1"
       Inputs:
         quantizelinear_input: F32[2, 3]
-        constant11_out1: ScalarTensor(F32) [constant]
-        constant12_out1: ScalarTensor(U8) [constant]
+        constant19_out1: ScalarTensor(F32) [constant]
+        constant20_out1: ScalarTensor(U8) [constant]
       Outputs:
         quantizelinear1_out1: U8[2, 3]
       Config:
@@ -326,7 +376,7 @@ fn resize(graph: &OnnxGraph) {
     Resize "resize1"
       Inputs:
         resize_input: F32[1, 1, 2, 2]
-        _: F32[4] [static(12)]
+        _: F32[4] [static(20)]
       Outputs:
         resize1_out1: F32[1, 1, ?, ?]
       Config:
@@ -360,9 +410,9 @@ fn slice(graph: &OnnxGraph) {
     Slice "slice1"
       Inputs:
         slice_input: F32[4, 6]
-        _: I64[2] [static(13)]
-        _: I64[2] [static(14)]
-        _: I64[2] [static(15)]
+        _: I64[2] [static(21)]
+        _: I64[2] [static(22)]
+        _: I64[2] [static(23)]
       Outputs:
         slice1_out1: F32[2, 3]
       Config:
@@ -422,7 +472,7 @@ fn top_k(graph: &OnnxGraph) {
     TopK "topk1"
       Inputs:
         topk_input: F32[3, 4]
-        _: I64[1] [static(16)]
+        _: I64[1] [static(24)]
       Outputs:
         topk1_out1: F32[?, ?]
         topk1_out2: I64[?, ?]
@@ -445,7 +495,7 @@ fn upsample(graph: &OnnxGraph) {
     Resize "upsample1"
       Inputs:
         upsample_input: F32[1, 1, 2, 2]
-        _: F32[4] [static(17)]
+        _: F32[4] [static(25)]
       Outputs:
         upsample1_out1: F32[1, 1, 4, 4]
       Config:

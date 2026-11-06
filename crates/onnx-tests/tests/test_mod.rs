@@ -134,6 +134,7 @@ pub mod pool3d;
 pub mod pow;
 pub mod prelu;
 pub mod qlinear_matmul;
+pub mod quantization;
 pub mod quantize_linear;
 pub mod random_normal;
 pub mod random_normal_like;

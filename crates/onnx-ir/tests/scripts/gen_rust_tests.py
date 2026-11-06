@@ -167,6 +167,9 @@ MIN_OPSET = {
     "NonMaxSuppression": 10,
     # Quantization
     "QuantizeLinear": 10,
+    "DynamicQuantizeLinear": 11,
+    "ConvInteger": 10,
+    "QLinearConv": 10,
     "DequantizeLinear": 10,
     "Where": 9,
     "NonZero": 9,

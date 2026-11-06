@@ -52,7 +52,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [Conv1d][34]                     | ✅             | ✅           |
 | [Conv2d][34]                     | ✅             | ✅           |
 | [Conv3d][34]                     | ✅             | ✅           |
-| [ConvInteger][37]                | ❌             | ❌           |
+| [ConvInteger][37]                | ✅             | ✅           |
 | [ConvTranspose1d][38]            | ✅             | ✅           |
 | [ConvTranspose2d][38]            | ✅             | ✅           |
 | [ConvTranspose3d][38]            | ✅             | ✅           |
@@ -67,7 +67,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [DFT][45]                        | ✅             | ✅           |
 | [Div][46]                        | ✅             | ✅           |
 | [Dropout][47]                    | ✅             | ✅           |
-| [DynamicQuantizeLinear][48]      | ❌             | ❌           |
+| [DynamicQuantizeLinear][48]      | ✅             | ✅           |
 | [Einsum][49]                     | ✅             | ✅           |
 | [Elu][50]                        | ✅             | ✅           |
 | [Equal][51]                      | ✅             | ✅           |
@@ -146,7 +146,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [Pad][120]                       | ✅             | ✅           |
 | [Pow][121]                       | ✅             | ✅           |
 | [PRelu][122]                     | ✅             | ✅           |
-| [QLinearConv][123]               | ❌             | ❌           |
+| [QLinearConv][123]               | ✅             | ✅           |
 | [QLinearMatMul][124]             | ✅             | ✅           |
 | [QuantizeLinear][125]            | ✅             | ✅           |
 | [RMSNormalization][198]          | ❌             | ❌           |
@@ -473,5 +473,12 @@ targets inside `If`/`Loop`/`Scan` subgraph bodies are not supported yet and
 are rejected with a clear error. See the "Custom Operators and Overrides"
 section of `DEVELOPMENT-GUIDE.md` for the full reference, and
 `examples/custom-op-hooks/` for a runnable example.
+
+Quantized convolution supports int8/uint8 inputs, per-tensor input/output parameters,
+per-output-channel weight parameters, grouping, dilation, and explicit or automatic padding.
+ConvInteger and QLinearConv accumulate in int32 using tensor windows and matrix multiplication;
+this can allocate a larger intermediate than a backend-native convolution kernel.
+Linear quantization supports scalar, per-axis, and blocked int8/uint8/int16/uint16 formats.
+Float8 and packed 2/4-bit quantization formats remain unsupported.
 
 Multinomial preserves the `seed` attribute but warns that Burn uses its backend random generator; per-node seeds are not honored.

@@ -200,11 +200,17 @@ impl NodeProcessor for QLinearMatMulProcessor {
         let output_rank = matmul_output_rank(a.ty.rank(), b.ty.rank());
 
         // Validate rank compatibility between tensors and their corresponding scales (and zero points)
-        for (tensor_rank, scale_rank, name) in [
-            (a.ty.rank(), a_scale.ty.rank(), "a"),
-            (b.ty.rank(), b_scale.ty.rank(), "b"),
-            (output_rank, y_scale.ty.rank(), "y"),
+        for (tensor_rank, scale_ty, name) in [
+            (a.ty.rank(), &a_scale.ty, "a"),
+            (b.ty.rank(), &b_scale.ty, "b"),
+            (output_rank, &y_scale.ty, "y"),
         ] {
+            let scale_rank = scale_ty.rank();
+            let single_element = matches!(scale_ty, ArgType::ScalarTensor(_))
+                || matches!(scale_ty, ArgType::Tensor(t) if t.static_shape.as_ref().is_some_and(|shape| shape.iter().all(|dim| *dim == Some(1))));
+            if single_element {
+                continue;
+            }
             match (tensor_rank, scale_rank) {
                 // Scalar scale (rank 0) is compatible with any tensor rank
                 (_, 0) => {}

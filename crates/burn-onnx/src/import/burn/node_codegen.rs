@@ -357,6 +357,9 @@ impl_node_codegen_dispatch! {
     MatMulInteger,
     DequantizeLinear,
     QuantizeLinear,
+    ConvInteger,
+    QLinearConv,
+    DynamicQuantizeLinear,
     QLinearMatMul,
 
     // Constant ops

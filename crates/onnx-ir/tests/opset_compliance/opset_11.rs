@@ -475,6 +475,20 @@ fn det(graph: &OnnxGraph) {
 }
 
 #[rstest]
+fn dynamic_quantize_linear(graph: &OnnxGraph) {
+    let node = find_node(graph, "dynamicquantizelinear");
+    insta::assert_snapshot!(format!("{node}"), @r#"
+    DynamicQuantizeLinear "dynamicquantizelinear1"
+      Inputs:
+        dynamicquantizelinear_input: F32[2, 3]
+      Outputs:
+        dynamicquantizelinear1_out1: U8[2, 3]
+        dynamicquantizelinear1_out2: ScalarTensor(F32)
+        dynamicquantizelinear1_out3: ScalarTensor(U8)
+    "#);
+}
+
+#[rstest]
 fn equal(graph: &OnnxGraph) {
     let node = find_node(graph, "equal");
     insta::assert_snapshot!(format!("{node}"), @r#"

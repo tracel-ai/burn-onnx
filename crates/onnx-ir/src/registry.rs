@@ -485,6 +485,18 @@ impl ProcessorRegistry {
             Box::new(crate::node::dequantize_linear::DequantizeLinearProcessor),
         );
         registry.register(
+            NodeType::DynamicQuantizeLinear,
+            Box::new(crate::node::dynamic_quantize_linear::DynamicQuantizeLinearProcessor),
+        );
+        registry.register(
+            NodeType::ConvInteger,
+            Box::new(crate::node::quantized_conv::ConvIntegerProcessor),
+        );
+        registry.register(
+            NodeType::QLinearConv,
+            Box::new(crate::node::quantized_conv::QLinearConvProcessor),
+        );
+        registry.register(
             NodeType::QuantizeLinear,
             Box::new(crate::node::quantize_linear::QuantizeLinearProcessor),
         );
