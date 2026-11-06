@@ -368,10 +368,12 @@ fn forward_burn_attention(
     let mask_tokens = option(mask.is_some(), quote! { hide });
     let bias_tokens = option(bias.is_some(), quote! { score_bias });
 
+    // ONNX past keys/values are already concatenated in the prelude. Burn's
+    // optional fixed-capacity/paged cache is a different interface and is unused.
     quote! {
         let (#(#output_names,)*) = {
             #body
-            let #output_y = burn::tensor::module::attention(q, k, v, #mask_tokens, #bias_tokens, #options);
+            let #output_y = burn::tensor::module::attention(q, k, v, #mask_tokens, #bias_tokens, None, #options);
             #row_guard
             #reshape_output
             (#(#output_names,)*)
@@ -553,6 +555,7 @@ mod tests {
                     v,
                     None,
                     None,
+                    None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
@@ -611,6 +614,7 @@ mod tests {
                     q,
                     k,
                     v,
+                    None,
                     None,
                     None,
                     burn::tensor::ops::AttentionModuleOptions {
@@ -695,6 +699,7 @@ mod tests {
                     v,
                     Some(hide),
                     None,
+                    None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
@@ -766,6 +771,7 @@ mod tests {
                     v,
                     None,
                     Some(score_bias),
+                    None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
@@ -832,6 +838,7 @@ mod tests {
                     v,
                     None,
                     None,
+                    None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: Some(50f64),
@@ -892,6 +899,7 @@ mod tests {
                     q,
                     k,
                     v,
+                    None,
                     None,
                     None,
                     burn::tensor::ops::AttentionModuleOptions {
@@ -964,6 +972,7 @@ mod tests {
                     k,
                     v,
                     Some(hide),
+                    None,
                     None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
@@ -1039,6 +1048,7 @@ mod tests {
                     k,
                     v,
                     Some(hide),
+                    None,
                     None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
@@ -1125,6 +1135,7 @@ mod tests {
                     v,
                     Some(hide),
                     None,
+                    None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
@@ -1210,6 +1221,7 @@ mod tests {
                     v,
                     None,
                     Some(score_bias),
+                    None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
@@ -1547,6 +1559,7 @@ mod tests {
                     v,
                     None,
                     Some(score_bias),
+                    None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
@@ -1649,6 +1662,7 @@ mod tests {
                     v,
                     Some(hide),
                     Some(score_bias),
+                    None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
@@ -1701,6 +1715,7 @@ mod tests {
                     q,
                     k,
                     v,
+                    None,
                     None,
                     None,
                     burn::tensor::ops::AttentionModuleOptions {
@@ -1770,6 +1785,7 @@ mod tests {
                     v,
                     Some(hide),
                     None,
+                    None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,
                         softcap: None,
@@ -1835,6 +1851,7 @@ mod tests {
                     k,
                     v,
                     Some(hide),
+                    None,
                     None,
                     burn::tensor::ops::AttentionModuleOptions {
                         scale: None,

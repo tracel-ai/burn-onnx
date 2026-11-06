@@ -335,17 +335,26 @@ mod tests {
         // A decode step: the causal mask is offset by the two cached keys, so the
         // single new query sees all three.
         let device = Default::default();
-        let model = attention_kv_cache_causal::Model::new(&device);
-
-        let (y, present_k, _) = model.forward(
-            seq([1, 2, 1, 4], 0.37),
-            seq([1, 2, 1, 4], 0.23),
-            seq([1, 2, 1, 4], 0.41),
-            seq([1, 2, 2, 4], 0.29),
-            seq([1, 2, 2, 4], 0.53),
+        let model = attention_kv_cache_causal::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_kv_cache_causal.bpk"),
+            &device,
         );
+        let k = seq([1, 2, 1, 4], 0.23);
+        let v = seq([1, 2, 1, 4], 0.41);
+        let past_k = seq([1, 2, 2, 4], 0.29);
+        let past_v = seq([1, 2, 2, 4], 0.53);
+        let expected_k = Tensor::cat(alloc::vec![past_k.clone(), k.clone()], 2).into_data();
+        let expected_v = Tensor::cat(alloc::vec![past_v.clone(), v.clone()], 2).into_data();
 
+        let (y, present_k, present_v) =
+            model.forward(seq([1, 2, 1, 4], 0.37), k, v, past_k, past_v);
+
+        // ONNX caches are concatenated before the attention call, rather than
+        // being passed to Burn's fixed-capacity/paged cache interface.
         assert_eq!(present_k.dims(), [1, 2, 3, 4]);
+        assert_eq!(present_v.dims(), [1, 2, 3, 4]);
+        present_k.into_data().assert_eq(&expected_k, true);
+        present_v.into_data().assert_eq(&expected_v, true);
         y.to_data().assert_approx_eq::<f32>(
             &TensorData::from([[
                 [[-0.72138f32, -0.23987, 0.241639, 0.404923]],

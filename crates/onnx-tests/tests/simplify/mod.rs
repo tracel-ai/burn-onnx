@@ -733,6 +733,7 @@ mod tests {
                         v,
                         None,
                         None,
+                        None,
                         burn::tensor::ops::AttentionModuleOptions {
                             scale: Some(0.5f64),
                             softcap: None,
@@ -767,6 +768,7 @@ mod tests {
                         q,
                         k,
                         v,
+                        None,
                         None,
                         None,
                         burn::tensor::ops::AttentionModuleOptions {
