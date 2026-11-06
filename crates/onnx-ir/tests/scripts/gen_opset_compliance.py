@@ -198,6 +198,7 @@ SUPPORTED_OPS = {
     "Identity": "identity",
     "Cast": "cast",
     "CastLike": "cast_like",
+    "ImageScaler": "image_scaler",
     "Shrink": "shrink",
     "Unique": "unique",
     "NonMaxSuppression": "non_max_suppression",
@@ -1246,6 +1247,13 @@ def make_lrn(op_name: str, opset: int):
     return [node], [inp], [out], []
 
 
+def make_image_scaler(op_name: str, opset: int):
+    inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [2, 3, 4, 5])
+    out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.FLOAT, [2, 3, 4, 5])
+    node = helper.make_node(op_name, [inp.name], [out.name], name=_p(op_name, "node"), scale=0.5, bias=[1., -2., 3.])
+    return [node], [inp], [out], []
+
+
 def make_shrink(op_name: str, opset: int):
     inp = helper.make_tensor_value_info(_p(op_name, "input"), TensorProto.FLOAT, [2, 3, 4])
     out = helper.make_tensor_value_info(_p(op_name, "output"), TensorProto.FLOAT, [2, 3, 4])
@@ -1542,6 +1550,7 @@ GENERATORS = {
     "thresholded_relu": make_thresholded_relu,
     "linear": make_linear,
     "lrn": make_lrn,
+    "image_scaler": make_image_scaler,
     "shrink": make_shrink,
     "cast_like": make_cast_like,
     "det": make_det,

@@ -170,6 +170,10 @@ impl ProcessorRegistry {
         );
         registry.register(NodeType::Sign, Box::new(crate::node::sign::SignProcessor));
         registry.register(
+            NodeType::ImageScaler,
+            Box::new(crate::node::image_scaler::ImageScalerProcessor),
+        );
+        registry.register(
             NodeType::Shrink,
             Box::new(crate::node::shrink::ShrinkProcessor),
         );

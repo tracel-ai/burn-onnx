@@ -99,6 +99,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [If][77]                         | ✅             | ✅           |
 | [Im][78]                         | ❌             | ❌           |
 | [ImageDecoder][197]              | ❌             | ❌           |
+| [ImageScaler][210]               | ✅             | ✅           |
 | [Imputer][205]                   | ✅             | ✅           |
 | [InstanceNormalization][79]      | ✅             | ✅           |
 | [IsInf][80]                      | ✅             | ✅           |
@@ -432,6 +433,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 [207]: https://onnx.ai/onnx/operators/onnx_aionnxml_SVMRegressor.html "ONNX SVMRegressor"
 [208]: https://onnx.ai/onnx/operators/onnx_aionnxml_OneHotEncoder.html "ONNX OneHotEncoder"
 [209]: https://onnx.ai/onnx/operators/onnx__CumProd.html "ONNX CumProd"
+[210]: https://onnx.ai/onnx/operators/onnx__ImageScaler.html "ONNX ImageScaler"
 
 ## Pattern Coalescing
 

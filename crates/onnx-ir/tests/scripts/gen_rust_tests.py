@@ -161,6 +161,7 @@ MIN_OPSET = {
     "Identity": 1,
     "Cast": 1,
     "CastLike": 15,
+    "ImageScaler": 1,
     "Shrink": 9,
     "Unique": 1,
     "NonMaxSuppression": 10,
