@@ -1,6 +1,10 @@
 // Import the shared macro
 use crate::include_models;
 include_models!(
+    attention_lengths_plain,
+    attention_lengths_plain3d,
+    attention_lengths_causal,
+    attention_lengths_qk,
     attention_optional_native,
     attention_optional_qk,
     attention_4d,
@@ -26,6 +30,116 @@ include_models!(
 mod tests {
     use super::*;
     use burn::tensor::{Bool, Device, Int, Tensor, TensorData, Tolerance};
+
+    #[test]
+    fn external_cache_lengths() {
+        let device = Default::default();
+        let plain3d = attention_lengths_plain3d::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_plain3d.bpk"),
+            &device,
+        );
+        let plain = attention_lengths_plain::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_plain.bpk"),
+            &device,
+        );
+        let causal = attention_lengths_causal::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_causal.bpk"),
+            &device,
+        );
+        let custom = attention_lengths_qk::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_qk.bpk"),
+            &device,
+        );
+        let q = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..16)
+                    .map(|i| i as f32 / 10.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [2, 2, 2, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let k = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..16)
+                    .map(|i| i as f32 / 10.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [2, 1, 4, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let v = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..16)
+                    .map(|i| i as f32 / 5.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [2, 1, 4, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let mask = Tensor::<4, Bool>::from_bool(
+            TensorData::new(
+                alloc::vec![
+                    true, true, false, true, true, true, false, false, false, true, false, true
+                ],
+                [2, 1, 2, 3],
+            ),
+            &device,
+        );
+        for (lengths, expected) in [
+            (
+                [3i64, 2],
+                [
+                    &include_bytes!("attention_lengths_plain_0_y.bin")[..],
+                    &include_bytes!("attention_lengths_causal_0_y.bin")[..],
+                    &include_bytes!("attention_lengths_qk_0_y.bin")[..],
+                    &include_bytes!("attention_lengths_qk_0_qk.bin")[..],
+                ],
+            ),
+            (
+                [0i64, 2],
+                [
+                    &include_bytes!("attention_lengths_plain_1_y.bin")[..],
+                    &include_bytes!("attention_lengths_causal_1_y.bin")[..],
+                    &include_bytes!("attention_lengths_qk_1_y.bin")[..],
+                    &include_bytes!("attention_lengths_qk_1_qk.bin")[..],
+                ],
+            ),
+        ] {
+            let lengths = Tensor::<1, Int>::from_data(
+                TensorData::from(lengths),
+                (&device, burn::tensor::DType::I64),
+            );
+            let a = plain.forward(q.clone(), k.clone(), v.clone(), lengths.clone());
+            let a3d = plain3d.forward(
+                q.clone().permute([0, 2, 1, 3]).reshape([2, 2, 4]),
+                k.clone().permute([0, 2, 1, 3]).reshape([2, 4, 2]),
+                v.clone().permute([0, 2, 1, 3]).reshape([2, 4, 2]),
+                lengths.clone(),
+            );
+            let a3d = a3d.reshape([2, 2, 2, 2]).permute([0, 2, 1, 3]);
+            a3d.to_data()
+                .assert_approx_eq::<f32>(&a.to_data(), Tolerance::absolute(1e-5));
+            let b = causal.forward(
+                q.clone(),
+                k.clone(),
+                v.clone(),
+                lengths.clone(),
+                mask.clone(),
+            );
+            let (c, d) = custom.forward(q.clone(), k.clone(), v.clone(), lengths, mask.clone());
+            for (i, (actual, bytes)) in [a, b, c, d].into_iter().zip(expected).enumerate() {
+                let data = bytes
+                    .chunks_exact(4)
+                    .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+                    .collect::<alloc::vec::Vec<_>>();
+                actual.to_data().assert_approx_eq::<f32>(
+                    &TensorData::new(data, [2, 2, 2, if i == 3 { 4 } else { 2 }]),
+                    Tolerance::absolute(1e-5),
+                );
+            }
+        }
+    }
 
     #[test]
     fn omitted_past_and_present_slots() {

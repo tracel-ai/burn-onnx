@@ -13,6 +13,11 @@ fn use_burn_attention(node: &onnx_ir::attention::AttentionNode) -> bool {
     !node.outputs.get(3).is_some_and(|a| !a.is_optional())
 }
 
+/// Whether the external KV cache supplies per-batch valid lengths.
+fn has_lengths(node: &onnx_ir::attention::AttentionNode) -> bool {
+    node.inputs.get(6).is_some_and(|a| !a.is_optional())
+}
+
 /// Known size of `axis` of a tensor argument.
 fn static_dim(arg: &Argument, axis: usize) -> Option<usize> {
     arg.ty.static_shape()?.get(axis).copied().flatten()
@@ -44,10 +49,16 @@ fn prelude(node: &onnx_ir::attention::AttentionNode, scope: &mut ScopeAtPosition
         _ => panic!("Expected tensor input for Q"),
     };
 
-    let mut body = quote! {
-        let q = #q;
-        let k = #k;
-        let v = #v;
+    let mut body = if let Some(lengths) = node.inputs.get(6).filter(|a| !a.is_optional()) {
+        let lengths = scope.arg(lengths);
+        if let Some(mask) = node.inputs.get(3).filter(|a| !a.is_optional()) {
+            let mask = scope.arg(mask);
+            quote! { let (q, k, v, cache_lengths, cache_mask) = (#q, #k, #v, #lengths, #mask); }
+        } else {
+            quote! { let (q, k, v, cache_lengths) = (#q, #k, #v, #lengths); }
+        }
+    } else {
+        quote! { let q = #q; let k = #k; let v = #v; }
     };
 
     // Reshape rank-3 inputs to rank-4: [batch, seq, hidden] -> [batch, heads, seq, head_dim]
@@ -169,6 +180,7 @@ fn native_causal(node: &onnx_ir::attention::AttentionNode, rank: usize) -> bool 
     let has_user_mask = node.inputs.get(3).is_some_and(|mask| !mask.is_optional());
     node.config.is_causal
         && !has_user_mask
+        && !has_lengths(node)
         && matches!(
             (static_dim(&node.inputs[0], seq_axis), static_dim(&node.inputs[1], seq_axis)),
             (Some(q), Some(k)) if q == k
@@ -178,7 +190,19 @@ fn native_causal(node: &onnx_ir::attention::AttentionNode, rank: usize) -> bool 
 /// The ONNX causal mask over the full `[batch, heads, q, k]` score shape: `true`
 /// where key `j > i + past_len` is hidden from query `i`. Reads `q`, `k` and, with
 /// a cache, `past_len`.
-fn causal_mask(past_kv: bool) -> TokenStream {
+fn causal_mask(past_kv: bool, lengths: bool) -> TokenStream {
+    if lengths {
+        return quote! {{
+            let [batch, heads, q_len, _] = q.dims();
+            let k_len = k.dims()[2];
+            let offset = cache_lengths.clone().reshape([batch, 1, 1, 1]) - q_len as i64;
+            let rows = Tensor::<1, Int>::arange(0..q_len as i64, (self.device(), burn::tensor::DType::I64))
+                .reshape([1, 1, q_len, 1]) + offset;
+            let cols = Tensor::<1, Int>::arange(0..k_len as i64, (self.device(), burn::tensor::DType::I64))
+                .reshape([1, 1, 1, k_len]);
+            cols.greater(rows).expand([batch, heads, q_len, k_len])
+        }};
+    }
     let offset = past_kv.then(|| quote! { .add_scalar(past_len as i64) });
     quote! {{
         let [batch, heads, q_len, _] = q.dims();
@@ -212,12 +236,16 @@ enum UserMask {
     Bias(TokenStream),
 }
 
-fn user_mask(
+fn raw_user_mask(
     node: &onnx_ir::attention::AttentionNode,
     scope: &mut ScopeAtPosition<'_>,
 ) -> Option<UserMask> {
     let mask_input = node.inputs.get(3).filter(|a| !a.is_optional())?;
-    let mask_arg = scope.arg(mask_input);
+    let mask_arg = if has_lengths(node) {
+        quote! { cache_mask }
+    } else {
+        scope.arg(mask_input)
+    };
     let ArgType::Tensor(t) = &mask_input.ty else {
         panic!("Attention mask must be a tensor");
     };
@@ -235,6 +263,42 @@ fn user_mask(
     } else {
         panic!("Unsupported attention mask type")
     })
+}
+
+/// Apply the external cache's padding mask to both native and intermediate-output paths.
+fn user_mask(
+    node: &onnx_ir::attention::AttentionNode,
+    scope: &mut ScopeAtPosition<'_>,
+) -> Option<UserMask> {
+    let user = raw_user_mask(node, scope);
+    if !has_lengths(node) {
+        return user;
+    }
+    let user_bias = match user {
+        Some(UserMask::Hide(mask)) => quote! {{
+            let mask = #mask;
+            let dims = mask.dims();
+            Tensor::<4>::zeros(dims, (self.device(), q.dtype())).mask_fill(mask, f32::NEG_INFINITY)
+        }},
+        Some(UserMask::Bias(bias)) => bias,
+        None => quote! { Tensor::<4>::zeros([1, 1, 1, k.dims()[2]], (self.device(), q.dtype())) },
+    };
+    Some(UserMask::Bias(quote! {{
+        let bias = #user_bias;
+        let [batch, heads, q_len, _] = q.dims();
+        let capacity = k.dims()[2];
+        let [b, h, rows, width] = bias.dims();
+        let bias = if width < capacity {
+            let padding = Tensor::<4>::full([b, h, rows, capacity - width], f32::NEG_INFINITY,
+                (self.device(), q.dtype()));
+            Tensor::cat(alloc::vec![bias, padding], 3)
+        } else { bias };
+        let positions = Tensor::<1, Int>::arange(0..capacity as i64, (self.device(), burn::tensor::DType::I64))
+            .reshape([1, 1, 1, capacity]);
+        let padding = positions.greater_equal(cache_lengths.clone().reshape([batch, 1, 1, 1]));
+        let shape = [batch, heads, q_len, capacity];
+        bias.expand(shape).mask_fill(padding.expand(shape), f32::NEG_INFINITY)
+    }}))
 }
 
 impl NodeCodegen for onnx_ir::attention::AttentionNode {
@@ -312,12 +376,12 @@ fn forward_burn_attention(
     let has_user_mask = hide.is_some() || bias.is_some();
     let mask = match (hide, explicit_causal) {
         (Some(hide), true) => {
-            let causal = causal_mask(past_kv);
+            let causal = causal_mask(past_kv, has_lengths(node));
             body.extend(quote! { let causal = #causal; });
             Some(quote! { #hide.expand(causal.dims()).bool_or(causal) })
         }
         (Some(hide), false) => Some(hide),
-        (None, true) => Some(causal_mask(past_kv)),
+        (None, true) => Some(causal_mask(past_kv, has_lengths(node))),
         (None, false) => None,
     };
     if let Some(mask) = &mask {
@@ -362,12 +426,17 @@ fn forward_burn_attention(
     let mask_tokens = option(mask.is_some(), quote! { hide });
     let bias_tokens = option(bias.is_some(), quote! { score_bias });
 
-    // ONNX past keys/values are already concatenated in the prelude. Burn's
-    // optional fixed-capacity/paged cache is a different interface and is unused.
+    // Internal past/present caches are concatenated in the prelude; external caches
+    // pass valid lengths to Burn so the backend can skip padded positions.
+    let cache = if has_lengths(node) {
+        quote! { Some(burn::tensor::module::AttentionCache::new(cache_lengths)) }
+    } else {
+        quote! { None }
+    };
     quote! {
         let (#(#output_names,)*) = {
             #body
-            let #output_y = burn::tensor::module::attention(q, k, v, #mask_tokens, #bias_tokens, None, #options);
+            let #output_y = burn::tensor::module::attention(q, k, v, #mask_tokens, #bias_tokens, #cache, #options);
             #row_guard
             #reshape_output
             (#(#output_names,)*)
@@ -405,7 +474,7 @@ fn forward_custom(
     let masked = user.is_some() || node.config.is_causal;
     if masked {
         let causal = node.config.is_causal.then(|| {
-            let causal = causal_mask(past_kv);
+            let causal = causal_mask(past_kv, has_lengths(node));
             quote! { let score_bias = score_bias.mask_fill(#causal, f32::NEG_INFINITY); }
         });
         let user = match user {
@@ -504,6 +573,572 @@ mod tests {
     use burn::tensor::{BoolStore, DType};
     use insta::assert_snapshot;
     use onnx_ir::attention::{AttentionConfig, AttentionNodeBuilder, AttentionQkMatmulOutputMode};
+
+    #[test]
+    fn test_attention_lengths_native() {
+        let mut node = AttentionNodeBuilder::new("attn")
+            .input_tensor_shape("query", vec![2, 2, 2, 2], DType::F32)
+            .input_tensor_shape("key", vec![2, 1, 4, 2], DType::F32)
+            .input_tensor_shape("value", vec![2, 1, 4, 2], DType::F32)
+            .input_tensor_shape(
+                "cache_lengths",
+                vec![2, 1, 2, 3],
+                DType::Bool(BoolStore::Native),
+            )
+            .input_tensor("past_key", 4, DType::F32)
+            .input_tensor("past_value", 4, DType::F32)
+            .input_tensor_shape("lengths", vec![2], DType::I64)
+            .output_tensor("output", 4, DType::F32)
+            .output_tensor("present_key", 4, DType::F32)
+            .output_tensor("present_value", 4, DType::F32)
+            .output_tensor("qk_output", 4, DType::F32)
+            .config(AttentionConfig::new(
+                false,
+                None,
+                None,
+                AttentionQkMatmulOutputMode::MatmulAfterSoftmax,
+                None,
+                0.0,
+                None,
+            ))
+            .build();
+        for i in [3, 4, 5] {
+            node.inputs[i].value_source = onnx_ir::ir::ValueSource::Optional;
+        }
+        for i in [1, 2, 3] {
+            node.outputs[i].value_source = onnx_ir::ir::ValueSource::Optional;
+        }
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(
+            &self,
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            lengths: Tensor<1, Int>,
+        ) -> Tensor<4> {
+            let (output,) = {
+                let (q, k, v, cache_lengths) = (query, key, value, lengths);
+                let groups = q.dims()[1] / k.dims()[1];
+                let (k, v) = if groups > 1 {
+                    let [batch, kv_heads, k_len, k_dim] = k.dims();
+                    let v_dim = v.dims()[3];
+                    (
+                        k
+                            .unsqueeze_dim::<5>(2)
+                            .expand([batch, kv_heads, groups, k_len, k_dim])
+                            .reshape([batch, kv_heads * groups, k_len, k_dim]),
+                        v
+                            .unsqueeze_dim::<5>(2)
+                            .expand([batch, kv_heads, groups, k_len, v_dim])
+                            .reshape([batch, kv_heads * groups, k_len, v_dim]),
+                    )
+                } else {
+                    (k, v)
+                };
+                let score_bias = {
+                    let bias = Tensor::<
+                        4,
+                    >::zeros([1, 1, 1, k.dims()[2]], (self.device(), q.dtype()));
+                    let [batch, heads, q_len, _] = q.dims();
+                    let capacity = k.dims()[2];
+                    let [b, h, rows, width] = bias.dims();
+                    let bias = if width < capacity {
+                        let padding = Tensor::<
+                            4,
+                        >::full(
+                            [b, h, rows, capacity - width],
+                            f32::NEG_INFINITY,
+                            (self.device(), q.dtype()),
+                        );
+                        Tensor::cat(alloc::vec![bias, padding], 3)
+                    } else {
+                        bias
+                    };
+                    let positions = Tensor::<
+                        1,
+                        Int,
+                    >::arange(0..capacity as i64, (self.device(), burn::tensor::DType::I64))
+                        .reshape([1, 1, 1, capacity]);
+                    let padding = positions
+                        .greater_equal(cache_lengths.clone().reshape([batch, 1, 1, 1]));
+                    let shape = [batch, heads, q_len, capacity];
+                    bias.expand(shape).mask_fill(padding.expand(shape), f32::NEG_INFINITY)
+                };
+                let hidden_rows = score_bias.clone().max_dim(3).equal_elem(f32::NEG_INFINITY);
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    Some(score_bias),
+                    Some(burn::tensor::module::AttentionCache::new(cache_lengths)),
+                    burn::tensor::ops::AttentionModuleOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                        ..Default::default()
+                    },
+                );
+                let output = {
+                    let dims = output.dims();
+                    output.mask_fill(hidden_rows.expand(dims), 0.0)
+                };
+                (output,)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_attention_lengths_float_mask() {
+        let mut node = AttentionNodeBuilder::new("attn")
+            .input_tensor_shape("query", vec![2, 2, 2, 2], DType::F32)
+            .input_tensor_shape("key", vec![2, 1, 4, 2], DType::F32)
+            .input_tensor_shape("value", vec![2, 1, 4, 2], DType::F32)
+            .input_tensor_shape("cache_lengths", vec![2, 1, 2, 3], DType::F32)
+            .input_tensor("past_key", 4, DType::F32)
+            .input_tensor("past_value", 4, DType::F32)
+            .input_tensor_shape("lengths", vec![2], DType::I64)
+            .output_tensor("output", 4, DType::F32)
+            .output_tensor("present_key", 4, DType::F32)
+            .output_tensor("present_value", 4, DType::F32)
+            .output_tensor("qk_output", 4, DType::F32)
+            .config(AttentionConfig::new(
+                true,
+                None,
+                None,
+                AttentionQkMatmulOutputMode::MatmulAfterSoftmax,
+                None,
+                0.0,
+                None,
+            ))
+            .build();
+        for i in [4, 5] {
+            node.inputs[i].value_source = onnx_ir::ir::ValueSource::Optional;
+        }
+        for i in [1, 2, 3] {
+            node.outputs[i].value_source = onnx_ir::ir::ValueSource::Optional;
+        }
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(
+            &self,
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            cache_lengths: Tensor<4>,
+            lengths: Tensor<1, Int>,
+        ) -> Tensor<4> {
+            let (output,) = {
+                let (q, k, v, cache_lengths, cache_mask) = (
+                    query,
+                    key,
+                    value,
+                    lengths,
+                    cache_lengths,
+                );
+                let groups = q.dims()[1] / k.dims()[1];
+                let (k, v) = if groups > 1 {
+                    let [batch, kv_heads, k_len, k_dim] = k.dims();
+                    let v_dim = v.dims()[3];
+                    (
+                        k
+                            .unsqueeze_dim::<5>(2)
+                            .expand([batch, kv_heads, groups, k_len, k_dim])
+                            .reshape([batch, kv_heads * groups, k_len, k_dim]),
+                        v
+                            .unsqueeze_dim::<5>(2)
+                            .expand([batch, kv_heads, groups, k_len, v_dim])
+                            .reshape([batch, kv_heads * groups, k_len, v_dim]),
+                    )
+                } else {
+                    (k, v)
+                };
+                let hide = {
+                    let [batch, heads, q_len, _] = q.dims();
+                    let k_len = k.dims()[2];
+                    let offset = cache_lengths.clone().reshape([batch, 1, 1, 1]) - q_len as i64;
+                    let rows = Tensor::<
+                        1,
+                        Int,
+                    >::arange(0..q_len as i64, (self.device(), burn::tensor::DType::I64))
+                        .reshape([1, 1, q_len, 1]) + offset;
+                    let cols = Tensor::<
+                        1,
+                        Int,
+                    >::arange(0..k_len as i64, (self.device(), burn::tensor::DType::I64))
+                        .reshape([1, 1, 1, k_len]);
+                    cols.greater(rows).expand([batch, heads, q_len, k_len])
+                };
+                let score_bias = {
+                    let bias = cache_mask;
+                    let [batch, heads, q_len, _] = q.dims();
+                    let capacity = k.dims()[2];
+                    let [b, h, rows, width] = bias.dims();
+                    let bias = if width < capacity {
+                        let padding = Tensor::<
+                            4,
+                        >::full(
+                            [b, h, rows, capacity - width],
+                            f32::NEG_INFINITY,
+                            (self.device(), q.dtype()),
+                        );
+                        Tensor::cat(alloc::vec![bias, padding], 3)
+                    } else {
+                        bias
+                    };
+                    let positions = Tensor::<
+                        1,
+                        Int,
+                    >::arange(0..capacity as i64, (self.device(), burn::tensor::DType::I64))
+                        .reshape([1, 1, 1, capacity]);
+                    let padding = positions
+                        .greater_equal(cache_lengths.clone().reshape([batch, 1, 1, 1]));
+                    let shape = [batch, heads, q_len, capacity];
+                    bias.expand(shape).mask_fill(padding.expand(shape), f32::NEG_INFINITY)
+                };
+                let hidden_rows = {
+                    let shape = [q.dims()[0], q.dims()[1], q.dims()[2], k.dims()[2]];
+                    score_bias
+                        .clone()
+                        .expand(shape)
+                        .mask_fill(hide.clone().expand(shape), f32::NEG_INFINITY)
+                        .max_dim(3)
+                        .equal_elem(f32::NEG_INFINITY)
+                };
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    Some(hide),
+                    Some(score_bias),
+                    Some(burn::tensor::module::AttentionCache::new(cache_lengths)),
+                    burn::tensor::ops::AttentionModuleOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                        ..Default::default()
+                    },
+                );
+                let output = {
+                    let dims = output.dims();
+                    output.mask_fill(hidden_rows.expand(dims), 0.0)
+                };
+                (output,)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_attention_lengths_masked() {
+        let mut node = AttentionNodeBuilder::new("attn")
+            .input_tensor_shape("query", vec![2, 2, 2, 2], DType::F32)
+            .input_tensor_shape("key", vec![2, 1, 4, 2], DType::F32)
+            .input_tensor_shape("value", vec![2, 1, 4, 2], DType::F32)
+            .input_tensor_shape(
+                "cache_lengths",
+                vec![2, 1, 2, 3],
+                DType::Bool(BoolStore::Native),
+            )
+            .input_tensor("past_key", 4, DType::F32)
+            .input_tensor("past_value", 4, DType::F32)
+            .input_tensor_shape("lengths", vec![2], DType::I64)
+            .output_tensor("output", 4, DType::F32)
+            .output_tensor("present_key", 4, DType::F32)
+            .output_tensor("present_value", 4, DType::F32)
+            .output_tensor("qk_output", 4, DType::F32)
+            .config(AttentionConfig::new(
+                true,
+                None,
+                None,
+                AttentionQkMatmulOutputMode::MatmulAfterSoftmax,
+                None,
+                0.0,
+                None,
+            ))
+            .build();
+        for i in [4, 5] {
+            node.inputs[i].value_source = onnx_ir::ir::ValueSource::Optional;
+        }
+        for i in [1, 2, 3] {
+            node.outputs[i].value_source = onnx_ir::ir::ValueSource::Optional;
+        }
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(
+            &self,
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            cache_lengths: Tensor<4, Bool>,
+            lengths: Tensor<1, Int>,
+        ) -> Tensor<4> {
+            let (output,) = {
+                let (q, k, v, cache_lengths, cache_mask) = (
+                    query,
+                    key,
+                    value,
+                    lengths,
+                    cache_lengths,
+                );
+                let groups = q.dims()[1] / k.dims()[1];
+                let (k, v) = if groups > 1 {
+                    let [batch, kv_heads, k_len, k_dim] = k.dims();
+                    let v_dim = v.dims()[3];
+                    (
+                        k
+                            .unsqueeze_dim::<5>(2)
+                            .expand([batch, kv_heads, groups, k_len, k_dim])
+                            .reshape([batch, kv_heads * groups, k_len, k_dim]),
+                        v
+                            .unsqueeze_dim::<5>(2)
+                            .expand([batch, kv_heads, groups, k_len, v_dim])
+                            .reshape([batch, kv_heads * groups, k_len, v_dim]),
+                    )
+                } else {
+                    (k, v)
+                };
+                let hide = {
+                    let [batch, heads, q_len, _] = q.dims();
+                    let k_len = k.dims()[2];
+                    let offset = cache_lengths.clone().reshape([batch, 1, 1, 1]) - q_len as i64;
+                    let rows = Tensor::<
+                        1,
+                        Int,
+                    >::arange(0..q_len as i64, (self.device(), burn::tensor::DType::I64))
+                        .reshape([1, 1, q_len, 1]) + offset;
+                    let cols = Tensor::<
+                        1,
+                        Int,
+                    >::arange(0..k_len as i64, (self.device(), burn::tensor::DType::I64))
+                        .reshape([1, 1, 1, k_len]);
+                    cols.greater(rows).expand([batch, heads, q_len, k_len])
+                };
+                let score_bias = {
+                    let bias = {
+                        let mask = cache_mask.bool_not();
+                        let dims = mask.dims();
+                        Tensor::<4>::zeros(dims, (self.device(), q.dtype()))
+                            .mask_fill(mask, f32::NEG_INFINITY)
+                    };
+                    let [batch, heads, q_len, _] = q.dims();
+                    let capacity = k.dims()[2];
+                    let [b, h, rows, width] = bias.dims();
+                    let bias = if width < capacity {
+                        let padding = Tensor::<
+                            4,
+                        >::full(
+                            [b, h, rows, capacity - width],
+                            f32::NEG_INFINITY,
+                            (self.device(), q.dtype()),
+                        );
+                        Tensor::cat(alloc::vec![bias, padding], 3)
+                    } else {
+                        bias
+                    };
+                    let positions = Tensor::<
+                        1,
+                        Int,
+                    >::arange(0..capacity as i64, (self.device(), burn::tensor::DType::I64))
+                        .reshape([1, 1, 1, capacity]);
+                    let padding = positions
+                        .greater_equal(cache_lengths.clone().reshape([batch, 1, 1, 1]));
+                    let shape = [batch, heads, q_len, capacity];
+                    bias.expand(shape).mask_fill(padding.expand(shape), f32::NEG_INFINITY)
+                };
+                let hidden_rows = {
+                    let shape = [q.dims()[0], q.dims()[1], q.dims()[2], k.dims()[2]];
+                    score_bias
+                        .clone()
+                        .expand(shape)
+                        .mask_fill(hide.clone().expand(shape), f32::NEG_INFINITY)
+                        .max_dim(3)
+                        .equal_elem(f32::NEG_INFINITY)
+                };
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    Some(hide),
+                    Some(score_bias),
+                    Some(burn::tensor::module::AttentionCache::new(cache_lengths)),
+                    burn::tensor::ops::AttentionModuleOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                        ..Default::default()
+                    },
+                );
+                let output = {
+                    let dims = output.dims();
+                    output.mask_fill(hidden_rows.expand(dims), 0.0)
+                };
+                (output,)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_attention_lengths_qk() {
+        let mut node = AttentionNodeBuilder::new("attn")
+            .input_tensor_shape("query", vec![2, 2, 2, 2], DType::F32)
+            .input_tensor_shape("key", vec![2, 1, 4, 2], DType::F32)
+            .input_tensor_shape("value", vec![2, 1, 4, 2], DType::F32)
+            .input_tensor_shape(
+                "cache_lengths",
+                vec![2, 1, 2, 3],
+                DType::Bool(BoolStore::Native),
+            )
+            .input_tensor("past_key", 4, DType::F32)
+            .input_tensor("past_value", 4, DType::F32)
+            .input_tensor_shape("lengths", vec![2], DType::I64)
+            .output_tensor("output", 4, DType::F32)
+            .output_tensor("present_key", 4, DType::F32)
+            .output_tensor("present_value", 4, DType::F32)
+            .output_tensor("qk_output", 4, DType::F32)
+            .config(AttentionConfig::new(
+                true,
+                None,
+                None,
+                AttentionQkMatmulOutputMode::MatmulAfterSoftmax,
+                None,
+                0.0,
+                None,
+            ))
+            .build();
+        for i in [4, 5] {
+            node.inputs[i].value_source = onnx_ir::ir::ValueSource::Optional;
+        }
+        for i in [1, 2] {
+            node.outputs[i].value_source = onnx_ir::ir::ValueSource::Optional;
+        }
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(
+            &self,
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+            cache_lengths: Tensor<4, Bool>,
+            lengths: Tensor<1, Int>,
+        ) -> (Tensor<4>, Tensor<4>) {
+            let (output, qk_output) = {
+                let (q, k, v, cache_lengths, cache_mask) = (
+                    query,
+                    key,
+                    value,
+                    lengths,
+                    cache_lengths,
+                );
+                let groups = q.dims()[1] / k.dims()[1];
+                let (k, v) = if groups > 1 {
+                    let [batch, kv_heads, k_len, k_dim] = k.dims();
+                    let v_dim = v.dims()[3];
+                    (
+                        k
+                            .unsqueeze_dim::<5>(2)
+                            .expand([batch, kv_heads, groups, k_len, k_dim])
+                            .reshape([batch, kv_heads * groups, k_len, k_dim]),
+                        v
+                            .unsqueeze_dim::<5>(2)
+                            .expand([batch, kv_heads, groups, k_len, v_dim])
+                            .reshape([batch, kv_heads * groups, k_len, v_dim]),
+                    )
+                } else {
+                    (k, v)
+                };
+                let scale = (1.0 / (q.dims()[3] as f64).sqrt()).sqrt();
+                let score_bias = {
+                    let shape = [q.dims()[0], q.dims()[1], q.dims()[2], k.dims()[2]];
+                    let score_bias = Tensor::<4>::zeros(shape, (self.device(), q.dtype()));
+                    let score_bias = score_bias
+                        + {
+                            let bias = {
+                                let mask = cache_mask.bool_not();
+                                let dims = mask.dims();
+                                Tensor::<4>::zeros(dims, (self.device(), q.dtype()))
+                                    .mask_fill(mask, f32::NEG_INFINITY)
+                            };
+                            let [batch, heads, q_len, _] = q.dims();
+                            let capacity = k.dims()[2];
+                            let [b, h, rows, width] = bias.dims();
+                            let bias = if width < capacity {
+                                let padding = Tensor::<
+                                    4,
+                                >::full(
+                                    [b, h, rows, capacity - width],
+                                    f32::NEG_INFINITY,
+                                    (self.device(), q.dtype()),
+                                );
+                                Tensor::cat(alloc::vec![bias, padding], 3)
+                            } else {
+                                bias
+                            };
+                            let positions = Tensor::<
+                                1,
+                                Int,
+                            >::arange(
+                                    0..capacity as i64,
+                                    (self.device(), burn::tensor::DType::I64),
+                                )
+                                .reshape([1, 1, 1, capacity]);
+                            let padding = positions
+                                .greater_equal(cache_lengths.clone().reshape([batch, 1, 1, 1]));
+                            let shape = [batch, heads, q_len, capacity];
+                            bias.expand(shape)
+                                .mask_fill(padding.expand(shape), f32::NEG_INFINITY)
+                        }
+                            .expand(shape);
+                    let score_bias = score_bias
+                        .mask_fill(
+                            {
+                                let [batch, heads, q_len, _] = q.dims();
+                                let k_len = k.dims()[2];
+                                let offset = cache_lengths.clone().reshape([batch, 1, 1, 1])
+                                    - q_len as i64;
+                                let rows = Tensor::<
+                                    1,
+                                    Int,
+                                >::arange(
+                                        0..q_len as i64,
+                                        (self.device(), burn::tensor::DType::I64),
+                                    )
+                                    .reshape([1, 1, q_len, 1]) + offset;
+                                let cols = Tensor::<
+                                    1,
+                                    Int,
+                                >::arange(
+                                        0..k_len as i64,
+                                        (self.device(), burn::tensor::DType::I64),
+                                    )
+                                    .reshape([1, 1, 1, k_len]);
+                                cols.greater(rows).expand([batch, heads, q_len, k_len])
+                            },
+                            f32::NEG_INFINITY,
+                        );
+                    score_bias
+                };
+                let q_scaled = q * scale;
+                let k_scaled = k * scale;
+                let k_transpose = k_scaled.transpose();
+                let qk = q_scaled.matmul(k_transpose);
+                let qk = qk + score_bias.clone();
+                let scores = softmax(qk, 3);
+                let scores = {
+                    let hidden_rows = score_bias.max_dim(3).equal_elem(f32::NEG_INFINITY);
+                    let dims = scores.dims();
+                    scores.mask_fill(hidden_rows.expand(dims), 0.0)
+                };
+                let qk_output = scores.clone();
+                let output = scores.matmul(v);
+                (output, qk_output)
+            };
+            (output, qk_output)
+        }
+        ");
+    }
 
     #[test]
     fn test_attention_optional_slots_native() {

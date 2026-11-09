@@ -144,6 +144,31 @@ impl NodeProcessor for AttentionProcessor {
             ));
         }
 
+        if let Some(lengths) = node.get_input(6) {
+            if has_past_key {
+                return Err(ProcessError::Custom("Attention: nonpad_kv_seqlen cannot be combined with past/present cache tensors".into()));
+            }
+            let ArgType::Tensor(lengths) = &lengths.ty else {
+                return Err(ProcessError::Custom(
+                    "Attention: nonpad_kv_seqlen must be a rank-1 INT64 tensor".into(),
+                ));
+            };
+            if lengths.rank != 1 || lengths.dtype != crate::ir::DType::I64 {
+                return Err(ProcessError::Custom(
+                    "Attention: nonpad_kv_seqlen must be a rank-1 INT64 tensor".into(),
+                ));
+            }
+            let batch = q.static_shape.as_ref().and_then(|s| s[0]);
+            let count = lengths.static_shape.as_ref().and_then(|s| s[0]);
+            if let (Some(batch), Some(count)) = (batch, count)
+                && batch != count
+            {
+                return Err(ProcessError::Custom(
+                    "Attention: nonpad_kv_seqlen length must equal batch size".into(),
+                ));
+            }
+        }
+
         // TODO: Validate softcap attribute range - spec doesn't specify valid range but negative values likely invalid
         // TODO: Validate softmax_precision attribute values - spec mentions precision mode but doesn't specify valid values
         // TODO: Add test for negative scale values - spec doesn't specify if scale can be negative
@@ -301,6 +326,48 @@ mod tests {
     use super::*;
     use crate::{ir::BoolStore, ir::DType, ir::NodeType, node::test_utils::TestNodeBuilder};
     use rstest::rstest;
+
+    #[test]
+    fn external_cache_length_validation() {
+        let mut node = TestNodeBuilder::new(NodeType::Attention, "external")
+            .input_tensor_f32("q", 4, Some(vec![2, 2, 2, 2]))
+            .input_tensor_f32("k", 4, Some(vec![2, 1, 4, 2]))
+            .input_tensor_f32("v", 4, Some(vec![2, 1, 4, 2]))
+            .input_tensor_f32("", 4, None)
+            .input_tensor_f32("", 4, None)
+            .input_tensor_f32("", 4, None)
+            .input_tensor_i64("lengths", 1, Some(vec![2]))
+            .output_tensor_f32("y", 4, None)
+            .build();
+        let prefs = OutputPreferences::new();
+        AttentionProcessor
+            .infer_types(&mut node, 24, &prefs)
+            .unwrap();
+        for (rank, dtype, shape, message) in [
+            (2, DType::I64, vec![Some(2), Some(1)], "rank-1 INT64"),
+            (1, DType::I32, vec![Some(2)], "rank-1 INT64"),
+            (1, DType::I64, vec![Some(3)], "batch size"),
+        ] {
+            let mut invalid = node.clone();
+            invalid.inputs[6].ty = ArgType::Tensor(TensorType {
+                rank,
+                dtype,
+                static_shape: Some(shape),
+            });
+            let err = AttentionProcessor
+                .infer_types(&mut invalid, 24, &prefs)
+                .unwrap_err();
+            assert!(err.to_string().contains(message), "{err}");
+        }
+        node.inputs[4] = node.inputs[1].clone();
+        node.inputs[5] = node.inputs[2].clone();
+        node.outputs
+            .extend([node.outputs[0].clone(), node.outputs[0].clone()]);
+        let err = AttentionProcessor
+            .infer_types(&mut node, 24, &prefs)
+            .unwrap_err();
+        assert!(err.to_string().contains("cannot be combined"), "{err}");
+    }
 
     #[test]
     fn optional_slots_and_cache_pair_validation() {

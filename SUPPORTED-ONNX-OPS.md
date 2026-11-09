@@ -481,6 +481,13 @@ are rejected with a clear error. See the "Custom Operators and Overrides"
 section of `DEVELOPMENT-GUIDE.md` for the full reference, and
 `examples/custom-op-hooks/` for a runnable example.
 
+Attention supports external KV caches through `nonpad_kv_seqlen` (a rank-1 INT64
+vector with one valid length per batch item). Native attention receives Burn's
+`AttentionCache`; intermediate qk outputs use the equivalent tensor padding mask.
+Causal alignment uses each item's valid length, and masks shorter than the cache
+capacity are padded with hidden entries. External valid lengths cannot be combined
+with internal past/present cache tensors.
+
 Quantized convolution supports int8/uint8 inputs, per-tensor input/output parameters,
 per-output-channel weight parameters, grouping, dilation, and explicit or automatic padding.
 ConvInteger and QLinearConv accumulate in int32 using tensor windows and matrix multiplication;
