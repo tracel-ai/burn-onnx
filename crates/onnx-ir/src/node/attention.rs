@@ -144,6 +144,14 @@ impl NodeProcessor for AttentionProcessor {
             ));
         }
 
+        // Until the backend translation supports external caches, reject this input
+        // explicitly rather than silently attending padded entries.
+        if node.get_input(6).is_some() {
+            return Err(ProcessError::Custom(
+                "Attention: nonpad_kv_seqlen is not supported yet".into(),
+            ));
+        }
+
         // TODO: Validate softcap attribute range - spec doesn't specify valid range but negative values likely invalid
         // TODO: Validate softmax_precision attribute values - spec mentions precision mode but doesn't specify valid values
         // TODO: Add test for negative scale values - spec doesn't specify if scale can be negative
