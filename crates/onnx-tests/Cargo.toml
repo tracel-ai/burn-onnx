@@ -13,7 +13,7 @@ test-autodiff = ["burn/autodiff"]
 test-metal = ["burn/metal", "burn/fusion", "burn/std"]
 
 [dev-dependencies]
-burn = { workspace = true, features = ["vision", "linalg", "signal"] }
+burn = { workspace = true, features = ["vision", "linalg", "signal", "extension"] }
 burn-store = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 float-cmp = { workspace = true }

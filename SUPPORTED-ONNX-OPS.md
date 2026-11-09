@@ -488,4 +488,10 @@ this can allocate a larger intermediate than a backend-native convolution kernel
 Linear quantization supports scalar, per-axis, and blocked int8/uint8/int16/uint16 formats.
 Float8 and packed 2/4-bit quantization formats remain unsupported.
 
-Multinomial preserves the `seed` attribute but warns that Burn uses its backend random generator; per-node seeds are not honored.
+RandomNormal, RandomUniform, RandomNormalLike, RandomUniformLike, Bernoulli, and Multinomial
+honor optional per-node seeds. Generated seeded models require Burn's `extension` feature
+(e.g. `burn = { ..., features = ["flex", "extension"] }`). Seeded draws use an explicit
+`RandomKey`: the ONNX f32 seed's IEEE-754 bits are widened to u64, preserving fractional
+seeds. Repeated calls reuse that key without changing the device RNG stream. Exact samples
+are backend-specific and need not match ONNX Runtime or ReferenceEvaluator. Unseeded nodes
+continue using Burn's implicit random stream.

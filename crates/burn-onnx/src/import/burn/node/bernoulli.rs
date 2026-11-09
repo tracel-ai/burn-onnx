@@ -18,7 +18,20 @@ impl NodeCodegen for onnx_ir::node::bernoulli::BernoulliNode {
         let dist = quote! { Distribution::Default };
 
         // Generate random values and compare with input to get binary output
-        let input_random = quote! { #input.random_like(#dist).lower(#input) };
+        let input_dtype = self.inputs[0].ty.elem_type().to_tokens();
+        let draw = super::random_helpers::random_draw(
+            self.config.seed,
+            quote! { input.shape() },
+            dist,
+            quote! { &input.device() },
+            input_dtype,
+        );
+        let rank = self.inputs[0].ty.rank();
+        let input_random = quote! { {
+            let input = #input;
+            let random: Tensor<#rank> = #draw;
+            random.lower(input)
+        } };
 
         // Convert to the output type based on the output tensor kind
         let output_ty = &self.outputs.first().unwrap().ty;
@@ -55,6 +68,40 @@ mod tests {
     use burn::tensor::{BoolStore, DType};
     use insta::assert_snapshot;
     use onnx_ir::node::bernoulli::BernoulliNodeBuilder;
+
+    #[test]
+    fn test_bernoulli_seeded() {
+        let node = BernoulliNodeBuilder::new("bernoulli")
+            .input_tensor("input", 2, DType::F32)
+            .output_tensor("output", 2, DType::I64)
+            .config(onnx_ir::node::bernoulli::BernoulliConfig {
+                seed: Some(42.5),
+                dtype: Some(7),
+            })
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Int> {
+            let output = {
+                let input = input;
+                let random: Tensor<2usize> = Tensor::from_dispatch(
+                    <burn::backend::Dispatch as burn::backend::ops::FloatTensorOps<
+                        burn::backend::Dispatch,
+                    >>::float_random(
+                        (input.shape()).into(),
+                        Distribution::Default,
+                        (&input.device()).as_dispatch(),
+                        (burn::tensor::DType::F32).into(),
+                        burn::backend::RandomKey::new(1110048768u64),
+                    ),
+                );
+                random.lower(input)
+            }
+                .int()
+                .cast(burn::tensor::DType::I64);
+            output
+        }
+        ");
+    }
 
     #[test]
     fn test_bernoulli_bool() {

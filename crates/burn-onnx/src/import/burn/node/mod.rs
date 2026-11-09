@@ -142,6 +142,7 @@ pub(crate) mod qlinear_matmul;
 mod quantization;
 pub(crate) mod quantize_linear;
 mod quantized_conv;
+mod random_helpers;
 pub(crate) mod random_normal;
 pub(crate) mod random_normal_like;
 pub(crate) mod random_uniform;
