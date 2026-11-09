@@ -108,11 +108,20 @@ mod tests {
         let node = BernoulliNodeBuilder::new("bernoulli1")
             .input_tensor("input", 2, DType::F32)
             .output_tensor("output", 2, DType::Bool(BoolStore::Native))
+            .config(Default::default())
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Bool> {
-            let output = input.random_like(Distribution::Default).lower(input);
+            let output = {
+                let input = input;
+                let random: Tensor<2usize> = Tensor::random(
+                    input.shape(),
+                    Distribution::Default,
+                    (&input.device(), burn::tensor::DType::F32),
+                );
+                random.lower(input)
+            };
             output
         }
         ");
@@ -123,13 +132,20 @@ mod tests {
         let node = BernoulliNodeBuilder::new("bernoulli2")
             .input_tensor("input", 2, DType::F32)
             .output_tensor("output", 2, DType::I32)
+            .config(Default::default())
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Int> {
-            let output = input
-                .random_like(Distribution::Default)
-                .lower(input)
+            let output = {
+                let input = input;
+                let random: Tensor<2usize> = Tensor::random(
+                    input.shape(),
+                    Distribution::Default,
+                    (&input.device(), burn::tensor::DType::F32),
+                );
+                random.lower(input)
+            }
                 .int()
                 .cast(burn::tensor::DType::I32);
             output
@@ -142,13 +158,20 @@ mod tests {
         let node = BernoulliNodeBuilder::new("bernoulli3")
             .input_tensor("input", 2, DType::F64)
             .output_tensor("output", 2, DType::F32)
+            .config(Default::default())
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
-            let output = input
-                .random_like(Distribution::Default)
-                .lower(input)
+            let output = {
+                let input = input;
+                let random: Tensor<2usize> = Tensor::random(
+                    input.shape(),
+                    Distribution::Default,
+                    (&input.device(), burn::tensor::DType::F64),
+                );
+                random.lower(input)
+            }
                 .float()
                 .cast(burn::tensor::DType::F32);
             output
@@ -161,13 +184,20 @@ mod tests {
         let node = BernoulliNodeBuilder::new("bernoulli4")
             .input_tensor("input", 2, DType::F32)
             .output_tensor("output", 2, DType::I64)
+            .config(Default::default())
             .build();
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> Tensor<2, Int> {
-            let output = input
-                .random_like(Distribution::Default)
-                .lower(input)
+            let output = {
+                let input = input;
+                let random: Tensor<2usize> = Tensor::random(
+                    input.shape(),
+                    Distribution::Default,
+                    (&input.device(), burn::tensor::DType::F32),
+                );
+                random.lower(input)
+            }
                 .int()
                 .cast(burn::tensor::DType::I64);
             output

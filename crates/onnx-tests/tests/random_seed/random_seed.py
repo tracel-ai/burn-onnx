@@ -35,3 +35,14 @@ for op in ["RandomNormal", "RandomUniform", "RandomNormalLike", "RandomUniformLi
     reference = ReferenceEvaluator(model).run(None, {"x": np.full([2,64], .5, dtype=np.float32)} if has_input else {})
     assert all(x.shape == (2,64) for x in reference)
     assert all(x.dtype == (np.int64 if dtype == T.INT64 else np.float64) for x in reference)
+
+for op in ["RandomNormalLike", "RandomUniformLike"]:
+    name = "inherit_" + op.lower()
+    model = h.make_model(h.make_graph(
+        [h.make_node(op, ["x"], ["y"], seed=42.5)], name,
+        [h.make_tensor_value_info("x", T.DOUBLE, [2,64])],
+        [h.make_tensor_value_info("y", T.DOUBLE, [2,64])]),
+        opset_imports=[h.make_opsetid("",22)])
+    onnx.checker.check_model(model)
+    assert ReferenceEvaluator(model).run(None, {"x": np.zeros([2,64], dtype=np.float64)})[0].dtype == np.float64
+    onnx.save(model, root / f"{name}.onnx")

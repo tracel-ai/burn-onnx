@@ -1,5 +1,7 @@
 use crate::include_models;
 include_models!(
+    inherit_randomnormallike,
+    inherit_randomuniformlike,
     seed_randomnormal,
     seed_randomuniform,
     seed_randomnormallike,
@@ -12,6 +14,22 @@ include_models!(
 mod tests {
     use super::*;
     use burn::tensor::{DType, Tensor};
+    #[test]
+    fn like_operators_inherit_double_dtype() {
+        let device = Default::default();
+        let normal = inherit_randomnormallike::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/inherit_randomnormallike.bpk"),
+            &device,
+        );
+        let uniform = inherit_randomuniformlike::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/inherit_randomuniformlike.bpk"),
+            &device,
+        );
+        let input = Tensor::<2>::zeros([2, 64], (&device, DType::F64));
+        assert_eq!(normal.forward(input.clone()).dtype(), DType::F64);
+        assert_eq!(uniform.forward(input).dtype(), DType::F64);
+    }
+
     #[test]
     fn randomnormal_seed_is_reproducible() {
         let device = Default::default();

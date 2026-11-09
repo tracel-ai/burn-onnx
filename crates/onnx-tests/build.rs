@@ -300,6 +300,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/gather/gather_static_shape_indices.onnx")
         .input("tests/gather/gather_with_shape_indices.onnx")
         .input("tests/random_seed/seed_randomnormal.onnx")
+        .input("tests/random_seed/inherit_randomnormallike.onnx")
+        .input("tests/random_seed/inherit_randomuniformlike.onnx")
         .input("tests/random_seed/seed_randomuniform.onnx")
         .input("tests/random_seed/seed_randomnormallike.onnx")
         .input("tests/random_seed/seed_randomuniformlike.onnx")

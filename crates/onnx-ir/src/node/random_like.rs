@@ -100,13 +100,19 @@ impl NodeProcessor for RandomLikeProcessor {
                     ProcessError::Custom(format!("unknown dtype attribute value {code}"))
                 })
             })
-            .transpose()?
-            .unwrap_or(DataType::FLOAT);
+            .transpose()?;
 
         let elem_type = match dtype {
-            DataType::FLOAT => DType::F32,
-            DataType::FLOAT16 => DType::F16,
-            DataType::DOUBLE => DType::F64,
+            Some(DataType::FLOAT) => DType::F32,
+            Some(DataType::FLOAT16) => DType::F16,
+            Some(DataType::DOUBLE) => DType::F64,
+            None if matches!(
+                node.inputs[0].ty.elem_type(),
+                DType::F16 | DType::F32 | DType::F64
+            ) =>
+            {
+                node.inputs[0].ty.elem_type()
+            }
             _ => {
                 return Err(ProcessError::InvalidAttribute {
                     name: "dtype".to_string(),
