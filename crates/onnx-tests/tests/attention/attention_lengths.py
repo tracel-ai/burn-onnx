@@ -15,7 +15,7 @@ feeds = {"q": np.arange(16, dtype=np.float32).reshape(2,2,2,2)/10,
          "lengths": np.array([3,2], dtype=np.int64)}
 mask = np.array([[[[True,True,False],[True,True,True]]],
                  [[[False,False,False],[True,False,True]]]], dtype=bool)
-for suffix, causal, qk, masked in [("plain3d",0,False,False), ("plain",0,False,False), ("causal",1,False,True), ("qk",1,True,True)]:
+for suffix, causal, qk, masked in [("nativecausal",1,False,False), ("plain3d",0,False,False), ("plain",0,False,False), ("causal",1,False,True), ("qk",1,True,True)]:
     data = dict(feeds)
     if suffix == "plain3d":
         for n in ["q", "k", "v"]:
@@ -36,3 +36,16 @@ for suffix, causal, qk, masked in [("plain3d",0,False,False), ("plain",0,False,F
             # Rust compares the rank-3 model after restoring its rank-4 layout.
             if suffix != "plain3d":
                 output.astype("<f4").tofile(root/f"attention_lengths_{suffix}_{case}_{name}.bin")
+
+shape_model = h.make_model(h.make_graph([
+    h.make_node("Shape", ["k"], ["lengths"], start=2, end=3),
+    h.make_node("Attention", ["q","k","v","","","","lengths"], ["y"]),
+], "shape_lengths", [
+    h.make_tensor_value_info("q", T.FLOAT, [1,2,2,2]),
+    h.make_tensor_value_info("k", T.FLOAT, [1,1,"capacity",2]),
+    h.make_tensor_value_info("v", T.FLOAT, [1,1,"capacity",2]),
+], [h.make_tensor_value_info("y", T.FLOAT, [1,2,2,2])]), opset_imports=[h.make_opsetid("",24)])
+onnx.checker.check_model(shape_model)
+onnx.save(shape_model, root/"attention_lengths_shape.onnx")
+shape_feeds = {n: a[:1] for n,a in feeds.items() if n != "lengths"}
+ReferenceEvaluator(shape_model).run(None, shape_feeds)[0].astype("<f4").tofile(root/"attention_lengths_shape_y.bin")

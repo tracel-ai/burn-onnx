@@ -80,6 +80,8 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/attention/attention_3d.onnx")
         .input("tests/attention/attention_4d.onnx")
         .input("tests/attention/attention_lengths_plain.onnx")
+        .input("tests/attention/attention_lengths_nativecausal.onnx")
+        .input("tests/attention/attention_lengths_shape.onnx")
         .input("tests/attention/attention_lengths_plain3d.onnx")
         .input("tests/attention/attention_lengths_causal.onnx")
         .input("tests/attention/attention_lengths_qk.onnx")

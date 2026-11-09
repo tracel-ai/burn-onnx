@@ -148,18 +148,18 @@ impl NodeProcessor for AttentionProcessor {
             if has_past_key {
                 return Err(ProcessError::Custom("Attention: nonpad_kv_seqlen cannot be combined with past/present cache tensors".into()));
             }
-            let ArgType::Tensor(lengths) = &lengths.ty else {
-                return Err(ProcessError::Custom(
-                    "Attention: nonpad_kv_seqlen must be a rank-1 INT64 tensor".into(),
-                ));
+            let count = match &lengths.ty {
+                ArgType::Shape(count) => Some(*count),
+                ArgType::Tensor(t) if t.rank == 1 && t.dtype == crate::ir::DType::I64 => {
+                    t.static_shape.as_ref().and_then(|s| s[0])
+                }
+                _ => {
+                    return Err(ProcessError::Custom(
+                        "Attention: nonpad_kv_seqlen must be a rank-1 INT64 tensor".into(),
+                    ));
+                }
             };
-            if lengths.rank != 1 || lengths.dtype != crate::ir::DType::I64 {
-                return Err(ProcessError::Custom(
-                    "Attention: nonpad_kv_seqlen must be a rank-1 INT64 tensor".into(),
-                ));
-            }
             let batch = q.static_shape.as_ref().and_then(|s| s[0]);
-            let count = lengths.static_shape.as_ref().and_then(|s| s[0]);
             if let (Some(batch), Some(count)) = (batch, count)
                 && batch != count
             {

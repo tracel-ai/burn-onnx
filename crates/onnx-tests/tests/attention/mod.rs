@@ -1,6 +1,8 @@
 // Import the shared macro
 use crate::include_models;
 include_models!(
+    attention_lengths_nativecausal,
+    attention_lengths_shape,
     attention_lengths_plain,
     attention_lengths_plain3d,
     attention_lengths_causal,
@@ -32,8 +34,56 @@ mod tests {
     use burn::tensor::{Bool, Device, Int, Tensor, TensorData, Tolerance};
 
     #[test]
+    fn external_cache_shape_lengths() {
+        let device = Default::default();
+        let model = attention_lengths_shape::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_shape.bpk"),
+            &device,
+        );
+        let q = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..8)
+                    .map(|i| i as f32 / 10.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [1, 2, 2, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let k = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..8)
+                    .map(|i| i as f32 / 10.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [1, 1, 4, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let v = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..8)
+                    .map(|i| i as f32 / 5.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [1, 1, 4, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let expected = include_bytes!("attention_lengths_shape_y.bin")
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+            .collect::<alloc::vec::Vec<_>>();
+        model.forward(q, k, v).to_data().assert_approx_eq::<f32>(
+            &TensorData::new(expected, [1, 2, 2, 2]),
+            Tolerance::absolute(1e-5),
+        );
+    }
+
+    #[test]
     fn external_cache_lengths() {
         let device = Default::default();
+        let nativecausal = attention_lengths_nativecausal::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_nativecausal.bpk"),
+            &device,
+        );
         let plain3d = attention_lengths_plain3d::Model::from_file(
             concat!(env!("OUT_DIR"), "/model/attention_lengths_plain3d.bpk"),
             &device,
@@ -94,6 +144,7 @@ mod tests {
                     &include_bytes!("attention_lengths_causal_0_y.bin")[..],
                     &include_bytes!("attention_lengths_qk_0_y.bin")[..],
                     &include_bytes!("attention_lengths_qk_0_qk.bin")[..],
+                    &include_bytes!("attention_lengths_nativecausal_0_y.bin")[..],
                 ],
             ),
             (
@@ -103,6 +154,7 @@ mod tests {
                     &include_bytes!("attention_lengths_causal_1_y.bin")[..],
                     &include_bytes!("attention_lengths_qk_1_y.bin")[..],
                     &include_bytes!("attention_lengths_qk_1_qk.bin")[..],
+                    &include_bytes!("attention_lengths_nativecausal_1_y.bin")[..],
                 ],
             ),
         ] {
@@ -110,6 +162,7 @@ mod tests {
                 TensorData::from(lengths),
                 (&device, burn::tensor::DType::I64),
             );
+            let e = nativecausal.forward(q.clone(), k.clone(), v.clone(), lengths.clone());
             let a = plain.forward(q.clone(), k.clone(), v.clone(), lengths.clone());
             let a3d = plain3d.forward(
                 q.clone().permute([0, 2, 1, 3]).reshape([2, 2, 4]),
@@ -128,7 +181,7 @@ mod tests {
                 mask.clone(),
             );
             let (c, d) = custom.forward(q.clone(), k.clone(), v.clone(), lengths, mask.clone());
-            for (i, (actual, bytes)) in [a, b, c, d].into_iter().zip(expected).enumerate() {
+            for (i, (actual, bytes)) in [a, b, c, d, e].into_iter().zip(expected).enumerate() {
                 let data = bytes
                     .chunks_exact(4)
                     .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
