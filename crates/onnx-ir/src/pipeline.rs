@@ -433,13 +433,35 @@ impl OnnxGraphBuilder {
             });
         }
 
+        // Contracts name original ONNX inputs. Resolve their positions before
+        // collision renaming, otherwise a name may become another input's alias.
+        let shape_input_indices = self
+            .shape_inputs
+            .iter()
+            .map(|name| {
+                model
+                    .graph
+                    .input
+                    .iter()
+                    .position(|input| input.name == *name)
+                    .ok_or_else(|| {
+                        Error::Processing(ProcessError::Custom(format!(
+                            "Shape input '{name}' is not a graph input"
+                        )))
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         if let Some(graph) = model.graph.as_mut() {
             crate::proto_conversion::dedup_sanitized_names(graph);
         }
+        let shape_inputs = shape_input_indices
+            .into_iter()
+            .map(|index| model.graph.input[index].name.clone())
+            .collect::<Vec<_>>();
 
         let hooks = PipelineHooks::new(self.custom_op_inference.clone());
         let graph =
-            build_graph_with_options(&model, base_path, self.simplify, &hooks, &self.shape_inputs)?;
+            build_graph_with_options(&model, base_path, self.simplify, &hooks, &shape_inputs)?;
 
         if let Some(path) = path_str {
             log::info!("Finished parsing ONNX file: {}", path);

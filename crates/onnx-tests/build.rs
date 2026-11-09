@@ -24,6 +24,17 @@ fn main() {
         .out_dir("model/")
         .run_from_script();
 
+    for (model, input) in [
+        ("shape_input_collision", "a_b"),
+        ("shape_input_renamed", "a-b"),
+    ] {
+        ModelGen::new()
+            .shape_input(input)
+            .input(&format!("tests/affine_grid/{model}.onnx"))
+            .out_dir("model/")
+            .run_from_script();
+    }
+
     // Custom (non-built-in) op models: need registered CustomOp hooks.
     let mut custom = ModelGen::new();
     custom

@@ -7,7 +7,9 @@ include_models!(
     affine_grid_2d_expanded,
     affine_grid_2d_align_corners_expanded,
     affine_grid_3d_expanded,
-    affine_grid_3d_align_corners_expanded
+    affine_grid_3d_align_corners_expanded,
+    shape_input_collision,
+    shape_input_renamed
 );
 
 #[cfg(test)]
@@ -15,6 +17,27 @@ mod tests {
     use super::*;
     use alloc::vec::Vec;
     use burn::tensor::{Int, Tensor, TensorData, Tolerance};
+
+    #[test]
+    fn shape_input_contracts_survive_name_collisions() {
+        let device = Default::default();
+        let collision = shape_input_collision::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/shape_input_collision.bpk"),
+            &device,
+        );
+        let renamed = shape_input_renamed::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/shape_input_renamed.bpk"),
+            &device,
+        );
+        // Only the second input has a fixed length. The first remains a tensor
+        // and accepts three elements despite its export-time length of two.
+        let input = Tensor::<1, Int>::from_data(
+            TensorData::from([7i64, 8, 9]),
+            (&device, burn::tensor::DType::I64),
+        );
+        assert_eq!(collision.forward(input.clone(), [10, 20, 30, 40]), (3, 4));
+        assert_eq!(renamed.forward(input, [10, 20, 30, 40]), (3, 4));
+    }
 
     fn floats(bytes: &[u8]) -> Vec<f32> {
         bytes
