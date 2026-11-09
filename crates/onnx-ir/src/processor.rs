@@ -338,8 +338,8 @@ pub fn validate_opset(opset: usize, min_version: usize) -> Result<(), ProcessErr
 pub fn validate_no_rank_zero_tensors(node: &RawNode) -> Result<(), ProcessError> {
     use crate::ir::ArgType;
 
-    // Check all outputs for rank-0 tensors
-    for output in &node.outputs {
+    // Omitted optional slots have no value whose type needs validation.
+    for output in node.outputs.iter().filter(|output| !output.is_optional()) {
         if let ArgType::Tensor(tensor) = &output.ty
             && tensor.rank == 0
         {

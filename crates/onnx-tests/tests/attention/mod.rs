@@ -1,6 +1,8 @@
 // Import the shared macro
 use crate::include_models;
 include_models!(
+    attention_optional_native,
+    attention_optional_qk,
     attention_4d,
     attention_3d,
     attention_attn_mask_bool,
@@ -24,6 +26,38 @@ include_models!(
 mod tests {
     use super::*;
     use burn::tensor::{Bool, Device, Int, Tensor, TensorData, Tolerance};
+
+    #[test]
+    fn omitted_past_and_present_slots() {
+        let device = Default::default();
+        let native = attention_optional_native::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_optional_native.bpk"),
+            &device,
+        );
+        let intermediate = attention_optional_qk::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_optional_qk.bpk"),
+            &device,
+        );
+        let q = Tensor::<4>::from_floats([[[[1., 0.], [0., 1.]]]], &device);
+        let k = Tensor::<4>::from_floats([[[[0., 1.], [1., 0.]]]], &device);
+        let v = Tensor::<4>::from_floats([[[[0.25, 0.5], [0.3, 0.6]]]], &device);
+        let y = native.forward(q.clone(), k.clone(), v.clone());
+        let (y_qk, qk) = intermediate.forward(q, k, v);
+        for (actual, bytes) in [
+            (y, &include_bytes!("attention_optional_native_y.bin")[..]),
+            (y_qk, &include_bytes!("attention_optional_qk_y.bin")[..]),
+            (qk, &include_bytes!("attention_optional_qk_qk.bin")[..]),
+        ] {
+            let expected = bytes
+                .chunks_exact(4)
+                .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+                .collect::<alloc::vec::Vec<_>>();
+            actual.to_data().assert_approx_eq::<f32>(
+                &TensorData::new(expected, [1, 1, 2, 2]),
+                Tolerance::absolute(1e-6),
+            );
+        }
+    }
 
     #[test]
     fn simple_4d() {
