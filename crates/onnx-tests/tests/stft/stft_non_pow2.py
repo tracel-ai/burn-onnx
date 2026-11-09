@@ -10,8 +10,8 @@
 # used to generate model: onnx-tests/tests/stft/stft_non_pow2.onnx
 #
 # Non-power-of-two STFT: real input, onesided, no window. Matches Kokoro's
-# decoder head config (n_fft=20, hop=5). Exercises the Bluestein path of
-# Burn's stft for non-power-of-two n_fft.
+# decoder head config (n_fft=20, hop=5). Exercises the bounded matrix DFT
+# used for accurate small non-power-of-two windows.
 #
 # Input: [1, 32, 1] real signal
 # frame_step=5, frame_length=20 -> n_frames = 1 + (32-20)/5 = 3

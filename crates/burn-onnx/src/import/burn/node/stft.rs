@@ -69,9 +69,11 @@ impl NodeCodegen for onnx_ir::node::stft::StftNode {
             quote! { None }
         };
 
-        // Burn's stft handles any n_fft: radix-2 FFT for powers of two, Bluestein otherwise.
-        quote! {
-            let #output = stft(
+        // Keep radix-2 and large transforms on Burn's native FFT. Small
+        // non-power-of-two windows are sensitive to cancellation in Bluestein's
+        // f32 butterflies (notably Kokoro's 20-sample phase-recovery window).
+        let native = quote! {
+            stft(
                 { #signal_prep signal },
                 #window_expr,
                 burn::tensor::signal::StftOptions {
@@ -81,12 +83,81 @@ impl NodeCodegen for onnx_ir::node::stft::StftNode {
                     center: false,
                     onesided: #onesided,
                 },
-            );
+            )
+        };
+        if matches!(frame_length, StftInput::Static(n) if n.is_power_of_two() || *n > 32) {
+            return quote! { let #output = #native; };
+        }
+
+        let dtype = signal_tensor.dtype.to_tokens();
+        let dft = small_dft_core(*onesided, dtype);
+        let core = if matches!(frame_length, StftInput::Runtime(_)) {
+            quote! {
+                if n_fft <= 32 && !n_fft.is_power_of_two() {
+                    #dft
+                } else {
+                    stft(signal, window, burn::tensor::signal::StftOptions {
+                        n_fft, hop_length, win_length: None, center: false, onesided: #onesided,
+                    })
+                }
+            }
+        } else {
+            dft
+        };
+        quote! {
+            let #output = {
+                let (signal, window, n_fft, hop_length): (_, Option<Tensor<1>>, usize, usize) =
+                    ({ #signal_prep signal }, #window_expr, #n_fft, #hop_length);
+                #core
+            };
         }
     }
 
     fn register_imports(&self, imports: &mut BurnImports) {
-        imports.register("burn::tensor::signal::stft");
+        if !matches!(&self.config.frame_length, StftInput::Static(n) if !n.is_power_of_two() && *n <= 32)
+        {
+            imports.register("burn::tensor::signal::stft");
+        }
+        if !matches!(&self.config.frame_length, StftInput::Static(n) if n.is_power_of_two() || *n > 32)
+        {
+            imports.register("burn::tensor::DType");
+        }
+    }
+}
+
+/// A bounded direct DFT: at most 32 x 32 coefficients, accumulated in f64 when
+/// available. The frame/window product retains the ONNX input dtype, and the
+/// result is cast back to it. Large windows keep the O(N log N) native FFT.
+fn small_dft_core(onesided: bool, output_dtype: TokenStream) -> TokenStream {
+    quote! {
+        let device = signal.device();
+        let frames: Tensor<3> = signal.unfold(1, n_fft, hop_length);
+        let windowed = if let Some(window) = window {
+            frames.mul(window.reshape([1, 1, n_fft]))
+        } else {
+            frames
+        };
+        let dft_dtype = if device.supports_dtype(DType::F64) { DType::F64 } else { DType::F32 };
+        let windowed = windowed.cast(dft_dtype);
+        let n_freqs = if #onesided { n_fft / 2 + 1 } else { n_fft };
+        let mut angles = alloc::vec::Vec::with_capacity(n_freqs * n_fft);
+        for k in 0..n_freqs {
+            for n in 0..n_fft {
+                angles.push(2.0_f64 * core::f64::consts::PI * k as f64 * n as f64 / n_fft as f64);
+            }
+        }
+        let angles: Tensor<2> = Tensor::from_data(
+            TensorData::new(angles, [n_freqs, n_fft]), (&device, dft_dtype),
+        ).transpose();
+        let real = angles.clone().cos();
+        let imag = angles.sin().neg();
+        let [batch, n_frames, _] = windowed.dims();
+        let flat = windowed.reshape([batch * n_frames, n_fft]);
+        let real: Tensor<3> = flat.clone().matmul(real)
+            .reshape([batch, n_frames, n_freqs]).cast(#output_dtype);
+        let imag: Tensor<3> = flat.matmul(imag)
+            .reshape([batch, n_frames, n_freqs]).cast(#output_dtype);
+        Tensor::stack::<4>(alloc::vec![real, imag], 3)
     }
 }
 
@@ -206,9 +277,119 @@ mod tests {
     }
 
     #[test]
+    fn test_stft_small_full_f64_with_window() {
+        let node = StftNodeBuilder::new("stft")
+            .input_tensor("signal", 2, DType::F64)
+            .input_scalar("step", DType::I64)
+            .input_tensor("window", 1, DType::F64)
+            .output_tensor("output", 4, DType::F64)
+            .config(StftConfig {
+                onesided: false,
+                frame_step: StftInput::Static(5),
+                frame_length: StftInput::Static(20),
+                has_window: true,
+            })
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, signal: Tensor<2>, step: i64, window: Tensor<1>) -> Tensor<4> {
+            let output = {
+                let (signal, window, n_fft, hop_length): (_, Option<Tensor<1>>, usize, usize) = (
+                    {
+                        let signal = signal;
+                        signal
+                    },
+                    Some(window),
+                    20usize,
+                    5usize,
+                );
+                let device = signal.device();
+                let frames: Tensor<3> = signal.unfold(1, n_fft, hop_length);
+                let windowed = if let Some(window) = window {
+                    frames.mul(window.reshape([1, 1, n_fft]))
+                } else {
+                    frames
+                };
+                let dft_dtype = if device.supports_dtype(DType::F64) {
+                    DType::F64
+                } else {
+                    DType::F32
+                };
+                let windowed = windowed.cast(dft_dtype);
+                let n_freqs = if false { n_fft / 2 + 1 } else { n_fft };
+                let mut angles = alloc::vec::Vec::with_capacity(n_freqs * n_fft);
+                for k in 0..n_freqs {
+                    for n in 0..n_fft {
+                        angles
+                            .push(
+                                2.0_f64 * core::f64::consts::PI * k as f64 * n as f64
+                                    / n_fft as f64,
+                            );
+                    }
+                }
+                let angles: Tensor<2> = Tensor::from_data(
+                        TensorData::new(angles, [n_freqs, n_fft]),
+                        (&device, dft_dtype),
+                    )
+                    .transpose();
+                let real = angles.clone().cos();
+                let imag = angles.sin().neg();
+                let [batch, n_frames, _] = windowed.dims();
+                let flat = windowed.reshape([batch * n_frames, n_fft]);
+                let real: Tensor<3> = flat
+                    .clone()
+                    .matmul(real)
+                    .reshape([batch, n_frames, n_freqs])
+                    .cast(burn::tensor::DType::F64);
+                let imag: Tensor<3> = flat
+                    .matmul(imag)
+                    .reshape([batch, n_frames, n_freqs])
+                    .cast(burn::tensor::DType::F64);
+                Tensor::stack::<4>(alloc::vec![real, imag], 3)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_stft_large_non_pow2_uses_native_fft() {
+        let node = StftNodeBuilder::new("stft")
+            .input_tensor("signal", 3, DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .config(StftConfig {
+                onesided: true,
+                frame_step: StftInput::Static(400),
+                frame_length: StftInput::Static(400),
+                has_window: false,
+            })
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, signal: Tensor<3>) -> Tensor<4> {
+            let output = stft(
+                {
+                    let signal = signal.squeeze_dims::<2usize>(&[2isize]);
+                    signal
+                },
+                None,
+                burn::tensor::signal::StftOptions {
+                    n_fft: 400usize,
+                    hop_length: 400usize,
+                    win_length: None,
+                    center: false,
+                    onesided: true,
+                },
+            );
+            output
+        }
+        ");
+    }
+
+    #[test]
     fn test_stft_non_pow2_onesided_no_window() {
         // Kokoro-style config: n_fft = 20 (not power of two), onesided.
-        // Same burn stft call as the power-of-two case.
+        // Small windows use the bounded high-precision DFT.
         let config = StftConfig {
             onesided: true,
             frame_step: StftInput::Static(5),
@@ -223,20 +404,60 @@ mod tests {
         let code = codegen_forward_default(&node);
         assert_snapshot!(code, @r"
         pub fn forward(&self, signal: Tensor<2>) -> Tensor<4> {
-            let output = stft(
-                {
-                    let signal = signal;
-                    signal
-                },
-                None,
-                burn::tensor::signal::StftOptions {
-                    n_fft: 20usize,
-                    hop_length: 5usize,
-                    win_length: None,
-                    center: false,
-                    onesided: true,
-                },
-            );
+            let output = {
+                let (signal, window, n_fft, hop_length): (_, Option<Tensor<1>>, usize, usize) = (
+                    {
+                        let signal = signal;
+                        signal
+                    },
+                    None,
+                    20usize,
+                    5usize,
+                );
+                let device = signal.device();
+                let frames: Tensor<3> = signal.unfold(1, n_fft, hop_length);
+                let windowed = if let Some(window) = window {
+                    frames.mul(window.reshape([1, 1, n_fft]))
+                } else {
+                    frames
+                };
+                let dft_dtype = if device.supports_dtype(DType::F64) {
+                    DType::F64
+                } else {
+                    DType::F32
+                };
+                let windowed = windowed.cast(dft_dtype);
+                let n_freqs = if true { n_fft / 2 + 1 } else { n_fft };
+                let mut angles = alloc::vec::Vec::with_capacity(n_freqs * n_fft);
+                for k in 0..n_freqs {
+                    for n in 0..n_fft {
+                        angles
+                            .push(
+                                2.0_f64 * core::f64::consts::PI * k as f64 * n as f64
+                                    / n_fft as f64,
+                            );
+                    }
+                }
+                let angles: Tensor<2> = Tensor::from_data(
+                        TensorData::new(angles, [n_freqs, n_fft]),
+                        (&device, dft_dtype),
+                    )
+                    .transpose();
+                let real = angles.clone().cos();
+                let imag = angles.sin().neg();
+                let [batch, n_frames, _] = windowed.dims();
+                let flat = windowed.reshape([batch * n_frames, n_fft]);
+                let real: Tensor<3> = flat
+                    .clone()
+                    .matmul(real)
+                    .reshape([batch, n_frames, n_freqs])
+                    .cast(burn::tensor::DType::F32);
+                let imag: Tensor<3> = flat
+                    .matmul(imag)
+                    .reshape([batch, n_frames, n_freqs])
+                    .cast(burn::tensor::DType::F32);
+                Tensor::stack::<4>(alloc::vec![real, imag], 3)
+            };
             output
         }
         ");
@@ -312,28 +533,82 @@ mod tests {
             frame_step: i64,
             frame_length: i32,
         ) -> Tensor<4> {
-            let output = stft(
-                {
-                    let signal = signal.squeeze_dims::<2usize>(&[2isize]);
-                    signal
-                },
-                None,
-                burn::tensor::signal::StftOptions {
-                    n_fft: {
+            let output = {
+                let (signal, window, n_fft, hop_length): (_, Option<Tensor<1>>, usize, usize) = (
+                    {
+                        let signal = signal.squeeze_dims::<2usize>(&[2isize]);
+                        signal
+                    },
+                    None,
+                    {
                         let value = frame_length;
                         assert!(value > 0, "STFT frame_length must be positive");
                         usize::try_from(value).expect("STFT parameter does not fit usize")
                     },
-                    hop_length: {
+                    {
                         let value = frame_step;
                         assert!(value > 0, "STFT frame_step must be positive");
                         usize::try_from(value).expect("STFT parameter does not fit usize")
                     },
-                    win_length: None,
-                    center: false,
-                    onesided: true,
-                },
-            );
+                );
+                if n_fft <= 32 && !n_fft.is_power_of_two() {
+                    let device = signal.device();
+                    let frames: Tensor<3> = signal.unfold(1, n_fft, hop_length);
+                    let windowed = if let Some(window) = window {
+                        frames.mul(window.reshape([1, 1, n_fft]))
+                    } else {
+                        frames
+                    };
+                    let dft_dtype = if device.supports_dtype(DType::F64) {
+                        DType::F64
+                    } else {
+                        DType::F32
+                    };
+                    let windowed = windowed.cast(dft_dtype);
+                    let n_freqs = if true { n_fft / 2 + 1 } else { n_fft };
+                    let mut angles = alloc::vec::Vec::with_capacity(n_freqs * n_fft);
+                    for k in 0..n_freqs {
+                        for n in 0..n_fft {
+                            angles
+                                .push(
+                                    2.0_f64 * core::f64::consts::PI * k as f64 * n as f64
+                                        / n_fft as f64,
+                                );
+                        }
+                    }
+                    let angles: Tensor<2> = Tensor::from_data(
+                            TensorData::new(angles, [n_freqs, n_fft]),
+                            (&device, dft_dtype),
+                        )
+                        .transpose();
+                    let real = angles.clone().cos();
+                    let imag = angles.sin().neg();
+                    let [batch, n_frames, _] = windowed.dims();
+                    let flat = windowed.reshape([batch * n_frames, n_fft]);
+                    let real: Tensor<3> = flat
+                        .clone()
+                        .matmul(real)
+                        .reshape([batch, n_frames, n_freqs])
+                        .cast(burn::tensor::DType::F32);
+                    let imag: Tensor<3> = flat
+                        .matmul(imag)
+                        .reshape([batch, n_frames, n_freqs])
+                        .cast(burn::tensor::DType::F32);
+                    Tensor::stack::<4>(alloc::vec![real, imag], 3)
+                } else {
+                    stft(
+                        signal,
+                        window,
+                        burn::tensor::signal::StftOptions {
+                            n_fft,
+                            hop_length,
+                            win_length: None,
+                            center: false,
+                            onesided: true,
+                        },
+                    )
+                }
+            };
             output
         }
         "#);

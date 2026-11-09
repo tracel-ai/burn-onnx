@@ -6,6 +6,7 @@ include_models!(
     stft_full,
     stft_large_non_pow2,
     stft_non_pow2,
+    stft_small_f64,
     stft_runtime_params,
     stft_with_window
 );
@@ -162,6 +163,66 @@ mod tests {
             &expected.to_data(),
             burn::tensor::Tolerance::rel_abs(1e-3, 1e-4),
         );
+    }
+
+    #[test]
+    fn stft_small_windowed_full_f64() {
+        let device = Device::default();
+        if !device.supports_dtype(burn::tensor::DType::F64) {
+            return;
+        }
+        let model = stft_small_f64::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/stft_small_f64.bpk"),
+            &device,
+        );
+        let signal = burn::tensor::Tensor::<2>::from_data(
+            burn::tensor::TensorData::new(alloc::vec![1.0f64; 32], [1, 32]),
+            (&device, burn::tensor::DType::F64),
+        );
+        let output = model.forward(signal).to_data();
+        assert_eq!(output.dtype(), burn::tensor::DType::F64);
+        let expected: alloc::vec::Vec<f64> = include_bytes!("stft_small_f64_expected.bin")
+            .chunks_exact(8)
+            .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+            .collect();
+        output.assert_approx_eq::<f64>(
+            &burn::tensor::TensorData::new(expected, [1, 3, 20, 2]),
+            burn::tensor::Tolerance::absolute(1e-12),
+        );
+    }
+
+    #[test]
+    fn stft_small_non_pow2_cancellation() {
+        let device = Device::default();
+        let model = stft_non_pow2::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/stft_non_pow2.bpk"),
+            &device,
+        );
+        let signal = burn::tensor::Tensor::<3>::from_data(
+            burn::tensor::TensorData::new(alloc::vec![1.0f32; 32], [1, 32, 1]),
+            (&device, burn::tensor::DType::F32),
+        );
+        let runtime_model = stft_runtime_params::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/stft_runtime_params.bpk"),
+            &device,
+        );
+        let runtime_output = runtime_model.forward(signal.clone(), 5, 20).to_data();
+        let output = model.forward(signal).to_data();
+        // A constant frame has only a DC real component. Near-zero spectral
+        // error is amplified by phase recovery in models such as Kokoro (#371).
+        let mut expected = alloc::vec![0.0f32; 3 * 11 * 2];
+        for frame in 0..3 {
+            expected[frame * 11 * 2] = 20.0;
+        }
+        let tolerance = if device.supports_dtype(burn::tensor::DType::F64) {
+            1e-12
+        } else {
+            1e-5
+        };
+        let expected = burn::tensor::TensorData::new(expected, [1, 3, 11, 2]);
+        for result in [output, runtime_output] {
+            result.assert_approx_eq::<f32>(&expected, burn::tensor::Tolerance::absolute(tolerance));
+        }
     }
 
     #[test]

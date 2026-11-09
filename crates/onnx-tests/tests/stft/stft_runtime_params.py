@@ -11,7 +11,7 @@
 #
 # STFT whose frame_step and frame_length are graph inputs rather than constants, as in
 # the ONNX backend test `test_stft`. Run with a non-power-of-two frame_length (12), so
-# burn's stft takes its Bluestein path.
+# the generated model takes its bounded matrix-DFT path.
 #
 # Input: [1, 32, 1] real signal, frame_step=4, frame_length=12
 # -> n_frames = 1 + (32-12)/4 = 6, onesided n_freqs = 12/2 + 1 = 7
