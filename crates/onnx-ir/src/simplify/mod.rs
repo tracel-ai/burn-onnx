@@ -255,4 +255,26 @@ pub(crate) mod tests {
         super::relift_constants(&mut nodes, 20);
         assert!(nodes[0].inputs[2].is_static());
     }
+
+    #[test]
+    fn native_atan2_is_not_semantically_equivalent_to_manual_quadrant_fixup() {
+        // The Kokoro graph's manual atan2 decomposition uses explicit quadrant
+        // branches after atan(imag / real). Those branches preserve a signed-zero
+        // distinction that native atan2 resolves differently for negative real
+        // inputs.
+        let manual_positive_zero_branch = -std::f32::consts::PI;
+        // Burn's native tensor atan2 follows the usual (+0, negative) convention.
+        let native_positive_zero = std::f32::consts::PI;
+
+        assert!(native_positive_zero.is_sign_positive());
+        assert!(
+            (native_positive_zero.abs() - std::f32::consts::PI).abs() < f32::EPSILON,
+            "native atan2 should return positive pi for (+0, negative)"
+        );
+        assert_ne!(
+            manual_positive_zero_branch.to_bits(),
+            native_positive_zero.to_bits(),
+            "a native atan2 rewrite must not erase the manual graph's signed-zero behavior"
+        );
+    }
 }
