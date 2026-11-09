@@ -8,6 +8,7 @@ include_models!(
     conv2d_asymmetric_padding,
     conv2d_same_upper_dynamic,
     conv3d,
+    conv3d_same,
     conv3d_asymmetric_padding
 );
 
@@ -17,6 +18,34 @@ mod tests {
     use burn::tensor::{Device, Int, Shape, Tensor, TensorData, Tolerance};
     use core::f64::consts;
     use float_cmp::ApproxEq;
+
+    #[test]
+    fn conv3d_same_stride_two() {
+        let device = Default::default();
+        let model = conv3d_same::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/conv3d_same.bpk"),
+            &device,
+        );
+        let values: alloc::vec::Vec<f32> = (0..120).map(|n| n as f32 / 10.0).collect();
+        let input = Tensor::<5>::from_data(
+            TensorData::new(values, [1, 1, 4, 5, 6]),
+            (&device, burn::tensor::DType::F32),
+        );
+        let (upper, lower) = model.forward(input);
+        for (actual, bytes) in [
+            (upper, &include_bytes!("conv3d_same_0_upper.bin")[..]),
+            (lower, &include_bytes!("conv3d_same_0_lower.bin")[..]),
+        ] {
+            let expected: alloc::vec::Vec<f32> = bytes
+                .chunks_exact(4)
+                .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+                .collect();
+            actual.to_data().assert_approx_eq::<f32>(
+                &TensorData::new(expected, [1, 1, 2, 3, 3]),
+                Tolerance::absolute(1e-4),
+            );
+        }
+    }
 
     #[test]
     fn conv1d() {
