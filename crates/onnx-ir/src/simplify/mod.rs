@@ -262,9 +262,20 @@ pub(crate) mod tests {
         // branches after atan(imag / real). Those branches preserve a signed-zero
         // distinction that native atan2 resolves differently for negative real
         // inputs.
-        let manual_positive_zero_branch = -std::f32::consts::PI;
-        // Burn's native tensor atan2 follows the usual (+0, negative) convention.
-        let native_positive_zero = std::f32::consts::PI;
+        let real = -1.0_f32;
+        let imag = 0.0_f32;
+        let phase_q1 = (imag / real).atan();
+        let phase_quad = if imag > 0.0 {
+            phase_q1 + std::f32::consts::PI
+        } else {
+            phase_q1 - std::f32::consts::PI
+        };
+        let manual_positive_zero_branch = if real < 0.0 {
+            phase_quad
+        } else {
+            phase_q1
+        };
+        let native_positive_zero = imag.atan2(real);
 
         assert!(native_positive_zero.is_sign_positive());
         assert!(
