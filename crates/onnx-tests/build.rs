@@ -688,6 +688,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/stft/stft_full.onnx")
         .input("tests/stft/stft_large_non_pow2.onnx")
         .input("tests/stft/stft_non_pow2.onnx")
+        .input("tests/stft/stft_small_f64.onnx")
         .input("tests/stft/stft_runtime_params.onnx")
         .input("tests/stft/stft_frame_step_name.onnx")
         .input("tests/stft/stft_frame_length_name.onnx")

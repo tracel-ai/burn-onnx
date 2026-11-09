@@ -23,6 +23,37 @@ voice-style embedding.
 The normal check loads `kokoro-v1.0.rs` and `kokoro-v1.0.bpk`, matching the
 complete ONNX file stem. The default smoke threshold is not a numerical match.
 
+### Small-window precision regression (2026-11-09)
+
+On main `77c18b6d` / Burn `02d45852`, native f32 FFT for the 20-sample
+STFT window fails even the smoke check. A bounded direct DFT restores the
+previous numerical behavior without sending large windows through a quadratic
+algorithm. Non-power-of-two windows of at most 32 samples use f64 accumulation
+when the device supports it (f32 otherwise); larger windows and powers of two
+keep the native FFT. Runtime frame lengths use the same selection.
+
+Measured with Flex on Apple Silicon in release mode, using the original model
+and a freshly generated seed-42 ORT reference:
+
+| Implementation | Burn peak | Pearson r | Max absolute error | Mean absolute error |
+|---|---:|---:|---:|---:|
+| Native f32 FFT (main) | 1113.1952 | 0.405139 | 1096.1067 | 5.217939 |
+| Bounded f64 matrix DFT | 224.9446 | 0.748335 | 155.3031 | 1.733947 |
+
+The second row passes the unchanged smoke threshold. **It still fails strict
+comparison**, whose max/mean limits remain 1.3078/0.1308. This repairs the smoke
+regression but does not resolve the residual phase sensitivity in #371. The
+manual phase graph is unchanged; replacing it with `atan2` is not equivalent
+at signed zero. No tolerances were relaxed.
+
+Reproduce with:
+
+```sh
+uv run get_model.py
+cargo run --release --bin burn-onnx-model-checks-kokoro
+KOKORO_STRICT=1 cargo run --release --bin burn-onnx-model-checks-kokoro
+```
+
 ### FFT experiments (2026-11-05)
 
 Measured on Apple Silicon/macOS with the Flex backend, a release build, main
