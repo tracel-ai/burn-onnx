@@ -227,8 +227,8 @@ mod tests {
 
     #[test]
     fn stft_non_pow2() {
-        // Non-power-of-two n_fft, which Burn's stft computes with Bluestein's
-        // algorithm. This test pins that path to ORT's reference output for
+        // Small non-power-of-two n_fft uses the bounded matrix DFT.
+        // This test pins that path to the ONNX reference output for
         // n_fft = 20, hop = 5 (matching Kokoro's decoder head).
         let device = Default::default();
         let model: stft_non_pow2::Model = stft_non_pow2::Model::new(&device);
@@ -530,4 +530,43 @@ fn runtime_zero_frame_step_rejected() {
         &device,
     );
     let _ = model.forward(burn::tensor::Tensor::<3>::ones([1, 32, 1], &device), 0, 12);
+}
+
+#[test]
+#[should_panic(expected = "STFT frame_step must not exceed frame_length")]
+fn runtime_small_dft_rejects_step_larger_than_frame() {
+    let device = Default::default();
+    let model = stft_runtime_params::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/stft_runtime_params.bpk"),
+        &device,
+    );
+    let _ = model.forward(burn::tensor::Tensor::<3>::ones([1, 32, 1], &device), 21, 20);
+}
+
+#[test]
+fn runtime_stft_dispatch_boundary() {
+    use burn::tensor::{DType, Tensor, TensorData, Tolerance};
+    let device = Default::default();
+    let model = stft_runtime_params::Model::from_file(
+        concat!(env!("OUT_DIR"), "/model/stft_runtime_params.bpk"),
+        &device,
+    );
+    // 31 uses the direct DFT, 32 the radix-2 FFT, and 33 Bluestein.
+    for length in [31usize, 32, 33] {
+        let signal = Tensor::<3>::from_data(
+            TensorData::new(alloc::vec![1.0f32; 66], [1, 66, 1]),
+            (&device, DType::F32),
+        );
+        let result = model.forward(signal, length as i64, length as i64);
+        let bins = length / 2 + 1;
+        assert_eq!(result.dims(), [1, 2, bins, 2]);
+        assert_eq!(result.dtype(), DType::F32);
+        let mut expected = alloc::vec![0.0f32; 2 * bins * 2];
+        expected[0] = length as f32;
+        expected[bins * 2] = length as f32;
+        result.to_data().assert_approx_eq::<f32>(
+            &TensorData::new(expected, [1, 2, bins, 2]),
+            Tolerance::absolute(1e-4),
+        );
+    }
 }

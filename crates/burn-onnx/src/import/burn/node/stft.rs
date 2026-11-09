@@ -130,6 +130,9 @@ impl NodeCodegen for onnx_ir::node::stft::StftNode {
 /// result is cast back to it. Large windows keep the O(N log N) native FFT.
 fn small_dft_core(onesided: bool, output_dtype: TokenStream) -> TokenStream {
     quote! {
+        // Preserve the frame/hop contract enforced by the IR for constants and
+        // by Burn's native STFT for runtime parameters on the FFT path.
+        assert!(hop_length <= n_fft, "STFT frame_step must not exceed frame_length");
         let device = signal.device();
         let frames: Tensor<3> = signal.unfold(1, n_fft, hop_length);
         let windowed = if let Some(window) = window {
@@ -291,7 +294,7 @@ mod tests {
             })
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @r#"
         pub fn forward(&self, signal: Tensor<2>, step: i64, window: Tensor<1>) -> Tensor<4> {
             let output = {
                 let (signal, window, n_fft, hop_length): (_, Option<Tensor<1>>, usize, usize) = (
@@ -303,6 +306,7 @@ mod tests {
                     20usize,
                     5usize,
                 );
+                assert!(hop_length <= n_fft, "STFT frame_step must not exceed frame_length");
                 let device = signal.device();
                 let frames: Tensor<3> = signal.unfold(1, n_fft, hop_length);
                 let windowed = if let Some(window) = window {
@@ -349,7 +353,7 @@ mod tests {
             };
             output
         }
-        ");
+        "#);
     }
 
     #[test]
@@ -402,7 +406,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @r#"
         pub fn forward(&self, signal: Tensor<2>) -> Tensor<4> {
             let output = {
                 let (signal, window, n_fft, hop_length): (_, Option<Tensor<1>>, usize, usize) = (
@@ -414,6 +418,7 @@ mod tests {
                     20usize,
                     5usize,
                 );
+                assert!(hop_length <= n_fft, "STFT frame_step must not exceed frame_length");
                 let device = signal.device();
                 let frames: Tensor<3> = signal.unfold(1, n_fft, hop_length);
                 let windowed = if let Some(window) = window {
@@ -460,7 +465,7 @@ mod tests {
             };
             output
         }
-        ");
+        "#);
     }
 
     #[test]
@@ -552,6 +557,7 @@ mod tests {
                     },
                 );
                 if n_fft <= 32 && !n_fft.is_power_of_two() {
+                    assert!(hop_length <= n_fft, "STFT frame_step must not exceed frame_length");
                     let device = signal.device();
                     let frames: Tensor<3> = signal.unfold(1, n_fft, hop_length);
                     let windowed = if let Some(window) = window {
