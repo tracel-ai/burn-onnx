@@ -11,6 +11,11 @@ impl NodeCodegen for onnx_ir::split::SplitNode {
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
         let input = scope.arg(self.inputs.first().unwrap());
+        let input = if matches!(self.inputs[0].ty, ArgType::Shape(_)) {
+            quote! { Tensor::<1, Int>::from_data(TensorData::from(#input), (self.device(), burn::tensor::DType::I64)) }
+        } else {
+            input
+        };
         let axis = self.config.axis.to_tokens();
 
         let outputs = self.outputs.iter().map(arg_to_ident).collect::<Vec<_>>();
@@ -90,6 +95,35 @@ mod tests {
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::split::{SplitConfig, SplitNodeBuilder, SplitSizesInput};
+
+    #[test]
+    fn test_split_shape_input() {
+        let node = SplitNodeBuilder::new("split")
+            .input_shape("shape", 4)
+            .output_tensor("first", 1, DType::I64)
+            .output_tensor("second", 1, DType::I64)
+            .config(SplitConfig {
+                axis: 0,
+                split_size: Some(2),
+                split_sizes: None,
+                num_outputs: None,
+            })
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, shape: [i64; 4]) -> (Tensor<1, Int>, Tensor<1, Int>) {
+            let [first, second] = {
+                let split_tensors = Tensor::<
+                    1,
+                    Int,
+                >::from_data(TensorData::from(shape), (self.device(), burn::tensor::DType::I64))
+                    .split(2, 0);
+                split_tensors.try_into().unwrap()
+            };
+            (first, second)
+        }
+        ");
+    }
 
     #[test]
     fn test_split_equal() {

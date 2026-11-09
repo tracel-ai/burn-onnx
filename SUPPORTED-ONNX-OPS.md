@@ -230,7 +230,12 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 ¹ Requires `burn/vision`; backend support follows Burn Vision.
 
 `AffineGrid` supports the native operator for 2D/3D with either `align_corners`
-setting. Official function expansions still require shape/rank inference support
+setting. Official function expansions can be imported with
+`ModelGen::shape_input("size")`, which exposes `size` as `[i64; 4]` (2D) or
+`[i64; 5]` (3D). The dimensions remain runtime values; the fixed array length
+lets inference select the dimension-dependent branches. The expanded 2D function
+requires a non-unit batch because its axis-free Squeeze removes unit dimensions.
+Without the explicit shape-input contract, these expansions remain unsupported
 ([#351](https://github.com/tracel-ai/burn-onnx/issues/351)).
 `Squeeze` without axes can use a partial static shape: known unit dimensions are removed and unknown dimensions
 must remain non-unit at runtime. A runtime guard reports inputs that would change

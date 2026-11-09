@@ -3,13 +3,183 @@ include_models!(
     affine_grid_2d,
     affine_grid_3d,
     affine_grid_f64,
-    affine_grid_f16
+    affine_grid_f16,
+    affine_grid_2d_expanded,
+    affine_grid_2d_align_corners_expanded,
+    affine_grid_3d_expanded,
+    affine_grid_3d_align_corners_expanded
 );
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec::Vec;
     use burn::tensor::{Int, Tensor, TensorData, Tolerance};
+
+    fn floats(bytes: &[u8]) -> Vec<f32> {
+        bytes
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+            .collect()
+    }
+
+    #[test]
+    fn affine_grid_2d_expanded() {
+        let device = Default::default();
+        let model = affine_grid_2d_expanded::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/affine_grid_2d_expanded.bpk"),
+            &device,
+        );
+        let theta = Tensor::<3>::from_data(
+            TensorData::new(
+                floats(include_bytes!("affine_grid_2d_expanded_theta.bin")),
+                [2, 2, 3],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let output = model.forward(theta.clone(), [2, 3, 5, 6]);
+        output.to_data().assert_approx_eq::<f32>(
+            &TensorData::new(
+                floats(include_bytes!("affine_grid_2d_expanded_expected.bin")),
+                [2, 5, 6, 2],
+            ),
+            Tolerance::absolute(1e-5),
+        );
+        // The contract fixes the vector length, not the requested spatial sizes.
+        model
+            .forward(theta, [2, 3, 2, 3])
+            .to_data()
+            .assert_approx_eq::<f32>(
+                &TensorData::new(
+                    floats(include_bytes!("affine_grid_2d_expanded_small_expected.bin")),
+                    [2, 2, 3, 2],
+                ),
+                Tolerance::absolute(1e-5),
+            );
+    }
+
+    #[test]
+    fn affine_grid_2d_align_corners_expanded() {
+        let device = Default::default();
+        let model = affine_grid_2d_align_corners_expanded::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model/affine_grid_2d_align_corners_expanded.bpk"
+            ),
+            &device,
+        );
+        let theta = Tensor::<3>::from_data(
+            TensorData::new(
+                floats(include_bytes!(
+                    "affine_grid_2d_align_corners_expanded_theta.bin"
+                )),
+                [2, 2, 3],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let output = model.forward(theta.clone(), [2, 3, 5, 6]);
+        output.to_data().assert_approx_eq::<f32>(
+            &TensorData::new(
+                floats(include_bytes!(
+                    "affine_grid_2d_align_corners_expanded_expected.bin"
+                )),
+                [2, 5, 6, 2],
+            ),
+            Tolerance::absolute(1e-5),
+        );
+        // The contract fixes the vector length, not the requested spatial sizes.
+        model
+            .forward(theta, [2, 3, 2, 3])
+            .to_data()
+            .assert_approx_eq::<f32>(
+                &TensorData::new(
+                    floats(include_bytes!(
+                        "affine_grid_2d_align_corners_expanded_small_expected.bin"
+                    )),
+                    [2, 2, 3, 2],
+                ),
+                Tolerance::absolute(1e-5),
+            );
+    }
+
+    #[test]
+    fn affine_grid_3d_expanded() {
+        let device = Default::default();
+        let model = affine_grid_3d_expanded::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/affine_grid_3d_expanded.bpk"),
+            &device,
+        );
+        let theta = Tensor::<3>::from_data(
+            TensorData::new(
+                floats(include_bytes!("affine_grid_3d_expanded_theta.bin")),
+                [2, 3, 4],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let output = model.forward(theta.clone(), [2, 3, 4, 5, 6]);
+        output.to_data().assert_approx_eq::<f32>(
+            &TensorData::new(
+                floats(include_bytes!("affine_grid_3d_expanded_expected.bin")),
+                [2, 4, 5, 6, 3],
+            ),
+            Tolerance::absolute(1e-5),
+        );
+        // The contract fixes the vector length, not the requested spatial sizes.
+        model
+            .forward(theta, [2, 3, 3, 2, 3])
+            .to_data()
+            .assert_approx_eq::<f32>(
+                &TensorData::new(
+                    floats(include_bytes!("affine_grid_3d_expanded_small_expected.bin")),
+                    [2, 3, 2, 3, 3],
+                ),
+                Tolerance::absolute(1e-5),
+            );
+    }
+
+    #[test]
+    fn affine_grid_3d_align_corners_expanded() {
+        let device = Default::default();
+        let model = affine_grid_3d_align_corners_expanded::Model::from_file(
+            concat!(
+                env!("OUT_DIR"),
+                "/model/affine_grid_3d_align_corners_expanded.bpk"
+            ),
+            &device,
+        );
+        let theta = Tensor::<3>::from_data(
+            TensorData::new(
+                floats(include_bytes!(
+                    "affine_grid_3d_align_corners_expanded_theta.bin"
+                )),
+                [2, 3, 4],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let output = model.forward(theta.clone(), [2, 3, 4, 5, 6]);
+        output.to_data().assert_approx_eq::<f32>(
+            &TensorData::new(
+                floats(include_bytes!(
+                    "affine_grid_3d_align_corners_expanded_expected.bin"
+                )),
+                [2, 4, 5, 6, 3],
+            ),
+            Tolerance::absolute(1e-5),
+        );
+        // The contract fixes the vector length, not the requested spatial sizes.
+        model
+            .forward(theta, [2, 3, 3, 2, 3])
+            .to_data()
+            .assert_approx_eq::<f32>(
+                &TensorData::new(
+                    floats(include_bytes!(
+                        "affine_grid_3d_align_corners_expanded_small_expected.bin"
+                    )),
+                    [2, 3, 2, 3, 3],
+                ),
+                Tolerance::absolute(1e-5),
+            );
+    }
 
     fn theta_2d(device: &burn::tensor::Device) -> Tensor<3> {
         Tensor::from_floats(

@@ -114,6 +114,7 @@ pub struct ModelGen {
     load_strategy: LoadStrategy,
     /// Whether to run graph simplification passes (default: true)
     simplify: bool,
+    shape_inputs: Vec<String>,
     /// Whether to partition large models into submodules (default: true)
     partition: bool,
     /// User hooks for custom (non-built-in) ops. Shared with the onnx-ir
@@ -129,6 +130,7 @@ impl Default for ModelGen {
             development: false,
             load_strategy: LoadStrategy::default(),
             simplify: true,
+            shape_inputs: Vec::new(),
             partition: true,
             hooks: Arc::new(HookRegistry::default()),
         }
@@ -136,6 +138,16 @@ impl Default for ModelGen {
 }
 
 impl ModelGen {
+    /// Expose an ONNX rank-one int64 input as a fixed-length `[i64; N]` array.
+    ///
+    /// The length must be declared in the model. Values remain dynamic; only
+    /// the length is specialized, with the Rust input type enforcing it.
+    /// This can resolve shape-dependent branches in expanded ONNX functions.
+    pub fn shape_input(&mut self, name: impl Into<String>) -> &mut Self {
+        self.shape_inputs.push(name.into());
+        self
+    }
+
     /// Creates a new `ModelGen` builder with default settings.
     ///
     /// Default configuration:
@@ -409,9 +421,13 @@ impl ModelGen {
         // registry at all), the pipeline's coverage pre-pass reports ALL
         // uncovered custom ops in one friendly summary instead of failing
         // deep inside type inference.
-        let graph = OnnxGraphBuilder::new()
+        let mut builder = OnnxGraphBuilder::new()
             .simplify(self.simplify)
-            .with_custom_op_inference(self.hooks.clone())
+            .with_custom_op_inference(self.hooks.clone());
+        for name in &self.shape_inputs {
+            builder = builder.shape_input(name);
+        }
+        let graph = builder
             .parse_file(input)
             .unwrap_or_else(|e| panic!("{}", parse_error_message(input, &e)));
 

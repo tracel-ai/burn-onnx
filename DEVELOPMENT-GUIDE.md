@@ -56,6 +56,29 @@ The conversion process involves three main stages:
 2. Translate IR to a Burn graph.
 3. Generate Rust source code from the Burn graph.
 
+## Fixed-length shape inputs
+
+By default, graph inputs remain tensors and their dimension sizes may vary at
+runtime. Some expanded ONNX functions choose an output rank based on the number
+of entries in an input shape vector. For those models, explicitly opt into a
+fixed-length host array:
+
+```rust,ignore
+ModelGen::new()
+    .input("affine_grid_expanded.onnx")
+    .shape_input("size")
+    .out_dir("model/")
+    .run_from_script();
+```
+
+The input must be a rank-one int64 tensor with a declared length. Code generation
+exposes it as `[i64; N]`, so Rust enforces the length; the values inside the array
+remain dynamic. For example, both `[2, 3, 5, 6]` and `[2, 3, 2, 3]` are valid
+2D AffineGrid sizes. This permits folding `Size(size)` without assuming that an
+ordinary tensor's export-time dimensions are runtime constants. Direct IR users
+can use `OnnxGraphBuilder::shape_input` with the same contract. Other graph inputs
+and subgraph-local inputs are unaffected.
+
 ## Adding New Operators
 
 To extend `burn-onnx` with support for new ONNX operators, follow these steps:

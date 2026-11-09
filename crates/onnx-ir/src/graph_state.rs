@@ -284,6 +284,36 @@ impl GraphState {
         }
     }
 
+    /// Apply an explicit fixed-length shape contract to selected graph inputs.
+    pub(crate) fn specialize_shape_inputs(
+        &mut self,
+        names: &[String],
+    ) -> Result<(), crate::processor::ProcessError> {
+        use crate::ir::ArgType;
+        use crate::processor::ProcessError;
+        for name in names {
+            let index = self.graph_input_map.get(name).copied().ok_or_else(|| {
+                ProcessError::Custom(format!("Shape input '{name}' is not a graph input"))
+            })?;
+            let input = &mut self.inputs[index];
+            let length = match &input.ty {
+                ArgType::Shape(_) => continue,
+                ArgType::Tensor(t) if t.rank == 1 && t.dtype == burn_tensor::DType::I64 => t
+                    .static_shape
+                    .as_ref()
+                    .and_then(|s| s.first().copied().flatten()),
+                _ => None,
+            }
+            .ok_or_else(|| {
+                ProcessError::Custom(format!(
+                    "Shape input '{name}' must be a rank-one int64 tensor with a known length"
+                ))
+            })?;
+            input.ty = ArgType::Shape(length);
+        }
+        Ok(())
+    }
+
     /// Get the base path for external data resolution
     pub(crate) fn base_path(&self) -> Option<&Path> {
         self.base_path.as_deref()
