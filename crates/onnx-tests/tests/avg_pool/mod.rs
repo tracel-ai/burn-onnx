@@ -19,181 +19,90 @@ mod tests {
     use super::*;
     use burn::tensor::{Device, Shape, Tensor, TensorData, Tolerance};
 
-    #[test]
-    fn avg_pool1d_dilated() {
+    fn check_dilated_pool<const D: usize>(forward: impl Fn(Tensor<D>) -> [Tensor<D>; 6]) {
         let device = Default::default();
-        let model = avg_pool1d_dilations::Model::from_file(
-            concat!(env!("OUT_DIR"), "/model/avg_pool1d_dilations.bpk"),
-            &device,
-        );
-        for (size, expected) in [
-            (
-                6usize,
-                [
-                    &include_bytes!("avg_pool1d_dilations_6_p00.bin")[..],
-                    &include_bytes!("avg_pool1d_dilations_6_p01.bin")[..],
-                    &include_bytes!("avg_pool1d_dilations_6_p10.bin")[..],
-                    &include_bytes!("avg_pool1d_dilations_6_p11.bin")[..],
-                    &include_bytes!("avg_pool1d_dilations_6_same_upper.bin")[..],
-                    &include_bytes!("avg_pool1d_dilations_6_same_lower.bin")[..],
-                ],
-            ),
-            (
-                7usize,
-                [
-                    &include_bytes!("avg_pool1d_dilations_7_p00.bin")[..],
-                    &include_bytes!("avg_pool1d_dilations_7_p01.bin")[..],
-                    &include_bytes!("avg_pool1d_dilations_7_p10.bin")[..],
-                    &include_bytes!("avg_pool1d_dilations_7_p11.bin")[..],
-                    &include_bytes!("avg_pool1d_dilations_7_same_upper.bin")[..],
-                    &include_bytes!("avg_pool1d_dilations_7_same_lower.bin")[..],
-                ],
-            ),
-        ] {
-            let mut shape = [size; 3];
-            shape[0] = 1;
-            shape[1] = 1;
-            let values = (0..size.pow(1))
+        let names = [
+            "exclude_pad_floor",
+            "exclude_pad_ceil",
+            "include_pad_floor",
+            "include_pad_ceil",
+            "same_upper",
+            "same_lower",
+        ];
+        for size in [6usize, 7] {
+            let mut shape = [size; D];
+            shape[..2].fill(1);
+            let values = (0..shape.iter().product::<usize>())
                 .map(|i| i as f32 / 10.)
                 .collect::<alloc::vec::Vec<_>>();
-            let input = Tensor::<3>::from_data(
+            let input = Tensor::from_data(
                 TensorData::new(values, shape),
                 (&device, burn::tensor::DType::F32),
             );
-            let (a, b, c, d, e, f) = model.forward(input);
-            for (actual, bytes) in [a, b, c, d, e, f].into_iter().zip(expected) {
-                let shape = bytes[..3 * 8]
-                    .chunks_exact(8)
-                    .map(|b| u64::from_le_bytes(b.try_into().unwrap()) as usize)
+            let prefix = alloc::format!("{} {size} ", D - 2);
+            let expected = include_str!("dilations.txt")
+                .lines()
+                .filter(|line| line.starts_with(&prefix))
+                .collect::<alloc::vec::Vec<_>>();
+            assert_eq!(expected.len(), names.len());
+            for ((actual, name), line) in forward(input).into_iter().zip(names).zip(expected) {
+                let mut fields = line.split(" | ");
+                assert_eq!(fields.next().unwrap(), alloc::format!("{prefix}{name}"));
+                let shape = fields
+                    .next()
+                    .unwrap()
+                    .split_whitespace()
+                    .map(|v| v.parse::<usize>().unwrap())
                     .collect::<alloc::vec::Vec<_>>();
-                let values = bytes[3 * 8..]
-                    .chunks_exact(4)
-                    .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+                let values = fields
+                    .next()
+                    .unwrap()
+                    .split_whitespace()
+                    .map(|v| v.parse::<f32>().unwrap())
                     .collect::<alloc::vec::Vec<_>>();
+                assert!(fields.next().is_none());
                 actual.to_data().assert_approx_eq::<f32>(
                     &TensorData::new(values, shape),
                     Tolerance::absolute(1e-4),
                 );
             }
         }
+    }
+
+    #[test]
+    fn avg_pool1d_dilated() {
+        let model = avg_pool1d_dilations::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/avg_pool1d_dilations.bpk"),
+            &Default::default(),
+        );
+        check_dilated_pool(|input| {
+            let (a, b, c, d, e, f) = model.forward(input);
+            [a, b, c, d, e, f]
+        });
     }
 
     #[test]
     fn avg_pool2d_dilated() {
-        let device = Default::default();
         let model = avg_pool2d_dilations::Model::from_file(
             concat!(env!("OUT_DIR"), "/model/avg_pool2d_dilations.bpk"),
-            &device,
+            &Default::default(),
         );
-        for (size, expected) in [
-            (
-                6usize,
-                [
-                    &include_bytes!("avg_pool2d_dilations_6_p00.bin")[..],
-                    &include_bytes!("avg_pool2d_dilations_6_p01.bin")[..],
-                    &include_bytes!("avg_pool2d_dilations_6_p10.bin")[..],
-                    &include_bytes!("avg_pool2d_dilations_6_p11.bin")[..],
-                    &include_bytes!("avg_pool2d_dilations_6_same_upper.bin")[..],
-                    &include_bytes!("avg_pool2d_dilations_6_same_lower.bin")[..],
-                ],
-            ),
-            (
-                7usize,
-                [
-                    &include_bytes!("avg_pool2d_dilations_7_p00.bin")[..],
-                    &include_bytes!("avg_pool2d_dilations_7_p01.bin")[..],
-                    &include_bytes!("avg_pool2d_dilations_7_p10.bin")[..],
-                    &include_bytes!("avg_pool2d_dilations_7_p11.bin")[..],
-                    &include_bytes!("avg_pool2d_dilations_7_same_upper.bin")[..],
-                    &include_bytes!("avg_pool2d_dilations_7_same_lower.bin")[..],
-                ],
-            ),
-        ] {
-            let mut shape = [size; 4];
-            shape[0] = 1;
-            shape[1] = 1;
-            let values = (0..size.pow(2))
-                .map(|i| i as f32 / 10.)
-                .collect::<alloc::vec::Vec<_>>();
-            let input = Tensor::<4>::from_data(
-                TensorData::new(values, shape),
-                (&device, burn::tensor::DType::F32),
-            );
+        check_dilated_pool(|input| {
             let (a, b, c, d, e, f) = model.forward(input);
-            for (actual, bytes) in [a, b, c, d, e, f].into_iter().zip(expected) {
-                let shape = bytes[..4 * 8]
-                    .chunks_exact(8)
-                    .map(|b| u64::from_le_bytes(b.try_into().unwrap()) as usize)
-                    .collect::<alloc::vec::Vec<_>>();
-                let values = bytes[4 * 8..]
-                    .chunks_exact(4)
-                    .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
-                    .collect::<alloc::vec::Vec<_>>();
-                actual.to_data().assert_approx_eq::<f32>(
-                    &TensorData::new(values, shape),
-                    Tolerance::absolute(1e-4),
-                );
-            }
-        }
+            [a, b, c, d, e, f]
+        });
     }
 
     #[test]
     fn avg_pool3d_dilated() {
-        let device = Default::default();
         let model = avg_pool3d_dilations::Model::from_file(
             concat!(env!("OUT_DIR"), "/model/avg_pool3d_dilations.bpk"),
-            &device,
+            &Default::default(),
         );
-        for (size, expected) in [
-            (
-                6usize,
-                [
-                    &include_bytes!("avg_pool3d_dilations_6_p00.bin")[..],
-                    &include_bytes!("avg_pool3d_dilations_6_p01.bin")[..],
-                    &include_bytes!("avg_pool3d_dilations_6_p10.bin")[..],
-                    &include_bytes!("avg_pool3d_dilations_6_p11.bin")[..],
-                    &include_bytes!("avg_pool3d_dilations_6_same_upper.bin")[..],
-                    &include_bytes!("avg_pool3d_dilations_6_same_lower.bin")[..],
-                ],
-            ),
-            (
-                7usize,
-                [
-                    &include_bytes!("avg_pool3d_dilations_7_p00.bin")[..],
-                    &include_bytes!("avg_pool3d_dilations_7_p01.bin")[..],
-                    &include_bytes!("avg_pool3d_dilations_7_p10.bin")[..],
-                    &include_bytes!("avg_pool3d_dilations_7_p11.bin")[..],
-                    &include_bytes!("avg_pool3d_dilations_7_same_upper.bin")[..],
-                    &include_bytes!("avg_pool3d_dilations_7_same_lower.bin")[..],
-                ],
-            ),
-        ] {
-            let mut shape = [size; 5];
-            shape[0] = 1;
-            shape[1] = 1;
-            let values = (0..size.pow(3))
-                .map(|i| i as f32 / 10.)
-                .collect::<alloc::vec::Vec<_>>();
-            let input = Tensor::<5>::from_data(
-                TensorData::new(values, shape),
-                (&device, burn::tensor::DType::F32),
-            );
+        check_dilated_pool(|input| {
             let (a, b, c, d, e, f) = model.forward(input);
-            for (actual, bytes) in [a, b, c, d, e, f].into_iter().zip(expected) {
-                let shape = bytes[..5 * 8]
-                    .chunks_exact(8)
-                    .map(|b| u64::from_le_bytes(b.try_into().unwrap()) as usize)
-                    .collect::<alloc::vec::Vec<_>>();
-                let values = bytes[5 * 8..]
-                    .chunks_exact(4)
-                    .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
-                    .collect::<alloc::vec::Vec<_>>();
-                actual.to_data().assert_approx_eq::<f32>(
-                    &TensorData::new(values, shape),
-                    Tolerance::absolute(1e-4),
-                );
-            }
-        }
+            [a, b, c, d, e, f]
+        });
     }
 
     #[test]
