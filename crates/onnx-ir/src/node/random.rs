@@ -36,6 +36,8 @@ use protobuf::Enum;
 /// Configuration for RandomNormal operation.
 #[derive(Debug, Clone)]
 pub struct RandomNormalConfig {
+    /// Optional ONNX random seed, preserved without integer truncation.
+    pub seed: Option<f32>,
     pub mean: f64,
     pub scale: f64,
     pub shape: Vec<usize>,
@@ -44,6 +46,8 @@ pub struct RandomNormalConfig {
 /// Configuration for RandomUniform operation.
 #[derive(Debug, Clone)]
 pub struct RandomUniformConfig {
+    /// Optional ONNX random seed, preserved without integer truncation.
+    pub seed: Option<f32>,
     pub low: f64,
     pub high: f64,
     pub shape: Vec<usize>,
@@ -121,10 +125,6 @@ impl NodeProcessor for RandomProcessor {
         // Add tests: random_normal_custom_mean_scale, random_uniform_custom_range
         // Note: Testing actual distribution properties is hard, but should at least extract attrs.
 
-        // TODO: Missing validation for seed attribute
-        // Spec mentions seed attribute for reproducibility but it's not extracted or validated.
-        // Add tests: random_normal_with_seed, random_uniform_with_seed
-
         let dtype = node
             .attrs
             .get("dtype")
@@ -175,6 +175,11 @@ impl NodeProcessor for RandomProcessor {
             .into_i64s()?;
         let shape: Vec<usize> = shape.into_iter().map(|i| i as usize).collect();
 
+        let seed = node
+            .attrs
+            .get("seed")
+            .map(|v| v.clone().into_f32())
+            .transpose()?;
         let config = match node.node_type {
             crate::ir::NodeType::RandomNormal => {
                 let mean = node
@@ -189,7 +194,12 @@ impl NodeProcessor for RandomProcessor {
                     .map(|v| v.clone().into_f32().map(|x| x as f64))
                     .transpose()?
                     .unwrap_or(1.0);
-                RandomConfig::Normal(RandomNormalConfig { mean, scale, shape })
+                RandomConfig::Normal(RandomNormalConfig {
+                    mean,
+                    scale,
+                    shape,
+                    seed,
+                })
             }
             crate::ir::NodeType::RandomUniform => {
                 let low = node
@@ -204,7 +214,12 @@ impl NodeProcessor for RandomProcessor {
                     .map(|v| v.clone().into_f32().map(|x| x as f64))
                     .transpose()?
                     .unwrap_or(1.0);
-                RandomConfig::Uniform(RandomUniformConfig { low, high, shape })
+                RandomConfig::Uniform(RandomUniformConfig {
+                    low,
+                    high,
+                    shape,
+                    seed,
+                })
             }
             _ => {
                 return Err(ProcessError::Custom(format!(
@@ -250,6 +265,42 @@ mod tests {
             .attr_int("dtype", dtype as i64)
             .attr_ints("shape", shape)
             .build()
+    }
+
+    #[test]
+    fn preserves_optional_fractional_seed() {
+        let node = TestNodeBuilder::new(NodeType::RandomNormal, "seeded")
+            .attr_ints("shape", vec![2, 3])
+            .attr_float("seed", 42.5)
+            .build();
+        let RandomConfig::Normal(config) = RandomProcessor.extract_config(&node, 22).unwrap()
+        else {
+            panic!("wrong config")
+        };
+        assert_eq!(config.seed, Some(42.5));
+        let mut absent = node;
+        absent.attrs.remove("seed");
+        let RandomConfig::Normal(config) = RandomProcessor.extract_config(&absent, 22).unwrap()
+        else {
+            panic!("wrong config")
+        };
+        assert_eq!(config.seed, None);
+        let node = TestNodeBuilder::new(NodeType::RandomUniform, "seeded")
+            .attr_ints("shape", vec![2, 3])
+            .attr_float("seed", 42.5)
+            .build();
+        let RandomConfig::Uniform(config) = RandomProcessor.extract_config(&node, 22).unwrap()
+        else {
+            panic!("wrong config")
+        };
+        assert_eq!(config.seed, Some(42.5));
+        let mut absent = node;
+        absent.attrs.remove("seed");
+        let RandomConfig::Uniform(config) = RandomProcessor.extract_config(&absent, 22).unwrap()
+        else {
+            panic!("wrong config")
+        };
+        assert_eq!(config.seed, None);
     }
 
     #[test]

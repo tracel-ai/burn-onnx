@@ -19,9 +19,19 @@ use crate::processor::{
 use crate::protos::tensor_proto::DataType;
 use protobuf::Enum;
 
+/// Attributes for Bernoulli sampling.
+#[derive(Debug, Clone, Default)]
+pub struct BernoulliConfig {
+    /// Optional output dtype code; omission preserves the input dtype.
+    pub dtype: Option<i64>,
+    /// Optional ONNX random seed.
+    pub seed: Option<f32>,
+}
+
 /// Node representation for Bernoulli operation
 #[derive(Debug, Clone, NodeBuilder)]
 pub struct BernoulliNode {
+    pub config: BernoulliConfig,
     pub name: String,
     pub inputs: Vec<Argument>,
     pub outputs: Vec<Argument>,
@@ -30,7 +40,7 @@ pub struct BernoulliNode {
 pub(crate) struct BernoulliProcessor;
 
 impl NodeProcessor for BernoulliProcessor {
-    type Config = ();
+    type Config = BernoulliConfig;
 
     fn spec(&self) -> NodeSpec {
         NodeSpec {
@@ -48,7 +58,6 @@ impl NodeProcessor for BernoulliProcessor {
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
         // TODO: Add validation for unexpected attributes
-        // TODO: Spec mentions 'seed' attribute but it's not validated or used in implementation
 
         // Get the tensor type and its rank
         let tensor = match &node.inputs[0].ty {
@@ -93,8 +102,25 @@ impl NodeProcessor for BernoulliProcessor {
         Ok(())
     }
 
-    fn build_node(&self, builder: RawNode, _opset: usize) -> Result<Node, ProcessError> {
+    fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+        Ok(BernoulliConfig {
+            dtype: node
+                .attrs
+                .get("dtype")
+                .map(|v| v.clone().into_i64())
+                .transpose()?,
+            seed: node
+                .attrs
+                .get("seed")
+                .map(|v| v.clone().into_f32())
+                .transpose()?,
+        })
+    }
+
+    fn build_node(&self, builder: RawNode, opset: usize) -> Result<Node, ProcessError> {
+        let config = self.extract_config(&builder, opset)?;
         Ok(Node::Bernoulli(BernoulliNode {
+            config,
             name: builder.name,
             inputs: builder.inputs,
             outputs: builder.outputs,
@@ -119,6 +145,22 @@ mod tests {
         }
 
         builder.build()
+    }
+
+    #[test]
+    fn preserves_seed_and_dtype() {
+        let node = TestNodeBuilder::new(NodeType::Bernoulli, "seeded")
+            .attr_float("seed", 42.5)
+            .attr_int("dtype", 7)
+            .build();
+        let config = BernoulliProcessor.extract_config(&node, 22).unwrap();
+        assert_eq!(config.seed, Some(42.5));
+        assert_eq!(config.dtype, Some(7));
+        let node = TestNodeBuilder::new(NodeType::Bernoulli, "unseeded").build();
+        assert_eq!(
+            BernoulliProcessor.extract_config(&node, 22).unwrap().seed,
+            None
+        );
     }
 
     #[test]

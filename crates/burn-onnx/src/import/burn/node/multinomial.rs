@@ -11,12 +11,6 @@ impl NodeCodegen for onnx_ir::node::multinomial::MultinomialNode {
     }
 
     fn forward(&self, scope: &mut ScopeAtPosition<'_>) -> TokenStream {
-        if let Some(seed) = self.config.seed {
-            log::warn!(
-                "Node '{}' (Multinomial): seed attribute ({seed}) is ignored; samples use the backend random generator",
-                self.name
-            );
-        }
         let input = scope.arg(&self.inputs[0]);
         let input = if matches!(self.inputs[0].ty.elem_type(), DType::F16 | DType::BF16) {
             quote! { #input.cast(burn::tensor::DType::F32) }
@@ -26,6 +20,28 @@ impl NodeCodegen for onnx_ir::node::multinomial::MultinomialNode {
         let output = arg_to_ident(&self.outputs[0]);
         let sample_size = self.config.sample_size;
         let dtype = self.config.dtype.to_tokens();
+
+        let sample = if self.config.seed.is_some() {
+            let draw = super::random_helpers::random_draw(
+                self.config.seed,
+                quote! { [weights.dims()[0], #sample_size] },
+                quote! { burn::tensor::Distribution::Uniform(0.0, 1.0) },
+                quote! { &weights.device() },
+                quote! { weights.dtype() },
+            );
+            // Same tensor inverse-CDF method as Burn's categorical(), with an explicit key.
+            quote! {
+                let categories = weights.dims()[1];
+                let sum = weights.clone().sum_dim(1);
+                let uniform: Tensor<2> = #draw;
+                let cdf = (weights / sum).cumsum(1).unsqueeze_dim::<3>(2);
+                cdf.lower(uniform.unsqueeze_dim::<3>(1)).int()
+                    .cast(burn::tensor::DType::I64).sum_dim(1).squeeze_dim::<2>(1)
+                    .clamp(0, categories as i64 - 1).cast(#dtype)
+            }
+        } else {
+            quote! { weights.categorical(#sample_size).cast(#dtype) }
+        };
 
         // The input holds unnormalized log-probabilities. Subtracting the row max keeps `exp`
         // from overflowing; `categorical` normalizes the weights, so the shift does not change
@@ -40,7 +56,8 @@ impl NodeCodegen for onnx_ir::node::multinomial::MultinomialNode {
                     )
                 } else {
                     let max = logits.clone().max_dim(1);
-                    (logits - max).exp().categorical(#sample_size).cast(#dtype)
+                    let weights = (logits - max).exp();
+                    #sample
                 }
             };
         }
@@ -79,7 +96,8 @@ mod tests {
                     )
                 } else {
                     let max = logits.clone().max_dim(1);
-                    (logits - max).exp().categorical(1usize).cast(burn::tensor::DType::I32)
+                    let weights = (logits - max).exp();
+                    weights.categorical(1usize).cast(burn::tensor::DType::I32)
                 }
             };
             output
@@ -117,7 +135,28 @@ mod tests {
                     )
                 } else {
                     let max = logits.clone().max_dim(1);
-                    (logits - max).exp().categorical(10usize).cast(burn::tensor::DType::I64)
+                    let weights = (logits - max).exp();
+                    let categories = weights.dims()[1];
+                    let sum = weights.clone().sum_dim(1);
+                    let uniform: Tensor<2> = Tensor::from_dispatch(
+                        <burn::backend::Dispatch as burn::backend::ops::FloatTensorOps<
+                            burn::backend::Dispatch,
+                        >>::float_random(
+                            ([weights.dims()[0], 10usize]).into(),
+                            burn::tensor::Distribution::Uniform(0.0, 1.0),
+                            (&weights.device()).as_dispatch(),
+                            (weights.dtype()).into(),
+                            burn::backend::RandomKey::new(1077936128u64),
+                        ),
+                    );
+                    let cdf = (weights / sum).cumsum(1).unsqueeze_dim::<3>(2);
+                    cdf.lower(uniform.unsqueeze_dim::<3>(1))
+                        .int()
+                        .cast(burn::tensor::DType::I64)
+                        .sum_dim(1)
+                        .squeeze_dim::<2>(1)
+                        .clamp(0, categories as i64 - 1)
+                        .cast(burn::tensor::DType::I64)
                 }
             };
             output
@@ -159,7 +198,8 @@ mod tests {
                     )
                 } else {
                     let max = logits.clone().max_dim(1);
-                    (logits - max).exp().categorical(1usize).cast(burn::tensor::DType::I32)
+                    let weights = (logits - max).exp();
+                    weights.categorical(1usize).cast(burn::tensor::DType::I32)
                 }
             };
             output

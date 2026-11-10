@@ -162,10 +162,37 @@ impl NodeProcessor for GatherElementsProcessor {
     }
 }
 
-// TODO: Add unit tests for GatherElements - No tests found for this operator - Missing test coverage entirely
 // TODO: Add test for rank validation - data and indices must have same rank per spec - Missing constraint test
 // TODO: Add test for indices type validation - indices must be int32 or int64 - Missing type constraint test
 // TODO: Add test for negative indices - Opset 13+ clarifies negative index handling - Missing negative indices test
 // TODO: Add test for out-of-bounds indices - Spec requires error for out-of-bounds - Missing bounds checking test
 // TODO: Add test for axis validation - Test axis out of range should return error - Missing constraint test
 // TODO: Add test for unexpected attributes - Should reject unknown attributes per implementation - Missing attribute validation test
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::NodeType;
+    use crate::node::test_utils::TestNodeBuilder;
+
+    #[test]
+    fn smaller_non_axis_dimensions_preserve_output_shape() {
+        let mut node = TestNodeBuilder::new(NodeType::GatherElements, "smaller_indices")
+            .input_tensor_f32("data", 3, Some(vec![2, 3, 4]))
+            .input_tensor_i64("indices", 3, Some(vec![1, 2, 2]))
+            .output_tensor_f32("output", 3, None)
+            .attr_int("axis", -2)
+            .build();
+        GatherElementsProcessor
+            .infer_types(&mut node, 18, &OutputPreferences::new())
+            .unwrap();
+        assert_eq!(node.outputs[0].ty.static_shape_known(), Some(vec![1, 2, 2]));
+        assert_eq!(
+            GatherElementsProcessor
+                .extract_config(&node, 18)
+                .unwrap()
+                .axis,
+            1
+        );
+    }
+}
