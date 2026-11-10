@@ -39,7 +39,6 @@ impl NodeCodegen for onnx_ir::node::avg_pool3d::AveragePool3dNode {
         let output = arg_to_ident(self.outputs.first().unwrap());
         let config = &self.config;
 
-        // burn's avg_pool3d has no dilation; onnx-ir rejects dilations other than 1.
         let padding = pool3d_padding(
             &config.padding,
             &config.auto_pad,
@@ -51,6 +50,7 @@ impl NodeCodegen for onnx_ir::node::avg_pool3d::AveragePool3dNode {
         );
         let kernel = config.kernel_size.to_tokens();
         let strides = config.strides.to_tokens();
+        let dilation = config.dilation.to_tokens();
         let count_include_pad = config.count_include_pad;
         let ceil_mode = config.ceil_mode;
 
@@ -63,6 +63,7 @@ impl NodeCodegen for onnx_ir::node::avg_pool3d::AveragePool3dNode {
                     input,
                     burn::tensor::ops::AvgPoolOptions::new(#kernel)
                         .with_stride(#strides)
+                        .with_dilation(#dilation)
                         .with_padding_pairs(padding)
                         .with_count_include_pad(#count_include_pad)
                         .with_ceil_mode(#ceil_mode),
@@ -75,6 +76,7 @@ impl NodeCodegen for onnx_ir::node::avg_pool3d::AveragePool3dNode {
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::*;
+    use super::NodeCodegen;
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::node::avg_pool3d::{AveragePool3dNode, AveragePool3dNodeBuilder, AvgPool3dConfig};
@@ -98,6 +100,170 @@ mod tests {
     }
 
     #[test]
+    fn test_avg_pool3d_dilated_explicit() {
+        let mut node = node(
+            "input",
+            PaddingConfig3d::Explicit(1, 0, 1, 0, 1, 0),
+            AutoPad::NotSet,
+        );
+        node.config.dilation = [2; 3];
+        node.config.auto_pad = AutoPad::NotSet;
+        node.config.count_include_pad = true;
+        node.config.ceil_mode = true;
+        assert!(node.field().is_none());
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, input: Tensor<5>) -> Tensor<5> {
+            let output = {
+                let (padding, input) = (
+                    [(1usize, 0usize), (0usize, 1usize), (1usize, 0usize)],
+                    input,
+                );
+                burn::tensor::module::avg_pool3d(
+                    input,
+                    burn::tensor::ops::AvgPoolOptions::new([2, 3, 2])
+                        .with_stride([2, 2, 2])
+                        .with_dilation([2, 2, 2])
+                        .with_padding_pairs(padding)
+                        .with_count_include_pad(true)
+                        .with_ceil_mode(true),
+                )
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_avg_pool3d_dilated_same_upper() {
+        let mut node = node(
+            "input",
+            PaddingConfig3d::Explicit(1, 0, 1, 0, 1, 0),
+            AutoPad::NotSet,
+        );
+        node.config.dilation = [2; 3];
+        node.config.auto_pad = AutoPad::SameUpper;
+        node.config.count_include_pad = true;
+        node.config.ceil_mode = true;
+        assert!(node.field().is_none());
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, input: Tensor<5>) -> Tensor<5> {
+            let output = {
+                let (padding, input) = (
+                    {
+                        let dims = input.dims();
+                        [
+                            {
+                                let size = dims[2usize];
+                                let total = (size.div_ceil(2usize).saturating_sub(1) * 2usize
+                                    + 3usize)
+                                    .saturating_sub(size);
+                                let small = total / 2;
+                                let big = total - small;
+                                (small, big)
+                            },
+                            {
+                                let size = dims[3usize];
+                                let total = (size.div_ceil(2usize).saturating_sub(1) * 2usize
+                                    + 5usize)
+                                    .saturating_sub(size);
+                                let small = total / 2;
+                                let big = total - small;
+                                (small, big)
+                            },
+                            {
+                                let size = dims[4usize];
+                                let total = (size.div_ceil(2usize).saturating_sub(1) * 2usize
+                                    + 3usize)
+                                    .saturating_sub(size);
+                                let small = total / 2;
+                                let big = total - small;
+                                (small, big)
+                            },
+                        ]
+                    },
+                    input,
+                );
+                burn::tensor::module::avg_pool3d(
+                    input,
+                    burn::tensor::ops::AvgPoolOptions::new([2, 3, 2])
+                        .with_stride([2, 2, 2])
+                        .with_dilation([2, 2, 2])
+                        .with_padding_pairs(padding)
+                        .with_count_include_pad(true)
+                        .with_ceil_mode(true),
+                )
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_avg_pool3d_dilated_same_lower() {
+        let mut node = node(
+            "input",
+            PaddingConfig3d::Explicit(1, 0, 1, 0, 1, 0),
+            AutoPad::NotSet,
+        );
+        node.config.dilation = [2; 3];
+        node.config.auto_pad = AutoPad::SameLower;
+        node.config.count_include_pad = true;
+        node.config.ceil_mode = true;
+        assert!(node.field().is_none());
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, input: Tensor<5>) -> Tensor<5> {
+            let output = {
+                let (padding, input) = (
+                    {
+                        let dims = input.dims();
+                        [
+                            {
+                                let size = dims[2usize];
+                                let total = (size.div_ceil(2usize).saturating_sub(1) * 2usize
+                                    + 3usize)
+                                    .saturating_sub(size);
+                                let small = total / 2;
+                                let big = total - small;
+                                (big, small)
+                            },
+                            {
+                                let size = dims[3usize];
+                                let total = (size.div_ceil(2usize).saturating_sub(1) * 2usize
+                                    + 5usize)
+                                    .saturating_sub(size);
+                                let small = total / 2;
+                                let big = total - small;
+                                (big, small)
+                            },
+                            {
+                                let size = dims[4usize];
+                                let total = (size.div_ceil(2usize).saturating_sub(1) * 2usize
+                                    + 3usize)
+                                    .saturating_sub(size);
+                                let small = total / 2;
+                                let big = total - small;
+                                (big, small)
+                            },
+                        ]
+                    },
+                    input,
+                );
+                burn::tensor::module::avg_pool3d(
+                    input,
+                    burn::tensor::ops::AvgPoolOptions::new([2, 3, 2])
+                        .with_stride([2, 2, 2])
+                        .with_dilation([2, 2, 2])
+                        .with_padding_pairs(padding)
+                        .with_count_include_pad(true)
+                        .with_ceil_mode(true),
+                )
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
     fn test_avg_pool3d_explicit_padding() {
         let node = node(
             "input",
@@ -116,6 +282,7 @@ mod tests {
                     input,
                     burn::tensor::ops::AvgPoolOptions::new([2, 3, 2])
                         .with_stride([2, 2, 2])
+                        .with_dilation([1, 1, 1])
                         .with_padding_pairs(padding)
                         .with_count_include_pad(false)
                         .with_ceil_mode(true),
@@ -173,6 +340,7 @@ mod tests {
                     input,
                     burn::tensor::ops::AvgPoolOptions::new([2, 3, 2])
                         .with_stride([2, 2, 2])
+                        .with_dilation([1, 1, 1])
                         .with_padding_pairs(padding)
                         .with_count_include_pad(false)
                         .with_ceil_mode(true),

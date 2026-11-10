@@ -101,12 +101,11 @@ impl NodeProcessor for AvgPool1dProcessor {
                             opset
                         )));
                     }
-                    // burn's avg_pool takes no dilation (tracel-ai/burn#6148): reject it
-                    // instead of pooling a dense window
-                    if dilations.iter().any(|&d| d != 1) {
-                        return Err(ProcessError::Custom(format!(
-                            "AveragePool: dilations other than 1 are not supported yet, got {dilations:?} (tracel-ai/burn#6148)"
-                        )));
+                    if dilations.iter().any(|&d| d <= 0) {
+                        return Err(ProcessError::InvalidAttribute {
+                            name: "dilations".into(),
+                            reason: "values must be positive".into(),
+                        });
                     }
                 }
                 "auto_pad" => {
@@ -116,7 +115,11 @@ impl NodeProcessor for AvgPool1dProcessor {
             }
         }
 
-        crate::node::padding::validate_auto_pad(node)?;
+        let config = self.extract_config(node, opset)?;
+        // Dilated pools use the functional API, with runtime SAME padding.
+        if config.dilation == 1 {
+            crate::node::padding::validate_auto_pad(node)?;
+        }
 
         // Extract input tensor type
         let tensor = match &node.inputs[0].ty {
@@ -223,6 +226,30 @@ mod tests {
     }
 
     #[test]
+    fn test_dilated_dynamic_same_and_invalid_dilation() {
+        for mode in ["SAME_UPPER", "SAME_LOWER"] {
+            for dilation in [-1, 0, 2] {
+                let mut node = TestNodeBuilder::new(NodeType::AveragePool1d, "dilated")
+                    .input_tensor_f32("input", 3, None)
+                    .output_tensor_f32("output", 3, None)
+                    .attr_ints("kernel_shape", vec![2; 1])
+                    .attr_ints("dilations", vec![dilation; 1])
+                    .attr_string("auto_pad", mode)
+                    .build();
+                let result =
+                    AvgPool1dProcessor.infer_types(&mut node, 19, &OutputPreferences::new());
+                if dilation > 0 {
+                    result.unwrap();
+                } else {
+                    assert!(
+                        matches!(result, Err(ProcessError::InvalidAttribute { name, .. }) if name == "dilations")
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn test_avg_pool1d_config_basic() {
         let node = create_test_node(vec![4], vec![1], vec![0, 0], 0, 0, None);
         let mut node = node;
@@ -272,18 +299,13 @@ mod tests {
     }
 
     #[test]
-    fn test_avg_pool1d_dilation_is_recorded_but_rejected() {
+    fn test_avg_pool1d_dilation_is_supported() {
         let node = create_test_node(vec![4], vec![1], vec![0, 0], 0, 0, Some(vec![2]));
         let mut node = node;
         let processor = AvgPool1dProcessor;
         let prefs = OutputPreferences::new();
         let config = processor.extract_config(&node, 19).unwrap();
-        // The config mirrors ONNX, but burn can't pool with dilation yet
-        let err = processor.infer_types(&mut node, 19, &prefs).unwrap_err();
-        assert!(
-            matches!(&err, ProcessError::Custom(msg) if msg.contains("dilations other than 1 are not supported yet")),
-            "{err}"
-        );
+        processor.infer_types(&mut node, 19, &prefs).unwrap();
 
         assert_eq!(config.kernel_size, 4);
         assert_eq!(config.stride, 1);

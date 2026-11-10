@@ -29,6 +29,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [Attention][194]                 | ✅             | ✅           |
 | [AveragePool1d][12]              | ✅             | ✅           |
 | [AveragePool2d][12]              | ✅             | ✅           |
+| [AveragePool3d][12]              | ✅             | ✅           |
 | [BatchNormalization][14]         | ✅             | ✅           |
 | [Bernoulli][15]                  | ✅             | ✅           |
 | [BitShift][16]                   | ✅             | ✅           |
@@ -480,6 +481,11 @@ targets inside `If`/`Loop`/`Scan` subgraph bodies are not supported yet and
 are rejected with a clear error. See the "Custom Operators and Overrides"
 section of `DEVELOPMENT-GUIDE.md` for the full reference, and
 `examples/custom-op-hooks/` for a runnable example.
+
+AveragePool supports dilated kernels in 1D, 2D, and 3D for opset 19 and later,
+including `count_include_pad`, `ceil_mode`, and dynamic SAME_UPPER/SAME_LOWER
+padding. Dilated 1D/2D pooling uses Burn's functional API because its pooling
+modules do not expose dilation.
 
 Quantized convolution supports int8/uint8 inputs, per-tensor input/output parameters,
 per-output-channel weight parameters, grouping, dilation, and explicit or automatic padding.
