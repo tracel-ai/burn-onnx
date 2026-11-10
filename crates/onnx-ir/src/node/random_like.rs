@@ -28,6 +28,8 @@ use protobuf::Enum;
 /// Configuration for RandomNormalLike operation.
 #[derive(Debug, Clone)]
 pub struct RandomNormalLikeConfig {
+    /// Optional ONNX random seed, preserved without integer truncation.
+    pub seed: Option<f32>,
     pub mean: f64,
     pub scale: f64,
 }
@@ -35,6 +37,8 @@ pub struct RandomNormalLikeConfig {
 /// Configuration for RandomUniformLike operation.
 #[derive(Debug, Clone)]
 pub struct RandomUniformLikeConfig {
+    /// Optional ONNX random seed, preserved without integer truncation.
+    pub seed: Option<f32>,
     pub low: f64,
     pub high: f64,
 }
@@ -86,7 +90,6 @@ impl NodeProcessor for RandomLikeProcessor {
     ) -> Result<(), ProcessError> {
         // TODO: Spec mentions RandomNormalLike has mean/scale attributes, RandomUniformLike has high/low
         // These attributes are documented but not validated or extracted into config
-        // TODO: Spec also mentions 'seed' attribute that is not validated
 
         let dtype = node
             .attrs
@@ -97,13 +100,19 @@ impl NodeProcessor for RandomLikeProcessor {
                     ProcessError::Custom(format!("unknown dtype attribute value {code}"))
                 })
             })
-            .transpose()?
-            .unwrap_or(DataType::FLOAT);
+            .transpose()?;
 
         let elem_type = match dtype {
-            DataType::FLOAT => DType::F32,
-            DataType::FLOAT16 => DType::F16,
-            DataType::DOUBLE => DType::F64,
+            Some(DataType::FLOAT) => DType::F32,
+            Some(DataType::FLOAT16) => DType::F16,
+            Some(DataType::DOUBLE) => DType::F64,
+            None if matches!(
+                node.inputs[0].ty.elem_type(),
+                DType::F16 | DType::F32 | DType::F64
+            ) =>
+            {
+                node.inputs[0].ty.elem_type()
+            }
             _ => {
                 return Err(ProcessError::InvalidAttribute {
                     name: "dtype".to_string(),
@@ -129,6 +138,11 @@ impl NodeProcessor for RandomLikeProcessor {
     }
 
     fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+        let seed = node
+            .attrs
+            .get("seed")
+            .map(|v| v.clone().into_f32())
+            .transpose()?;
         let config = match node.node_type {
             crate::ir::NodeType::RandomNormalLike => {
                 let mean = node
@@ -143,7 +157,7 @@ impl NodeProcessor for RandomLikeProcessor {
                     .map(|v| v.clone().into_f32().map(|x| x as f64))
                     .transpose()?
                     .unwrap_or(1.0);
-                RandomLikeConfig::Normal(RandomNormalLikeConfig { mean, scale })
+                RandomLikeConfig::Normal(RandomNormalLikeConfig { mean, scale, seed })
             }
             crate::ir::NodeType::RandomUniformLike => {
                 let low = node
@@ -158,7 +172,7 @@ impl NodeProcessor for RandomLikeProcessor {
                     .map(|v| v.clone().into_f32().map(|x| x as f64))
                     .transpose()?
                     .unwrap_or(1.0);
-                RandomLikeConfig::Uniform(RandomUniformLikeConfig { low, high })
+                RandomLikeConfig::Uniform(RandomUniformLikeConfig { low, high, seed })
             }
             _ => {
                 return Err(ProcessError::Custom(format!(
@@ -212,6 +226,46 @@ mod tests {
             .output_tensor_f32("output", 0, None) // Rank 0 will be updated
             .attr_int("dtype", dtype as i64)
             .build()
+    }
+
+    #[test]
+    fn preserves_optional_fractional_seed() {
+        let node = TestNodeBuilder::new(NodeType::RandomNormalLike, "seeded")
+            .attr_ints("shape", vec![2, 3])
+            .attr_float("seed", 42.5)
+            .build();
+        let RandomLikeConfig::Normal(config) =
+            RandomLikeProcessor.extract_config(&node, 22).unwrap()
+        else {
+            panic!("wrong config")
+        };
+        assert_eq!(config.seed, Some(42.5));
+        let mut absent = node;
+        absent.attrs.remove("seed");
+        let RandomLikeConfig::Normal(config) =
+            RandomLikeProcessor.extract_config(&absent, 22).unwrap()
+        else {
+            panic!("wrong config")
+        };
+        assert_eq!(config.seed, None);
+        let node = TestNodeBuilder::new(NodeType::RandomUniformLike, "seeded")
+            .attr_ints("shape", vec![2, 3])
+            .attr_float("seed", 42.5)
+            .build();
+        let RandomLikeConfig::Uniform(config) =
+            RandomLikeProcessor.extract_config(&node, 22).unwrap()
+        else {
+            panic!("wrong config")
+        };
+        assert_eq!(config.seed, Some(42.5));
+        let mut absent = node;
+        absent.attrs.remove("seed");
+        let RandomLikeConfig::Uniform(config) =
+            RandomLikeProcessor.extract_config(&absent, 22).unwrap()
+        else {
+            panic!("wrong config")
+        };
+        assert_eq!(config.seed, None);
     }
 
     #[test]

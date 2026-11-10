@@ -43,6 +43,11 @@ fn bernoulli(graph: &OnnxGraph) {
         bernoulli_input: F32[2, 3]
       Outputs:
         bernoulli1_out1: F32[2, 3]
+      Config:
+        BernoulliConfig {
+            dtype: None,
+            seed: None,
+        }
     "#);
 }
 

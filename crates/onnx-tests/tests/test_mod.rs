@@ -243,3 +243,5 @@ macro_rules! include_simplified_models {
         }
     };
 }
+
+mod random_seed;

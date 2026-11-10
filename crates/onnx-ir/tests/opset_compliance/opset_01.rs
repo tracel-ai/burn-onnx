@@ -1644,6 +1644,7 @@ fn random_normal(graph: &OnnxGraph) {
         randomnormal1_out1: F32[?, ?]
       Config:
         RandomNormalConfig {
+            seed: None,
             mean: 0.0,
             scale: 1.0,
             shape: [
@@ -1665,6 +1666,7 @@ fn random_normal_like(graph: &OnnxGraph) {
         randomnormallike1_out1: F32[2, 3]
       Config:
         RandomNormalLikeConfig {
+            seed: None,
             mean: 0.0,
             scale: 1.0,
         }
@@ -1681,6 +1683,7 @@ fn random_uniform(graph: &OnnxGraph) {
         randomuniform1_out1: F32[?, ?]
       Config:
         RandomUniformConfig {
+            seed: None,
             low: 0.0,
             high: 1.0,
             shape: [
@@ -1702,6 +1705,7 @@ fn random_uniform_like(graph: &OnnxGraph) {
         randomuniformlike1_out1: F32[2, 3]
       Config:
         RandomUniformLikeConfig {
+            seed: None,
             low: 0.0,
             high: 1.0,
         }

@@ -22,9 +22,15 @@ impl NodeCodegen for onnx_ir::node::random::RandomUniformNode {
         let high = self.config.high;
         let dist = quote! { Distribution::Uniform(#low, #high) };
 
-        quote! {
-            let #output = Tensor::random(#shape, #dist, self.device());
-        }
+        let dtype = self.outputs[0].ty.elem_type().to_tokens();
+        let draw = super::random_helpers::random_draw(
+            self.config.seed,
+            shape,
+            dist,
+            quote! { self.device() },
+            dtype,
+        );
+        quote! { let #output = #draw; }
     }
 
     fn register_imports(&self, imports: &mut BurnImports) {
@@ -40,8 +46,39 @@ mod tests {
     use onnx_ir::node::random::{RandomUniformConfig, RandomUniformNodeBuilder};
 
     #[test]
+    fn test_random_uniform_seeded() {
+        let config = RandomUniformConfig {
+            seed: Some(42.5),
+            low: 0.0,
+            high: 1.0,
+            shape: vec![3, 4],
+        };
+        let node = RandomUniformNodeBuilder::new("rand1")
+            .output_tensor("output", 2, DType::F64)
+            .config(config)
+            .build();
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self) -> Tensor<2> {
+            let output = Tensor::from_dispatch(
+                <burn::backend::Dispatch as burn::backend::ops::FloatTensorOps<
+                    burn::backend::Dispatch,
+                >>::float_random(
+                    (Shape::new([3usize, 4usize])).into(),
+                    Distribution::Uniform(0f64, 1f64),
+                    (self.device()).as_dispatch(),
+                    (burn::tensor::DType::F64).into(),
+                    burn::backend::RandomKey::new(1110048768u64),
+                ),
+            );
+            output
+        }
+        ");
+    }
+
+    #[test]
     fn test_random_uniform() {
         let config = RandomUniformConfig {
+            seed: None,
             low: 0.0,
             high: 1.0,
             shape: vec![3, 4],
@@ -56,7 +93,7 @@ mod tests {
             let output = Tensor::random(
                 Shape::new([3usize, 4usize]),
                 Distribution::Uniform(0f64, 1f64),
-                self.device(),
+                (self.device(), burn::tensor::DType::F32),
             );
             output
         }
