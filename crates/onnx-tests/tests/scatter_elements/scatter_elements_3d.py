@@ -42,8 +42,8 @@ def main():
     np.random.seed(42)
     test_data = np.arange(24, dtype=np.float32).reshape(2, 3, 4)
     # Mixes negative and positive indices along the middle axis.
-    # No column repeats a target row: burn leaves duplicate indices undefined for
-    # scatter_nd, so a fixture must not depend on how they fold.
+    # No column repeats a target row, so the fixture does not depend on how
+    # duplicate indices fold.
     test_indices = np.array(
         [[[0, -1, 1, -2], [2, 1, -3, 0]], [[-2, 0, 2, 1], [2, -1, 0, -3]]], dtype=np.int64
     )

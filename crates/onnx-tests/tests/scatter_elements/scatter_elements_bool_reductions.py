@@ -12,10 +12,9 @@
 #
 # ScatterElements (axis 1) on bool data with every reduction. On bool, add and max are a
 # logical or, mul and min a logical and (NumPy semantics). The indices repeat targets so
-# the reduction matters. indices/updates match the data on the non-axis dimension (burn's
-# native scatter); indices_small/updates_small have 1 row instead of 2 on the non-axis
-# dimension, which selects the ScatterND fallback, with unique targets (burn documents
-# duplicates as undefined for scatter_nd reductions) and row 1 untouched.
+# the reduction matters. indices/updates match the data on the non-axis dimension;
+# indices_small/updates_small have 1 row instead of 2 on the non-axis
+# dimension, with unique targets and row 1 untouched.
 # Expected values from onnx.reference.ReferenceEvaluator (onnx 1.23.2; on 1.19 it assigned
 # for mul), checked against a NumPy loop and, for the full-shape add/mul outputs, ONNX
 # Runtime (which rejects max/min on bool).

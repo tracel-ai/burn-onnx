@@ -16,7 +16,7 @@ from onnx.reference import ReferenceEvaluator
 
 
 def main():
-    # Integer data on the scatter_nd path, which is otherwise only snapshot-tested.
+    # Integer data, which is otherwise only snapshot-tested.
     data = helper.make_tensor_value_info("data", TensorProto.INT64, [3, 3])
     indices = helper.make_tensor_value_info("indices", TensorProto.INT64, [2, 3])
     updates = helper.make_tensor_value_info("updates", TensorProto.INT64, [2, 3])
