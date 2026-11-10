@@ -482,11 +482,6 @@ are rejected with a clear error. See the "Custom Operators and Overrides"
 section of `DEVELOPMENT-GUIDE.md` for the full reference, and
 `examples/custom-op-hooks/` for a runnable example.
 
-AveragePool supports dilated kernels in 1D, 2D, and 3D for opset 19 and later,
-including `count_include_pad`, `ceil_mode`, and dynamic SAME_UPPER/SAME_LOWER
-padding. All three dimensions use Burn's functional pooling API for both unit
-and non-unit dilation.
-
 Quantized convolution supports int8/uint8 inputs, per-tensor input/output parameters,
 per-output-channel weight parameters, grouping, dilation, and explicit or automatic padding.
 ConvInteger and QLinearConv accumulate in int32 using tensor windows and matrix multiplication;

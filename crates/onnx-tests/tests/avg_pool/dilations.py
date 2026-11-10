@@ -12,7 +12,6 @@ from onnx.reference import ReferenceEvaluator
 
 np.random.seed(42)
 root = Path(__file__).parent
-expected = ["# spatial rank, input size, output | output shape | flattened f32 values"]
 for rank in [1, 2, 3]:
     nodes = []
     for include, ceil in [(0, 0), (0, 1), (1, 0), (1, 1)]:
@@ -78,7 +77,8 @@ for rank in [1, 2, 3]:
                 h.make_attribute("pads", [begin] * rank + [total - begin] * rank)
             )
         for node, y in zip(nodes, ReferenceEvaluator(reference).run(None, {"x": x})):
-            shape = " ".join(str(d) for d in y.shape)
-            values = " ".join(format(float(v), ".9g") for v in y.flat)
-            expected.append(f"{rank} {size} {node.output[0]} | {shape} | {values}")
-(root / "dilations.txt").write_text("\n".join(expected) + "\n")
+            # Paste these reference values directly into the Rust integration test.
+            shape = ", ".join(str(d) for d in y.shape)
+            values = ", ".join(repr(float(f"{v:.7g}")) for v in y.flat)
+            print(f"// rank {rank}, size {size}, {node.output[0]}")
+            print(f"(&[{values}], [{shape}]),")
