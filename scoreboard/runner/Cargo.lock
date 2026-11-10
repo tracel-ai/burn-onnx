@@ -556,8 +556,8 @@ checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
 
 [[package]]
 name = "burn"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-core",
  "burn-linalg",
@@ -571,8 +571,8 @@ dependencies = [
 
 [[package]]
 name = "burn-autodiff"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-std",
@@ -586,8 +586,8 @@ dependencies = [
 
 [[package]]
 name = "burn-backend"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-std",
  "cubecl",
@@ -605,8 +605,8 @@ dependencies = [
 
 [[package]]
 name = "burn-backend-extension"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -615,8 +615,8 @@ dependencies = [
 
 [[package]]
 name = "burn-core"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-backend-extension",
@@ -644,8 +644,8 @@ dependencies = [
 
 [[package]]
 name = "burn-cpu"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -654,8 +654,8 @@ dependencies = [
 
 [[package]]
 name = "burn-cubecl"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-cubecl-fusion",
@@ -673,8 +673,8 @@ dependencies = [
 
 [[package]]
 name = "burn-cubecl-fusion"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-fusion",
@@ -691,8 +691,8 @@ dependencies = [
 
 [[package]]
 name = "burn-cuda"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -701,8 +701,8 @@ dependencies = [
 
 [[package]]
 name = "burn-derive"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-einsum",
  "derive-new",
@@ -713,8 +713,8 @@ dependencies = [
 
 [[package]]
 name = "burn-dispatch"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-autodiff",
  "burn-backend",
@@ -727,13 +727,13 @@ dependencies = [
 
 [[package]]
 name = "burn-einsum"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 
 [[package]]
 name = "burn-flex"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-ir",
@@ -749,8 +749,8 @@ dependencies = [
 
 [[package]]
 name = "burn-fusion"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-ir",
@@ -765,8 +765,8 @@ dependencies = [
 
 [[package]]
 name = "burn-instrument"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-fusion",
  "burn-instrument-macros",
@@ -779,8 +779,8 @@ dependencies = [
 
 [[package]]
 name = "burn-instrument-macros"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -789,8 +789,8 @@ dependencies = [
 
 [[package]]
 name = "burn-ir"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-std",
@@ -800,8 +800,8 @@ dependencies = [
 
 [[package]]
 name = "burn-linalg"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-core",
  "burn-fusion",
@@ -812,8 +812,8 @@ dependencies = [
 
 [[package]]
 name = "burn-nn"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-core",
  "burn-linalg",
@@ -832,8 +832,8 @@ dependencies = [
 
 [[package]]
 name = "burn-optim"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-core",
  "burn-derive",
@@ -847,8 +847,8 @@ dependencies = [
 
 [[package]]
 name = "burn-pack"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-std",
  "byteorder",
@@ -858,8 +858,8 @@ dependencies = [
 
 [[package]]
 name = "burn-rocm"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -868,8 +868,8 @@ dependencies = [
 
 [[package]]
 name = "burn-signal"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-autodiff",
  "burn-core",
@@ -881,8 +881,8 @@ dependencies = [
 
 [[package]]
 name = "burn-std"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -906,8 +906,8 @@ dependencies = [
 
 [[package]]
 name = "burn-store"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-core",
  "burn-pack",
@@ -923,8 +923,8 @@ dependencies = [
 
 [[package]]
 name = "burn-tensor"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-derive",
@@ -939,8 +939,8 @@ dependencies = [
 
 [[package]]
 name = "burn-vision"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "aligned-vec",
  "bon",
@@ -957,8 +957,8 @@ dependencies = [
 
 [[package]]
 name = "burn-wgpu"
-version = "0.23.0-pre.1"
-source = "git+https://github.com/tracel-ai/burn?rev=02d45852cf59720ae63b8f2c6314a02671eed8fa#02d45852cf59720ae63b8f2c6314a02671eed8fa"
+version = "0.23.0-pre.2"
+source = "git+https://github.com/tracel-ai/burn?rev=26f664754fdeb5d9cbe4970d80185e329dd978c6#26f664754fdeb5d9cbe4970d80185e329dd978c6"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
@@ -1319,7 +1319,7 @@ dependencies = [
 [[package]]
 name = "cubecl"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "cubecl-core",
  "cubecl-cpu",
@@ -1338,7 +1338,7 @@ dependencies = [
 [[package]]
 name = "cubecl-common"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "bytemuck",
  "cfg_aliases",
@@ -1362,7 +1362,7 @@ dependencies = [
 [[package]]
 name = "cubecl-core"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "bitflags",
  "bytemuck",
@@ -1392,7 +1392,7 @@ dependencies = [
 [[package]]
 name = "cubecl-cpp"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "bytemuck",
  "cubecl-common",
@@ -1414,7 +1414,7 @@ dependencies = [
 [[package]]
 name = "cubecl-cpu"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "bytemuck",
  "crossbeam-utils",
@@ -1436,7 +1436,7 @@ dependencies = [
 [[package]]
 name = "cubecl-cuda"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "bytemuck",
  "cubecl-common",
@@ -1456,7 +1456,7 @@ dependencies = [
 [[package]]
 name = "cubecl-environment"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "async-channel",
  "backtrace",
@@ -1494,7 +1494,7 @@ dependencies = [
 [[package]]
 name = "cubecl-hip"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "bytemuck",
  "cubecl-common",
@@ -1527,7 +1527,7 @@ dependencies = [
 [[package]]
 name = "cubecl-ir"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "bumpalo",
  "cubecl-common",
@@ -1558,7 +1558,7 @@ dependencies = [
 [[package]]
 name = "cubecl-llvm"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "cc",
  "cubecl-core",
@@ -1578,7 +1578,7 @@ dependencies = [
 [[package]]
 name = "cubecl-macros"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "darling 0.24.1",
  "derive-new",
@@ -1595,7 +1595,7 @@ dependencies = [
 [[package]]
 name = "cubecl-macros-internal"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "darling 0.24.1",
  "inflections",
@@ -1607,7 +1607,7 @@ dependencies = [
 [[package]]
 name = "cubecl-metal"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "block2",
  "bytemuck",
@@ -1631,7 +1631,7 @@ dependencies = [
 [[package]]
 name = "cubecl-monitoring"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "cfg_aliases",
  "cubecl-ir",
@@ -1644,7 +1644,7 @@ dependencies = [
 [[package]]
 name = "cubecl-opt"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "cubecl-common",
  "cubecl-core",
@@ -1666,7 +1666,7 @@ dependencies = [
 [[package]]
 name = "cubecl-runtime"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "buildid",
  "bytemuck",
@@ -1697,7 +1697,7 @@ dependencies = [
 [[package]]
 name = "cubecl-server"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "buildid",
  "bytemuck",
@@ -1725,7 +1725,7 @@ dependencies = [
 [[package]]
 name = "cubecl-spirv"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "bitflags",
  "cubecl-common",
@@ -1748,7 +1748,7 @@ dependencies = [
 [[package]]
 name = "cubecl-std"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "cubecl-common",
  "cubecl-core",
@@ -1765,7 +1765,7 @@ dependencies = [
 [[package]]
 name = "cubecl-tile"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "cubecl-core",
  "cubecl-ir",
@@ -1779,7 +1779,7 @@ dependencies = [
 [[package]]
 name = "cubecl-wgpu"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "bytemuck",
  "cfg-if",
@@ -1809,7 +1809,7 @@ dependencies = [
 [[package]]
 name = "cubecl-zspace"
 version = "0.12.0-pre.2"
-source = "git+https://github.com/tracel-ai/cubecl?rev=ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc#ea6fd78d908ffe6a5b7843a1e4365ca34d6f30dc"
+source = "git+https://github.com/tracel-ai/cubecl?rev=a7d6f91b77be521273cae068dcc54750cad41773#a7d6f91b77be521273cae068dcc54750cad41773"
 dependencies = [
  "derive-new",
  "serde",
@@ -1818,8 +1818,8 @@ dependencies = [
 
 [[package]]
 name = "cubek"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "cubecl",
  "cubek-attention",
@@ -1837,8 +1837,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-attention"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "bytemuck",
  "cubecl",
@@ -1852,8 +1852,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-attention-backward"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "cubecl",
  "cubek-matmul",
@@ -1864,8 +1864,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-convolution"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "bytemuck",
  "cubecl",
@@ -1879,8 +1879,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-interpolate"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "cubecl",
  "cubecl-common",
@@ -1892,8 +1892,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-matmul"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "bytemuck",
  "cubecl",
@@ -1908,8 +1908,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-microkernel"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "cubecl",
  "cubek-std",
@@ -1918,8 +1918,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-pool"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "cubecl",
  "cubecl-common",
@@ -1928,8 +1928,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-quant"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "cubecl",
  "cubecl-common",
@@ -1940,8 +1940,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-random"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "cubecl",
  "cubecl-common",
@@ -1955,8 +1955,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-reduce"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "cubecl",
  "cubek-microkernel",
@@ -1969,8 +1969,8 @@ dependencies = [
 
 [[package]]
 name = "cubek-std"
-version = "0.4.0-pre.1"
-source = "git+https://github.com/tracel-ai/cubek?rev=2a19416cb60bbd45ae36c44992b43ea78b468f28#2a19416cb60bbd45ae36c44992b43ea78b468f28"
+version = "0.4.0-pre.2"
+source = "git+https://github.com/tracel-ai/cubek?rev=a3439d734040b5dfd61f500e316947ebbfb3dc52#a3439d734040b5dfd61f500e316947ebbfb3dc52"
 dependencies = [
  "cubecl",
  "cubecl-common",
