@@ -682,8 +682,7 @@ status = "pass"
 status = "pass"
 
 [test_averagepool_2d_dilations]
-status = "skip-codegen"
-reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
+status = "pass"
 
 [test_averagepool_2d_pads]
 status = "pass"
@@ -716,24 +715,19 @@ status = "pass"
 status = "pass"
 
 [test_averagepool_3d_dilations_large_count_include_pad_is_0_ceil_mode_is_False]
-status = "skip-codegen"
-reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
+status = "pass"
 
 [test_averagepool_3d_dilations_large_count_include_pad_is_0_ceil_mode_is_True]
-status = "skip-codegen"
-reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
+status = "pass"
 
 [test_averagepool_3d_dilations_large_count_include_pad_is_1_ceil_mode_is_False]
-status = "skip-codegen"
-reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
+status = "pass"
 
 [test_averagepool_3d_dilations_large_count_include_pad_is_1_ceil_mode_is_True]
-status = "skip-codegen"
-reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
+status = "pass"
 
 [test_averagepool_3d_dilations_small]
-status = "skip-codegen"
-reason = "AveragePool: dilations other than 1 are not supported yet (burn's avg_pool has no dilation, tracel-ai/burn#6148)"
+status = "pass"
 
 [test_basic_conv_with_padding]
 status = "pass"

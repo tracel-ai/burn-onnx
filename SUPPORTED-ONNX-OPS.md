@@ -29,6 +29,7 @@ as `com.microsoft`, can still be imported by registering a custom op hook; see
 | [Attention][194]                 | ✅             | ✅           |
 | [AveragePool1d][12]              | ✅             | ✅           |
 | [AveragePool2d][12]              | ✅             | ✅           |
+| [AveragePool3d][12]              | ✅             | ✅           |
 | [BatchNormalization][14]         | ✅             | ✅           |
 | [Bernoulli][15]                  | ✅             | ✅           |
 | [BitShift][16]                   | ✅             | ✅           |
