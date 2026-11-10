@@ -17,8 +17,8 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
         let updates = scope.arg(&self.inputs[2]);
         let output = arg_to_ident(self.outputs.first().unwrap());
 
-        let rank = match &self.inputs[0].ty {
-            ArgType::Tensor(t) => t.rank,
+        match &self.inputs[0].ty {
+            ArgType::Tensor(_) => {}
             ArgType::Shape(rank) => {
                 return forward_shape(self, data, indices, updates, output, *rank);
             }
@@ -29,8 +29,7 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
                 );
                 return quote! { let #output = { compile_error!(#msg); unreachable!() }; };
             }
-        };
-        let rank_lit = rank.to_tokens();
+        }
 
         // On bool tensors burn's Add and Max are a logical or and Mul and Min a logical and,
         // as in NumPy (and so in the ONNX reference).
@@ -58,70 +57,20 @@ impl NodeCodegen for onnx_ir::scatter_elements::ScatterElementsNode {
                 .remainder_scalar(axis_size);
         };
 
-        // Element-wise `scatter` implements all five update ops on every backend, but
-        // it requires `indices` to match `data` on every non-axis dimension, while ONNX
-        // only bounds them by it. When the shapes line up, which is the common case,
-        // the native kernel runs directly.
-        let native = quote! { data.scatter(#axis, indices, updates, #update_op) };
-
-        // A rank-1 tensor has no non-axis dimension to disagree on.
-        if rank == 1 {
-            return quote! {
-                let #output = {
-                    #prologue
-                    #native
-                };
-            };
-        }
-
-        // Otherwise ScatterElements assigns
-        //   output[p_0, .., p_{axis-1}, indices[p], p_{axis+1}, .., p_{r-1}] = updates[p]
-        // for every p in the index shape, so materializing those coordinates as index
-        // tuples turns it into a ScatterND, which accepts any index shape. The non-axis
-        // columns are the row-major coordinates of p, recovered from a flat arange.
+        // Element-wise `scatter` implements all five update ops on every backend and, since
+        // burn 0.23.0-pre.2 (tracel-ai/burn#6381), accepts indices smaller than `data` on the
+        // non-axis dimensions, which is all ONNX requires: each index coordinate maps onto the
+        // same data coordinate. burn documents duplicate indices as undefined for Assign.
         //
-        // Duplicate indices fold sequentially on the CPU backends but race on cubecl.
-        // burn documents duplicates as undefined for Assign on both paths and for Mul,
-        // Min and Max on the scatter_nd path.
-        let coordinates = quote! {
-            let mut strides = [1usize; #rank_lit];
-            for d in (0..#rank_lit - 1).rev() {
-                strides[d] = strides[d + 1] * idx_dims[d + 1];
-            }
-            let flat = Tensor::<1, Int>::arange(
-                0..n as i64,
-                (self.device(), burn::tensor::DType::I64),
-            );
-            let mut columns: alloc::vec::Vec<Tensor<2, Int>> =
-                alloc::vec::Vec::with_capacity(#rank_lit);
-            for d in 0..#rank_lit {
-                columns.push(if d == #axis {
-                    indices.clone().reshape([n, 1])
-                } else {
-                    flat
-                        .clone()
-                        .div_scalar(strides[d] as i64)
-                        .remainder_scalar(idx_dims[d] as i64)
-                        .reshape([n, 1])
-                });
-            }
-            let coordinates = Tensor::cat(columns, 1);
-        };
-
-        // An empty index tensor is a legal ONNX no-op, but `scatter_nd` rejects empty indices.
+        // An empty index tensor is a legal ONNX no-op, so it returns `data` without launching
+        // a kernel.
         quote! {
             let #output = {
                 #prologue
-                let idx_dims = indices.dims();
-                let data_dims = data.dims();
-                let n: usize = idx_dims.iter().product();
-                if n == 0 {
+                if indices.dims().contains(&0) {
                     data
-                } else if (0..#rank_lit).all(|d| d == #axis || idx_dims[d] == data_dims[d]) {
-                    #native
                 } else {
-                    #coordinates
-                    data.scatter_nd(coordinates, updates.reshape([n]), #update_op)
+                    data.scatter(#axis, indices, updates, #update_op)
                 }
             };
         }
@@ -188,7 +137,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @"
         pub fn forward(
             &self,
             data: Tensor<2>,
@@ -199,44 +148,10 @@ mod tests {
                 let (data, indices, updates) = (data, indices, updates);
                 let axis_size = data.dims()[0] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
-                let idx_dims = indices.dims();
-                let data_dims = data.dims();
-                let n: usize = idx_dims.iter().product();
-                if n == 0 {
+                if indices.dims().contains(&0) {
                     data
-                } else if (0..2).all(|d| d == 0 || idx_dims[d] == data_dims[d]) {
-                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Assign)
                 } else {
-                    let mut strides = [1usize; 2];
-                    for d in (0..2 - 1).rev() {
-                        strides[d] = strides[d + 1] * idx_dims[d + 1];
-                    }
-                    let flat = Tensor::<
-                        1,
-                        Int,
-                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
-                    let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
-                        2,
-                    );
-                    for d in 0..2 {
-                        columns
-                            .push(
-                                if d == 0 {
-                                    indices.clone().reshape([n, 1])
-                                } else {
-                                    flat.clone()
-                                        .div_scalar(strides[d] as i64)
-                                        .remainder_scalar(idx_dims[d] as i64)
-                                        .reshape([n, 1])
-                                },
-                            );
-                    }
-                    let coordinates = Tensor::cat(columns, 1);
-                    data.scatter_nd(
-                        coordinates,
-                        updates.reshape([n]),
-                        burn::tensor::IndexingUpdateOp::Assign,
-                    )
+                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Assign)
                 }
             };
             output
@@ -255,7 +170,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @"
         pub fn forward(
             &self,
             data: Tensor<2>,
@@ -266,44 +181,10 @@ mod tests {
                 let (data, indices, updates) = (data, indices, updates);
                 let axis_size = data.dims()[1] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
-                let idx_dims = indices.dims();
-                let data_dims = data.dims();
-                let n: usize = idx_dims.iter().product();
-                if n == 0 {
+                if indices.dims().contains(&0) {
                     data
-                } else if (0..2).all(|d| d == 1 || idx_dims[d] == data_dims[d]) {
-                    data.scatter(1, indices, updates, burn::tensor::IndexingUpdateOp::Add)
                 } else {
-                    let mut strides = [1usize; 2];
-                    for d in (0..2 - 1).rev() {
-                        strides[d] = strides[d + 1] * idx_dims[d + 1];
-                    }
-                    let flat = Tensor::<
-                        1,
-                        Int,
-                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
-                    let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
-                        2,
-                    );
-                    for d in 0..2 {
-                        columns
-                            .push(
-                                if d == 1 {
-                                    indices.clone().reshape([n, 1])
-                                } else {
-                                    flat.clone()
-                                        .div_scalar(strides[d] as i64)
-                                        .remainder_scalar(idx_dims[d] as i64)
-                                        .reshape([n, 1])
-                                },
-                            );
-                    }
-                    let coordinates = Tensor::cat(columns, 1);
-                    data.scatter_nd(
-                        coordinates,
-                        updates.reshape([n]),
-                        burn::tensor::IndexingUpdateOp::Add,
-                    )
+                    data.scatter(1, indices, updates, burn::tensor::IndexingUpdateOp::Add)
                 }
             };
             output
@@ -322,7 +203,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @"
         pub fn forward(
             &self,
             data: Tensor<2>,
@@ -333,44 +214,10 @@ mod tests {
                 let (data, indices, updates) = (data, indices, updates);
                 let axis_size = data.dims()[0] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
-                let idx_dims = indices.dims();
-                let data_dims = data.dims();
-                let n: usize = idx_dims.iter().product();
-                if n == 0 {
+                if indices.dims().contains(&0) {
                     data
-                } else if (0..2).all(|d| d == 0 || idx_dims[d] == data_dims[d]) {
-                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Mul)
                 } else {
-                    let mut strides = [1usize; 2];
-                    for d in (0..2 - 1).rev() {
-                        strides[d] = strides[d + 1] * idx_dims[d + 1];
-                    }
-                    let flat = Tensor::<
-                        1,
-                        Int,
-                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
-                    let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
-                        2,
-                    );
-                    for d in 0..2 {
-                        columns
-                            .push(
-                                if d == 0 {
-                                    indices.clone().reshape([n, 1])
-                                } else {
-                                    flat.clone()
-                                        .div_scalar(strides[d] as i64)
-                                        .remainder_scalar(idx_dims[d] as i64)
-                                        .reshape([n, 1])
-                                },
-                            );
-                    }
-                    let coordinates = Tensor::cat(columns, 1);
-                    data.scatter_nd(
-                        coordinates,
-                        updates.reshape([n]),
-                        burn::tensor::IndexingUpdateOp::Mul,
-                    )
+                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Mul)
                 }
             };
             output
@@ -389,7 +236,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @"
         pub fn forward(
             &self,
             data: Tensor<2>,
@@ -400,44 +247,10 @@ mod tests {
                 let (data, indices, updates) = (data, indices, updates);
                 let axis_size = data.dims()[0] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
-                let idx_dims = indices.dims();
-                let data_dims = data.dims();
-                let n: usize = idx_dims.iter().product();
-                if n == 0 {
+                if indices.dims().contains(&0) {
                     data
-                } else if (0..2).all(|d| d == 0 || idx_dims[d] == data_dims[d]) {
-                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Max)
                 } else {
-                    let mut strides = [1usize; 2];
-                    for d in (0..2 - 1).rev() {
-                        strides[d] = strides[d + 1] * idx_dims[d + 1];
-                    }
-                    let flat = Tensor::<
-                        1,
-                        Int,
-                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
-                    let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
-                        2,
-                    );
-                    for d in 0..2 {
-                        columns
-                            .push(
-                                if d == 0 {
-                                    indices.clone().reshape([n, 1])
-                                } else {
-                                    flat.clone()
-                                        .div_scalar(strides[d] as i64)
-                                        .remainder_scalar(idx_dims[d] as i64)
-                                        .reshape([n, 1])
-                                },
-                            );
-                    }
-                    let coordinates = Tensor::cat(columns, 1);
-                    data.scatter_nd(
-                        coordinates,
-                        updates.reshape([n]),
-                        burn::tensor::IndexingUpdateOp::Max,
-                    )
+                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Max)
                 }
             };
             output
@@ -456,7 +269,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @"
         pub fn forward(
             &self,
             data: Tensor<2>,
@@ -467,44 +280,10 @@ mod tests {
                 let (data, indices, updates) = (data, indices, updates);
                 let axis_size = data.dims()[0] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
-                let idx_dims = indices.dims();
-                let data_dims = data.dims();
-                let n: usize = idx_dims.iter().product();
-                if n == 0 {
+                if indices.dims().contains(&0) {
                     data
-                } else if (0..2).all(|d| d == 0 || idx_dims[d] == data_dims[d]) {
-                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Min)
                 } else {
-                    let mut strides = [1usize; 2];
-                    for d in (0..2 - 1).rev() {
-                        strides[d] = strides[d + 1] * idx_dims[d + 1];
-                    }
-                    let flat = Tensor::<
-                        1,
-                        Int,
-                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
-                    let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
-                        2,
-                    );
-                    for d in 0..2 {
-                        columns
-                            .push(
-                                if d == 0 {
-                                    indices.clone().reshape([n, 1])
-                                } else {
-                                    flat.clone()
-                                        .div_scalar(strides[d] as i64)
-                                        .remainder_scalar(idx_dims[d] as i64)
-                                        .reshape([n, 1])
-                                },
-                            );
-                    }
-                    let coordinates = Tensor::cat(columns, 1);
-                    data.scatter_nd(
-                        coordinates,
-                        updates.reshape([n]),
-                        burn::tensor::IndexingUpdateOp::Min,
-                    )
+                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Min)
                 }
             };
             output
@@ -523,7 +302,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @"
         pub fn forward(
             &self,
             data: Tensor<2, Int>,
@@ -534,44 +313,10 @@ mod tests {
                 let (data, indices, updates) = (data, indices, updates);
                 let axis_size = data.dims()[0] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
-                let idx_dims = indices.dims();
-                let data_dims = data.dims();
-                let n: usize = idx_dims.iter().product();
-                if n == 0 {
+                if indices.dims().contains(&0) {
                     data
-                } else if (0..2).all(|d| d == 0 || idx_dims[d] == data_dims[d]) {
-                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Assign)
                 } else {
-                    let mut strides = [1usize; 2];
-                    for d in (0..2 - 1).rev() {
-                        strides[d] = strides[d + 1] * idx_dims[d + 1];
-                    }
-                    let flat = Tensor::<
-                        1,
-                        Int,
-                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
-                    let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
-                        2,
-                    );
-                    for d in 0..2 {
-                        columns
-                            .push(
-                                if d == 0 {
-                                    indices.clone().reshape([n, 1])
-                                } else {
-                                    flat.clone()
-                                        .div_scalar(strides[d] as i64)
-                                        .remainder_scalar(idx_dims[d] as i64)
-                                        .reshape([n, 1])
-                                },
-                            );
-                    }
-                    let coordinates = Tensor::cat(columns, 1);
-                    data.scatter_nd(
-                        coordinates,
-                        updates.reshape([n]),
-                        burn::tensor::IndexingUpdateOp::Assign,
-                    )
+                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Assign)
                 }
             };
             output
@@ -590,7 +335,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @"
         pub fn forward(
             &self,
             data: Tensor<1, Bool>,
@@ -601,7 +346,11 @@ mod tests {
                 let (data, indices, updates) = (data, indices, updates);
                 let axis_size = data.dims()[0] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
-                data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Assign)
+                if indices.dims().contains(&0) {
+                    data
+                } else {
+                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Assign)
+                }
             };
             output
         }
@@ -619,7 +368,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @"
         pub fn forward(
             &self,
             data: Tensor<2, Bool>,
@@ -630,44 +379,10 @@ mod tests {
                 let (data, indices, updates) = (data, indices, updates);
                 let axis_size = data.dims()[1] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
-                let idx_dims = indices.dims();
-                let data_dims = data.dims();
-                let n: usize = idx_dims.iter().product();
-                if n == 0 {
+                if indices.dims().contains(&0) {
                     data
-                } else if (0..2).all(|d| d == 1 || idx_dims[d] == data_dims[d]) {
-                    data.scatter(1, indices, updates, burn::tensor::IndexingUpdateOp::Assign)
                 } else {
-                    let mut strides = [1usize; 2];
-                    for d in (0..2 - 1).rev() {
-                        strides[d] = strides[d + 1] * idx_dims[d + 1];
-                    }
-                    let flat = Tensor::<
-                        1,
-                        Int,
-                    >::arange(0..n as i64, (self.device(), burn::tensor::DType::I64));
-                    let mut columns: alloc::vec::Vec<Tensor<2, Int>> = alloc::vec::Vec::with_capacity(
-                        2,
-                    );
-                    for d in 0..2 {
-                        columns
-                            .push(
-                                if d == 1 {
-                                    indices.clone().reshape([n, 1])
-                                } else {
-                                    flat.clone()
-                                        .div_scalar(strides[d] as i64)
-                                        .remainder_scalar(idx_dims[d] as i64)
-                                        .reshape([n, 1])
-                                },
-                            );
-                    }
-                    let coordinates = Tensor::cat(columns, 1);
-                    data.scatter_nd(
-                        coordinates,
-                        updates.reshape([n]),
-                        burn::tensor::IndexingUpdateOp::Assign,
-                    )
+                    data.scatter(1, indices, updates, burn::tensor::IndexingUpdateOp::Assign)
                 }
             };
             output
@@ -686,7 +401,7 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code, @r"
+        assert_snapshot!(code, @"
         pub fn forward(
             &self,
             data: Tensor<1, Bool>,
@@ -697,7 +412,11 @@ mod tests {
                 let (data, indices, updates) = (data, indices, updates);
                 let axis_size = data.dims()[0] as i64;
                 let indices = indices.cast(burn::tensor::DType::I64).remainder_scalar(axis_size);
-                data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Add)
+                if indices.dims().contains(&0) {
+                    data
+                } else {
+                    data.scatter(0, indices, updates, burn::tensor::IndexingUpdateOp::Add)
+                }
             };
             output
         }

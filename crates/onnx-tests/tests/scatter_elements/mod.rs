@@ -5,6 +5,7 @@ include_models!(
     scatter_elements_axis1,
     scatter_elements_add,
     scatter_elements_add_partial,
+    scatter_elements_partial,
     scatter_elements_mul,
     scatter_elements_max,
     scatter_elements_min,
@@ -251,9 +252,8 @@ mod tests {
         // expected value is not also the last write, which keeps the test able to tell a
         // correct fold from last-write-wins.
         //
-        // burn documents duplicate indices as undefined for scatter_nd with Assign, Mul,
-        // Min and Max. They fold sequentially on the CPU backends this suite runs on, but
-        // cubecl races, so this assertion is CPU-backend only.
+        // burn's `scatter` documents that Max reduces duplicate indices to the maximum of
+        // all contributions.
         let data = Tensor::<2>::zeros([3, 3], &device);
         let indices = Tensor::<2, Int>::from_ints([[0, 0, 0], [0, 0, 0]], &device);
         let updates = Tensor::<2>::from_floats([[3.0, 3.0, 3.0], [2.0, 2.0, 2.0]], &device);
@@ -293,7 +293,7 @@ mod tests {
 
         // Rank 3 with axis=1, so the generated coordinate columns cover a non-unit outer
         // stride and the unit inner stride. Indices mix negative and positive values, and no
-        // column repeats a target row: burn leaves duplicate indices undefined for scatter_nd.
+        // column repeats a target row, so the fixture does not depend on how duplicates fold.
         let data = Tensor::<3>::from_floats(
             [
                 [
@@ -384,9 +384,8 @@ mod tests {
         let device = Default::default();
         let model: scatter_elements_max::Model = scatter_elements_max::Model::new(&device);
 
-        // An empty index tensor is a legal ONNX no-op. It has to be special-cased because
-        // scatter_nd rejects empty indices, and reshape reads a 0 in the target shape as
-        // "keep the source dim" rather than as an empty dimension.
+        // An empty index tensor is a legal ONNX no-op: the generated code returns `data`
+        // without launching a scatter kernel.
         let data =
             Tensor::<2>::from_floats([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], &device);
         let indices = Tensor::<2, Int>::zeros([0, 3], &device);
@@ -422,7 +421,8 @@ mod tests {
         output.to_data().assert_eq(&expected, false);
     }
 
-    // Indices narrower than data on a non-axis dimension take the scatter_nd path.
+    // Indices narrower than data on a non-axis dimension, which burn's `scatter` accepts
+    // since burn 0.23.0-pre.2.
 
     #[test]
     fn scatter_elements_partial_indices() {
@@ -523,8 +523,7 @@ mod tests {
         let data = bools(TensorData::from([[false, true, false], [true, true, true]]));
         let indices = ints(TensorData::from([[0i64, 0, 2], [1, 1, 2]]));
         let updates = bools(TensorData::from([[true, true, false], [false, true, true]]));
-        // One row instead of two on the non-axis dimension: the ScatterND fallback, with
-        // unique targets (burn documents duplicates as undefined for scatter_nd reductions)
+        // One row instead of two on the non-axis dimension, with unique targets
         let indices_small = ints(TensorData::from([[0i64, 1, 2]]));
         let updates_small = bools(TensorData::from([[true, false, true]]));
 
@@ -537,7 +536,7 @@ mod tests {
         y_max.to_data().assert_eq(&or, false);
         y_mul.to_data().assert_eq(&and, false);
         y_min.to_data().assert_eq(&and, false);
-        // The fallback leaves row 1 untouched
+        // Row 1 is not covered by the indices and stays untouched
         y_small_add.to_data().assert_eq(
             &TensorData::from([[true, true, true], [true, true, true]]),
             false,
@@ -545,6 +544,113 @@ mod tests {
         y_small_mul.to_data().assert_eq(
             &TensorData::from([[false, false, false], [true, true, true]]),
             false,
+        );
+    }
+
+    #[test]
+    fn scatter_elements_partial_every_reduction() {
+        // Expected values from scatter_elements_partial.py (ONNX reference, checked against
+        // ONNX Runtime). The indices are smaller than the data on the non-axis dimensions:
+        // [2, 3] into [3, 4] along axis 0, and [1, 2, 3] into [2, 3, 4] along axis 1. The
+        // uncovered rows and columns must pass through unchanged.
+        let device = Default::default();
+        let model = scatter_elements_partial::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/scatter_elements_partial.bpk"),
+            &device,
+        );
+        let data = Tensor::<2>::from_floats(
+            [
+                [1.0, 2.0, 3.0, 4.0],
+                [5.0, 6.0, 7.0, 8.0],
+                [9.0, 10.0, 11.0, 12.0],
+            ],
+            &device,
+        );
+        let indices = Tensor::<2, Int>::from_ints([[-1, 0, 1], [0, 1, 2]], &device);
+        let updates = Tensor::<2>::from_floats([[20.0, 0.5, 30.0], [-4.0, 40.0, 2.0]], &device);
+        let data3 =
+            Tensor::<1>::from_floats(core::array::from_fn::<f32, 24, _>(|i| i as f32), &device)
+                .reshape([2, 3, 4]);
+        let indices3 = Tensor::<3, Int>::from_ints([[[0, 2, 1], [2, 0, 0]]], &device);
+        let updates3 =
+            Tensor::<3>::from_floats([[[100.0, -1.0, 50.0], [7.0, 60.0, -3.0]]], &device);
+
+        let (y_none, y_add, y_mul, y_max, y_min, y3_none, y3_max) =
+            model.forward(data, indices, updates, data3, indices3, updates3);
+
+        let check2 = |output: Tensor<2>, expected: [[f32; 4]; 3]| {
+            output.to_data().assert_approx_eq::<f32>(
+                &TensorData::from(expected),
+                burn::tensor::Tolerance::default(),
+            );
+        };
+        check2(
+            y_none,
+            [
+                [-4.0, 0.5, 3.0, 4.0],
+                [5.0, 40.0, 30.0, 8.0],
+                [20.0, 10.0, 2.0, 12.0],
+            ],
+        );
+        check2(
+            y_add,
+            [
+                [-3.0, 2.5, 3.0, 4.0],
+                [5.0, 46.0, 37.0, 8.0],
+                [29.0, 10.0, 13.0, 12.0],
+            ],
+        );
+        check2(
+            y_mul,
+            [
+                [-4.0, 1.0, 3.0, 4.0],
+                [5.0, 240.0, 210.0, 8.0],
+                [180.0, 10.0, 22.0, 12.0],
+            ],
+        );
+        check2(
+            y_max,
+            [
+                [1.0, 2.0, 3.0, 4.0],
+                [5.0, 40.0, 30.0, 8.0],
+                [20.0, 10.0, 11.0, 12.0],
+            ],
+        );
+        check2(
+            y_min,
+            [
+                [-4.0, 0.5, 3.0, 4.0],
+                [5.0, 6.0, 7.0, 8.0],
+                [9.0, 10.0, 2.0, 12.0],
+            ],
+        );
+
+        let untouched = [
+            [12.0, 13.0, 14.0, 15.0],
+            [16.0, 17.0, 18.0, 19.0],
+            [20.0, 21.0, 22.0, 23.0],
+        ];
+        let check3 = |output: Tensor<3>, first: [[f32; 4]; 3]| {
+            output.to_data().assert_approx_eq::<f32>(
+                &TensorData::from([first, untouched]),
+                burn::tensor::Tolerance::default(),
+            );
+        };
+        check3(
+            y3_none,
+            [
+                [100.0, 60.0, -3.0, 3.0],
+                [4.0, 5.0, 50.0, 7.0],
+                [7.0, -1.0, 10.0, 11.0],
+            ],
+        );
+        check3(
+            y3_max,
+            [
+                [100.0, 60.0, 2.0, 3.0],
+                [4.0, 5.0, 50.0, 7.0],
+                [8.0, 9.0, 10.0, 11.0],
+            ],
         );
     }
 }
