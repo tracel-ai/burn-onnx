@@ -104,6 +104,10 @@ Key principles:
 
 ### Testing
 
+- Follow existing neighboring tests before adding a new test format. Keep reference outputs
+  inline in Rust (`TensorData::from(...)`); Python generators print reference values. Do not
+  add `.bin` expected-output fixtures, custom text fixtures, or parsers for small test arrays.
+  Keep necessary `.onnx` models and share repeated setup without reducing coverage.
 - Unit tests in the same file as implementation
 - Integration tests in `crates/onnx-tests/tests/<op_name>/`
 - Bug fixes **must** include an integration test (write failing test first, then fix)

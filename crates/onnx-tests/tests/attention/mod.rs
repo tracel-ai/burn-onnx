@@ -67,14 +67,14 @@ mod tests {
             ),
             (&device, burn::tensor::DType::F32),
         );
-        let expected = include_bytes!("attention_lengths_shape_y.bin")
-            .chunks_exact(4)
-            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
-            .collect::<alloc::vec::Vec<_>>();
-        model.forward(q, k, v).to_data().assert_approx_eq::<f32>(
-            &TensorData::new(expected, [1, 2, 2, 2]),
-            Tolerance::absolute(1e-5),
-        );
+        let expected = TensorData::from([[
+            [[0.60707068f32, 0.80707067], [0.63530535, 0.83530533]],
+            [[0.66334939, 0.86334932], [0.69105482, 0.89105475]],
+        ]]);
+        model
+            .forward(q, k, v)
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, Tolerance::absolute(1e-5));
     }
 
     #[test]
@@ -140,21 +140,103 @@ mod tests {
             (
                 [3i64, 2],
                 [
-                    &include_bytes!("attention_lengths_plain_0_y.bin")[..],
-                    &include_bytes!("attention_lengths_causal_0_y.bin")[..],
-                    &include_bytes!("attention_lengths_qk_0_y.bin")[..],
-                    &include_bytes!("attention_lengths_qk_0_qk.bin")[..],
-                    &include_bytes!("attention_lengths_nativecausal_0_y.bin")[..],
+                    // Unmasked attention
+                    TensorData::from([
+                        [
+                            [[0.40377113f32, 0.60377115], [0.41884053, 0.61884052]],
+                            [[0.43384984, 0.63384986], [0.44875193, 0.64875191]],
+                        ],
+                        [
+                            [[1.8239266, 2.0239265], [1.8294821, 2.0294821]],
+                            [[1.8349917, 2.0349915], [1.8404469, 2.0404468]],
+                        ],
+                    ]),
+                    // Masked causal attention
+                    TensorData::from([
+                        [
+                            [[0.20141418f32, 0.40141419], [0.41884053, 0.61884052]],
+                            [[0.21271077, 0.41271079], [0.44875193, 0.64875191]],
+                        ],
+                        [[[0.0, 0.0], [1.6, 1.8]], [[0.0, 0.0], [1.6, 1.8]]],
+                    ]),
+                    // Attention with qk output
+                    TensorData::from([
+                        [
+                            [[0.20141418f32, 0.40141419], [0.41884053, 0.61884052]],
+                            [[0.21271077, 0.41271079], [0.44875193, 0.64875191]],
+                        ],
+                        [[[0.0, 0.0], [1.6, 1.8]], [[0.0, 0.0], [1.6, 1.8]]],
+                    ]),
+                    // Qk probabilities
+                    TensorData::from([
+                        [
+                            [
+                                [0.49646452f32, 0.50353545, 0.0, 0.0],
+                                [0.31006017, 0.33277848, 0.35716137, 0.0],
+                            ],
+                            [
+                                [0.46822309, 0.53177691, 0.0, 0.0],
+                                [0.27425548, 0.32960927, 0.39613524, 0.0],
+                            ],
+                        ],
+                        [
+                            [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+                            [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+                        ],
+                    ]),
+                    // Unmasked causal attention
+                    TensorData::from([
+                        [
+                            [[0.20141418f32, 0.40141419], [0.41884053, 0.61884052]],
+                            [[0.21271077, 0.41271079], [0.44875193, 0.64875191]],
+                        ],
+                        [
+                            [[1.6, 1.8], [1.8294821, 2.0294821]],
+                            [[1.6, 1.8], [1.8404469, 2.0404468]],
+                        ],
+                    ]),
                 ],
             ),
             (
                 [0i64, 2],
                 [
-                    &include_bytes!("attention_lengths_plain_1_y.bin")[..],
-                    &include_bytes!("attention_lengths_causal_1_y.bin")[..],
-                    &include_bytes!("attention_lengths_qk_1_y.bin")[..],
-                    &include_bytes!("attention_lengths_qk_1_qk.bin")[..],
-                    &include_bytes!("attention_lengths_nativecausal_1_y.bin")[..],
+                    // Unmasked attention
+                    TensorData::from([
+                        [[[0.0f32, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]],
+                        [
+                            [[1.8239266, 2.0239265], [1.8294821, 2.0294821]],
+                            [[1.8349917, 2.0349915], [1.8404469, 2.0404468]],
+                        ],
+                    ]),
+                    // Masked causal attention
+                    TensorData::from([
+                        [[[0.0f32, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]],
+                        [[[0.0, 0.0], [1.6, 1.8]], [[0.0, 0.0], [1.6, 1.8]]],
+                    ]),
+                    // Attention with qk output
+                    TensorData::from([
+                        [[[0.0f32, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]],
+                        [[[0.0, 0.0], [1.6, 1.8]], [[0.0, 0.0], [1.6, 1.8]]],
+                    ]),
+                    // Qk probabilities
+                    TensorData::from([
+                        [
+                            [[0.0f32, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]],
+                            [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]],
+                        ],
+                        [
+                            [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+                            [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+                        ],
+                    ]),
+                    // Unmasked causal attention
+                    TensorData::from([
+                        [[[0.0f32, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]],
+                        [
+                            [[1.6, 1.8], [1.8294821, 2.0294821]],
+                            [[1.6, 1.8], [1.8404469, 2.0404468]],
+                        ],
+                    ]),
                 ],
             ),
         ] {
@@ -181,15 +263,10 @@ mod tests {
                 mask.clone(),
             );
             let (c, d) = custom.forward(q.clone(), k.clone(), v.clone(), lengths, mask.clone());
-            for (i, (actual, bytes)) in [a, b, c, d, e].into_iter().zip(expected).enumerate() {
-                let data = bytes
-                    .chunks_exact(4)
-                    .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
-                    .collect::<alloc::vec::Vec<_>>();
-                actual.to_data().assert_approx_eq::<f32>(
-                    &TensorData::new(data, [2, 2, 2, if i == 3 { 4 } else { 2 }]),
-                    Tolerance::absolute(1e-5),
-                );
+            for (actual, expected) in [a, b, c, d, e].into_iter().zip(expected) {
+                actual
+                    .to_data()
+                    .assert_approx_eq::<f32>(&expected, Tolerance::absolute(1e-5));
             }
         }
     }
