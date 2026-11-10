@@ -132,12 +132,23 @@ impl NodeProcessor for AttentionProcessor {
 
         let has_past_key = node.get_input(4).is_some();
         let has_past_value = node.get_input(5).is_some();
-        let has_present = node.outputs.len() >= 3;
+        let has_present_key = node.outputs.get(1).is_some_and(|a| !a.is_optional());
+        let has_present_value = node.outputs.get(2).is_some_and(|a| !a.is_optional());
 
-        if has_past_key != has_past_value || has_past_key != has_present || node.outputs.len() == 2
+        if has_past_key != has_past_value
+            || has_past_key != has_present_key
+            || has_present_key != has_present_value
         {
             return Err(ProcessError::Custom(
                 "Attention: past_key, past_value, present_key, present_value can only be used together".to_string(),
+            ));
+        }
+
+        // Until the backend translation supports external caches, reject this input
+        // explicitly rather than silently attending padded entries.
+        if node.get_input(6).is_some() {
+            return Err(ProcessError::Custom(
+                "Attention: nonpad_kv_seqlen is not supported yet".into(),
             ));
         }
 
@@ -210,7 +221,7 @@ impl NodeProcessor for AttentionProcessor {
             });
         }
 
-        if let Some(qk_matmul_output) = node.outputs.get_mut(3) {
+        if let Some(qk_matmul_output) = node.outputs.get_mut(3).filter(|a| !a.is_optional()) {
             qk_matmul_output.ty = ArgType::Tensor(TensorType {
                 dtype: node.inputs[0].ty.elem_type(),
                 rank: 4,
@@ -298,6 +309,54 @@ mod tests {
     use super::*;
     use crate::{ir::BoolStore, ir::DType, ir::NodeType, node::test_utils::TestNodeBuilder};
     use rstest::rstest;
+
+    #[test]
+    fn optional_slots_and_cache_pair_validation() {
+        let mut node = TestNodeBuilder::new(NodeType::Attention, "optional")
+            .input_tensor_f32("q", 4, None)
+            .input_tensor_f32("k", 4, None)
+            .input_tensor_f32("v", 4, None)
+            .input_tensor_f32("", 4, None)
+            .input_tensor_f32("", 4, None)
+            .input_tensor_f32("", 4, None)
+            .output_tensor_f32("y", 4, None)
+            .build();
+        let absent = node.inputs[3].clone();
+        node.outputs
+            .extend([absent.clone(), absent.clone(), absent]);
+        let prefs = OutputPreferences::new();
+        AttentionProcessor
+            .infer_types(&mut node, 23, &prefs)
+            .unwrap();
+        node.outputs[3] = node.outputs[0].clone();
+        node.outputs[3].name = "qk".into();
+        AttentionProcessor
+            .infer_types(&mut node, 23, &prefs)
+            .unwrap();
+        assert!(node.outputs[1].is_optional());
+        assert!(node.outputs[2].is_optional());
+        // Every incomplete cache combination must fail in IR, before codegen.
+        for bits in 1..15 {
+            let mut invalid = node.clone();
+            for (bit, input) in [(0, 4), (1, 5)] {
+                if bits & (1 << bit) != 0 {
+                    invalid.inputs[input] = node.inputs[0].clone();
+                }
+            }
+            for (bit, output) in [(2, 1), (3, 2)] {
+                if bits & (1 << bit) != 0 {
+                    invalid.outputs[output] = node.outputs[0].clone();
+                }
+            }
+            let err = AttentionProcessor
+                .infer_types(&mut invalid, 23, &prefs)
+                .unwrap_err();
+            assert!(
+                err.to_string().contains("can only be used together"),
+                "{err}"
+            );
+        }
+    }
 
     fn create_test_node(
         q: Option<usize>,

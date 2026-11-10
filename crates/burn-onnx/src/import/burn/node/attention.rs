@@ -10,7 +10,7 @@ use onnx_ir::node::attention::AttentionQkMatmulOutputMode;
 ///
 /// Only the qk_matmul intermediate output needs the hand-written path.
 fn use_burn_attention(node: &onnx_ir::attention::AttentionNode) -> bool {
-    node.outputs.get(3).is_none()
+    !node.outputs.get(3).is_some_and(|a| !a.is_optional())
 }
 
 /// Known size of `axis` of a tensor argument.
@@ -36,14 +36,8 @@ fn prelude(node: &onnx_ir::attention::AttentionNode, scope: &mut ScopeAtPosition
     let v = scope.arg(node.inputs.get(2).unwrap());
     let output_y = arg_to_ident(node.outputs.first().unwrap());
 
-    let past_kv = matches!((node.inputs.get(4), node.inputs.get(5)), (Some(_), Some(_)));
-    let present_kv = matches!(
-        (node.outputs.get(1), node.outputs.get(2)),
-        (Some(_), Some(_))
-    );
-    if past_kv != present_kv {
-        panic!("Attention: past_[key,value] and present_[key,value] must be used together.")
-    }
+    // Pairing is validated by the IR processor; positional holes are not values.
+    let past_kv = node.inputs.get(4).is_some_and(|a| !a.is_optional());
 
     let rank = match &node.inputs.first().unwrap().ty {
         ArgType::Tensor(t) => t.rank,
@@ -115,7 +109,7 @@ fn prelude(node: &onnx_ir::attention::AttentionNode, scope: &mut ScopeAtPosition
         output_names.push(present_k);
         output_names.push(present_v);
     }
-    if let Some(qk_out) = node.outputs.get(3) {
+    if let Some(qk_out) = node.outputs.get(3).filter(|a| !a.is_optional()) {
         output_names.push(arg_to_ident(qk_out));
     }
 
@@ -434,7 +428,11 @@ fn forward_custom(
         });
     }
 
-    let qk_out = node.outputs.get(3).map(arg_to_ident);
+    let qk_out = node
+        .outputs
+        .get(3)
+        .filter(|a| !a.is_optional())
+        .map(arg_to_ident);
     let capture = |mode: AttentionQkMatmulOutputMode, value: TokenStream| match &qk_out {
         Some(out) if node.config.qk_matmul_output_mode == mode => {
             quote! { let #out = #value.clone(); }
@@ -506,6 +504,108 @@ mod tests {
     use burn::tensor::{BoolStore, DType};
     use insta::assert_snapshot;
     use onnx_ir::attention::{AttentionConfig, AttentionNodeBuilder, AttentionQkMatmulOutputMode};
+
+    #[test]
+    fn test_attention_optional_slots_native() {
+        let mut node = AttentionNodeBuilder::new("attn")
+            .input_tensor_shape("query", vec![1, 1, 2, 2], DType::F32)
+            .input_tensor_shape("key", vec![1, 1, 2, 2], DType::F32)
+            .input_tensor_shape("value", vec![1, 1, 2, 2], DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .config(AttentionConfig::new(
+                false,
+                None,
+                None,
+                AttentionQkMatmulOutputMode::Matmul,
+                None,
+                0.0,
+                None,
+            ))
+            .build();
+        let mut absent = node.inputs[0].clone();
+        absent.name.clear();
+        absent.value_source = onnx_ir::ir::ValueSource::Optional;
+        node.inputs
+            .extend([absent.clone(), absent.clone(), absent.clone()]);
+        node.outputs
+            .extend([absent.clone(), absent.clone(), absent]);
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(&self, query: Tensor<4>, key: Tensor<4>, value: Tensor<4>) -> Tensor<4> {
+            let (output,) = {
+                let q = query;
+                let k = key;
+                let v = value;
+                let output = burn::tensor::module::attention(
+                    q,
+                    k,
+                    v,
+                    None,
+                    None,
+                    None,
+                    burn::tensor::ops::AttentionModuleOptions {
+                        scale: None,
+                        softcap: None,
+                        is_causal: false,
+                        ..Default::default()
+                    },
+                );
+                (output,)
+            };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_attention_optional_slots_qk() {
+        let mut node = AttentionNodeBuilder::new("attn")
+            .input_tensor_shape("query", vec![1, 1, 2, 2], DType::F32)
+            .input_tensor_shape("key", vec![1, 1, 2, 2], DType::F32)
+            .input_tensor_shape("value", vec![1, 1, 2, 2], DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .output_tensor("qk_output", 4, DType::F32)
+            .config(AttentionConfig::new(
+                false,
+                None,
+                None,
+                AttentionQkMatmulOutputMode::Matmul,
+                None,
+                0.0,
+                None,
+            ))
+            .build();
+        let mut absent = node.inputs[0].clone();
+        absent.name.clear();
+        absent.value_source = onnx_ir::ir::ValueSource::Optional;
+        node.inputs
+            .extend([absent.clone(), absent.clone(), absent.clone()]);
+        node.outputs.insert(1, absent.clone());
+        node.outputs.insert(2, absent);
+        assert_snapshot!(codegen_forward_default(&node), @r"
+        pub fn forward(
+            &self,
+            query: Tensor<4>,
+            key: Tensor<4>,
+            value: Tensor<4>,
+        ) -> (Tensor<4>, Tensor<4>) {
+            let (output, qk_output) = {
+                let q = query;
+                let k = key;
+                let v = value;
+                let scale = (1.0 / (q.dims()[3] as f64).sqrt()).sqrt();
+                let q_scaled = q * scale;
+                let k_scaled = k * scale;
+                let k_transpose = k_scaled.transpose();
+                let qk = q_scaled.matmul(k_transpose);
+                let qk_output = qk.clone();
+                let scores = softmax(qk, 3);
+                let output = scores.matmul(v);
+                (output, qk_output)
+            };
+            (output, qk_output)
+        }
+        ");
+    }
 
     #[test]
     fn test_attention_basic_rank4() {

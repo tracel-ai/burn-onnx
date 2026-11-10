@@ -647,12 +647,10 @@ status = "pass"
 status = "pass"
 
 [test_attention_4d_with_qk_matmul]
-status = "skip-codegen"
-reason = "Node 'attention1' (Attention): Attention: past_key, past_value, present_key, present_value can only be used together"
+status = "pass"
 
 [test_attention_4d_with_qk_matmul_bias]
-status = "skip-codegen"
-reason = "Node 'attention1' (Attention): Attention: past_key, past_value, present_key, present_value can only be used together"
+status = "pass"
 
 [test_attention_4d_with_qk_matmul_bias_expanded]
 status = "pass"
@@ -661,15 +659,13 @@ status = "pass"
 status = "pass"
 
 [test_attention_4d_with_qk_matmul_softcap]
-status = "skip-codegen"
-reason = "Node 'attention1' (Attention): Attention: past_key, past_value, present_key, present_value can only be used together"
+status = "pass"
 
 [test_attention_4d_with_qk_matmul_softcap_expanded]
 status = "pass"
 
 [test_attention_4d_with_qk_matmul_softmax]
-status = "skip-codegen"
-reason = "Node 'attention1' (Attention): Attention: past_key, past_value, present_key, present_value can only be used together"
+status = "pass"
 
 [test_attention_4d_with_qk_matmul_softmax_expanded]
 status = "pass"
