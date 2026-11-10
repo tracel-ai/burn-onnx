@@ -245,6 +245,27 @@ mod tests {
     use crate::node::test_utils::TestNodeBuilder;
     use crate::processor::OutputPreferences;
 
+    #[test]
+    fn smaller_non_axis_dimensions_preserve_output_shape() {
+        let mut node = TestNodeBuilder::new(NodeType::ScatterElements, "smaller_indices")
+            .input_tensor_f32("data", 3, Some(vec![2, 3, 4]))
+            .input_tensor_i64("indices", 3, Some(vec![1, 2, 2]))
+            .input_tensor_f32("updates", 3, Some(vec![1, 2, 2]))
+            .output_tensor_f32("output", 3, None)
+            .attr_int("axis", -2)
+            .build();
+        ScatterElementsProcessor
+            .infer_types(&mut node, 18, &OutputPreferences::new())
+            .unwrap();
+        assert_eq!(node.outputs[0].ty.static_shape_known(), Some(vec![2, 3, 4]));
+        assert_eq!(
+            ScatterElementsProcessor
+                .extract_config(&node, 18)
+                .unwrap()
+                .axis,
+            1
+        );
+    }
     fn create_test_node() -> TestNodeBuilder {
         TestNodeBuilder::new(NodeType::ScatterElements, "test_scatter_elements")
             .input_tensor_f32("data", 2, None)

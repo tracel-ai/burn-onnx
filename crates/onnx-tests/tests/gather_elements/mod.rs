@@ -1,5 +1,6 @@
 use crate::include_models;
 include_models!(
+    smaller_indices,
     gather_elements,
     gather_elements_axis0,
     gather_elements_3d,
@@ -10,6 +11,66 @@ include_models!(
 mod tests {
     use super::*;
     use burn::tensor::{Device, Int, Tensor, TensorData};
+
+    #[test]
+    fn gather_scatter_smaller_non_axis_dimensions() {
+        let device = Default::default();
+        let model = smaller_indices::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/smaller_indices.bpk"),
+            &device,
+        );
+        let data = Tensor::<3>::from_data(
+            TensorData::new(
+                (0..24).map(|i| i as f32).collect::<alloc::vec::Vec<_>>(),
+                [2, 3, 4],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let indices = Tensor::<3, Int>::from_data(
+            TensorData::new(alloc::vec![0i64, -1, 1, 0], [1, 2, 2]),
+            (&device, burn::tensor::DType::I64),
+        );
+        let updates = Tensor::<3>::from_data(
+            TensorData::new(alloc::vec![30f32, -10., -4., 40.], [1, 2, 2]),
+            (&device, burn::tensor::DType::F32),
+        );
+        let (gather, none, add, max, min) = model.forward(data, indices, updates);
+        for (actual, bytes, shape) in [
+            (
+                gather,
+                &include_bytes!("smaller_indices_gather.bin")[..],
+                [1, 2, 2],
+            ),
+            (
+                none,
+                &include_bytes!("smaller_indices_none.bin")[..],
+                [2, 3, 4],
+            ),
+            (
+                add,
+                &include_bytes!("smaller_indices_add.bin")[..],
+                [2, 3, 4],
+            ),
+            (
+                max,
+                &include_bytes!("smaller_indices_max.bin")[..],
+                [2, 3, 4],
+            ),
+            (
+                min,
+                &include_bytes!("smaller_indices_min.bin")[..],
+                [2, 3, 4],
+            ),
+        ] {
+            let expected = bytes
+                .chunks_exact(4)
+                .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+                .collect::<alloc::vec::Vec<_>>();
+            actual
+                .to_data()
+                .assert_eq(&TensorData::new(expected, shape), true);
+        }
+    }
 
     #[test]
     fn gather_elements() {

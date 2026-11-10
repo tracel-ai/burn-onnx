@@ -301,6 +301,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/gather/gather_static_shape_indices.onnx")
         .input("tests/gather/gather_with_shape_indices.onnx")
         .input("tests/gather_elements/gather_elements.onnx")
+        .input("tests/gather_elements/smaller_indices.onnx")
         .input("tests/gather_elements/gather_elements_3d.onnx")
         .input("tests/gather_elements/gather_elements_axis0.onnx")
         .input("tests/gather_elements/gather_elements_negative_axis.onnx")
