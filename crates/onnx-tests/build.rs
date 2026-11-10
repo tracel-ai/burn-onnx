@@ -15,6 +15,26 @@ fn main() {
     add_all_inputs(&mut model_gen);
     model_gen.out_dir("model/").run_from_script();
 
+    ModelGen::new()
+        .shape_input("size")
+        .input("tests/affine_grid/affine_grid_2d_expanded.onnx")
+        .input("tests/affine_grid/affine_grid_2d_align_corners_expanded.onnx")
+        .input("tests/affine_grid/affine_grid_3d_expanded.onnx")
+        .input("tests/affine_grid/affine_grid_3d_align_corners_expanded.onnx")
+        .out_dir("model/")
+        .run_from_script();
+
+    for (model, input) in [
+        ("shape_input_collision", "a_b"),
+        ("shape_input_renamed", "a-b"),
+    ] {
+        ModelGen::new()
+            .shape_input(input)
+            .input(&format!("tests/affine_grid/{model}.onnx"))
+            .out_dir("model/")
+            .run_from_script();
+    }
+
     // Custom (non-built-in) op models: need registered CustomOp hooks.
     let mut custom = ModelGen::new();
     custom

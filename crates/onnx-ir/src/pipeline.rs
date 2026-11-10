@@ -250,6 +250,8 @@ impl From<ProcessError> for Error {
 pub struct OnnxGraphBuilder {
     /// Whether to run graph simplification passes (default: true)
     simplify: bool,
+    /// Graph inputs explicitly represented as fixed-length host shape arrays.
+    shape_inputs: Vec<String>,
     /// Type-inference hooks for custom (non-built-in) operators
     custom_op_inference: Option<Arc<dyn CustomOpInference>>,
 }
@@ -258,6 +260,7 @@ impl fmt::Debug for OnnxGraphBuilder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OnnxGraphBuilder")
             .field("simplify", &self.simplify)
+            .field("shape_inputs", &self.shape_inputs)
             .field(
                 "custom_op_inference",
                 &self.custom_op_inference.as_ref().map(|_| "<hooks>"),
@@ -270,6 +273,7 @@ impl Default for OnnxGraphBuilder {
     fn default() -> Self {
         Self {
             simplify: true,
+            shape_inputs: Vec::new(),
             custom_op_inference: None,
         }
     }
@@ -288,6 +292,20 @@ impl OnnxGraphBuilder {
     /// pattern-based simplifications.
     pub fn simplify(mut self, simplify: bool) -> Self {
         self.simplify = simplify;
+        self
+    }
+
+    /// Represent a graph input as a fixed-length host shape array.
+    ///
+    /// The named input must be a rank-one int64 tensor with a declared length.
+    /// Its values remain dynamic, but its length becomes part of the model's
+    /// input contract. This allows rank-dependent control flow (for example,
+    /// `Size(size) == 4` in expanded AffineGrid) to resolve during import.
+    /// Burn code generation exposes this input as `[i64; N]`, enforcing the
+    /// length in the Rust type rather than assuming a runtime tensor's size.
+    /// Names refer to the original ONNX graph inputs.
+    pub fn shape_input(mut self, name: impl Into<String>) -> Self {
+        self.shape_inputs.push(name.into());
         self
     }
 
@@ -415,12 +433,35 @@ impl OnnxGraphBuilder {
             });
         }
 
+        // Contracts name original ONNX inputs. Resolve their positions before
+        // collision renaming, otherwise a name may become another input's alias.
+        let shape_input_indices = self
+            .shape_inputs
+            .iter()
+            .map(|name| {
+                model
+                    .graph
+                    .input
+                    .iter()
+                    .position(|input| input.name == *name)
+                    .ok_or_else(|| {
+                        Error::Processing(ProcessError::Custom(format!(
+                            "Shape input '{name}' is not a graph input"
+                        )))
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         if let Some(graph) = model.graph.as_mut() {
             crate::proto_conversion::dedup_sanitized_names(graph);
         }
+        let shape_inputs = shape_input_indices
+            .into_iter()
+            .map(|index| model.graph.input[index].name.clone())
+            .collect::<Vec<_>>();
 
         let hooks = PipelineHooks::new(self.custom_op_inference.clone());
-        let graph = build_graph_with_options(&model, base_path, self.simplify, &hooks)?;
+        let graph =
+            build_graph_with_options(&model, base_path, self.simplify, &hooks, &shape_inputs)?;
 
         if let Some(path) = path_str {
             log::info!("Finished parsing ONNX file: {}", path);
@@ -437,6 +478,7 @@ fn build_graph_with_options(
     base_path: Option<&Path>,
     simplify: bool,
     hooks: &PipelineHooks,
+    shape_inputs: &[String],
 ) -> Result<OnnxGraph, Error> {
     let (opset_version, domain_opsets) = extract_opset_versions(model)?;
     let graph_builder = build_graph_builder_from_proto(
@@ -447,6 +489,7 @@ fn build_graph_with_options(
         base_path,
         simplify,
         hooks,
+        shape_inputs,
     )?;
 
     log::debug!(" PHASE 6: Node Conversion (RawNode -> Node) ");
@@ -463,6 +506,7 @@ fn build_graph_with_options(
 /// # Errors
 ///
 /// Returns an error if node conversion or type inference fails
+#[allow(clippy::too_many_arguments)] // root input contracts are separate from subgraph scope
 pub(crate) fn build_graph_builder_from_proto(
     graph: &crate::protos::GraphProto,
     opset_version: usize,
@@ -471,6 +515,7 @@ pub(crate) fn build_graph_builder_from_proto(
     base_path: Option<&Path>,
     simplify: bool,
     hooks: &PipelineHooks,
+    shape_inputs: &[String],
 ) -> Result<crate::ir::OnnxGraphBuilder, Error> {
     build_graph_builder_from_proto_with_outer_scope(
         graph,
@@ -481,6 +526,7 @@ pub(crate) fn build_graph_builder_from_proto(
         base_path,
         simplify,
         hooks,
+        shape_inputs,
     )
 }
 
@@ -506,6 +552,7 @@ pub(crate) fn build_graph_builder_from_proto_with_outer_scope(
     base_path: Option<&Path>,
     simplify: bool,
     hooks: &PipelineHooks,
+    shape_inputs: &[String],
 ) -> Result<crate::ir::OnnxGraphBuilder, Error> {
     log::debug!(" PHASE 1: Initialization ");
     let state_rc = initialization::initialize_from_graph_with_registry_and_outer_scope(
@@ -515,6 +562,11 @@ pub(crate) fn build_graph_builder_from_proto_with_outer_scope(
         base_path,
     )
     .map_err(|error| Error::InvalidFormat { path: None, error })?;
+
+    state_rc
+        .borrow_mut()
+        .specialize_shape_inputs(shape_inputs)
+        .map_err(Error::Processing)?;
 
     log::debug!(" PHASE 2: Node Conversion (Proto -> RawNode) ");
     node_conversion::convert_nodes_from_graph(

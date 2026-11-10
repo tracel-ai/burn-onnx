@@ -99,6 +99,7 @@ impl DeferredGraph {
             self.base_path.as_deref(),
             false,
             &hooks,
+            &[],
         )
     }
 
