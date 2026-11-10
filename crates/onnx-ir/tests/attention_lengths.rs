@@ -1,12 +1,7 @@
 #[test]
-fn rejects_unsupported_external_cache_lengths() {
+fn accepts_supported_external_cache_lengths() {
+    // #693 rejects this fixture while external caches are unsupported. Once the
+    // translation is implemented, keep the same end-to-end parser regression.
     let bytes = include_bytes!("fixtures/attention/unsupported_lengths.onnx");
-    let result = onnx_ir::OnnxGraphBuilder::new().parse_bytes(bytes);
-    assert!(result.is_err(), "lengths must not be silently ignored");
-    assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("nonpad_kv_seqlen is not supported")
-    );
+    onnx_ir::OnnxGraphBuilder::new().parse_bytes(bytes).unwrap();
 }

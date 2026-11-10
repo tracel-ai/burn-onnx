@@ -1,6 +1,12 @@
 // Import the shared macro
 use crate::include_models;
 include_models!(
+    attention_lengths_nativecausal,
+    attention_lengths_shape,
+    attention_lengths_plain,
+    attention_lengths_plain3d,
+    attention_lengths_causal,
+    attention_lengths_qk,
     attention_optional_native,
     attention_optional_qk,
     attention_4d,
@@ -26,6 +32,244 @@ include_models!(
 mod tests {
     use super::*;
     use burn::tensor::{Bool, Device, Int, Tensor, TensorData, Tolerance};
+
+    #[test]
+    fn external_cache_shape_lengths() {
+        let device = Default::default();
+        let model = attention_lengths_shape::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_shape.bpk"),
+            &device,
+        );
+        let q = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..8)
+                    .map(|i| i as f32 / 10.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [1, 2, 2, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let k = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..8)
+                    .map(|i| i as f32 / 10.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [1, 1, 4, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let v = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..8)
+                    .map(|i| i as f32 / 5.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [1, 1, 4, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let expected = TensorData::from([[
+            [[0.60707068f32, 0.80707067], [0.63530535, 0.83530533]],
+            [[0.66334939, 0.86334932], [0.69105482, 0.89105475]],
+        ]]);
+        model
+            .forward(q, k, v)
+            .to_data()
+            .assert_approx_eq::<f32>(&expected, Tolerance::absolute(1e-5));
+    }
+
+    #[test]
+    fn external_cache_lengths() {
+        let device = Default::default();
+        let nativecausal = attention_lengths_nativecausal::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_nativecausal.bpk"),
+            &device,
+        );
+        let plain3d = attention_lengths_plain3d::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_plain3d.bpk"),
+            &device,
+        );
+        let plain = attention_lengths_plain::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_plain.bpk"),
+            &device,
+        );
+        let causal = attention_lengths_causal::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_causal.bpk"),
+            &device,
+        );
+        let custom = attention_lengths_qk::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/attention_lengths_qk.bpk"),
+            &device,
+        );
+        let q = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..16)
+                    .map(|i| i as f32 / 10.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [2, 2, 2, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let k = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..16)
+                    .map(|i| i as f32 / 10.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [2, 1, 4, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let v = Tensor::<4>::from_data(
+            TensorData::new(
+                (0..16)
+                    .map(|i| i as f32 / 5.)
+                    .collect::<alloc::vec::Vec<_>>(),
+                [2, 1, 4, 2],
+            ),
+            (&device, burn::tensor::DType::F32),
+        );
+        let mask = Tensor::<4, Bool>::from_bool(
+            TensorData::new(
+                alloc::vec![
+                    true, true, false, true, true, true, false, false, false, true, false, true
+                ],
+                [2, 1, 2, 3],
+            ),
+            &device,
+        );
+        for (lengths, expected) in [
+            (
+                [3i64, 2],
+                [
+                    // Unmasked attention
+                    TensorData::from([
+                        [
+                            [[0.40377113f32, 0.60377115], [0.41884053, 0.61884052]],
+                            [[0.43384984, 0.63384986], [0.44875193, 0.64875191]],
+                        ],
+                        [
+                            [[1.8239266, 2.0239265], [1.8294821, 2.0294821]],
+                            [[1.8349917, 2.0349915], [1.8404469, 2.0404468]],
+                        ],
+                    ]),
+                    // Masked causal attention
+                    TensorData::from([
+                        [
+                            [[0.20141418f32, 0.40141419], [0.41884053, 0.61884052]],
+                            [[0.21271077, 0.41271079], [0.44875193, 0.64875191]],
+                        ],
+                        [[[0.0, 0.0], [1.6, 1.8]], [[0.0, 0.0], [1.6, 1.8]]],
+                    ]),
+                    // Attention with qk output
+                    TensorData::from([
+                        [
+                            [[0.20141418f32, 0.40141419], [0.41884053, 0.61884052]],
+                            [[0.21271077, 0.41271079], [0.44875193, 0.64875191]],
+                        ],
+                        [[[0.0, 0.0], [1.6, 1.8]], [[0.0, 0.0], [1.6, 1.8]]],
+                    ]),
+                    // Qk probabilities
+                    TensorData::from([
+                        [
+                            [
+                                [0.49646452f32, 0.50353545, 0.0, 0.0],
+                                [0.31006017, 0.33277848, 0.35716137, 0.0],
+                            ],
+                            [
+                                [0.46822309, 0.53177691, 0.0, 0.0],
+                                [0.27425548, 0.32960927, 0.39613524, 0.0],
+                            ],
+                        ],
+                        [
+                            [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+                            [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+                        ],
+                    ]),
+                    // Unmasked causal attention
+                    TensorData::from([
+                        [
+                            [[0.20141418f32, 0.40141419], [0.41884053, 0.61884052]],
+                            [[0.21271077, 0.41271079], [0.44875193, 0.64875191]],
+                        ],
+                        [
+                            [[1.6, 1.8], [1.8294821, 2.0294821]],
+                            [[1.6, 1.8], [1.8404469, 2.0404468]],
+                        ],
+                    ]),
+                ],
+            ),
+            (
+                [0i64, 2],
+                [
+                    // Unmasked attention
+                    TensorData::from([
+                        [[[0.0f32, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]],
+                        [
+                            [[1.8239266, 2.0239265], [1.8294821, 2.0294821]],
+                            [[1.8349917, 2.0349915], [1.8404469, 2.0404468]],
+                        ],
+                    ]),
+                    // Masked causal attention
+                    TensorData::from([
+                        [[[0.0f32, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]],
+                        [[[0.0, 0.0], [1.6, 1.8]], [[0.0, 0.0], [1.6, 1.8]]],
+                    ]),
+                    // Attention with qk output
+                    TensorData::from([
+                        [[[0.0f32, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]],
+                        [[[0.0, 0.0], [1.6, 1.8]], [[0.0, 0.0], [1.6, 1.8]]],
+                    ]),
+                    // Qk probabilities
+                    TensorData::from([
+                        [
+                            [[0.0f32, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]],
+                            [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]],
+                        ],
+                        [
+                            [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+                            [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+                        ],
+                    ]),
+                    // Unmasked causal attention
+                    TensorData::from([
+                        [[[0.0f32, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]],
+                        [
+                            [[1.6, 1.8], [1.8294821, 2.0294821]],
+                            [[1.6, 1.8], [1.8404469, 2.0404468]],
+                        ],
+                    ]),
+                ],
+            ),
+        ] {
+            let lengths = Tensor::<1, Int>::from_data(
+                TensorData::from(lengths),
+                (&device, burn::tensor::DType::I64),
+            );
+            let e = nativecausal.forward(q.clone(), k.clone(), v.clone(), lengths.clone());
+            let a = plain.forward(q.clone(), k.clone(), v.clone(), lengths.clone());
+            let a3d = plain3d.forward(
+                q.clone().permute([0, 2, 1, 3]).reshape([2, 2, 4]),
+                k.clone().permute([0, 2, 1, 3]).reshape([2, 4, 2]),
+                v.clone().permute([0, 2, 1, 3]).reshape([2, 4, 2]),
+                lengths.clone(),
+            );
+            let a3d = a3d.reshape([2, 2, 2, 2]).permute([0, 2, 1, 3]);
+            a3d.to_data()
+                .assert_approx_eq::<f32>(&a.to_data(), Tolerance::absolute(1e-5));
+            let b = causal.forward(
+                q.clone(),
+                k.clone(),
+                v.clone(),
+                lengths.clone(),
+                mask.clone(),
+            );
+            let (c, d) = custom.forward(q.clone(), k.clone(), v.clone(), lengths, mask.clone());
+            for (actual, expected) in [a, b, c, d, e].into_iter().zip(expected) {
+                actual
+                    .to_data()
+                    .assert_approx_eq::<f32>(&expected, Tolerance::absolute(1e-5));
+            }
+        }
+    }
 
     #[test]
     fn omitted_past_and_present_slots() {

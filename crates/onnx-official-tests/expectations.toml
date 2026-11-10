@@ -474,8 +474,7 @@ status = "pass"
 status = "pass"
 
 [test_attention_4d_diff_heads_mask4d_padded_kv]
-status = "skip-codegen"
-reason = "Attention: past_[key,value] and present_[key,value] must be used together."
+status = "pass"
 
 [test_attention_4d_diff_heads_mask4d_padded_kv_expanded]
 status = "skip-compile"
