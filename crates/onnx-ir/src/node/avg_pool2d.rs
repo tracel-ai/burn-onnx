@@ -113,12 +113,6 @@ impl NodeProcessor for AvgPool2dProcessor {
             }
         }
 
-        let config = self.extract_config(node, opset)?;
-        // Dilated pools use the functional API, with runtime SAME padding.
-        if config.dilation == [1, 1] {
-            crate::node::padding::validate_auto_pad(node)?;
-        }
-
         // Extract input tensor type
         let tensor = match &node.inputs[0].ty {
             ArgType::Tensor(tensor) => tensor,
@@ -385,10 +379,8 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    /// Pins `validate_auto_pad` into this processor's `infer_types`. Without the call the node
-    /// reaches burn-onnx codegen, which panics instead of reporting a `ProcessError`.
     #[test]
-    fn test_avg_pool2d_rejects_unsupported_auto_pad_on_dynamic_shape() {
+    fn test_avg_pool2d_accepts_same_lower_on_dynamic_shape() {
         let mut node = TestNodeBuilder::new(NodeType::AveragePool2d, "test_auto_pad")
             .input_tensor_f32("data", 4, None)
             .output_tensor_f32("output", 4, None)
@@ -397,13 +389,6 @@ mod tests {
             .build_with_graph_data(16);
         let processor = AvgPool2dProcessor;
         let prefs = OutputPreferences::new();
-        let err = processor
-            .infer_types(&mut node, 16, &prefs)
-            .expect_err("SAME_LOWER over a dynamic input must be rejected")
-            .to_string();
-        assert!(
-            err.contains(&crate::node::padding::SameBlocker::SameLower.to_string()),
-            "{err}"
-        );
+        processor.infer_types(&mut node, 16, &prefs).unwrap();
     }
 }

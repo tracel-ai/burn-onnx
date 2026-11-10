@@ -484,8 +484,8 @@ section of `DEVELOPMENT-GUIDE.md` for the full reference, and
 
 AveragePool supports dilated kernels in 1D, 2D, and 3D for opset 19 and later,
 including `count_include_pad`, `ceil_mode`, and dynamic SAME_UPPER/SAME_LOWER
-padding. Dilated 1D/2D pooling uses Burn's functional API because its pooling
-modules do not expose dilation.
+padding. All three dimensions use Burn's functional pooling API for both unit
+and non-unit dilation.
 
 Quantized convolution supports int8/uint8 inputs, per-tensor input/output parameters,
 per-output-channel weight parameters, grouping, dilation, and explicit or automatic padding.
