@@ -6,10 +6,10 @@
 //!
 //! ## Opset Versions
 //! - **Opset 1**: Initial version with LogSoftmax operation.
-//! - **Opset 11**: Changed default axis from 1 to -1 (last dimension); clarified axis behavior.
-//! - **Opset 13**: Added bfloat16 type support; no functional changes to operation semantics.
+//! - **Opset 11**: Allows negative axes and retains 2D coercion with default axis 1.
+//! - **Opset 13**: Removes 2D coercion and changes the default axis to -1.
 //!
-//! **Implementation Note**: This implementation validates opset 13+.
+//! Inputs are coerced to 2D before opset 13. Later opsets normalize along the specified axis.
 //!
 //! ## Missing Test Coverage
 //! - TODO: No test for axis=0 or positive axis values - Only axis=-1 tested
@@ -32,6 +32,9 @@ use onnx_ir_derive::NodeBuilder;
 pub struct LogSoftmaxConfig {
     /// Axis along which to apply log softmax
     pub axis: usize,
+    /// Coerce the input to two dimensions at axis, as required before opset 13.
+    #[new(value = "false")]
+    pub flatten: bool,
 }
 
 /// Node representation for LogSoftmax operation
@@ -105,6 +108,7 @@ impl NodeProcessor for LogSoftmaxProcessor {
 
         let config = LogSoftmaxConfig {
             axis: axis as usize,
+            flatten: opset < 13,
         };
         Ok(config)
     }
@@ -178,5 +182,15 @@ mod tests {
                 actual: 2
             })
         ));
+    }
+
+    #[test]
+    fn legacy_coercion_depends_on_opset() {
+        let processor = LogSoftmaxProcessor;
+        let node = create_test_node(-1, 3);
+        for opset in [11, 12, 13, 18] {
+            let config = processor.extract_config(&node, opset).unwrap();
+            assert_eq!(config.flatten, opset < 13);
+        }
     }
 }

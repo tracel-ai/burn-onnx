@@ -14,8 +14,20 @@ impl NodeCodegen for onnx_ir::log_softmax::LogSoftmaxNode {
         let output = arg_to_ident(self.outputs.first().unwrap());
         let dim = self.config.axis.to_tokens();
 
-        quote! {
-            let #output = log_softmax(#input, #dim);
+        if self.config.flatten {
+            quote! {
+                let #output = {
+                    let input = #input;
+                    let dims = input.dims();
+                    let outer = dims[..#dim].iter().product::<usize>();
+                    let inner = dims[#dim..].iter().product::<usize>();
+                    log_softmax(input.reshape([outer, inner]), 1).reshape(dims)
+                };
+            }
+        } else {
+            quote! {
+                let #output = log_softmax(#input, #dim);
+            }
         }
     }
 
@@ -60,6 +72,25 @@ mod tests {
         assert_snapshot!(code, @r"
         pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
             let output = log_softmax(input, 0);
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn legacy_coercion() {
+        let mut node = create_log_softmax_node("log_softmax1", 0);
+        node.config.flatten = true;
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<2>) -> Tensor<2> {
+            let output = {
+                let input = input;
+                let dims = input.dims();
+                let outer = dims[..0].iter().product::<usize>();
+                let inner = dims[0..].iter().product::<usize>();
+                log_softmax(input.reshape([outer, inner]), 1).reshape(dims)
+            };
             output
         }
         ");
