@@ -722,6 +722,7 @@ fn log_softmax(graph: &OnnxGraph) {
       Config:
         LogSoftmaxConfig {
             axis: 2,
+            flatten: false,
         }
     "#);
 }
@@ -1541,6 +1542,7 @@ fn softmax(graph: &OnnxGraph) {
       Config:
         SoftmaxConfig {
             axis: 2,
+            flatten: false,
         }
     "#);
 }

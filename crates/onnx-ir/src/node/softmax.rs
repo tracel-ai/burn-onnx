@@ -9,10 +9,10 @@
 //!
 //! ## Opset Versions
 //! - **Opset 1**: Initial version with axis=1 default, operates on 2D tensors.
-//! - **Opset 11**: Changed default axis to -1 (last dimension). Maintains backward compatibility with 2D coercion behavior.
+//! - **Opset 11**: Allows negative axes and retains 2D coercion with default axis 1.
 //! - **Opset 13**: Removed 2D coercion behavior. Softmax now operates along specified axis directly without reshaping. This is the current behavior.
 //!
-//! **Implementation Note**: This implementation requires opset 13+ and uses the modern behavior (no 2D coercion). The axis attribute defaults to -1 as per opset 11+ specification.
+//! Inputs are coerced to 2D before opset 13. Later opsets normalize along the specified axis.
 
 use crate::ir::{ArgType, Argument, Node, RawNode};
 use crate::processor::{
@@ -26,6 +26,9 @@ use onnx_ir_derive::NodeBuilder;
 pub struct SoftmaxConfig {
     /// Axis along which to apply softmax
     pub axis: usize,
+    /// Coerce the input to two dimensions at axis, as required before opset 13.
+    #[new(value = "false")]
+    pub flatten: bool,
 }
 
 /// Node representation for Softmax operation
@@ -132,6 +135,7 @@ impl NodeProcessor for SoftmaxProcessor {
 
         let config = SoftmaxConfig {
             axis: axis as usize,
+            flatten: opset < 13,
         };
         Ok(config)
     }
@@ -264,9 +268,6 @@ mod tests {
         );
     }
 
-    // TODO: Missing test for opset 13 behavior change - spec changed from 2D coercion to direct
-    // axis operation. Need test to verify opset < 13 and opset 13+ work correctly.
-
     // TODO: Missing test for type constraints - Softmax only supports float types.
     // Need test to verify integer input is rejected (or properly handled).
 
@@ -279,5 +280,15 @@ mod tests {
         let config = processor.extract_config(&node, 16).unwrap();
         processor.infer_types(&mut node, 16, &prefs).unwrap();
         assert_eq!(config.axis, 0);
+    }
+
+    #[test]
+    fn legacy_coercion_depends_on_opset() {
+        let processor = SoftmaxProcessor;
+        let node = create_test_node(-1, 3);
+        for opset in [11, 12, 13, 18] {
+            let config = processor.extract_config(&node, opset).unwrap();
+            assert_eq!(config.flatten, opset < 13);
+        }
     }
 }
