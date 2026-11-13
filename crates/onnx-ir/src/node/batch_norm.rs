@@ -85,8 +85,8 @@ impl NodeProcessor for BatchNormProcessor {
         let all_constant = (1..=4).all(|i| node.inputs.len() > i && node.inputs[i].is_constant());
 
         if all_constant {
-            for i in 1..=4 {
-                node.inputs[i].to_static()?;
+            for input in &mut node.inputs[1..=4] {
+                input.to_static()?;
             }
         }
 
