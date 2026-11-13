@@ -270,22 +270,19 @@ pub(crate) mod tests {
         } else {
             phase_q1 - std::f32::consts::PI
         };
-        let manual_positive_zero_branch = if real < 0.0 {
-            phase_quad
-        } else {
-            phase_q1
-        };
+        let manual_positive_zero_branch = if real < 0.0 { phase_quad } else { phase_q1 };
         let native_positive_zero = imag.atan2(real);
 
-        assert!(native_positive_zero.is_sign_positive());
+        // `f32::atan2` can be one ulp below the rounded PI constant (a macOS
+        // debug build returns 3.1415925), so compare with a tolerance.
+        let tolerance = 1e-6;
         assert!(
-            (native_positive_zero.abs() - std::f32::consts::PI).abs() < f32::EPSILON,
-            "native atan2 should return positive pi for (+0, negative)"
+            (native_positive_zero - std::f32::consts::PI).abs() < tolerance,
+            "native atan2 should return +pi for (+0, negative), got {native_positive_zero}"
         );
-        assert_ne!(
-            manual_positive_zero_branch.to_bits(),
-            native_positive_zero.to_bits(),
-            "a native atan2 rewrite must not erase the manual graph's signed-zero behavior"
+        assert!(
+            (manual_positive_zero_branch + std::f32::consts::PI).abs() < tolerance,
+            "the manual quadrant fixup should return -pi for (+0, negative), got {manual_positive_zero_branch}"
         );
     }
 }
