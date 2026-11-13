@@ -898,15 +898,13 @@ status = "pass"
 status = "pass"
 
 [test_blackmanwindow_expanded]
-status = "skip-compile"
-reason = "no method named `add` found for type `f32` in the current scope: method not found in `f32`"
+status = "pass"
 
 [test_blackmanwindow_symmetric]
 status = "pass"
 
 [test_blackmanwindow_symmetric_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1>`, found `f32`"
+status = "pass"
 
 [test_cast_BFLOAT16_to_FLOAT]
 status = "pass"
@@ -2605,29 +2603,25 @@ status = "pass"
 status = "pass"
 
 [test_hammingwindow_expanded]
-status = "skip-compile"
-reason = "no method named `add` found for type `f32` in the current scope: method not found in `f32`"
+status = "pass"
 
 [test_hammingwindow_symmetric]
 status = "pass"
 
 [test_hammingwindow_symmetric_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1>`, found `f32`"
+status = "pass"
 
 [test_hannwindow]
 status = "pass"
 
 [test_hannwindow_expanded]
-status = "skip-compile"
-reason = "no method named `add` found for type `f32` in the current scope: method not found in `f32`"
+status = "pass"
 
 [test_hannwindow_symmetric]
 status = "pass"
 
 [test_hannwindow_symmetric_expanded]
-status = "skip-compile"
-reason = "mismatched types: expected `Tensor<1>`, found `f32`"
+status = "pass"
 
 [test_hardmax_axis_0]
 status = "pass"
