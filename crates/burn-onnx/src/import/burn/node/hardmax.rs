@@ -14,6 +14,25 @@ impl NodeCodegen for onnx_ir::hardmax::HardmaxNode {
         let output = arg_to_ident(self.outputs.first().unwrap());
         let dim = self.config.axis.to_tokens();
 
+        if self.config.flatten {
+            return quote! {
+                let #output = {
+                    let input = #input;
+                    let dims = input.dims();
+                    let outer = dims[..#dim].iter().product::<usize>();
+                    let inner = dims[#dim..].iter().product::<usize>();
+                    let input = input.reshape([outer, inner]);
+                    let indices = input.clone().argmax(1);
+                    input.zeros_like().scatter(
+                        1,
+                        indices.clone(),
+                        Tensor::ones(indices.dims(), &input.device()),
+                        burn::tensor::IndexingUpdateOp::Add,
+                    ).reshape(dims)
+                };
+            };
+        }
+
         quote! {
             let #output = {
                 let input = #input;
