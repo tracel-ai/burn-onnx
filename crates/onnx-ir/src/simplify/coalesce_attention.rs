@@ -657,9 +657,9 @@ fn try_prescaled_qk_pattern(
 /// Find the shared scalar input between two Mul nodes.
 /// Returns (tensor_input_index_in_a, tensor_input_index_in_b) for the non-shared inputs.
 fn find_shared_scalar_inputs(a: &RawNode, b: &RawNode) -> Option<(usize, usize)> {
-    for ai in 0..2 {
-        for bi in 0..2 {
-            if a.inputs[ai].name == b.inputs[bi].name {
+    for (ai, a_input) in a.inputs[..2].iter().enumerate() {
+        for (bi, b_input) in b.inputs[..2].iter().enumerate() {
+            if a_input.name == b_input.name {
                 return Some((1 - ai, 1 - bi));
             }
         }
