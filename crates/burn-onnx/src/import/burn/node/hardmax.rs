@@ -26,7 +26,7 @@ impl NodeCodegen for onnx_ir::hardmax::HardmaxNode {
                     input.zeros_like().scatter(
                         1,
                         indices.clone(),
-                        Tensor::ones(indices.dims(), &input.device()),
+                        Tensor::ones(indices.dims(), (&input.device(), input.dtype())),
                         burn::tensor::IndexingUpdateOp::Add,
                     ).reshape(dims)
                 };
@@ -40,7 +40,7 @@ impl NodeCodegen for onnx_ir::hardmax::HardmaxNode {
                 input.zeros_like().scatter(
                     #dim,
                     indices.clone(),
-                    Tensor::ones(indices.dims(), &input.device()),
+                    Tensor::ones(indices.dims(), (&input.device(), input.dtype())),
                     burn::tensor::IndexingUpdateOp::Add,
                 )
             };
@@ -79,7 +79,7 @@ mod tests {
                     .scatter(
                         1,
                         indices.clone(),
-                        Tensor::ones(indices.dims(), &input.device()),
+                        Tensor::ones(indices.dims(), (&input.device(), input.dtype())),
                         burn::tensor::IndexingUpdateOp::Add,
                     )
             };
@@ -102,7 +102,7 @@ mod tests {
                     .scatter(
                         0,
                         indices.clone(),
-                        Tensor::ones(indices.dims(), &input.device()),
+                        Tensor::ones(indices.dims(), (&input.device(), input.dtype())),
                         burn::tensor::IndexingUpdateOp::Add,
                     )
             };
