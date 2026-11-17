@@ -611,6 +611,7 @@ fn hardmax(graph: &OnnxGraph) {
       Config:
         HardmaxConfig {
             axis: 1,
+            flatten: true,
         }
     "#);
 }

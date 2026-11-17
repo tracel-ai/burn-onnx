@@ -27,6 +27,9 @@ use onnx_ir_derive::NodeBuilder;
 pub struct HardmaxConfig {
     /// Axis along which to compute hardmax
     pub axis: usize,
+    /// Coerce the input to two dimensions at axis before opset 13.
+    #[new(value = "false")]
+    pub flatten: bool,
 }
 
 /// Node representation for Hardmax operation
@@ -87,6 +90,7 @@ impl NodeProcessor for HardmaxProcessor {
 
         Ok(HardmaxConfig {
             axis: axis as usize,
+            flatten: opset < 13,
         })
     }
 
@@ -122,6 +126,14 @@ mod tests {
         let processor = HardmaxProcessor;
         let config = processor.extract_config(&node, 13).unwrap();
         assert_eq!(config.axis, 2); // -1 + 3 = 2
+    }
+
+    #[test]
+    fn legacy_coercion_depends_on_opset() {
+        let node = create_test_node(1, 3);
+        let processor = HardmaxProcessor;
+        assert!(processor.extract_config(&node, 11).unwrap().flatten);
+        assert!(!processor.extract_config(&node, 13).unwrap().flatten);
     }
 
     #[test]

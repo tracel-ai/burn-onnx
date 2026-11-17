@@ -1,10 +1,48 @@
 use crate::include_models;
-include_models!(hardmax);
+include_models!(hardmax, hardmax_legacy);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use burn::tensor::{Device, Tensor, TensorData};
+    use burn::tensor::{DType, Device, Tensor, TensorData};
+
+    #[test]
+    fn hardmax_preserves_f64_input_dtype() {
+        let device: Device = Default::default();
+        if !device.supports_dtype(DType::F64) {
+            return;
+        }
+        let input = Tensor::<2>::from_data(
+            TensorData::from([[0.0f64, 1.0, 2.0], [3.0, 4.0, 5.0]]),
+            (&device, DType::F64),
+        );
+        let legacy: hardmax_legacy::Model = hardmax_legacy::Model::new(&device);
+        let modern: hardmax::Model = hardmax::Model::new(&device);
+        let legacy_output = legacy.forward(input.clone());
+        let modern_output = modern.forward(input);
+        assert_eq!(legacy_output.dtype(), DType::F64);
+        assert_eq!(modern_output.dtype(), DType::F64);
+        legacy_output.to_data().assert_approx_eq::<f64>(
+            &TensorData::from([[0.0f64, 0.0, 0.0], [0.0, 0.0, 1.0]]),
+            burn::tensor::Tolerance::default(),
+        );
+        modern_output.to_data().assert_approx_eq::<f64>(
+            &TensorData::from([[0.0f64, 0.0, 1.0], [0.0, 0.0, 1.0]]),
+            burn::tensor::Tolerance::default(),
+        );
+    }
+
+    #[test]
+    fn legacy_axis_zero_normalizes_the_whole_tensor() {
+        let device = Default::default();
+        let model: hardmax_legacy::Model = hardmax_legacy::Model::new(&device);
+        let input = Tensor::<2>::from_floats([[0., 1., 2.], [3., 4., 5.]], &device);
+        let output = model.forward(input);
+        output.to_data().assert_approx_eq::<f32>(
+            &TensorData::from([[0.0f32, 0., 0.], [0., 0., 1.]]),
+            burn::tensor::Tolerance::default(),
+        );
+    }
 
     #[test]
     fn hardmax() {
