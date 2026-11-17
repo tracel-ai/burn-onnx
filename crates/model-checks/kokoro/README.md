@@ -148,6 +148,20 @@ This is a fundamental algorithm divergence, not a Burn bug — see
 and possible fixes (manual-atan2 → atan2 coalescer pass, or implementing
 Bluestein's algorithm upstream).
 
+### Atan2 coalescing decision
+
+The manual `Atan + Div + Greater + Less + Where` sequence was evaluated as a
+candidate simplification. It is not safe to replace this graph with native
+`atan2` without a proof that the real and imaginary inputs cannot reach signed
+zero: for a negative real input, the manual quadrant branch and native
+`atan2(+0, negative)` produce opposite signed phase values (`-pi` versus
+`+pi`). The Kokoro graph has dynamic STFT-derived inputs, so onnx-ir cannot
+establish that proof from its current type and shape information.
+
+The candidate was also measured in the existing Kokoro experiments above; the
+native-`atan2` substitutions remained far outside the strict comparison limits.
+This change therefore deliberately does not add an unsafe coalescing rewrite.
+
 [issue-371]: https://github.com/tracel-ai/burn-onnx/issues/371
 
 ### Previously fixed while building this check (still relevant)
