@@ -9,10 +9,6 @@
 [advisories]
 ignore = [
     "RUSTSEC-2024-0436", # `paste` is unmaintained (transitive).
-    "RUSTSEC-2025-0141", # `bincode` is no longer maintained.
-    "RUSTSEC-2026-0097", # `rustls-webpki` advisory (transitive via ureq/tch).
-    "RUSTSEC-2026-0098", # `rustls-webpki` advisory (transitive via ureq/tch).
-    "RUSTSEC-2026-0099", # `rustls-webpki` advisory (transitive via ureq/tch).
     "RUSTSEC-2026-0110", # `bare-metal` is deprecated (transitive via cortex-m 0.7 in raspberry-pi-pico example). cortex-m has not yet bumped to bare-metal 1.0.
     "RUSTSEC-2026-0173", # `proc-macro-error2` is unmaintained (transitive via defmt-macros/pio-proc in raspberry-pi-pico example).
 ] # advisory IDs to ignore e.g. ["RUSTSEC-2019-0001", ...]
