@@ -138,11 +138,8 @@ the decomposition alone (#464); the 19 left are the native op, still `skip-codeg
   reduce over a zero-size dimension, where ONNX mandates the identity element (`-inf` for max,
   `+inf` for min) and Burn's kernels return something else. Sum, prod, L1, L2 and LogSum over an
   empty set all pass, because their identities are 0 and 1 and Burn agrees. Belongs upstream in burn.
-- **Two latent RNN weight bugs on the static path (out of scope for #466, both predate it).**
-  `collect_*_snapshots` slices a direction with `.squeeze::<2>()`, which drops *every* size-1
-  dimension, so a GRU with `input_size == 1` or `hidden_size == 1` squeezes the wrong axis and fails
-  the rank check; the generated runtime path uses `select_dim`/`slice_dim` and is not exposed. And
-  nothing validates a declared `W`/`R` shape against the `hidden_size` and `direction` attributes:
+- **RNN weight shapes are not validated on the static path (out of scope for #466, predates it).**
+  Nothing validates a declared `W`/`R` shape against the `hidden_size` and `direction` attributes:
   an undersized weight panics in Burn's slice check, an oversized one is silently truncated, so a
   `[2, ...]` W in a `direction="forward"` model quietly uses direction 0 only. That check belongs in
   `infer_types` as a `ProcessError` where the static shape is known.
@@ -189,4 +186,4 @@ Removed from the queue above. `git log -- TODO.md` has the full write-ups.
   exports no functional `gru`/`lstm`/`rnn`, so the generated `forward` builds the module and
   overwrites each gate's `Param` from slices of the runtime tensors, table-driven from one
   `GateLayout` const per op. Also fixed `layout=1` putting the direction axis on the wrong output
-  dimension. Two latent static-path bugs it left alone are in Tier 2.
+  dimension. Of the two latent static-path bugs it left alone, the shape check is in Tier 2.

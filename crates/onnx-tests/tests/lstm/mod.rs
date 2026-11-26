@@ -5,7 +5,8 @@ include_models!(
     lstm_input_forget,
     lstm_reverse,
     lstm_with_initial_state,
-    lstm_runtime_weights
+    lstm_runtime_weights,
+    lstm_size_one
 );
 
 #[cfg(test)]
@@ -457,6 +458,41 @@ mod tests {
                 alloc::vec![0.123_023_406f32, 0.179_252_7, 0.237_362_19],
                 [1, 1, 3],
             ),
+            tolerance,
+        );
+    }
+
+    /// LSTM with initializer weights and `input_size == hidden_size == 1`. Slicing one
+    /// direction out of `W`/`R` gives `[1, 4, 1]`, and a plain `squeeze` dropped the
+    /// trailing size-1 axis too, so codegen panicked on the rank check.
+    #[test]
+    fn lstm_size_one() {
+        let device = Default::default();
+        let model = lstm_size_one::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/lstm_size_one.bpk"),
+            &device,
+        );
+
+        let (y, y_h) = model.forward(ramp([3, 2, 1], 0.25, -0.5));
+
+        // Expected from ONNX ReferenceEvaluator
+        let tolerance = Tolerance::<f32>::absolute(1e-5);
+        y.to_data().assert_approx_eq(
+            &TensorData::new(
+                alloc::vec![
+                    -0.141_675_4f32,
+                    -0.097_311_07,
+                    -0.103_972_36,
+                    0.006_180_970_5,
+                    0.083_255_68,
+                    0.190_762_31,
+                ],
+                [3, 1, 2, 1],
+            ),
+            tolerance,
+        );
+        y_h.to_data().assert_approx_eq(
+            &TensorData::new(alloc::vec![0.083_255_68f32, 0.190_762_31], [1, 2, 1]),
             tolerance,
         );
     }
