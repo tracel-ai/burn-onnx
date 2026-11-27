@@ -104,7 +104,7 @@ fn collect_gru_tensors(
                 0..gate_count * hidden_size,
                 0..input_size,
             ])
-            .squeeze::<2>(); // [gates*hidden_size, input_size]
+            .squeeze_dim::<2>(0); // [gates*hidden_size, input_size]
 
         // R shape: [num_directions, gates*hidden_size, hidden_size]
         let r_dir = r_tensor
@@ -114,7 +114,7 @@ fn collect_gru_tensors(
                 0..gate_count * hidden_size,
                 0..hidden_size,
             ])
-            .squeeze::<2>(); // [gates*hidden_size, hidden_size]
+            .squeeze_dim::<2>(0); // [gates*hidden_size, hidden_size]
 
         // B shape: [num_directions, 2*gates*hidden_size]
         let b_dir = b_tensor.as_ref().map(|b| {

@@ -6,7 +6,8 @@ include_models!(
     gru_bidirectional,
     gru_runtime_weights,
     gru_bidirectional_runtime_weights,
-    gru_bidirectional_static_weights
+    gru_bidirectional_static_weights,
+    gru_size_one
 );
 
 #[cfg(test)]
@@ -368,6 +369,41 @@ mod tests {
         y_h.into_data().assert_approx_eq::<f32>(
             &expected_y_h.into_data(),
             burn::tensor::Tolerance::default(),
+        );
+    }
+
+    /// GRU with initializer weights and `input_size == hidden_size == 1`. Slicing one
+    /// direction out of `W`/`R` gives `[1, 3, 1]`, and a plain `squeeze` dropped the
+    /// trailing size-1 axis too, so codegen panicked on the rank check.
+    #[test]
+    fn gru_size_one() {
+        let device = Default::default();
+        let model = gru_size_one::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/gru_size_one.bpk"),
+            &device,
+        );
+
+        let (y, y_h) = model.forward(ramp([3, 2, 1], 0.25, -0.5));
+
+        // Expected from ONNX ReferenceEvaluator
+        let tolerance = burn::tensor::Tolerance::<f32>::absolute(1e-5);
+        y.to_data().assert_approx_eq(
+            &TensorData::new(
+                alloc::vec![
+                    -0.191_332_07f32,
+                    -0.109_364_92,
+                    -0.116_741_14,
+                    -0.011_716_832,
+                    0.045_666_143,
+                    0.135_488_05,
+                ],
+                [3, 1, 2, 1],
+            ),
+            tolerance,
+        );
+        y_h.to_data().assert_approx_eq(
+            &TensorData::new(alloc::vec![0.045_666_143f32, 0.135_488_05], [1, 2, 1]),
+            tolerance,
         );
     }
 }

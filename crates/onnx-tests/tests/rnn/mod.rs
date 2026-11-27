@@ -4,7 +4,8 @@ include_models!(
     rnn_bidirectional,
     rnn_reverse,
     rnn_with_initial_state,
-    rnn_runtime_weights
+    rnn_runtime_weights,
+    rnn_size_one
 );
 
 #[cfg(test)]
@@ -340,6 +341,41 @@ mod tests {
             "Y_h sum mismatch: expected {}, got {}",
             expected_y_h_sum,
             y_h_sum
+        );
+    }
+
+    /// RNN with initializer weights and `input_size == hidden_size == 1`. Slicing one
+    /// direction out of `W`/`R` gives `[1, 1, 1]`, and a plain `squeeze` dropped every
+    /// axis, so codegen panicked on the rank check.
+    #[test]
+    fn rnn_size_one() {
+        let device = Default::default();
+        let model = rnn_size_one::Model::from_file(
+            concat!(env!("OUT_DIR"), "/model/rnn_size_one.bpk"),
+            &device,
+        );
+
+        let (y, y_h) = model.forward(ramp([3, 2, 1], 0.25, -0.5));
+
+        // Expected from ONNX ReferenceEvaluator
+        let tolerance = burn::tensor::Tolerance::<f32>::absolute(1e-5);
+        y.to_data().assert_approx_eq(
+            &TensorData::new(
+                alloc::vec![
+                    -0.031_275_038f32,
+                    0.092_627_02,
+                    0.217_848_26,
+                    0.317_121_4,
+                    0.409_747_96,
+                    0.497_336_36,
+                ],
+                [3, 1, 2, 1],
+            ),
+            tolerance,
+        );
+        y_h.to_data().assert_approx_eq(
+            &TensorData::new(alloc::vec![0.409_747_96f32, 0.497_336_36], [1, 2, 1]),
+            tolerance,
         );
     }
 }
