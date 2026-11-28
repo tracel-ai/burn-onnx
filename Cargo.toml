@@ -94,11 +94,11 @@ thiserror = { version = "2", default-features = false }
 toml = { version = "1.1.2", default-features = false, features = ["parse", "serde"] }
 
 ### For development against a pinned Burn revision. ###
-# burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "a05bee716193ddf64de69867f089e695caa9fd0d" }
-# burn-flex = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "a05bee716193ddf64de69867f089e695caa9fd0d" }
-# burn-pack = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "a05bee716193ddf64de69867f089e695caa9fd0d" }
-# burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "a05bee716193ddf64de69867f089e695caa9fd0d" }
-# burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "a05bee716193ddf64de69867f089e695caa9fd0d" }
+# burn = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "826be49ab1ad74a6bdea5837653a2700966cfff8" }
+# burn-flex = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "826be49ab1ad74a6bdea5837653a2700966cfff8" }
+# burn-pack = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "826be49ab1ad74a6bdea5837653a2700966cfff8" }
+# burn-store = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "826be49ab1ad74a6bdea5837653a2700966cfff8" }
+# burn-tensor = { git = "https://github.com/tracel-ai/burn", default-features = false, rev = "826be49ab1ad74a6bdea5837653a2700966cfff8" }
 
 ### For local development. ###
 # burn = { path = "../burn/crates/burn", default-features = false }
